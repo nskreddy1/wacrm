@@ -90,17 +90,37 @@ interface NavItem {
   beta?: boolean;
 }
 
-const navItems: NavItem[] = [
-  { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
-  { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
-  { href: "/notifications", labelKey: "notifications", icon: Bell },
-  { href: "/contacts", labelKey: "contacts", icon: Users },
-  { href: "/bookings", labelKey: "bookings", icon: CalendarDays },
-  { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
-  { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
-  { href: "/automations", labelKey: "automations", icon: Zap },
-  { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
-  { href: "/agents", labelKey: "aiAgents", icon: Bot },
+interface NavGroup {
+  labelKey: string;
+  items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
+  {
+    labelKey: "groupOverview",
+    items: [
+      { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
+      { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
+      { href: "/notifications", labelKey: "notifications", icon: Bell },
+    ],
+  },
+  {
+    labelKey: "groupCrm",
+    items: [
+      { href: "/contacts", labelKey: "contacts", icon: Users },
+      { href: "/bookings", labelKey: "bookings", icon: CalendarDays },
+      { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
+    ],
+  },
+  {
+    labelKey: "groupAutomation",
+    items: [
+      { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
+      { href: "/automations", labelKey: "automations", icon: Zap },
+      { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
+      { href: "/agents", labelKey: "aiAgents", icon: Bot },
+    ],
+  },
 ];
 
 const bottomNavItems = [
@@ -207,92 +227,111 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Main navigation */}
+        {/* Main navigation — grouped into labelled sections for an
+            enterprise-style information hierarchy. */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          <div className="flex flex-col gap-5">
+            {navGroups.map((group) => (
+              <div key={group.labelKey}>
+                <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  {t(group.labelKey as string)}
+                </p>
+                <ul className="flex flex-col gap-0.5">
+                  {group.items.map((item) => {
+                    const isActive =
+                      pathname === item.href ||
+                      (item.href !== "/dashboard" &&
+                        pathname.startsWith(item.href));
 
-              const showUnreadDot =
-                item.href === "/inbox" && totalUnread > 0 && !isActive;
+                    const showUnreadDot =
+                      item.href === "/inbox" && totalUnread > 0 && !isActive;
 
-              // Unlike the inbox dot, the notifications count stays visible
-              // even while the page is active — it reflects unread state
-              // (cleared by marking notifications read), not "currently
-              // viewing this section".
-              const showNotificationBadge =
-                item.href === "/notifications" && unreadNotifications > 0;
+                    // Unlike the inbox dot, the notifications count stays
+                    // visible even while the page is active — it reflects
+                    // unread state, not "currently viewing this section".
+                    const showNotificationBadge =
+                      item.href === "/notifications" &&
+                      unreadNotifications > 0;
 
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      // Taller on mobile so fingers can hit the row reliably (≥44px).
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span className="flex-1">{t(item.labelKey as string)}</span>
-                    {item.beta && (
-                      <span
-                        aria-label={t("beta")}
-                        className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          aria-current={isActive ? "page" : undefined}
+                          className={cn(
+                            // Taller on mobile so fingers can hit the row
+                            // reliably (≥44px). Left rail marks the active row.
+                            "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
+                            isActive
+                              ? "bg-primary/10 text-primary before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span className="flex-1">
+                            {t(item.labelKey as string)}
+                          </span>
+                          {item.beta && (
+                            <span
+                              aria-label={t("beta")}
+                              className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
+                            >
+                              {t("beta")}
+                            </span>
+                          )}
+                          {showUnreadDot && (
+                            <span
+                              aria-label={t("unreadConversations", { count: totalUnread })}
+                              className="relative flex h-2 w-2"
+                            >
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                            </span>
+                          )}
+                          {showNotificationBadge && (
+                            <span
+                              aria-label={t("unreadNotifications", { count: unreadNotifications })}
+                              className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
+                            >
+                              {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                            </span>
+                          )}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+
+            <div>
+              <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                {t("groupSystem")}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {bottomNavItems.map((item) => {
+                  const isActive = pathname.startsWith(item.href);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        aria-current={isActive ? "page" : undefined}
+                        className={cn(
+                          "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
+                          isActive
+                            ? "bg-primary/10 text-primary before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
                       >
-                        {t("beta")}
-                      </span>
-                    )}
-                    {showUnreadDot && (
-                      <span
-                        aria-label={t("unreadConversations", { count: totalUnread })}
-                        className="relative flex h-2 w-2"
-                      >
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-                      </span>
-                    )}
-                    {showNotificationBadge && (
-                      <span
-                        aria-label={t("unreadNotifications", { count: unreadNotifications })}
-                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
-                      >
-                        {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="my-4 border-t border-border" />
-
-          <ul className="flex flex-col gap-1">
-            {bottomNavItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {t(item.labelKey as string)}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+                        <item.icon className="h-4 w-4" />
+                        {t(item.labelKey as string)}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
         </nav>
 
         {/* User section */}

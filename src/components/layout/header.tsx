@@ -49,7 +49,7 @@ import { useTranslations } from "next-intl";
 export function Header({ onOpenSidebar }: HeaderProps) {
   const t = useTranslations("Header");
   const pathname = usePathname();
-  const { profile, signOut } = useAuth();
+  const { profile, account, signOut } = useAuth();
   const titleKey = getPageTitleKey(pathname);
 
   const initial =
@@ -58,7 +58,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
     "U";
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-6">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
       <div className="flex min-w-0 items-center gap-2">
         {/* Hamburger — mobile only. 44×44 hit target per Apple HIG. */}
         <button
@@ -69,13 +69,23 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
-          {t(titleKey as string)}
-        </h1>
+        {/* Breadcrumb-style location: workspace context + current page. */}
+        <nav aria-label={t("breadcrumb")} className="flex min-w-0 items-center gap-1.5">
+          <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">
+            {account?.name ?? t("workspace")}
+          </span>
+          <span aria-hidden="true" className="hidden text-muted-foreground/50 sm:inline">
+            /
+          </span>
+          <h1 className="truncate text-sm font-semibold text-foreground sm:text-base">
+            {t(titleKey as string)}
+          </h1>
+        </nav>
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
         <ModeToggle />
+        <div aria-hidden="true" className="mx-1 hidden h-6 w-px bg-border sm:block" />
 
         <DropdownMenu>
         <DropdownMenuTrigger
