@@ -24,7 +24,7 @@ import { downloadCsv } from "@/lib/download-csv"
 import { pipelinePath } from "@/lib/routes/dashboard-routes"
 import { cn } from "@/lib/utils"
 
-export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipelineId }: { initialSnapshot: PipelineSnapshot; initialMode: PipelineMode; initialSubPipelineId?: string }) {
+export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipelineId, initialSavedViewId }: { initialSnapshot: PipelineSnapshot; initialMode: PipelineMode; initialSubPipelineId?: string; initialSavedViewId?: string }) {
   const router = useRouter()
   const { data: snapshot = initialSnapshot, mutate } = useSWR<PipelineSnapshot>(cacheKeys.pipelineSnapshot(initialSnapshot.accountId, initialSnapshot.pipeline.id), null, { fallbackData: initialSnapshot, revalidateOnFocus: false })
   const [query, setQuery] = useState("")
@@ -50,7 +50,7 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
   }, [activeSubPipeline, ascending, owner, query, snapshot.deals, sort, stage])
 
   function changeMode(mode: PipelineMode) {
-    router.replace(pipelinePath(snapshot.accountId, snapshot.pipeline.id, mode, { subPipeline: activeSubPipelineId }))
+    router.replace(pipelinePath(snapshot.accountId, snapshot.pipeline.id, mode, { subPipeline: activeSubPipelineId, savedView: initialSavedViewId }))
   }
 
   function optimisticDeal(next: PipelineDeal) {
@@ -119,7 +119,7 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
     <div className="flex items-center gap-4 border-b bg-muted/30 px-4 py-2 text-xs"><span><strong>{deals.length}</strong> deals</span><span><strong>{deals.filter((deal) => deal.status === "open").length}</strong> open</span><span><strong>{new Intl.NumberFormat(undefined, { style: "currency", currency: deals[0]?.currency ?? "USD", maximumFractionDigits: 0 }).format(deals.reduce((sum, deal) => sum + deal.value, 0))}</strong> value</span>{(owner !== "all" || stage !== "all") && <Button variant="ghost" size="sm" onClick={() => { setOwner("all"); setStage("all") }}><X data-icon="inline-start" />Clear</Button>}</div>
     {selected.size > 0 && <div className="flex items-center gap-2 border-b bg-muted px-3 py-2 text-sm"><strong>{selected.size} selected</strong><Button variant="destructive" size="sm" onClick={() => void deleteSelected()}><Trash2 data-icon="inline-start" />Delete</Button></div>}
     {initialMode === "board" ? <DndContext sensors={sensors} onDragEnd={dragEnd}><div className="grid min-h-0 flex-1 auto-cols-[minmax(15rem,1fr)] grid-flow-col gap-2 overflow-x-auto bg-muted/20 p-2">{snapshot.stages.map((item) => <StageColumn key={item.id} stageId={item.id} name={item.name} deals={deals.filter((deal) => deal.stageId === item.id)} onOpen={setEditing} currency={deals[0]?.currency ?? "USD"} />)}</div></DndContext> : initialMode === "sheet" ? <PipelineSheet deals={deals} stages={snapshot.stages} members={snapshot.members} onSave={saveDeal} /> : <DealTable deals={deals} selected={selected} onSelected={setSelected} onOpen={setEditing} stages={snapshot.stages} />}
-    {initialMode === "board" && <SubPipelineTabs pipelines={snapshot.subPipelines} activePipelineId={activeSubPipelineId} onActivate={(id) => { setActiveSubPipelineId(id); router.replace(pipelinePath(snapshot.accountId, snapshot.pipeline.id, initialMode, { subPipeline: id })) }} onCreate={(name) => startTransition(() => void createSubPipeline(name))} onReorder={(items) => startTransition(() => void reorderSubPipelines(items))} />}
+    {initialMode === "board" && <SubPipelineTabs pipelines={snapshot.subPipelines} activePipelineId={activeSubPipelineId} onActivate={(id) => { setActiveSubPipelineId(id); router.replace(pipelinePath(snapshot.accountId, snapshot.pipeline.id, initialMode, { subPipeline: id, savedView: initialSavedViewId })) }} onCreate={(name) => startTransition(() => void createSubPipeline(name))} onReorder={(items) => startTransition(() => void reorderSubPipelines(items))} />}
     {editing !== null && <PipelineDealEditor key={editing === "new" ? `new-${defaultStageId}` : editing.id} open deal={editing === "new" ? null : editing} defaultStageId={defaultStageId} snapshot={snapshot} pending={pending} onOpenChange={(open) => { if (!open) setEditing(null) }} onSave={saveDeal} />}
   </div>
 }

@@ -1,11 +1,8 @@
-import type { Metadata } from "next"
-import { ContactWorkspace } from "@/components/contacts/contact-workspace"
+import { redirect } from "next/navigation"
+import { getCurrentAccount } from "@/lib/auth/account"
+import { enterpriseContactsPath } from "@/lib/routes/dashboard-routes"
 
-export const metadata: Metadata = {
-  title: "Contacts",
-  description: "Manage contacts in list, spreadsheet, and card views.",
-}
-
-export default function ContactsPage() {
-  return <ContactWorkspace />
+export default async function ContactsPage() {
+  const context = await getCurrentAccount()
+  redirect(enterpriseContactsPath(context.accountId))
 }

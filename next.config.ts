@@ -110,11 +110,9 @@ const nextConfig: NextConfig = {
       {
         source: "/:path((?!_next/static|_next/image|api).*)",
         headers: [
-          {
-            key: "Cache-Control",
-            value:
-              "public, max-age=0, s-maxage=300, stale-while-revalidate=86400",
-          },
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+          { key: "CDN-Cache-Control", value: "no-store" },
         ],
       },
       {
