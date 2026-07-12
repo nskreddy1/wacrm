@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { SubPipelineTabs, type SubPipeline } from "@/components/pipelines/sub-pipeline-tabs"
 import { demoDeals, demoStages, type DemoDeal, type DemoStage } from "@/lib/demo/crm-data"
 import { downloadCsv } from "@/lib/download-csv"
 import { cn } from "@/lib/utils"
@@ -63,6 +64,10 @@ function displayValue(deal: DemoDeal, field: DealField) {
 
 export function EnterprisePipelineWorkspace({ initialDeals = demoDeals }: { initialDeals?: DemoDeal[] }) {
   const [deals, setDeals] = useState(initialDeals)
+  const [subPipelines, setSubPipelines] = useState<SubPipeline[]>([
+    { id: "sales-standard", name: "Sales Pipeline Standard", dealIds: initialDeals.map((deal) => deal.id) },
+  ])
+  const [activeSubPipelineId, setActiveSubPipelineId] = useState("sales-standard")
   const [view, setView] = useState<ViewMode>("board")
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -83,17 +88,20 @@ export function EnterprisePipelineWorkspace({ initialDeals = demoDeals }: { init
   const [pageSize, setPageSize] = useState(20)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor))
   const activeView = views.find((item) => item.id === activeViewId) ?? views[0]
+  const activeSubPipeline = subPipelines.find((item) => item.id === activeSubPipelineId) ?? subPipelines[0]
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
     const today = new Date("2026-07-12T12:00:00")
+    const activeDealIds = new Set(activeSubPipeline.dealIds)
     const result = deals.filter((deal) => {
+      if (!activeDealIds.has(deal.id)) return false
       const searchable = `${deal.title} ${deal.contact} ${deal.company} ${deal.owner} ${deal.source}`.toLowerCase()
       const viewMatch = activeView.filter === "all" || (activeView.filter === "mine" && deal.owner === "Sam Silva") || (activeView.filter === "closing" && deal.due.startsWith("2026-07")) || (activeView.filter === "hot" && deal.priority === "Hot") || (activeView.filter === "recent" && new Date(`${deal.createdAt}T12:00:00`) >= new Date(today.getTime() - 7 * 86400000))
       return (!term || searchable.includes(term)) && viewMatch && (ownerFilter === "all" || deal.owner === ownerFilter) && (stageFilter === "all" || deal.stageId === stageFilter)
     })
     return result.sort((a, b) => String(a[sort.field]).localeCompare(String(b[sort.field]), undefined, { numeric: true }) * (sort.direction === "asc" ? 1 : -1))
-  }, [activeView.filter, deals, ownerFilter, query, sort, stageFilter])
+  }, [activeSubPipeline.dealIds, activeView.filter, deals, ownerFilter, query, sort, stageFilter])
   const pageRows = filtered.slice(page * pageSize, page * pageSize + pageSize)
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const pipelineValue = filtered.reduce((sum, deal) => sum + deal.value, 0)
@@ -106,7 +114,7 @@ export function EnterprisePipelineWorkspace({ initialDeals = demoDeals }: { init
     setter(state.includes(field) ? state.filter((item) => item !== field) : [...state, field])
   }
   function openDeal(deal?: DemoDeal, stageId?: string) { const next = deal ?? { ...emptyDeal, id: `d${Date.now()}`, stageId: stageId ?? "qualification" }; setDraft(next); setEditing(next) }
-  function saveDeal() { if (!draft.title.trim()) return toast.error("Deal name is required"); setDeals((current) => current.some((item) => item.id === draft.id) ? current.map((item) => item.id === draft.id ? draft : item) : [draft, ...current]); setEditing(null); toast.success("Deal saved") }
+  function saveDeal() { if (!draft.title.trim()) return toast.error("Deal name is required"); setDeals((current) => current.some((item) => item.id === draft.id) ? current.map((item) => item.id === draft.id ? draft : item) : [draft, ...current]); setSubPipelines((current) => current.map((pipeline) => pipeline.id === activeSubPipelineId && !pipeline.dealIds.includes(draft.id) ? { ...pipeline, dealIds: [...pipeline.dealIds, draft.id] } : pipeline)); setEditing(null); toast.success("Deal saved") }
   function deleteSelected() { setDeals((current) => current.filter((deal) => !selected.has(deal.id))); setSelected(new Set()); toast.success("Selected deals deleted") }
   function exportCsv() { const rows = [visibleFields.map((field) => fields.find((item) => item.id === field)?.label ?? field), ...filtered.map((deal) => visibleFields.map((field) => displayValue(deal, field)))]; if (!downloadCsv("pipeline-deals.csv", rows)) return toast.error("No deals to export"); toast.success(`${filtered.length} deals exported`) }
   function dragEnd(event: DragEndEvent) { setActiveDrag(null); if (!event.over) return; const dealId = String(event.active.id); const overId = String(event.over.id); const target = demoStages.some((stage) => stage.id === overId) ? overId : deals.find((deal) => deal.id === overId)?.stageId; if (target) setDeals((current) => current.map((deal) => deal.id === dealId ? { ...deal, stageId: target, probability: demoStages.findIndex((stage) => stage.id === target) * 20 } : deal)) }
@@ -128,7 +136,7 @@ export function EnterprisePipelineWorkspace({ initialDeals = demoDeals }: { init
 
     {view === "board" ? <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(event: DragStartEvent) => setActiveDrag(String(event.active.id))} onDragEnd={dragEnd} onDragCancel={() => setActiveDrag(null)}><div className="min-h-0 flex-1 overflow-hidden bg-muted/20 p-2"><div className="grid h-full min-h-0 grid-cols-2 gap-2 md:grid-cols-6">{demoStages.map((stage) => <StageColumn key={stage.id} stage={stage} deals={filtered.filter((deal) => deal.stageId === stage.id)} cardFields={cardFields} onOpen={openDeal} />)}</div></div><DragOverlay>{activeDrag && <DealCard deal={deals.find((deal) => deal.id === activeDrag)!} fields={cardFields} onOpen={() => {}} overlay />}</DragOverlay></DndContext> : <DealList deals={pageRows} fields={visibleFields} selected={selected} sort={sort} onSort={cycleSort} onSelect={setSelected} onOpen={openDeal} />}
 
-    <footer className="flex flex-wrap items-center gap-4 border-t bg-card px-4 py-2 text-xs"><span>Total deals <strong>{filtered.length}</strong></span><span>Open deals <strong>{openDeals}</strong></span><span>Won <strong>{filtered.filter((deal) => deal.stageId === "won").length}</strong></span>{view === "list" && <><span className="ml-auto">Rows</span><Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(0) }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{[10,20,50].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectGroup></SelectContent></Select><span>{filtered.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length}</span><Button variant="ghost" size="icon-sm" disabled={page === 0} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft /></Button><Button variant="ghost" size="icon-sm" disabled={page >= totalPages - 1} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight /></Button></>}</footer>
+    {view === "board" ? <SubPipelineTabs pipelines={subPipelines} activePipelineId={activeSubPipelineId} onActivate={(id) => { setActiveSubPipelineId(id); setSelected(new Set()); setPage(0) }} onCreate={(name) => { const id = `pipeline-${Date.now()}`; setSubPipelines((current) => [...current, { id, name, dealIds: [] }]); setActiveSubPipelineId(id); setSelected(new Set()); toast.success("Sub-pipeline created") }} /> : <footer className="flex flex-wrap items-center gap-4 border-t bg-card px-4 py-2 text-xs"><span>Total deals <strong>{filtered.length}</strong></span><span>Open deals <strong>{openDeals}</strong></span><span>Won <strong>{filtered.filter((deal) => deal.stageId === "won").length}</strong></span><span className="ml-auto">Rows</span><Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(0) }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{[10,20,50].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectGroup></SelectContent></Select><span>{filtered.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length}</span><Button variant="ghost" size="icon-sm" disabled={page === 0} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft /></Button><Button variant="ghost" size="icon-sm" disabled={page >= totalPages - 1} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight /></Button></footer>}
 
     <DealSheet open={Boolean(editing)} draft={draft} onDraft={setDraft} onOpenChange={(open) => !open && setEditing(null)} onSave={saveDeal} />
     <CreateViewDialog open={createViewOpen} name={newViewName} owner={ownerFilter} stage={stageFilter} view={view} sort={sort} displayedFields={view === "board" ? cardFields : visibleFields} onName={setNewViewName} onOwner={setOwnerFilter} onStage={setStageFilter} onView={setView} onOpenChange={setCreateViewOpen} onSave={() => { if (!newViewName.trim()) return toast.error("View name is required"); const next = { id: `view-${Date.now()}`, name: newViewName.trim(), favorite: false, filter: "all" as const }; setViews((current) => [...current, next]); setActiveViewId(next.id); setNewViewName(""); setCreateViewOpen(false); setPage(0); toast.success("View created and applied") }} />
