@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { hasSupabaseConfig } from "@/lib/supabase/server";
 import { DashboardShell } from "./dashboard-shell";
 
 // Server layout whose only job is to declare "do not index" metadata
@@ -24,5 +25,9 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  if (!hasSupabaseConfig()) {
+    return <main className="min-h-screen bg-background">{children}</main>;
+  }
+
   return <DashboardShell>{children}</DashboardShell>;
 }
