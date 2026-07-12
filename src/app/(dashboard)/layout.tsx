@@ -6,6 +6,8 @@ import { DashboardShell } from "./dashboard-shell";
 // crawler-level and middleware redirects unauthenticated visitors, so
 // this is belt-and-suspenders — but SEO-critical if a URL ever leaks
 // via a link shared externally.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   robots: {
     index: false,
