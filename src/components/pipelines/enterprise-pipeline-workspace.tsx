@@ -126,7 +126,7 @@ export function EnterprisePipelineWorkspace({ initialDeals = demoDeals }: { init
     <div className="flex flex-wrap items-center gap-4 border-b bg-muted/30 px-4 py-2 text-xs"><span><strong>{filtered.length}</strong> total deals</span><span><strong>{openDeals}</strong> open</span><span><strong>${pipelineValue.toLocaleString()}</strong> pipeline value</span><span><strong>{filtered.filter((deal) => deal.priority === "Hot").length}</strong> high priority</span>{(ownerFilter !== "all" || stageFilter !== "all") && <Button variant="ghost" size="sm" onClick={() => { setOwnerFilter("all"); setStageFilter("all") }}><X data-icon="inline-start" /> Clear filters</Button>}</div>
     {selected.size > 0 && <div className="flex items-center gap-2 border-b bg-muted px-3 py-2 text-sm"><strong>{selected.size} selected</strong><Button variant="destructive" size="sm" onClick={deleteSelected}><Trash2 data-icon="inline-start" /> Delete</Button><Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button></div>}
 
-    {view === "board" ? <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(event: DragStartEvent) => setActiveDrag(String(event.active.id))} onDragEnd={dragEnd} onDragCancel={() => setActiveDrag(null)}><div className="min-h-0 flex-1 overflow-hidden bg-muted/20 p-2"><div className="grid h-full min-h-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">{demoStages.map((stage) => <StageColumn key={stage.id} stage={stage} deals={filtered.filter((deal) => deal.stageId === stage.id)} cardFields={cardFields} onOpen={openDeal} />)}</div></div><DragOverlay>{activeDrag && <DealCard deal={deals.find((deal) => deal.id === activeDrag)!} fields={cardFields} onOpen={() => {}} overlay />}</DragOverlay></DndContext> : <DealList deals={pageRows} fields={visibleFields} selected={selected} sort={sort} onSort={cycleSort} onSelect={setSelected} onOpen={openDeal} />}
+    {view === "board" ? <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(event: DragStartEvent) => setActiveDrag(String(event.active.id))} onDragEnd={dragEnd} onDragCancel={() => setActiveDrag(null)}><div className="min-h-0 flex-1 overflow-hidden bg-muted/20 p-2"><div className="grid h-full min-h-0 grid-cols-2 gap-2 md:grid-cols-6">{demoStages.map((stage) => <StageColumn key={stage.id} stage={stage} deals={filtered.filter((deal) => deal.stageId === stage.id)} cardFields={cardFields} onOpen={openDeal} />)}</div></div><DragOverlay>{activeDrag && <DealCard deal={deals.find((deal) => deal.id === activeDrag)!} fields={cardFields} onOpen={() => {}} overlay />}</DragOverlay></DndContext> : <DealList deals={pageRows} fields={visibleFields} selected={selected} sort={sort} onSort={cycleSort} onSelect={setSelected} onOpen={openDeal} />}
 
     <footer className="flex flex-wrap items-center gap-4 border-t bg-card px-4 py-2 text-xs"><span>Total deals <strong>{filtered.length}</strong></span><span>Open deals <strong>{openDeals}</strong></span><span>Won <strong>{filtered.filter((deal) => deal.stageId === "won").length}</strong></span>{view === "list" && <><span className="ml-auto">Rows</span><Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(0) }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{[10,20,50].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectGroup></SelectContent></Select><span>{filtered.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length}</span><Button variant="ghost" size="icon-sm" disabled={page === 0} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft /></Button><Button variant="ghost" size="icon-sm" disabled={page >= totalPages - 1} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight /></Button></>}</footer>
 
@@ -146,22 +146,22 @@ function FieldPicker({ label, selected, onToggle, icon }: { label: string; selec
 
 function StageColumn({ stage, deals, cardFields, onOpen }: { stage: DemoStage; deals: DemoDeal[]; cardFields: DealField[]; onOpen: (deal?: DemoDeal, stageId?: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
-  const visibleDeals = deals.slice(0, 2)
-  const hiddenDeals = deals.slice(2)
 
-  return <section ref={setNodeRef} className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-card/70 transition-colors", isOver && "border-primary bg-primary/5")}>
-    <div className={cn("h-1 shrink-0", stageTone[stage.color])} />
-    <header className="shrink-0 border-b bg-card px-2 py-2">
-      <div className="flex items-start justify-between gap-1">
-        <div className="min-w-0"><h2 className="truncate text-xs font-semibold" title={stage.name}>{stage.name}</h2><p className="truncate text-[11px] text-muted-foreground">${deals.reduce((sum, deal) => sum + deal.value, 0).toLocaleString()} · {deals.length}</p></div>
+  return <section ref={setNodeRef} className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md bg-muted/40 transition-colors", isOver && "bg-primary/5 ring-1 ring-primary")}>
+    <header className="shrink-0 rounded-md border bg-card shadow-xs">
+      <div className={cn("h-1 rounded-t-md", stageTone[stage.color])} />
+      <div className="flex items-start justify-between gap-1 px-2 py-1.5">
+        <div className="min-w-0"><h2 className="truncate text-sm font-semibold" title={stage.name}>{stage.name}</h2><p className="truncate text-xs text-muted-foreground">${deals.reduce((sum, deal) => sum + deal.value, 0).toLocaleString()} <span aria-hidden="true">·</span> {deals.length} {deals.length === 1 ? "Deal" : "Deals"}</p></div>
         <DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`${stage.name} options`} />}><Ellipsis /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={() => onOpen(undefined, stage.id)}><Plus /> Add deal</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
       </div>
     </header>
-    <div className="flex min-h-0 flex-1 flex-col gap-1.5 p-1.5">
-      {visibleDeals.map((deal) => <DraggableDeal key={deal.id} deal={deal} fields={cardFields} onOpen={onOpen} />)}
-      {deals.length === 0 && <div className="flex min-h-20 flex-1 items-center justify-center rounded-md border border-dashed px-2 text-center text-xs text-muted-foreground">Drop deals here</div>}
-      {hiddenDeals.length > 0 && <Popover><PopoverTrigger render={<Button variant="ghost" size="sm" className="w-full" />}>+{hiddenDeals.length} more</PopoverTrigger><PopoverContent align="start" className="w-80"><div className="flex flex-col gap-2"><div><p className="font-medium">More in {stage.name}</p><p className="text-xs text-muted-foreground">Open a deal without adding board scroll.</p></div>{hiddenDeals.map((deal) => <button key={deal.id} className="flex items-center justify-between gap-3 rounded-md border p-2 text-left hover:bg-muted" onClick={() => onOpen(deal)}><span className="min-w-0 truncate text-sm font-medium">{deal.title}</span><span className="shrink-0 text-xs text-muted-foreground">${deal.value.toLocaleString()}</span></button>)}</div></PopoverContent></Popover>}
-      <Button variant="ghost" size="sm" className="mt-auto w-full justify-start border border-dashed" onClick={() => onOpen(undefined, stage.id)}><Plus data-icon="inline-start" /> Add</Button>
+    <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden border-x bg-card/30">
+      <button className="m-1.5 shrink-0 rounded-sm border border-dashed bg-card px-2 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted" onClick={() => onOpen(undefined, stage.id)}>{stage.description}</button>
+      <div className="flex min-h-0 flex-col gap-2 px-1.5">
+        {deals.map((deal) => <DraggableDeal key={deal.id} deal={deal} fields={cardFields} onOpen={onOpen} />)}
+      </div>
+      {deals.length === 0 && <div className="flex min-h-0 flex-1 items-center justify-center px-2 text-center text-xs text-muted-foreground">This stage is empty</div>}
+      <Button variant="ghost" size="sm" className="mt-auto w-full shrink-0 justify-start rounded-none border-t bg-card" onClick={() => onOpen(undefined, stage.id)}><Plus data-icon="inline-start" /> Deal</Button>
     </div>
   </section>
 }
