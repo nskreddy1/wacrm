@@ -4,6 +4,7 @@ import { useCallback, useState } from "react"
 
 import { Header } from "@/components/layout/header"
 import { Sidebar } from "@/components/layout/sidebar"
+import { DashboardCacheProvider } from "@/components/providers/dashboard-cache-provider"
 import { AuthProvider } from "@/hooks/use-auth"
 
 function DashboardShellInner({ children }: { children: React.ReactNode }) {
@@ -28,5 +29,11 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
 }
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
-  return <AuthProvider><DashboardShellInner>{children}</DashboardShellInner></AuthProvider>
+  return (
+    <AuthProvider>
+      <DashboardCacheProvider>
+        <DashboardShellInner>{children}</DashboardShellInner>
+      </DashboardCacheProvider>
+    </AuthProvider>
+  )
 }

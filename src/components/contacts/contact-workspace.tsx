@@ -25,8 +25,6 @@ import { countRules, emptyFilterGroup, flattenRules, matchesFilter, summarizeRul
 type Store = { contacts: DemoContact[]; fields: ContactField[]; preferences: { visible: string[]; order: string[]; frozen: string[]; widths: Record<string, number> } }
 type View = "list" | "sheet" | "cards"
 type Sort = { field: string; direction: "asc" | "desc" } | null
-const fetcher = (url: string) => fetch(url).then(async (response) => { if (!response.ok) throw new Error("Unable to load contacts"); return response.json() })
-
 async function api(method: string, body: unknown) {
   const response = await fetch("/api/demo/contacts", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
   const payload = await response.json()
@@ -41,7 +39,7 @@ function valueText(value: DemoContact["values"][string]) {
 }
 
 export function ContactWorkspace() {
-  const { data, error, isLoading, mutate } = useSWR<{ data: Store }>("/api/demo/contacts", fetcher)
+  const { data, error, isLoading, mutate } = useSWR<{ data: Store }>("/api/demo/contacts")
   const store = data?.data
   const [view, setView] = useState<View>("list")
   const [query, setQuery] = useState("")

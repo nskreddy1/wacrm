@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { GripVertical, MoreHorizontal, Plus } from "lucide-react"
+import { ArrowDownUp, ChevronDown, ChevronUp, GripVertical, MoreHorizontal, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -23,6 +23,16 @@ type SubPipelineTabsProps = {
   onReorder: (pipelines: SubPipeline[]) => void
 }
 
+function moveItem(items: SubPipeline[], sourceId: string, targetId: string) {
+  const sourceIndex = items.findIndex((pipeline) => pipeline.id === sourceId)
+  const targetIndex = items.findIndex((pipeline) => pipeline.id === targetId)
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return items
+  const next = [...items]
+  const [moved] = next.splice(sourceIndex, 1)
+  next.splice(targetIndex, 0, moved)
+  return next
+}
+
 export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCreate, onReorder }: SubPipelineTabsProps) {
   const [createOpen, setCreateOpen] = useState(false)
   const [rearrangeOpen, setRearrangeOpen] = useState(false)
@@ -37,15 +47,19 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
 
   function movePipeline(targetId: string) {
     if (!draggedId || draggedId === targetId) return
+    setDraftOrder((current) => moveItem(current, draggedId, targetId))
+  }
+
+  function moveByOffset(id: string, offset: number) {
     setDraftOrder((current) => {
-      const sourceIndex = current.findIndex((pipeline) => pipeline.id === draggedId)
-      const targetIndex = current.findIndex((pipeline) => pipeline.id === targetId)
-      if (sourceIndex < 0 || targetIndex < 0) return current
-      const next = [...current]
-      const [moved] = next.splice(sourceIndex, 1)
-      next.splice(targetIndex, 0, moved)
-      return next
+      const sourceIndex = current.findIndex((pipeline) => pipeline.id === id)
+      const target = current[sourceIndex + offset]
+      return target ? moveItem(current, id, target.id) : current
     })
+  }
+
+  function renamePipeline(id: string, nextName: string) {
+    setDraftOrder((current) => current.map((pipeline) => pipeline.id === id ? { ...pipeline, name: nextName } : pipeline))
   }
 
   function createPipeline() {
@@ -66,6 +80,7 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
         </button>)}
         <Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-r" onClick={() => setCreateOpen(true)} aria-label="Create sub-pipeline"><Plus /></Button>
       </div>
+      <Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-l" onClick={openRearrange} aria-label="Rearrange sub-pipelines"><ArrowDownUp /></Button>
       <DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-l" aria-label="Sub-pipeline options" />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={() => setCreateOpen(true)}><Plus /> New sub-pipeline</DropdownMenuItem><DropdownMenuItem onClick={openRearrange}><GripVertical /> Rearrange sub-pipelines</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
     </footer>
 
@@ -78,10 +93,10 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
     </Dialog>
 
     <Dialog open={rearrangeOpen} onOpenChange={setRearrangeOpen}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader><DialogTitle>Rearrange Sub-Pipelines</DialogTitle><DialogDescription>Drag each board into the order you want in the footer.</DialogDescription></DialogHeader>
-        <div className="flex flex-col gap-2">{draftOrder.map((pipeline) => <div key={pipeline.id} draggable onDragStart={() => setDraggedId(pipeline.id)} onDragEnd={() => setDraggedId(null)} onDragOver={(event) => event.preventDefault()} onDrop={() => movePipeline(pipeline.id)} className={cn("flex cursor-grab items-center gap-2 rounded-md border bg-background p-2 active:cursor-grabbing", draggedId === pipeline.id && "opacity-50")}><GripVertical className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 truncate text-sm">{pipeline.name}</span></div>)}</div>
-        <DialogFooter><Button onClick={() => { onReorder(draftOrder); setRearrangeOpen(false) }}>Save</Button></DialogFooter>
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-sm">
+        <DialogHeader className="border-b px-4 py-3"><DialogTitle>Rearrange Sub-Pipelines</DialogTitle><DialogDescription className="sr-only">Rename or drag boards into the order shown in the footer.</DialogDescription></DialogHeader>
+        <div className="flex flex-col gap-2 p-4">{draftOrder.map((pipeline, index) => <div key={pipeline.id} draggable onDragStart={() => setDraggedId(pipeline.id)} onDragEnd={() => setDraggedId(null)} onDragOver={(event) => event.preventDefault()} onDrop={() => movePipeline(pipeline.id)} className={cn("flex items-center gap-2", draggedId === pipeline.id && "opacity-50")}><button type="button" className="cursor-grab text-muted-foreground active:cursor-grabbing" aria-label={`Drag ${pipeline.name}`}><GripVertical aria-hidden="true" /></button><Input value={pipeline.name} onChange={(event) => renamePipeline(pipeline.id, event.target.value)} aria-label={`Sub-pipeline ${index + 1} name`} /><div className="flex"><Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => moveByOffset(pipeline.id, -1)} aria-label={`Move ${pipeline.name} up`}><ChevronUp /></Button><Button variant="ghost" size="icon-sm" disabled={index === draftOrder.length - 1} onClick={() => moveByOffset(pipeline.id, 1)} aria-label={`Move ${pipeline.name} down`}><ChevronDown /></Button></div></div>)}</div>
+        <DialogFooter className="justify-start border-t bg-muted/30 px-4 py-3 sm:justify-start"><Button onClick={() => { onReorder(draftOrder.map((pipeline) => ({ ...pipeline, name: pipeline.name.trim() || "Untitled pipeline" }))); setRearrangeOpen(false) }}>Save</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </>
