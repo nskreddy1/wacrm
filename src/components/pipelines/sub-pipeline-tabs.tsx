@@ -20,11 +20,33 @@ type SubPipelineTabsProps = {
   activePipelineId: string
   onActivate: (id: string) => void
   onCreate: (name: string) => void
+  onReorder: (pipelines: SubPipeline[]) => void
 }
 
-export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCreate }: SubPipelineTabsProps) {
+export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCreate, onReorder }: SubPipelineTabsProps) {
   const [createOpen, setCreateOpen] = useState(false)
+  const [rearrangeOpen, setRearrangeOpen] = useState(false)
+  const [draftOrder, setDraftOrder] = useState<SubPipeline[]>(pipelines)
+  const [draggedId, setDraggedId] = useState<string | null>(null)
   const [name, setName] = useState("")
+
+  function openRearrange() {
+    setDraftOrder(pipelines)
+    setRearrangeOpen(true)
+  }
+
+  function movePipeline(targetId: string) {
+    if (!draggedId || draggedId === targetId) return
+    setDraftOrder((current) => {
+      const sourceIndex = current.findIndex((pipeline) => pipeline.id === draggedId)
+      const targetIndex = current.findIndex((pipeline) => pipeline.id === targetId)
+      if (sourceIndex < 0 || targetIndex < 0) return current
+      const next = [...current]
+      const [moved] = next.splice(sourceIndex, 1)
+      next.splice(targetIndex, 0, moved)
+      return next
+    })
+  }
 
   function createPipeline() {
     const trimmedName = name.trim()
@@ -44,7 +66,7 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
         </button>)}
         <Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-r" onClick={() => setCreateOpen(true)} aria-label="Create sub-pipeline"><Plus /></Button>
       </div>
-      <DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-l" aria-label="Sub-pipeline options" />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={() => setCreateOpen(true)}><Plus /> New sub-pipeline</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
+      <DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-l" aria-label="Sub-pipeline options" />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={() => setCreateOpen(true)}><Plus /> New sub-pipeline</DropdownMenuItem><DropdownMenuItem onClick={openRearrange}><GripVertical /> Rearrange sub-pipelines</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
     </footer>
 
     <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -52,6 +74,14 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
         <DialogHeader><DialogTitle>Create sub-pipeline</DialogTitle><DialogDescription>Add another board to this pipeline workspace. It starts empty and uses the same stages.</DialogDescription></DialogHeader>
         <div className="flex flex-col gap-2"><Label htmlFor="sub-pipeline-name">Board name</Label><Input id="sub-pipeline-name" value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.nativeEvent.isComposing || event.keyCode === 229) return; if (event.key === "Enter") createPipeline() }} placeholder="Enterprise renewals" autoFocus /></div>
         <DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button><Button onClick={createPipeline} disabled={!name.trim()}>Create board</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={rearrangeOpen} onOpenChange={setRearrangeOpen}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader><DialogTitle>Rearrange Sub-Pipelines</DialogTitle><DialogDescription>Drag each board into the order you want in the footer.</DialogDescription></DialogHeader>
+        <div className="flex flex-col gap-2">{draftOrder.map((pipeline) => <div key={pipeline.id} draggable onDragStart={() => setDraggedId(pipeline.id)} onDragEnd={() => setDraggedId(null)} onDragOver={(event) => event.preventDefault()} onDrop={() => movePipeline(pipeline.id)} className={cn("flex cursor-grab items-center gap-2 rounded-md border bg-background p-2 active:cursor-grabbing", draggedId === pipeline.id && "opacity-50")}><GripVertical className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 truncate text-sm">{pipeline.name}</span></div>)}</div>
+        <DialogFooter><Button onClick={() => { onReorder(draftOrder); setRearrangeOpen(false) }}>Save</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </>
