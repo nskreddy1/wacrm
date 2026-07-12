@@ -1,30 +1,5 @@
-"use client"
-
-import { useMemo, useState } from "react"
-import { CalendarClock, ChevronDown, CircleDollarSign, Ellipsis, Filter, GripVertical, LayoutGrid, List, Plus, Search, SlidersHorizontal, UserRound } from "lucide-react"
-import { demoDeals, demoStages, type DemoDeal } from "@/lib/demo/crm-data"
-import { cn } from "@/lib/utils"
-
-const stageAccent = { blue: "bg-blue-500", amber: "bg-amber-500", cyan: "bg-cyan-500", green: "bg-primary", red: "bg-red-500" }
+import { EnterprisePipelineWorkspace } from "@/components/pipelines/enterprise-pipeline-workspace"
 
 export default function PipelinesPage() {
-  const [deals, setDeals] = useState(demoDeals)
-  const [query, setQuery] = useState("")
-  const filtered = useMemo(() => deals.filter(deal => `${deal.title} ${deal.contact} ${deal.company}`.toLowerCase().includes(query.toLowerCase())), [deals, query])
-  const moveDeal = (deal: DemoDeal, direction: number) => { const index = demoStages.findIndex(stage => stage.id === deal.stageId); const target = demoStages[index + direction]; if (target) setDeals(current => current.map(item => item.id === deal.id ? { ...item, stageId: target.id } : item)) }
-
-  return <div className="flex h-full min-h-[600px] flex-col overflow-hidden bg-[#eef5f7]">
-    <div className="flex flex-col gap-3 border-b border-border bg-card px-4 py-3 lg:flex-row lg:items-center">
-      <div className="flex items-center gap-2"><button className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-semibold">Sales pipeline <ChevronDown className="size-3.5" /></button><span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">Demo data</span></div>
-      <div className="flex min-w-0 flex-1 items-center gap-2 lg:justify-end"><label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-background px-3 lg:max-w-64"><Search className="size-4 text-muted-foreground" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search deals" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label><button aria-label="Filter deals" className="flex size-9 items-center justify-center rounded-lg border border-border bg-card"><Filter className="size-4" /></button><button className="hidden h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm md:flex"><SlidersHorizontal className="size-4" /> Created time</button><div className="hidden rounded-lg border border-border bg-muted p-1 md:flex"><button aria-label="Board view" className="rounded-md bg-card p-1.5 text-primary shadow-sm"><LayoutGrid className="size-4" /></button><button aria-label="List view" className="p-1.5 text-muted-foreground"><List className="size-4" /></button></div><button className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> Deal</button></div>
-    </div>
-    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden p-3">
-      <div className="flex h-full min-w-max gap-2">
-        {demoStages.map((stage, stageIndex) => { const stageDeals = filtered.filter(deal => deal.stageId === stage.id); const value = stageDeals.reduce((sum, deal) => sum + deal.value, 0); return <section key={stage.id} className="flex h-full w-[270px] flex-col overflow-hidden rounded-lg border border-[#d9e5e8] bg-[#f8fafb]">
-          <div className={cn("h-1 shrink-0", stageAccent[stage.color])} /><header className="border-b border-[#dfe9eb] bg-card px-3 py-3"><div className="flex items-start justify-between gap-2"><div><h2 className="text-sm font-semibold">{stage.name}</h2><p className="mt-0.5 text-xs text-muted-foreground">${value.toLocaleString()} · {stageDeals.length} {stageDeals.length === 1 ? "deal" : "deals"}</p></div><button aria-label={`More options for ${stage.name}`} className="text-muted-foreground"><Ellipsis className="size-4" /></button></div><p className="mt-2 truncate text-[11px] text-muted-foreground">{stage.description}</p></header>
-          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">{stageDeals.map(deal => <article key={deal.id} className="group rounded-lg border border-[#dfe7e9] bg-card p-3 shadow-sm transition-shadow hover:shadow-md"><div className="flex items-start gap-2"><GripVertical className="mt-0.5 size-4 shrink-0 cursor-grab text-muted-foreground/40" /><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{deal.title}</h3><p className="mt-0.5 truncate text-xs text-muted-foreground">{deal.company}</p></div><button aria-label="Deal actions"><Ellipsis className="size-4 text-muted-foreground" /></button></div><div className="mt-3 flex items-center gap-2 text-xs"><CircleDollarSign className="size-3.5 text-primary" /><span className="font-semibold">${deal.value.toLocaleString()}</span><span className="text-muted-foreground">·</span><span className="truncate text-muted-foreground">{deal.contact}</span></div><div className="mt-3 flex items-center justify-between border-t border-border pt-2 text-[11px] text-muted-foreground"><span className="flex items-center gap-1"><CalendarClock className="size-3" /> {deal.due}</span><span className="flex items-center gap-1"><UserRound className="size-3" /> {deal.owner}</span></div><div className="mt-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"><button disabled={stageIndex === 0} onClick={() => moveDeal(deal, -1)} className="flex-1 rounded border border-border py-1 text-[10px] disabled:opacity-30">Previous</button><button disabled={stageIndex === demoStages.length - 1} onClick={() => moveDeal(deal, 1)} className="flex-1 rounded border border-border py-1 text-[10px] disabled:opacity-30">Next</button></div></article>)}{stageDeals.length === 0 && <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><div className="flex size-9 items-center justify-center rounded-full bg-[#eaf1f3]"><LayoutGrid className="size-4 text-muted-foreground" /></div><p className="mt-3 text-xs font-medium text-muted-foreground">This stage is empty</p><button className="mt-2 text-xs font-semibold text-primary">Add a deal</button></div>}</div>
-        </section> })}
-      </div>
-    </div>
-  </div>
+  return <EnterprisePipelineWorkspace />
 }
