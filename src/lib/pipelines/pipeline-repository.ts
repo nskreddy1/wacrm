@@ -1,16 +1,8 @@
-import type { DemoDeal as PipelineDeal, DemoStage as PipelineStage } from "@/lib/demo/crm-data"
+import type { PipelineRecord, PipelineSnapshot } from "./domain"
 
-export type { PipelineDeal, PipelineStage }
-
-export interface PipelineSnapshot {
-  deals: PipelineDeal[]
-  stages: PipelineStage[]
-}
+export type { PipelineDeal, PipelineSnapshot, PipelineStage } from "./domain"
 
 export interface PipelineRepository {
-  getSnapshot(): Promise<PipelineSnapshot>
-  createDeal(deal: PipelineDeal): Promise<PipelineDeal>
-  updateDeal(deal: PipelineDeal): Promise<PipelineDeal>
-  moveDeal(dealId: string, stageId: string): Promise<PipelineDeal>
-  deleteDeals(dealIds: readonly string[]): Promise<void>
+  listPipelines(): Promise<PipelineRecord[]>
+  getSnapshot(pipelineId?: string): Promise<PipelineSnapshot | null>
 }

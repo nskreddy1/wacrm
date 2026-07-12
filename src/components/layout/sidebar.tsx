@@ -38,6 +38,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useAuth } from "@/hooks/use-auth"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "@/lib/utils"
+import { accountIdFromPath, dashboardHref, isModulePath } from "@/lib/routes/dashboard-routes"
 
 type NavItem = {
   href: string
@@ -59,7 +60,9 @@ const primaryItems: NavItem[] = [
 ]
 
 function isActive(pathname: string, href: string) {
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`))
+  const moduleName = href.replace(/^\//, "")
+  const enterpriseModule = moduleName === "pipelines" ? "deals" : moduleName
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)) || isModulePath(pathname, enterpriseModule)
 }
 
 function Brand({ compact }: { compact: boolean }) {
@@ -76,9 +79,11 @@ function Brand({ compact }: { compact: boolean }) {
 function NavLink({ item, compact, pathname, onNavigate }: { item: NavItem; compact: boolean; pathname: string; onNavigate?: () => void }) {
   const active = isActive(pathname, item.href)
   const router = useRouter()
+  const href = dashboardHref(accountIdFromPath(pathname), item.href)
   const link = (
     <Button
-      render={<Link href={item.href} prefetch onMouseEnter={() => router.prefetch(item.href)} onFocus={() => router.prefetch(item.href)} onClick={onNavigate} />}
+      render={<Link href={href} prefetch onMouseEnter={() => router.prefetch(href)} onFocus={() => router.prefetch(href)} onClick={onNavigate} />}
+      nativeButton={false}
       variant="ghost"
       aria-current={active ? "page" : undefined}
       className={cn(
