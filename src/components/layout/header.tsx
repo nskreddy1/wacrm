@@ -1,21 +1,76 @@
 "use client"
 
-import { usePathname } from "next/navigation"
-import { Bell, ChevronDown, Command, Menu, Plus, Search } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Bell, ChevronDown, Command, Menu, Plus, Search, Settings, UserPlus } from "lucide-react"
 
-const titles: Record<string, string> = { dashboard: "Overview", inbox: "Shared inbox", contacts: "Contacts", pipelines: "Sales pipeline", bookings: "Bookings", broadcasts: "Broadcasts", automations: "Automations", settings: "Settings" }
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+const titles: Record<string, string> = {
+  dashboard: "Dashboard",
+  inbox: "Shared inbox",
+  contacts: "Contacts",
+  pipelines: "Pipelines",
+  bookings: "Bookings",
+  broadcasts: "Broadcasts",
+  automations: "Automations",
+  agents: "AI agents",
+  settings: "Settings",
+}
 
 export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
   const pathname = usePathname()
+  const router = useRouter()
   const segment = pathname.split("/").filter(Boolean)[0] ?? "dashboard"
-  return <header className="z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3 lg:px-5">
-    <button onClick={onOpenSidebar} aria-label="Open navigation" className="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted lg:hidden"><Menu className="size-5" /></button>
-    <div className="hidden min-w-36 sm:block"><p className="text-xs text-muted-foreground">Acme Support</p><h1 className="text-sm font-semibold">{titles[segment] ?? "Workspace"}</h1></div>
-    <button className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-background px-3 text-left text-sm text-muted-foreground sm:max-w-md" aria-label="Search workspace"><Search className="size-4" /><span className="truncate">Search contacts, messages and deals</span><span className="ml-auto hidden items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] md:flex"><Command className="size-3" /> K</span></button>
-    <div className="ml-auto flex items-center gap-1">
-      <button className="hidden h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground sm:flex"><Plus className="size-4" /> Create <ChevronDown className="size-3" /></button>
-      <button aria-label="Notifications" className="relative flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"><Bell className="size-[18px]" /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" /></button>
-      <button aria-label="Open account menu" className="flex size-9 items-center justify-center rounded-full bg-[#d9f7e9] text-xs font-bold text-[#073b4c]">SS</button>
-    </div>
-  </header>
+  const title = titles[segment] ?? "Workspace"
+
+  return (
+    <header className="z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-2 sm:px-3 lg:px-4">
+      <Button variant="ghost" size="icon" onClick={onOpenSidebar} aria-label="Open navigation" className="lg:hidden"><Menu /></Button>
+      <div className="hidden min-w-32 sm:block"><p className="text-[10px] text-muted-foreground">Acme Support</p><h1 className="truncate text-sm font-semibold">{title}</h1></div>
+      <Button variant="outline" className="min-w-0 flex-1 justify-start text-muted-foreground sm:max-w-md" aria-label="Search workspace">
+        <Search data-icon="inline-start" />
+        <span className="truncate">Search contacts, messages and deals</span>
+        <span className="ml-auto hidden items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] md:flex"><Command />K</span>
+      </Button>
+      <div className="ml-auto flex items-center gap-1">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button className="hidden sm:flex"><Plus data-icon="inline-start" />Create<ChevronDown data-icon="inline-end" /></Button>} />
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel>Create new</DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => router.push("/contacts")}><UserPlus />Contact</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/pipelines")}><Plus />Deal</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/bookings")}><Plus />Booking</DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Notifications" className="relative"><Bell /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" /></Button>} />
+          <DropdownMenuContent align="end" className="w-72">
+            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup><DropdownMenuItem onClick={() => router.push("/inbox")}>3 conversations need assignment</DropdownMenuItem><DropdownMenuItem onClick={() => router.push("/pipelines")}>Northstar deal moved to proposal</DropdownMenuItem></DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Open account menu"><Avatar size="sm"><AvatarFallback className="bg-secondary font-semibold text-secondary-foreground">SS</AvatarFallback></Avatar></Button>} />
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuLabel>Sam Silva<span className="block font-normal text-muted-foreground">Workspace owner</span></DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup><DropdownMenuItem onClick={() => router.push("/settings")}><Settings />Settings</DropdownMenuItem></DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </header>
+  )
 }
