@@ -75,9 +75,10 @@ function Brand({ compact }: { compact: boolean }) {
 
 function NavLink({ item, compact, pathname, onNavigate }: { item: NavItem; compact: boolean; pathname: string; onNavigate?: () => void }) {
   const active = isActive(pathname, item.href)
+  const router = useRouter()
   const link = (
     <Button
-      render={<Link href={item.href} onClick={onNavigate} />}
+      render={<Link href={item.href} prefetch onMouseEnter={() => router.prefetch(item.href)} onFocus={() => router.prefetch(item.href)} onClick={onNavigate} />}
       variant="ghost"
       aria-current={active ? "page" : undefined}
       className={cn(
