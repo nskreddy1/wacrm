@@ -59,7 +59,8 @@ const primaryItems: NavItem[] = [
 ]
 
 function isActive(pathname: string, href: string) {
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`))
+  const module = href.replace(/^\//, "")
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)) || pathname.includes(`/pipelines/`) && module === "pipelines" || pathname.includes(`/contacts/`) && module === "contacts"
 }
 
 function Brand({ compact }: { compact: boolean }) {
