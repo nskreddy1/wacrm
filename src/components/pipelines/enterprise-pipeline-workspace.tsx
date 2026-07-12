@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCorners, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core"
 import { toast } from "sonner"
-import { ArrowDown, ArrowUp, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Columns3, Download, Ellipsis, Filter, GripVertical, LayoutGrid, List, Plus, Search, SlidersHorizontal, Star, Trash2, UserRound, X } from "lucide-react"
+import { ArrowDown, ArrowUp, BriefcaseBusiness, Building2, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Columns3, Download, Ellipsis, Filter, Flame, Gauge, GripVertical, LayoutGrid, List, Plus, Search, SlidersHorizontal, Sparkles, Star, Target, Trash2, UserRound, X, type LucideIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,18 @@ const fields: { id: DealField; label: string }[] = [
   { id: "owner", label: "Deal owner" }, { id: "priority", label: "Priority" }, { id: "probability", label: "Probability" },
   { id: "createdAt", label: "Created time" }, { id: "source", label: "Lead source" }, { id: "activity", label: "Last activity" },
 ]
+const fieldIcons: Partial<Record<DealField, LucideIcon>> = {
+  contact: UserRound,
+  value: CircleDollarSign,
+  due: CalendarClock,
+  owner: BriefcaseBusiness,
+  company: Building2,
+  probability: Gauge,
+  source: Sparkles,
+  activity: Target,
+  priority: Flame,
+}
+
 const initialViews: SavedView[] = [
   { id: "all", name: "All deals", favorite: true, filter: "all" }, { id: "mine", name: "My deals", favorite: true, filter: "mine" },
   { id: "closing", name: "Closing this month", filter: "closing" }, { id: "hot", name: "High priority deals", filter: "hot" },
@@ -49,8 +61,8 @@ function displayValue(deal: DemoDeal, field: DealField) {
   return String(deal[field])
 }
 
-export function EnterprisePipelineWorkspace() {
-  const [deals, setDeals] = useState(demoDeals)
+export function EnterprisePipelineWorkspace({ initialDeals = demoDeals }: { initialDeals?: DemoDeal[] }) {
+  const [deals, setDeals] = useState(initialDeals)
   const [view, setView] = useState<ViewMode>("board")
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -100,7 +112,7 @@ export function EnterprisePipelineWorkspace() {
   function dragEnd(event: DragEndEvent) { setActiveDrag(null); if (!event.over) return; const dealId = String(event.active.id); const overId = String(event.over.id); const target = demoStages.some((stage) => stage.id === overId) ? overId : deals.find((deal) => deal.id === overId)?.stageId; if (target) setDeals((current) => current.map((deal) => deal.id === dealId ? { ...deal, stageId: target, probability: demoStages.findIndex((stage) => stage.id === target) * 20 } : deal)) }
   function cycleSort(field: DealField) { setSort((current) => current.field !== field ? { field, direction: "asc" } : { field, direction: current.direction === "asc" ? "desc" : "asc" }) }
 
-  return <div className="flex min-h-[calc(100vh-3.5rem)] flex-col overflow-hidden bg-background">
+  return <div className="flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-background">
     <header className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2">
       <Popover><PopoverTrigger render={<Button variant={(ownerFilter !== "all" || stageFilter !== "all") ? "secondary" : "outline"} size="sm" />}><Filter data-icon="inline-start" /> Filter{(ownerFilter !== "all" || stageFilter !== "all") && <Badge variant="secondary">{Number(ownerFilter !== "all") + Number(stageFilter !== "all")}</Badge>}</PopoverTrigger><PopoverContent align="start" className="w-72"><div className="flex flex-col gap-3"><div><p className="font-medium">Filter deals</p><p className="text-xs text-muted-foreground">Narrow every pipeline view.</p></div><Select value={ownerFilter} onValueChange={(value) => value && setOwnerFilter(value)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All owners</SelectItem>{["Sam Silva", "Nora James", "Ravi Patel"].map((owner) => <SelectItem key={owner} value={owner}>{owner}</SelectItem>)}</SelectGroup></SelectContent></Select><Select value={stageFilter} onValueChange={(value) => value && setStageFilter(value)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All stages</SelectItem>{demoStages.map((stage) => <SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>)}</SelectGroup></SelectContent></Select><Button variant="outline" size="sm" onClick={() => { setOwnerFilter("all"); setStageFilter("all") }}>Clear filters</Button></div></PopoverContent></Popover>
       <Popover><PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-36 justify-between" />}>{activeView.name}<ChevronDown data-icon="inline-end" /></PopoverTrigger><PopoverContent align="start" className="w-80 p-0"><div className="p-3"><div className="flex items-center gap-2 border-b"><span className="border-b-2 border-primary px-2 pb-2 text-sm font-medium">All views</span><span className="px-2 pb-2 text-sm text-muted-foreground">Favorites</span></div><div className="relative mt-3"><Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={viewSearch} onChange={(event) => setViewSearch(event.target.value)} placeholder="Search views" className="pl-8" /></div></div><Separator /><ScrollArea className="h-64"><div className="flex flex-col gap-1 p-2"><p className="px-2 py-1 text-xs font-semibold text-muted-foreground">PUBLIC VIEWS</p>{views.filter((item) => item.name.toLowerCase().includes(viewSearch.toLowerCase())).map((item) => <button key={item.id} onClick={() => setActiveViewId(item.id)} className={cn("flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted", item.id === activeViewId && "bg-primary/10 text-primary")}><span className="flex-1">{item.name}</span>{item.favorite && <Star className="size-3.5 fill-current" />}{item.id === activeViewId && <Check className="size-4" />}</button>)}</div></ScrollArea><Separator /><div className="p-2"><Button variant="ghost" className="w-full justify-start" onClick={() => setCreateViewOpen(true)}><Plus data-icon="inline-start" /> Create view</Button></div></PopoverContent></Popover>
@@ -114,7 +126,7 @@ export function EnterprisePipelineWorkspace() {
     <div className="flex flex-wrap items-center gap-4 border-b bg-muted/30 px-4 py-2 text-xs"><span><strong>{filtered.length}</strong> total deals</span><span><strong>{openDeals}</strong> open</span><span><strong>${pipelineValue.toLocaleString()}</strong> pipeline value</span><span><strong>{filtered.filter((deal) => deal.priority === "Hot").length}</strong> high priority</span>{(ownerFilter !== "all" || stageFilter !== "all") && <Button variant="ghost" size="sm" onClick={() => { setOwnerFilter("all"); setStageFilter("all") }}><X data-icon="inline-start" /> Clear filters</Button>}</div>
     {selected.size > 0 && <div className="flex items-center gap-2 border-b bg-muted px-3 py-2 text-sm"><strong>{selected.size} selected</strong><Button variant="destructive" size="sm" onClick={deleteSelected}><Trash2 data-icon="inline-start" /> Delete</Button><Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button></div>}
 
-    {view === "board" ? <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(event: DragStartEvent) => setActiveDrag(String(event.active.id))} onDragEnd={dragEnd} onDragCancel={() => setActiveDrag(null)}><div className="min-h-0 flex-1 overflow-x-auto bg-muted/20 p-3"><div className="flex h-full min-w-max gap-2">{demoStages.map((stage) => <StageColumn key={stage.id} stage={stage} deals={filtered.filter((deal) => deal.stageId === stage.id)} cardFields={cardFields} onOpen={openDeal} />)}</div></div><DragOverlay>{activeDrag && <DealCard deal={deals.find((deal) => deal.id === activeDrag)!} fields={cardFields} onOpen={() => {}} overlay />}</DragOverlay></DndContext> : <DealList deals={pageRows} fields={visibleFields} selected={selected} sort={sort} onSort={cycleSort} onSelect={setSelected} onOpen={openDeal} />}
+    {view === "board" ? <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(event: DragStartEvent) => setActiveDrag(String(event.active.id))} onDragEnd={dragEnd} onDragCancel={() => setActiveDrag(null)}><div className="min-h-0 flex-1 overflow-hidden bg-muted/20 p-2"><div className="grid h-full min-h-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">{demoStages.map((stage) => <StageColumn key={stage.id} stage={stage} deals={filtered.filter((deal) => deal.stageId === stage.id)} cardFields={cardFields} onOpen={openDeal} />)}</div></div><DragOverlay>{activeDrag && <DealCard deal={deals.find((deal) => deal.id === activeDrag)!} fields={cardFields} onOpen={() => {}} overlay />}</DragOverlay></DndContext> : <DealList deals={pageRows} fields={visibleFields} selected={selected} sort={sort} onSort={cycleSort} onSelect={setSelected} onOpen={openDeal} />}
 
     <footer className="flex flex-wrap items-center gap-4 border-t bg-card px-4 py-2 text-xs"><span>Total deals <strong>{filtered.length}</strong></span><span>Open deals <strong>{openDeals}</strong></span><span>Won <strong>{filtered.filter((deal) => deal.stageId === "won").length}</strong></span>{view === "list" && <><span className="ml-auto">Rows</span><Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(0) }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{[10,20,50].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectGroup></SelectContent></Select><span>{filtered.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length}</span><Button variant="ghost" size="icon-sm" disabled={page === 0} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft /></Button><Button variant="ghost" size="icon-sm" disabled={page >= totalPages - 1} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight /></Button></>}</footer>
 
@@ -134,10 +146,38 @@ function FieldPicker({ label, selected, onToggle, icon }: { label: string; selec
 
 function StageColumn({ stage, deals, cardFields, onOpen }: { stage: DemoStage; deals: DemoDeal[]; cardFields: DealField[]; onOpen: (deal?: DemoDeal, stageId?: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
-  return <section ref={setNodeRef} className={cn("flex h-fit w-64 shrink-0 flex-col overflow-hidden rounded-lg border bg-card/70 transition-colors", isOver && "border-primary bg-primary/5")}><div className={cn("h-1 shrink-0", stageTone[stage.color])} /><header className="border-b bg-card px-3 py-2"><div className="flex items-start justify-between gap-2"><div><h2 className="text-sm font-semibold">{stage.name}</h2><p className="text-xs text-muted-foreground">${deals.reduce((sum, deal) => sum + deal.value, 0).toLocaleString()} · {deals.length} {deals.length === 1 ? "deal" : "deals"}</p></div><DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`${stage.name} options`} />}><Ellipsis /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={() => onOpen(undefined, stage.id)}><Plus /> Add deal</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu></div><p className="mt-1 truncate text-xs text-muted-foreground">{stage.description}</p></header><div className="flex flex-col gap-1.5 p-1.5">{deals.map((deal) => <DraggableDeal key={deal.id} deal={deal} fields={cardFields} onOpen={onOpen} />)}{deals.length === 0 && <div className="flex min-h-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">Drop deals here</div>}<Button variant="ghost" size="sm" className="justify-start border border-dashed" onClick={() => onOpen(undefined, stage.id)}><Plus data-icon="inline-start" /> Add deal</Button></div></section>
+  const visibleDeals = deals.slice(0, 2)
+  const hiddenDeals = deals.slice(2)
+
+  return <section ref={setNodeRef} className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-card/70 transition-colors", isOver && "border-primary bg-primary/5")}>
+    <div className={cn("h-1 shrink-0", stageTone[stage.color])} />
+    <header className="shrink-0 border-b bg-card px-2 py-2">
+      <div className="flex items-start justify-between gap-1">
+        <div className="min-w-0"><h2 className="truncate text-xs font-semibold" title={stage.name}>{stage.name}</h2><p className="truncate text-[11px] text-muted-foreground">${deals.reduce((sum, deal) => sum + deal.value, 0).toLocaleString()} · {deals.length}</p></div>
+        <DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`${stage.name} options`} />}><Ellipsis /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={() => onOpen(undefined, stage.id)}><Plus /> Add deal</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
+      </div>
+    </header>
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5 p-1.5">
+      {visibleDeals.map((deal) => <DraggableDeal key={deal.id} deal={deal} fields={cardFields} onOpen={onOpen} />)}
+      {deals.length === 0 && <div className="flex min-h-20 flex-1 items-center justify-center rounded-md border border-dashed px-2 text-center text-xs text-muted-foreground">Drop deals here</div>}
+      {hiddenDeals.length > 0 && <Popover><PopoverTrigger render={<Button variant="ghost" size="sm" className="w-full" />}>+{hiddenDeals.length} more</PopoverTrigger><PopoverContent align="start" className="w-80"><div className="flex flex-col gap-2"><div><p className="font-medium">More in {stage.name}</p><p className="text-xs text-muted-foreground">Open a deal without adding board scroll.</p></div>{hiddenDeals.map((deal) => <button key={deal.id} className="flex items-center justify-between gap-3 rounded-md border p-2 text-left hover:bg-muted" onClick={() => onOpen(deal)}><span className="min-w-0 truncate text-sm font-medium">{deal.title}</span><span className="shrink-0 text-xs text-muted-foreground">${deal.value.toLocaleString()}</span></button>)}</div></PopoverContent></Popover>}
+      <Button variant="ghost" size="sm" className="mt-auto w-full justify-start border border-dashed" onClick={() => onOpen(undefined, stage.id)}><Plus data-icon="inline-start" /> Add</Button>
+    </div>
+  </section>
 }
 function DraggableDeal({ deal, fields, onOpen }: { deal: DemoDeal; fields: DealField[]; onOpen: (deal: DemoDeal) => void }) { const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id: deal.id }); return <div ref={setNodeRef} className={cn(isDragging && "opacity-30")}><DealCard deal={deal} fields={fields} onOpen={onOpen} dragProps={{ ...attributes, ...listeners }} /></div> }
-function DealCard({ deal, fields: shownFields, onOpen, dragProps, overlay }: { deal: DemoDeal; fields: DealField[]; onOpen: (deal: DemoDeal) => void; dragProps?: Record<string, unknown>; overlay?: boolean }) { return <article className={cn("rounded-md border bg-card p-2 shadow-xs hover:shadow-sm", overlay && "w-64 shadow-lg")}><div className="flex items-start gap-1.5"><button aria-label={`Drag ${deal.title}`} className="cursor-grab text-muted-foreground" {...dragProps}><GripVertical className="size-4" /></button><button className="min-w-0 flex-1 truncate text-left text-sm font-semibold hover:text-primary" onClick={() => onOpen(deal)}>{deal.title}</button><Badge className="shrink-0" variant={deal.priority === "Hot" ? "destructive" : "secondary"}>{deal.priority}</Badge></div><div className="mt-1.5 flex flex-col gap-1">{shownFields.filter((field) => !["title", "priority", "stageId"].includes(field)).slice(0, 4).map((field) => <div key={field} className="flex items-center gap-1.5 text-xs"><span className="w-16 shrink-0 text-muted-foreground">{fields.find((item) => item.id === field)?.label}</span><span className="truncate font-medium">{displayValue(deal, field)}</span></div>)}</div><div className="mt-2 flex items-center justify-between border-t pt-1.5 text-xs text-muted-foreground"><span className="flex min-w-0 items-center gap-1 truncate"><CalendarClock className="size-3.5 shrink-0" /> {deal.activity}</span><Avatar className="size-5 shrink-0"><AvatarFallback>{deal.owner.split(" ").map((part) => part[0]).join("")}</AvatarFallback></Avatar></div></article> }
+function DealCard({ deal, fields: shownFields, onOpen, dragProps, overlay }: { deal: DemoDeal; fields: DealField[]; onOpen: (deal: DemoDeal) => void; dragProps?: Record<string, unknown>; overlay?: boolean }) {
+  const metadata = shownFields.filter((field) => !["title", "priority", "stageId"].includes(field)).slice(0, 4)
+
+  return <article className={cn("min-w-0 rounded-md border bg-card p-2 shadow-xs transition-shadow hover:shadow-sm", overlay && "w-64 shadow-lg")}>
+    <div className="flex items-start gap-1"><button aria-label={`Drag ${deal.title}`} className="shrink-0 cursor-grab text-muted-foreground" {...dragProps}><GripVertical className="size-4" /></button><button className="min-w-0 flex-1 truncate text-left text-xs font-semibold hover:text-primary" onClick={() => onOpen(deal)} title={deal.title}>{deal.title}</button>{deal.priority === "Hot" && <Flame className="size-3.5 shrink-0 text-destructive" aria-label="High priority" />}</div>
+    <div className="mt-1.5 grid min-w-0 gap-1">{metadata.map((field) => {
+      const Icon = fieldIcons[field] ?? Target
+      const label = fields.find((item) => item.id === field)?.label ?? field
+      return <div key={field} className="flex min-w-0 items-center gap-1.5 text-[11px]" title={`${label}: ${displayValue(deal, field)}`}><Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="sr-only">{label}: </span><span className="truncate font-medium">{displayValue(deal, field)}</span></div>
+    })}</div>
+  </article>
+}
 
 function DealList({ deals, fields: shownFields, selected, sort, onSort, onSelect, onOpen }: { deals: DemoDeal[]; fields: DealField[]; selected: Set<string>; sort: { field: DealField; direction: "asc" | "desc" }; onSort: (field: DealField) => void; onSelect: (value: Set<string>) => void; onOpen: (deal: DemoDeal) => void }) {
   const all = deals.length > 0 && deals.every((deal) => selected.has(deal.id))
