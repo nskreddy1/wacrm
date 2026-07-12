@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation"
-import { getCurrentAccount } from "@/lib/auth/account"
+import { getPipelineRuntime } from "@/lib/pipelines/pipeline-runtime"
 import { orgPath, pipelinePath } from "@/lib/routes/dashboard-routes"
-import { SupabasePipelineRepository } from "@/lib/pipelines/supabase-pipeline-repository"
 
 export default async function PipelinesPage() {
-  const context = await getCurrentAccount()
-  const pipelines = await new SupabasePipelineRepository(context).listPipelines()
-  redirect(pipelines[0] ? pipelinePath(context.accountId, pipelines[0].id, "board") : orgPath(context.accountId, "pipelines"))
+  const { accountId, repository } = await getPipelineRuntime()
+  const pipelines = await repository.listPipelines()
+  redirect(pipelines[0] ? pipelinePath(accountId, pipelines[0].id, "board") : orgPath(accountId, "pipelines"))
 }
