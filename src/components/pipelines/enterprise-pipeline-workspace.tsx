@@ -166,7 +166,7 @@ function StageColumn({ stage, deals, cardFields, onOpen }: { stage: DemoStage; d
       </div>
     </header>
     <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden border-x bg-card/30">
-      <button className="m-1.5 shrink-0 rounded-sm border border-dashed bg-card px-2 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted" onClick={() => onOpen(undefined, stage.id)}>{stage.description}</button>
+      {deals.length === 0 && <button className="m-1.5 shrink-0 rounded-sm border border-dashed bg-card px-2 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted" onClick={() => onOpen(undefined, stage.id)}>{stage.description}</button>}
       <div className="flex min-h-0 flex-col gap-2 px-1.5">
         {deals.map((deal) => <DraggableDeal key={deal.id} deal={deal} fields={cardFields} onOpen={onOpen} />)}
       </div>
