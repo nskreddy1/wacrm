@@ -1,5 +1,3 @@
-import "server-only"
-
 import { z } from "zod"
 
 const providerSchema = z.enum(["supabase", "neon"])
@@ -7,7 +5,9 @@ const providerSchema = z.enum(["supabase", "neon"])
 export type DatabaseProvider = z.infer<typeof providerSchema>
 
 export function getDatabaseProvider(): DatabaseProvider {
-  const result = providerSchema.safeParse(process.env.DATABASE_PROVIDER ?? "supabase")
+  const configuredProvider = process.env.DATABASE_PROVIDER
+  const detectedProvider = process.env.DATABASE_URL ? "neon" : "supabase"
+  const result = providerSchema.safeParse(configuredProvider ?? detectedProvider)
   if (!result.success) {
     throw new Error("DATABASE_PROVIDER must be either 'supabase' or 'neon'")
   }

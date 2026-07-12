@@ -35,7 +35,7 @@ export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
 
   return (
     <header className="z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-2 sm:px-3 lg:px-4">
-      <Button variant="ghost" size="icon" onClick={onOpenSidebar} aria-label="Open navigation" className="lg:hidden"><Menu /></Button>
+      <Button variant="ghost" size="icon" onClick={onOpenSidebar} aria-label="Open navigation" className="md:hidden"><Menu /></Button>
       <div className="hidden min-w-32 sm:block"><p className="text-[10px] text-muted-foreground">Acme Support</p><h1 className="truncate text-sm font-semibold">{title}</h1></div>
       <Button variant="outline" className="min-w-0 flex-1 justify-start text-muted-foreground sm:max-w-md" aria-label="Search workspace">
         <Search data-icon="inline-start" />

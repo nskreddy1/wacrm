@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { hasSupabaseConfig } from "@/lib/supabase/server";
 import { DashboardShell } from "./dashboard-shell";
 
 // Server layout whose only job is to declare "do not index" metadata
@@ -7,6 +6,8 @@ import { DashboardShell } from "./dashboard-shell";
 // crawler-level and middleware redirects unauthenticated visitors, so
 // this is belt-and-suspenders — but SEO-critical if a URL ever leaks
 // via a link shared externally.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   robots: {
     index: false,
@@ -25,9 +26,5 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  if (!hasSupabaseConfig()) {
-    return <main className="min-h-screen bg-background">{children}</main>;
-  }
-
   return <DashboardShell>{children}</DashboardShell>;
 }

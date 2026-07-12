@@ -127,7 +127,7 @@ export function Sidebar({
 
   return (
     <TooltipProvider delay={250}>
-      <aside className={cn("hidden h-screen shrink-0 flex-col overflow-hidden bg-[#07475a] text-white transition-[width] duration-200 lg:flex", collapsed ? "w-[72px]" : "w-60")}>
+      <aside className={cn("hidden h-screen shrink-0 flex-col overflow-hidden bg-[#07475a] text-white transition-[width] duration-200 md:flex", collapsed ? "w-[72px]" : "w-60")}>
         <Brand compact={collapsed} />
         <Separator className="bg-white/10" />
         <ScrollArea className="min-h-0 flex-1">
@@ -171,7 +171,7 @@ export function Sidebar({
         </div>
       </aside>
 
-      <div className={cn("fixed inset-0 z-50 lg:hidden", open ? "pointer-events-auto" : "pointer-events-none")} aria-hidden={!open}>
+      <div className={cn("fixed inset-0 z-50 md:hidden", open ? "pointer-events-auto" : "pointer-events-none")} aria-hidden={!open}>
         <button type="button" aria-label="Close navigation" onClick={onClose} className={cn("absolute inset-0 bg-foreground/30 transition-opacity", open ? "opacity-100" : "opacity-0")} />
         <aside className={cn("relative flex h-full w-72 flex-col bg-[#07475a] text-white shadow-xl transition-transform", open ? "translate-x-0" : "-translate-x-full")}>
           <Brand compact={false} />
