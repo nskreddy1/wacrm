@@ -22,10 +22,10 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "wacrm",
-    template: "%s — wacrm",
+    default: "Relay CRM",
+    template: "%s — Relay CRM",
   },
-  description: "Self-hostable CRM template for WhatsApp.",
+  description: "Enterprise WhatsApp CRM for conversations, contacts, pipelines, campaigns, and bookings.",
   robots: {
     index: false,
     follow: false,
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#020617",
+  themeColor: "#073b4c",
   colorScheme: "dark light",
 };
 
@@ -90,7 +90,7 @@ export default async function RootLayout({
       lang={locale}
       data-theme={DEFAULT_THEME}
       data-mode={DEFAULT_MODE}
-      className={`${inter.variable} h-full antialiased`}
+      className={`${inter.variable} h-full bg-background antialiased`}
       // The `theme-boot` script below rewrites `data-theme` and
       // `data-mode` on <html> from localStorage before React hydrates,
       // so for any non-default choice the client DOM intentionally

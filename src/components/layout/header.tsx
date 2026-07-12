@@ -1,159 +1,21 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useAuth } from "@/hooks/use-auth";
-import { LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ModeToggle } from "@/components/layout/mode-toggle";
+import { usePathname } from "next/navigation"
+import { Bell, ChevronDown, Command, Menu, Plus, Search } from "lucide-react"
 
-const pageTitles: Record<string, string> = {
-  "/dashboard": "dashboard",
-  "/inbox": "inbox",
-  "/notifications": "notifications",
-  "/contacts": "contacts",
-  "/bookings": "bookings",
-  "/pipelines": "pipelines",
-  "/broadcasts": "broadcasts",
-  "/automations": "automations",
-  "/settings": "settings",
-};
+const titles: Record<string, string> = { dashboard: "Overview", inbox: "Shared inbox", contacts: "Contacts", pipelines: "Sales pipeline", bookings: "Bookings", broadcasts: "Broadcasts", automations: "Automations", settings: "Settings" }
 
-function getPageTitleKey(pathname: string): string {
-  if (pageTitles[pathname]) return pageTitles[pathname];
-  const match = Object.entries(pageTitles).find(([path]) =>
-    pathname.startsWith(path),
-  );
-  return match ? match[1] : "dashboard";
-}
-
-interface HeaderProps {
-  /** Wired to the shell's drawer state. Used only on mobile — the
-   *  hamburger button is hidden on lg+. */
-  onOpenSidebar?: () => void;
-}
-
-import { useTranslations } from "next-intl";
-
-export function Header({ onOpenSidebar }: HeaderProps) {
-  const t = useTranslations("Header");
-  const pathname = usePathname();
-  const { profile, account, signOut } = useAuth();
-  const titleKey = getPageTitleKey(pathname);
-
-  const initial =
-    profile?.full_name?.charAt(0)?.toUpperCase() ??
-    profile?.email?.charAt(0)?.toUpperCase() ??
-    "U";
-
-  return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
-      <div className="flex min-w-0 items-center gap-2">
-        {/* Hamburger — mobile only. 44×44 hit target per Apple HIG. */}
-        <button
-          type="button"
-          onClick={onOpenSidebar}
-          aria-label={t("openMenu")}
-          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        {/* Breadcrumb-style location: workspace context + current page. */}
-        <nav aria-label={t("breadcrumb")} className="flex min-w-0 items-center gap-1.5">
-          <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">
-            {account?.name ?? t("workspace")}
-          </span>
-          <span aria-hidden="true" className="hidden text-muted-foreground/50 sm:inline">
-            /
-          </span>
-          <h1 className="truncate text-sm font-semibold text-foreground sm:text-base">
-            {t(titleKey as string)}
-          </h1>
-        </nav>
-      </div>
-
-      <div className="flex items-center gap-1 sm:gap-2">
-        <ModeToggle />
-        <div aria-hidden="true" className="mx-1 hidden h-6 w-px bg-border sm:block" />
-
-        <DropdownMenu>
-        <DropdownMenuTrigger
-          className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted/70 focus:bg-muted/70 focus:outline-none data-popup-open:bg-muted/70 sm:gap-3 sm:pl-1 sm:pr-3"
-          aria-label={t("openAccountMenu")}
-        >
-          <Avatar className="size-8">
-            {profile?.avatar_url ? (
-              <AvatarImage
-                src={profile.avatar_url}
-                alt={profile.full_name ?? t("defaultAvatar")}
-              />
-            ) : null}
-            <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-              {initial}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden text-sm font-medium text-foreground sm:inline">
-            {profile?.full_name ?? t("defaultUser")}
-          </span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          sideOffset={6}
-          className="min-w-56 bg-popover text-popover-foreground ring-border"
-        >
-          <div className="px-2 py-1.5">
-            <p className="truncate text-sm font-medium text-foreground">
-              {profile?.full_name ?? t("defaultUser")}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {profile?.email ?? ""}
-            </p>
-          </div>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem
-            render={
-              <Link
-                href="/settings?tab=profile"
-                className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-              />
-            }
-          >
-            <User className="size-4" />
-            {t("menuProfile")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            render={
-              <Link
-                href="/settings?tab=whatsapp"
-                className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-              />
-            }
-          >
-            <SettingsIcon className="size-4" />
-            {t("menuSettings")}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem
-            onClick={signOut}
-            className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-          >
-            <LogOut className="size-4" />
-            {t("menuSignOut")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </header>
-  );
+export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
+  const pathname = usePathname()
+  const segment = pathname.split("/").filter(Boolean)[0] ?? "dashboard"
+  return <header className="z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3 lg:px-5">
+    <button onClick={onOpenSidebar} aria-label="Open navigation" className="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted lg:hidden"><Menu className="size-5" /></button>
+    <div className="hidden min-w-36 sm:block"><p className="text-xs text-muted-foreground">Acme Support</p><h1 className="text-sm font-semibold">{titles[segment] ?? "Workspace"}</h1></div>
+    <button className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-background px-3 text-left text-sm text-muted-foreground sm:max-w-md" aria-label="Search workspace"><Search className="size-4" /><span className="truncate">Search contacts, messages and deals</span><span className="ml-auto hidden items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] md:flex"><Command className="size-3" /> K</span></button>
+    <div className="ml-auto flex items-center gap-1">
+      <button className="hidden h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground sm:flex"><Plus className="size-4" /> Create <ChevronDown className="size-3" /></button>
+      <button aria-label="Notifications" className="relative flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"><Bell className="size-[18px]" /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" /></button>
+      <button aria-label="Open account menu" className="flex size-9 items-center justify-center rounded-full bg-[#d9f7e9] text-xs font-bold text-[#073b4c]">SS</button>
+    </div>
+  </header>
 }
