@@ -42,7 +42,6 @@ function SignupPageInner() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const supabase = createClient();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +58,7 @@ function SignupPageInner() {
     }
 
     setLoading(true);
+    const supabase = createClient();
 
     // If we have an invite token, point Supabase's verification
     // email back at the join page so the user can accept after
