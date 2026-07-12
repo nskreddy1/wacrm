@@ -156,6 +156,14 @@ function LoginPageInner() {
               {t('createAccount')}
             </Link>
           </p>
+
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              <p className="font-semibold mb-1">Demo Admin Account (Dev Only)</p>
+              <p>Email: <code className="bg-amber-500/20 px-1 rounded">admin@wacrm.local</code></p>
+              <p>Password: <code className="bg-amber-500/20 px-1 rounded">AdminPass123!</code></p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
