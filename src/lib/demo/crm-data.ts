@@ -8,6 +8,12 @@ export type DemoDeal = {
   owner: string
   due: string
   activity: string
+  priority: "Hot" | "Warm" | "Normal"
+  probability: number
+  createdAt: string
+  source: string
+  nextStep: string
+  description: string
 }
 
 export type DemoStage = {
@@ -27,12 +33,14 @@ export const demoStages: DemoStage[] = [
 ]
 
 export const demoDeals: DemoDeal[] = [
-  { id: "d1", title: "Annual support plan", contact: "Aarav Mehta", company: "Northstar Labs", value: 12800, stageId: "qualification", owner: "Sam", due: "Jul 14", activity: "Reply due today" },
-  { id: "d2", title: "Customer care rollout", contact: "Mia Chen", company: "Acme Retail", value: 24600, stageId: "analysis", owner: "Nora", due: "Jul 16", activity: "Call booked" },
-  { id: "d3", title: "WhatsApp commerce pilot", contact: "Leo Martin", company: "Fable Goods", value: 8400, stageId: "proposal", owner: "Sam", due: "Jul 18", activity: "Proposal viewed" },
-  { id: "d4", title: "Regional sales workspace", contact: "Priya Shah", company: "Brightline", value: 31900, stageId: "negotiation", owner: "Ravi", due: "Jul 12", activity: "Legal review" },
-  { id: "d5", title: "Concierge automation", contact: "Owen Brooks", company: "Staywell", value: 17200, stageId: "won", owner: "Nora", due: "Jul 08", activity: "Handoff ready" },
-  { id: "d6", title: "Lead routing setup", contact: "Sofia Reyes", company: "Juniper Co", value: 6200, stageId: "qualification", owner: "Ravi", due: "Jul 20", activity: "New message" },
+  { id: "d1", title: "Annual support plan", contact: "Ted Watson", company: "Northstar Labs", value: 12800, stageId: "qualification", owner: "Sam Silva", due: "2026-07-14", activity: "Reply due today", priority: "Hot", probability: 20, createdAt: "2026-07-02", source: "Website", nextStep: "Confirm discovery call", description: "Annual WhatsApp support and service workspace." },
+  { id: "d2", title: "Customer care rollout", contact: "Mia Chen", company: "Acme Retail", value: 24600, stageId: "analysis", owner: "Nora James", due: "2026-07-16", activity: "Call booked", priority: "Warm", probability: 40, createdAt: "2026-07-04", source: "Referral", nextStep: "Map support queues", description: "Multi-team customer care rollout across retail locations." },
+  { id: "d3", title: "WhatsApp commerce pilot", contact: "Leo Martin", company: "Fable Goods", value: 8400, stageId: "proposal", owner: "Sam Silva", due: "2026-07-18", activity: "Proposal viewed", priority: "Normal", probability: 60, createdAt: "2026-07-05", source: "Campaign", nextStep: "Review proposal", description: "Pilot commerce workflows for the digital sales team." },
+  { id: "d4", title: "Regional sales workspace", contact: "Priya Shah", company: "Brightline", value: 31900, stageId: "negotiation", owner: "Ravi Patel", due: "2026-07-12", activity: "Legal review", priority: "Hot", probability: 80, createdAt: "2026-06-28", source: "Partner", nextStep: "Approve terms", description: "Enterprise regional pipeline with role-based access." },
+  { id: "d5", title: "Concierge automation", contact: "Owen Brooks", company: "Staywell", value: 17200, stageId: "won", owner: "Nora James", due: "2026-07-08", activity: "Handoff ready", priority: "Warm", probability: 100, createdAt: "2026-06-22", source: "Upsell", nextStep: "Customer handoff", description: "Automated concierge journeys and booking follow-up." },
+  { id: "d6", title: "Lead routing setup", contact: "Sofia Baker", company: "Orbit Works", value: 6200, stageId: "qualification", owner: "Ravi Patel", due: "2026-07-20", activity: "New message", priority: "Normal", probability: 20, createdAt: "2026-07-10", source: "Website", nextStep: "Qualify requirements", description: "Lead routing and round-robin assignment setup." },
+  { id: "d7", title: "Healthcare intake expansion", contact: "Sophia Patel", company: "Evergreen Health", value: 42800, stageId: "analysis", owner: "Sam Silva", due: "2026-07-24", activity: "Security review", priority: "Hot", probability: 45, createdAt: "2026-07-08", source: "Referral", nextStep: "Complete security review", description: "Secure intake and appointment workflows for five clinics." },
+  { id: "d8", title: "Renewal messaging program", contact: "Ava Rodriguez", company: "Acme Retail", value: 14600, stageId: "proposal", owner: "Nora James", due: "2026-07-29", activity: "Pricing requested", priority: "Warm", probability: 65, createdAt: "2026-07-09", source: "Renewal", nextStep: "Send revised pricing", description: "Renewal reminders and customer retention automations." },
 ]
 
 export const dashboardData = {
