@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation"
-import { getCurrentAccount } from "@/lib/auth/account"
+import { getCurrentProviderAccount } from "@/lib/auth/provider-account"
 import { enterpriseContactsPath } from "@/lib/routes/dashboard-routes"
 
 export default async function ContactsPage() {
-  const context = await getCurrentAccount()
+  const context = await getCurrentProviderAccount()
   redirect(enterpriseContactsPath(context.accountId))
 }
