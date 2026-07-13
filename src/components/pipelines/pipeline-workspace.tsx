@@ -3,10 +3,11 @@
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
-import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { ArrowDown, ArrowUp, ChevronDown, Download, Ellipsis, Filter, GripVertical, LayoutGrid, List, Plus, Search, Table2, Trash2, X } from "lucide-react"
+import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core"
+import { ArrowDown, ArrowUp, CalendarClock, ChevronDown, Download, Ellipsis, Filter, GripVertical, LayoutGrid, List, Plus, Search, Table2, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -36,8 +37,10 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
   const [activeSubPipelineId, setActiveSubPipelineId] = useState(initialSubPipelineId ?? snapshot.subPipelines[0]?.id ?? snapshot.pipeline.id)
   const [editing, setEditing] = useState<PipelineDeal | "new" | null>(null)
   const [defaultStageId, setDefaultStageId] = useState(snapshot.stages[0]?.id ?? "")
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState("")
   const [pending, startTransition] = useTransition()
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor))
   const activeSubPipeline = snapshot.subPipelines.find((item) => item.id === activeSubPipelineId) ?? snapshot.subPipelines[0]
 
   const deals = useMemo(() => {
@@ -63,11 +66,15 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
     if (!current || current.stageId === stageId) return
     await optimisticDeal({ ...current, stageId })
     const result = await moveDealAction(dealId, snapshot.pipeline.id, stageId)
-    if (!result.ok) { await mutate(previous, { revalidate: false }); toast.error(result.error); return }
+    if (!result.ok) { await mutate(previous, { revalidate: false }); setAnnouncement(`Could not move ${current.title}.`); toast.error(result.error); return }
     await optimisticDeal(result.data)
+    const target = snapshot.stages.find((item) => item.id === stageId)
+    setAnnouncement(`${current.title} moved to ${target?.name ?? "the selected stage"}.`)
   }
 
+  function dragStart(event: DragStartEvent) { setActiveDragId(String(event.active.id)) }
   function dragEnd(event: DragEndEvent) {
+    setActiveDragId(null)
     if (event.over) void moveDeal(String(event.active.id), String(event.over.id))
   }
 
@@ -106,7 +113,10 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
     else toast.error("No deals to export")
   }
 
+  const activeDrag = snapshot.deals.find((deal) => deal.id === activeDragId)
+
   return <div className="flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-background">
+    <p className="sr-only" aria-live="polite">{announcement}</p>
     <header className="flex min-h-14 flex-wrap items-center gap-2 border-b bg-card px-3 py-2">
       <Popover><PopoverTrigger render={<Button variant={owner !== "all" || stage !== "all" ? "secondary" : "ghost"} size="icon" className="rounded-full" aria-label="Filter deals" />}><Filter /></PopoverTrigger><PopoverContent align="start" className="w-72"><div className="flex flex-col gap-3"><p className="font-medium">Filter deals</p><Select value={owner} onValueChange={(value) => value && setOwner(value)}><SelectTrigger className="w-full"><SelectValue placeholder="Owner" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All owners</SelectItem>{snapshot.members.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectGroup></SelectContent></Select><Select value={stage} onValueChange={(value) => value && setStage(value)}><SelectTrigger className="w-full"><SelectValue placeholder="Stage" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All stages</SelectItem>{snapshot.stages.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectGroup></SelectContent></Select><Button variant="outline" onClick={() => { setOwner("all"); setStage("all") }}>Clear filters</Button></div></PopoverContent></Popover>
       <Select value={snapshot.pipeline.id} onValueChange={(id) => id && router.push(pipelinePath(snapshot.accountId, id, initialMode))}><SelectTrigger className="min-w-44 rounded-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{snapshot.pipelines.map((pipeline) => <SelectItem key={pipeline.id} value={pipeline.id}>{pipeline.name}</SelectItem>)}</SelectGroup></SelectContent></Select>
@@ -118,20 +128,20 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
     </header>
     <div className="flex items-center gap-4 border-b bg-muted/30 px-4 py-2 text-xs"><span><strong>{deals.length}</strong> deals</span><span><strong>{deals.filter((deal) => deal.status === "open").length}</strong> open</span><span><strong>{new Intl.NumberFormat(undefined, { style: "currency", currency: deals[0]?.currency ?? "USD", maximumFractionDigits: 0 }).format(deals.reduce((sum, deal) => sum + deal.value, 0))}</strong> value</span>{(owner !== "all" || stage !== "all") && <Button variant="ghost" size="sm" onClick={() => { setOwner("all"); setStage("all") }}><X data-icon="inline-start" />Clear</Button>}</div>
     {selected.size > 0 && <div className="flex items-center gap-2 border-b bg-muted px-3 py-2 text-sm"><strong>{selected.size} selected</strong><Button variant="destructive" size="sm" onClick={() => void deleteSelected()}><Trash2 data-icon="inline-start" />Delete</Button></div>}
-    {initialMode === "board" ? <DndContext sensors={sensors} onDragEnd={dragEnd}><div className="grid min-h-0 flex-1 auto-cols-[minmax(15rem,1fr)] grid-flow-col gap-2 overflow-x-auto bg-muted/20 p-2">{snapshot.stages.map((item) => <StageColumn key={item.id} stageId={item.id} name={item.name} deals={deals.filter((deal) => deal.stageId === item.id)} onOpen={setEditing} currency={deals[0]?.currency ?? "USD"} />)}</div></DndContext> : initialMode === "sheet" ? <PipelineSheet deals={deals} stages={snapshot.stages} members={snapshot.members} onSave={saveDeal} /> : <DealTable deals={deals} selected={selected} onSelected={setSelected} onOpen={setEditing} stages={snapshot.stages} />}
+    {initialMode === "board" ? <DndContext sensors={sensors} onDragStart={dragStart} onDragCancel={() => setActiveDragId(null)} onDragEnd={dragEnd}><div className="grid min-h-0 flex-1 auto-cols-[18rem] grid-flow-col gap-2 overflow-x-auto bg-muted/20 p-2 [scrollbar-gutter:stable]">{snapshot.stages.map((item) => <StageColumn key={item.id} stage={item} deals={deals.filter((deal) => deal.stageId === item.id)} allStages={snapshot.stages} onOpen={setEditing} onAdd={(stageId) => { setDefaultStageId(stageId); setEditing("new") }} onMove={moveDeal} currency={deals[0]?.currency ?? "USD"} />)}</div><DragOverlay>{activeDrag && <div className="w-72 rotate-1 rounded-md border bg-card p-3 shadow-lg"><p className="truncate text-sm font-semibold">{activeDrag.title}</p></div>}</DragOverlay></DndContext> : initialMode === "sheet" ? <PipelineSheet deals={deals} stages={snapshot.stages} members={snapshot.members} onSave={saveDeal} /> : <DealTable deals={deals} selected={selected} onSelected={setSelected} onOpen={setEditing} stages={snapshot.stages} />}
     {initialMode === "board" && <SubPipelineTabs pipelines={snapshot.subPipelines} activePipelineId={activeSubPipelineId} onActivate={(id) => { setActiveSubPipelineId(id); router.replace(pipelinePath(snapshot.accountId, snapshot.pipeline.id, initialMode, { subPipeline: id, savedView: initialSavedViewId })) }} onCreate={(name) => startTransition(() => void createSubPipeline(name))} onReorder={(items) => startTransition(() => void reorderSubPipelines(items))} />}
     {editing !== null && <PipelineDealEditor key={editing === "new" ? `new-${defaultStageId}` : editing.id} open deal={editing === "new" ? null : editing} defaultStageId={defaultStageId} snapshot={snapshot} pending={pending} onOpenChange={(open) => { if (!open) setEditing(null) }} onSave={saveDeal} />}
   </div>
 }
 
-function StageColumn({ stageId, name, deals, onOpen, currency }: { stageId: string; name: string; deals: PipelineDeal[]; onOpen: (deal: PipelineDeal) => void; currency: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stageId })
-  return <section ref={setNodeRef} className={cn("flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card", isOver && "ring-2 ring-primary")}><header className="flex items-center justify-between border-b p-3"><div><h2 className="font-semibold">{name}</h2><p className="text-xs text-muted-foreground">{new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(deals.reduce((sum, deal) => sum + deal.value, 0))} · {deals.length}</p></div></header><div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">{deals.map((deal) => <DealCard key={deal.id} deal={deal} onOpen={onOpen} />)}{deals.length === 0 && <p className="m-auto text-sm text-muted-foreground">Drop a deal here</p>}</div></section>
+function StageColumn({ stage, deals, allStages, onOpen, onAdd, onMove, currency }: { stage: PipelineSnapshot["stages"][number]; deals: PipelineDeal[]; allStages: PipelineSnapshot["stages"]; onOpen: (deal: PipelineDeal) => void; onAdd: (stageId: string) => void; onMove: (dealId: string, stageId: string) => Promise<void>; currency: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage.id })
+  return <section ref={setNodeRef} aria-labelledby={`stage-${stage.id}`} className={cn("flex min-h-0 flex-col overflow-hidden rounded-lg border border-t-4 bg-card", isOver && "ring-2 ring-primary")} style={{ borderTopColor: stage.color }}><header className="flex items-start justify-between border-b p-3"><div className="min-w-0"><h2 id={`stage-${stage.id}`} className="truncate font-semibold">{stage.name}</h2><p className="text-xs text-muted-foreground">{new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(deals.reduce((sum, deal) => sum + deal.value, 0))} · {deals.length} {deals.length === 1 ? "deal" : "deals"}</p></div><Button variant="ghost" size="icon-sm" onClick={() => onAdd(stage.id)} aria-label={`Add deal to ${stage.name}`}><Plus /></Button></header><div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">{deals.map((deal) => <DealCard key={deal.id} deal={deal} stages={allStages} onOpen={onOpen} onMove={onMove} />)}{deals.length === 0 && <div className="m-auto flex flex-col items-center gap-2 text-center"><p className="text-sm font-medium">No deals in {stage.name}</p><p className="text-xs text-muted-foreground">Move a deal here or add one.</p><Button variant="outline" size="sm" onClick={() => onAdd(stage.id)}><Plus data-icon="inline-start" />Add deal</Button></div>}<Button variant="ghost" size="sm" className="justify-start" onClick={() => onAdd(stage.id)}><Plus data-icon="inline-start" />Add deal</Button></div></section>
 }
 
-function DealCard({ deal, onOpen }: { deal: PipelineDeal; onOpen: (deal: PipelineDeal) => void }) {
+function DealCard({ deal, stages, onOpen, onMove }: { deal: PipelineDeal; stages: PipelineSnapshot["stages"]; onOpen: (deal: PipelineDeal) => void; onMove: (dealId: string, stageId: string) => Promise<void> }) {
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id: deal.id })
-  return <article ref={setNodeRef} className={cn("rounded-md border bg-background p-3 shadow-xs", isDragging && "opacity-40")}><div className="flex items-start gap-2"><button {...attributes} {...listeners} aria-label={`Drag ${deal.title}`} className="cursor-grab text-muted-foreground"><GripVertical /></button><button className="min-w-0 flex-1 truncate text-left text-sm font-semibold hover:text-primary" onClick={() => onOpen(deal)}>{deal.title}</button></div><p className="mt-2 text-sm font-medium">{new Intl.NumberFormat(undefined, { style: "currency", currency: deal.currency }).format(deal.value)}</p><div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><Avatar className="size-6"><AvatarFallback>{deal.owner?.name.slice(0, 2).toUpperCase() ?? "--"}</AvatarFallback></Avatar><span className="truncate">{deal.owner?.name ?? "Unassigned"}</span></div></article>
+  return <article ref={setNodeRef} className={cn("rounded-md border bg-background p-3 shadow-xs transition-shadow hover:shadow-sm", isDragging && "opacity-40")}><div className="flex items-start gap-2"><button {...attributes} {...listeners} aria-label={`Drag ${deal.title}`} className="cursor-grab text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"><GripVertical /></button><button className="min-w-0 flex-1 truncate text-left text-sm font-semibold hover:text-primary" onClick={() => onOpen(deal)}>{deal.title}</button><Badge variant={deal.priority === "hot" || deal.priority === "high" ? "destructive" : "secondary"} className="capitalize">{deal.priority}</Badge></div><p className="mt-2 text-xs text-muted-foreground">{deal.contact?.name ?? deal.company ?? "No contact"}</p><p className="mt-1 text-sm font-semibold">{new Intl.NumberFormat(undefined, { style: "currency", currency: deal.currency, maximumFractionDigits: 0 }).format(deal.value)}</p><div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span className="flex items-center gap-1"><CalendarClock className="size-4" />{deal.due ?? "No close date"}</span><Avatar className="size-6"><AvatarFallback>{deal.owner?.name.slice(0, 2).toUpperCase() ?? "--"}</AvatarFallback></Avatar></div><div className="mt-2 flex items-center justify-between border-t pt-2"><span className="truncate text-xs text-muted-foreground">{deal.nextStep ?? deal.activity ?? "No next activity"}</span><DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Move ${deal.title}`} />}><Ellipsis /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup>{stages.filter((stage) => stage.id !== deal.stageId).map((stage) => <DropdownMenuItem key={stage.id} onClick={() => void onMove(deal.id, stage.id)}>Move to {stage.name}</DropdownMenuItem>)}</DropdownMenuGroup></DropdownMenuContent></DropdownMenu></div></article>
 }
 
 function DealTable({ deals, selected, onSelected, onOpen, stages }: { deals: PipelineDeal[]; selected: Set<string>; onSelected: (value: Set<string>) => void; onOpen: (deal: PipelineDeal) => void; stages: PipelineSnapshot["stages"] }) {
