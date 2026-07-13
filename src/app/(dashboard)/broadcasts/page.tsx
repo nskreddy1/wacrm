@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Broadcast } from '@/types';
-import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -13,7 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2 } from 'lucide-react';
+import { Radio, Plus, RefreshCw } from 'lucide-react';
+import { FeatureLoading, FeatureState } from '@/components/ui/feature-state';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -70,6 +70,7 @@ export default function BroadcastsPage() {
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchBroadcasts() {
+    setError(null);
     try {
       const supabase = createClient();
       const { data, error: fetchError } = await supabase
@@ -131,21 +132,17 @@ export default function BroadcastsPage() {
     };
   }, [anySending]);
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
+  if (loading) return <FeatureLoading label="Loading broadcast performance" />;
 
   if (error) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-2">
-        <p className="text-sm text-red-400">{error}</p>
-        <Button variant="outline" onClick={() => window.location.reload()}>
-          {t('retry')}
-        </Button>
+      <div className="flex min-h-[60vh] items-center justify-center p-6">
+        <FeatureState
+          icon={RefreshCw}
+          title="Broadcasts are temporarily unavailable"
+          description={`${error} Your campaign data is safe. Retry the connection without leaving this page.`}
+          action={{ label: t('retry'), onClick: fetchBroadcasts }}
+        />
       </div>
     );
   }

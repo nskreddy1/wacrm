@@ -16,6 +16,7 @@ import {
   Users,
   PhoneCall,
   Loader2,
+  RefreshCw,
 } from "lucide-react"
 
 import { useCan } from "@/hooks/use-can"
@@ -42,6 +43,7 @@ import {
 import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/lib/automations/templates"
 import { triggerMeta, formatRelative } from "@/lib/automations/trigger-meta"
 import { cn } from "@/lib/utils"
+import { FeatureLoading, FeatureState } from "@/components/ui/feature-state"
 
 const TEMPLATE_ORDER: TemplateSlug[] = [
   "welcome_message",
@@ -67,6 +69,7 @@ export default function AutomationsPage() {
   const [deleting, setDeleting] = useState(false)
 
   async function load() {
+    setError(null)
     try {
       const response = await fetch("/api/automations", { cache: "no-store" })
       const payload = await response.json().catch(() => ({}))
@@ -135,22 +138,18 @@ export default function AutomationsPage() {
 
   if (error) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-2">
-        <p className="text-sm text-red-400">{error}</p>
-        <Button variant="outline" onClick={() => window.location.reload()}>
-          {t("retry")}
-        </Button>
+      <div className="flex min-h-[60vh] items-center justify-center p-6">
+        <FeatureState
+          icon={RefreshCw}
+          title="Automation workspace unavailable"
+          description={`${error} Your rules have not been changed. Retry the secure connection to continue.`}
+          action={{ label: t("retry"), onClick: load }}
+        />
       </div>
     )
   }
 
-  if (automations === null) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    )
-  }
+  if (automations === null) return <FeatureLoading label="Loading automation rules" />
 
   const showTemplates = automations.length < 3
 
