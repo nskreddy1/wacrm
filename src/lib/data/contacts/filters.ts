@@ -1,4 +1,4 @@
-import type { ContactField, DemoContact } from "@/lib/demo/contact-repository"
+import type { ContactField, WorkspaceContact } from "@/lib/data/contacts/types"
 
 export type FilterOperator = "is" | "is_not" | "contains" | "not_contains" | "starts_with" | "ends_with" | "is_empty" | "is_not_empty" | "gt" | "gte" | "lt" | "lte"
 export type FilterRule = { id: string; field: string; operator: FilterOperator; value: string }
@@ -14,7 +14,7 @@ export function operatorsFor(field?: ContactField): Array<{ value: FilterOperato
   return [...common, { value: "contains", label: "contains" }, { value: "not_contains", label: "does not contain" }, { value: "starts_with", label: "starts with" }, { value: "ends_with", label: "ends with" }, { value: "is_empty", label: "is empty" }, { value: "is_not_empty", label: "is not empty" }]
 }
 
-function evaluateRule(contact: DemoContact, field: ContactField | undefined, rule: FilterRule) {
+function evaluateRule(contact: WorkspaceContact, field: ContactField | undefined, rule: FilterRule) {
   const raw = contact.values[rule.field]
   const empty = raw === undefined || raw === null || raw === "" || (Array.isArray(raw) && raw.length === 0)
   if (rule.operator === "is_empty") return empty
@@ -45,7 +45,7 @@ function evaluateRule(contact: DemoContact, field: ContactField | undefined, rul
   return true
 }
 
-export function matchesFilter(contact: DemoContact, fields: ContactField[], group: FilterGroup): boolean {
+export function matchesFilter(contact: WorkspaceContact, fields: ContactField[], group: FilterGroup): boolean {
   if (!group.rules.length) return true
   const results = group.rules.map((item) => isGroup(item) ? matchesFilter(contact, fields, item) : evaluateRule(contact, fields.find((field) => field.id === item.field), item))
   return group.combinator === "and" ? results.every(Boolean) : results.some(Boolean)

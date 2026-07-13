@@ -1,5 +1,6 @@
 import { ContactWorkspace } from "@/components/contacts/contact-workspace"
 import { isOpaqueId, type ContactViewMode } from "@/lib/routes/dashboard-routes"
+import { DEMO_ACCOUNT_ID } from "@/lib/data/runtime"
 
 const modes = new Set<ContactViewMode>(["list", "sheet", "cards"])
 
@@ -13,5 +14,5 @@ export default async function ContactsPage({
   const view = query.view && isOpaqueId(query.view) ? query.view : "all"
   const contact = query.contact && isOpaqueId(query.contact) ? query.contact : undefined
 
-  return <ContactWorkspace accountId="demo-workspace" initialView={mode} savedViewId={view} initialContactId={contact} />
+  return <ContactWorkspace accountId={DEMO_ACCOUNT_ID} initialView={mode} savedViewId={view} initialContactId={contact} />
 }

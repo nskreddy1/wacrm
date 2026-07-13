@@ -8,8 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import type { ContactField } from "@/lib/demo/contact-repository"
-import { isGroup, operatorsFor, type FilterGroup, type FilterOperator, type FilterRule } from "@/lib/demo/contact-filters"
+import type { ContactField } from "@/lib/data/contacts/types"
+import { isGroup, operatorsFor, type FilterGroup, type FilterOperator, type FilterRule } from "@/lib/data/contacts/filters"
 
 const makeRule = (field: ContactField): FilterRule => ({ id: crypto.randomUUID(), field: field.id, operator: "contains", value: "" })
 function mapGroup(root: FilterGroup, id: string, fn: (group: FilterGroup) => FilterGroup): FilterGroup { return root.id === id ? fn(root) : { ...root, rules: root.rules.map((item) => isGroup(item) ? mapGroup(item, id, fn) : item) } }

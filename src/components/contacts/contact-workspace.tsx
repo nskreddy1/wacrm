@@ -18,23 +18,23 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { ContactField, DemoContact, FieldType } from "@/lib/demo/contact-repository"
+import type { ContactField, FieldType, WorkspaceContact } from "@/lib/data/contacts/types"
 import { cn } from "@/lib/utils"
 import { contactsPath, type ContactViewMode } from "@/lib/routes/dashboard-routes"
 import { ContactFilterBuilder } from "@/components/contacts/contact-filter-builder"
-import { countRules, emptyFilterGroup, flattenRules, matchesFilter, summarizeRule, type FilterGroup } from "@/lib/demo/contact-filters"
+import { countRules, emptyFilterGroup, flattenRules, matchesFilter, summarizeRule, type FilterGroup } from "@/lib/data/contacts/filters"
 
-type Store = { contacts: DemoContact[]; fields: ContactField[]; preferences: { visible: string[]; order: string[]; frozen: string[]; widths: Record<string, number> } }
+type Store = { contacts: WorkspaceContact[]; fields: ContactField[]; preferences: { visible: string[]; order: string[]; frozen: string[]; widths: Record<string, number> } }
 type View = ContactViewMode
 type Sort = { field: string; direction: "asc" | "desc" } | null
 async function api(method: string, body: unknown) {
-  const response = await fetch("/api/demo/contacts", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  const response = await fetch("/api/v1/workspace/contacts", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
   const payload = await response.json()
   if (!response.ok) throw new Error(payload.error?.message ?? "Request failed")
   return payload.data
 }
 
-function valueText(value: DemoContact["values"][string]) {
+function valueText(value: WorkspaceContact["values"][string]) {
   if (Array.isArray(value)) return value.join(", ")
   if (typeof value === "boolean") return value ? "Yes" : "No"
   return String(value ?? "")
@@ -42,7 +42,7 @@ function valueText(value: DemoContact["values"][string]) {
 
 export function ContactWorkspace({ accountId, initialView = "list", savedViewId = "all", initialContactId }: { accountId: string; initialView?: View; savedViewId?: string; initialContactId?: string }) {
   const router = useRouter()
-  const { data, error, isLoading, mutate } = useSWR<{ data: Store }>(`/api/demo/contacts?account=${encodeURIComponent(accountId)}&view=${encodeURIComponent(savedViewId)}&mode=${initialView}`)
+  const { data, error, isLoading, mutate } = useSWR<{ data: Store }>(`/api/v1/workspace/contacts?account=${encodeURIComponent(accountId)}&view=${encodeURIComponent(savedViewId)}&mode=${initialView}`)
   const store = data?.data
   const view = initialView
   const [query, setQuery] = useState("")
@@ -81,7 +81,7 @@ export function ContactWorkspace({ accountId, initialView = "list", savedViewId 
   function toggleSelected(id: string) { setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next }) }
   function cycleSort(field: string) { setSort((current) => !current || current.field !== field ? { field, direction: "asc" } : current.direction === "asc" ? { field, direction: "desc" } : null) }
 
-  async function saveCell(contact: DemoContact, field: ContactField, raw: string | boolean) {
+  async function saveCell(contact: WorkspaceContact, field: ContactField, raw: string | boolean) {
     let value: string | number | boolean = raw
     if (field.type === "number" || field.type === "currency") value = Number(raw) || 0
     setSaving(`${contact.id}:${field.id}`)
