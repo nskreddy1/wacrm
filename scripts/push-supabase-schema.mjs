@@ -28,11 +28,16 @@ if (migrationFiles.length === 0) {
   process.exit(1)
 }
 
+const isLocalDatabase = /localhost|127\.0\.0\.1/.test(connectionString)
+const normalizedConnectionString = new URL(connectionString)
+
+// Supabase pooler certificates can include a managed self-signed chain.
+// Remove URL-level sslmode so this explicit pg TLS configuration takes effect.
+if (!isLocalDatabase) normalizedConnectionString.searchParams.delete('sslmode')
+
 const client = new Client({
-  connectionString,
-  ssl: connectionString.includes('localhost')
-    ? undefined
-    : { rejectUnauthorized: false },
+  connectionString: normalizedConnectionString.toString(),
+  ssl: isLocalDatabase ? undefined : { rejectUnauthorized: false },
 })
 
 try {

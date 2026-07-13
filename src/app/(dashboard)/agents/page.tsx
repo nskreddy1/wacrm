@@ -8,6 +8,8 @@ import { AiUsageCard } from '@/components/agents/ai-usage';
 import { AiConfig } from '@/components/settings/ai-config';
 import { useAuth } from '@/hooks/use-auth';
 import { canEditSettings } from '@/lib/auth/roles';
+import { FeatureLoading } from '@/components/ui/feature-state';
+import { Badge } from '@/components/ui/badge';
 
 type Tab = 'playground' | 'setup' | 'usage';
 

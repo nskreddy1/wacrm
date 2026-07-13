@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { toast } from "sonner"
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, Filter, Grid2X2, List, MoreHorizontal, Plus, Search, SheetIcon, SlidersHorizontal, Trash2, Upload, X } from "lucide-react"
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, Filter, Grid2X2, List, MoreHorizontal, Plus, RefreshCw, Search, SheetIcon, SlidersHorizontal, Trash2, Upload, X } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,7 @@ import type { ContactField, FieldType, WorkspaceContact } from "@/lib/data/conta
 import { cn } from "@/lib/utils"
 import { contactsPath, type ContactViewMode } from "@/lib/routes/dashboard-routes"
 import { ContactFilterBuilder } from "@/components/contacts/contact-filter-builder"
+import { FeatureLoading, FeatureState } from "@/components/ui/feature-state"
 import { countRules, emptyFilterGroup, flattenRules, matchesFilter, summarizeRule, type FilterGroup } from "@/lib/data/contacts/filters"
 
 type Store = { contacts: WorkspaceContact[]; fields: ContactField[]; preferences: { visible: string[]; order: string[]; frozen: string[]; widths: Record<string, number> } }
@@ -115,8 +116,8 @@ export function ContactWorkspace({ accountId, initialView = "list", savedViewId 
     await api("PATCH", { kind: "preferences", preferences: { visible } })
   }
 
-  if (error) return <div className="flex min-h-96 items-center justify-center text-sm text-destructive">Unable to load the contact workspace.</div>
-  if (isLoading || !store) return <div className="flex min-h-96 items-center justify-center text-sm text-muted-foreground">Loading enterprise contacts…</div>
+  if (error) return <div className="flex min-h-[60vh] items-center justify-center p-6"><FeatureState icon={RefreshCw} title="Contact workspace unavailable" description="We couldn't securely load this account's contacts. No records were changed; retry the request to reconnect." action={{ label: "Retry", onClick: () => void mutate() }} /></div>
+  if (isLoading || !store) return <div className="p-6"><FeatureLoading label="Loading enterprise contacts" /></div>
 
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-background">
