@@ -1,9 +1,8 @@
 -- Add independently selectable SMTP and Microsoft email providers.
+--
+-- PostgreSQL does not allow a newly-added enum value to be referenced by a
+-- constraint in the same transaction. Supabase runs each migration in a
+-- transaction, so the provider-pair constraint is deliberately applied in
+-- migration 041 after these enum values have committed.
 ALTER TYPE channel_provider ADD VALUE IF NOT EXISTS 'smtp';
 ALTER TYPE channel_provider ADD VALUE IF NOT EXISTS 'microsoft';
-
-ALTER TABLE channel_connections DROP CONSTRAINT IF EXISTS channel_provider_pair;
-ALTER TABLE channel_connections ADD CONSTRAINT channel_provider_pair CHECK (
-  (channel = 'whatsapp' AND provider IN ('meta', 'twilio')) OR
-  (channel = 'email' AND provider IN ('google', 'microsoft', 'resend', 'smtp'))
-);
