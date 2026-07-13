@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import { NextResponse, type NextRequest } from "next/server"
 
+import { resolveServiceApiUrl } from "@/lib/service-api-url"
 import { createClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
@@ -17,7 +18,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   }
 
   const { path } = await context.params
-  const baseUrl = process.env.EXPRESS_API_URL ?? "http://127.0.0.1:4000"
+  const baseUrl = resolveServiceApiUrl()
   const upstream = new URL(`/v1/${path.map(encodeURIComponent).join("/")}`, baseUrl)
   upstream.search = request.nextUrl.search
 

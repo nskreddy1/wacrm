@@ -29,11 +29,11 @@
   },
   "scripts": {
     "dev": "concurrently --kill-others-on-fail --names web,api --prefix-colors cyan,green \"pnpm dev:web\" \"pnpm dev:api\"",
-    "dev:web": "next dev",
+    "dev:web": "node --env-file-if-exists=.env.development.local scripts/run-web.mjs dev",
     "dev:api": "node --env-file-if-exists=.env.development.local --import tsx --watch server/index.ts",
     "build": "next build",
     "start": "concurrently --kill-others-on-fail --names web,api --prefix-colors cyan,green \"pnpm start:web\" \"pnpm start:api\"",
-    "start:web": "next start",
+    "start:web": "node --env-file-if-exists=.env.development.local scripts/run-web.mjs start",
     "start:api": "node --env-file-if-exists=.env.development.local --import tsx server/index.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

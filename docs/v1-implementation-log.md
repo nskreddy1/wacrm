@@ -137,3 +137,51 @@ The connected Supabase project still has zero public tables and zero applied mig
 ### Provider replacement rule
 
 Production provider changes are connection configuration plus adapter changes. Conversations, contacts, messages, notifications, and other CRM-domain behavior continue to consume channel-neutral contracts and do not branch on provider SDK objects.
+
+## 2026-07-13 — Alternate ports and current-state architecture audit
+
+### Objective
+
+Remove hard-coded local port coupling, investigate the preview collision, and reconcile existing architecture documentation with every meaningful source-controlled area.
+
+### Changes
+
+- Added `scripts/run-web.mjs`; `dev:web` and `start:web` now validate and honor `WEB_PORT` with a backward-compatible default of 3000.
+- Kept Express `API_HOST`/`API_PORT` validation and the default port 4000.
+- Added `src/lib/service-api-url.ts` and four unit tests. The BFF prioritizes `EXPRESS_API_URL`, then derives its local target from `API_HOST` and `API_PORT`.
+- Documented the port contract in `.env.local.example` and the README, including `WEB_PORT=3100 API_PORT=4100 pnpm dev`.
+- Replaced the target-only architecture document with a consolidated current-state/target audit, and reconciled `docs/architecture-delta.md`.
+
+### Audit methodology and inventory
+
+- Reviewed tracked root configuration, App Router pages/APIs, components, domain libraries, Express, migrations, MCP, tests, docs and CI/governance files.
+- Counted 530 tracked files: 409 `src`, 40 migrations, 20 root, 20 docs, 16 MCP, 10 GitHub, 7 Express, 7 public and one message catalog.
+- Cataloged 29 page files, 60 route handlers, provider status, migration chronology, trust boundaries, risks and next actions.
+- Excluded `.git`, `.next`, `node_modules`, caches, build output and private environment files.
+
+### Validation
+
+- `pnpm exec vitest run src/lib/service-api-url.test.ts`: passed, 4 tests.
+- `pnpm test`: passed, 653 tests across 71 files.
+- `pnpm typecheck`: passed after widening the resolver test input type to a string environment record.
+- Changed-file ESLint: passed.
+- `pnpm build`: passed on Next.js 16.2.6; 46 static-generation entries completed. Existing warnings include the `next.config.ts` module-type warning and edge-runtime/static-generation notice.
+- Next accepted `WEB_PORT=3100` and reported that URL, proving launcher propagation.
+- Full development preview could not remain active because another Next process already held this checkout's `.next/dev` lock; changing the HTTP port does not create a second Next build directory.
+- The first Express probe failed because the standalone Bash process lacked required Supabase public variables. A later production probe timed out in the sandbox, so alternate two-process health/BFF/browser verification is recorded as incomplete rather than passed.
+
+### Architecture findings
+
+- Meta remains the mature provider. SMTP has a real adapter/settings path. Twilio and Resend are partial. Gmail and Microsoft 365 are foundation/target work.
+- The connected Supabase project still lacks the repository baseline, so migrations `001`–`040`, RLS and persistence remain unverified live.
+- Legacy account-prefixed routes coexist with canonical simple routes.
+- SQLite/demo/in-memory paths remain durability exceptions to Supabase production authority.
+- Duplicate lockfiles, full-repository lint debt and the shallow Express extraction remain technical debt.
+
+### Security and tenancy
+
+No secrets or private environment values were read into the report. The BFF continues to require a Supabase session, forwards only allowlisted headers, generates request IDs, applies a timeout and keeps Express internal. URL resolution validates the derived port and preserves explicit deployment overrides.
+
+### Next action
+
+Stop the existing dev process (or use a separate worktree/production build) and rerun the alternate-port browser/health path with project environment variables loaded. Then establish Supabase migrations `001`–`040` in order and execute live owner/admin/agent/viewer plus cross-account RLS probes before additional provider work.
