@@ -5,6 +5,7 @@ import { Bell, ChevronDown, Command, Menu, Plus, Search, Settings, UserPlus } fr
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { routes } from "@/lib/routing/routes"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +24,9 @@ const titles: Record<string, string> = {
   bookings: "Bookings",
   broadcasts: "Broadcasts",
   automations: "Automations",
+  flows: "Flows",
   agents: "AI agents",
+  notifications: "Notifications",
   settings: "Settings",
 }
 
@@ -48,9 +51,9 @@ export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>Create new</DropdownMenuLabel>
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => router.push("/contacts")}><UserPlus />Contact</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push("/pipelines")}><Plus />Deal</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push("/bookings")}><Plus />Booking</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push(routes.app.contacts)}><UserPlus />Contact</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push(routes.app.pipelines)}><Plus />Deal</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push(routes.app.bookings)}><Plus />Booking</DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -59,7 +62,7 @@ export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
           <DropdownMenuContent align="end" className="w-72">
             <DropdownMenuLabel>Notifications</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup><DropdownMenuItem onClick={() => router.push("/inbox")}>3 conversations need assignment</DropdownMenuItem><DropdownMenuItem onClick={() => router.push("/pipelines")}>Northstar deal moved to proposal</DropdownMenuItem></DropdownMenuGroup>
+            <DropdownMenuGroup><DropdownMenuItem onClick={() => router.push(routes.app.inbox)}>3 conversations need assignment</DropdownMenuItem><DropdownMenuItem onClick={() => router.push(routes.app.pipelines)}>Northstar deal moved to proposal</DropdownMenuItem></DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
         <DropdownMenu>
@@ -67,7 +70,7 @@ export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuLabel>Sam Silva<span className="block font-normal text-muted-foreground">Workspace owner</span></DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup><DropdownMenuItem onClick={() => router.push("/settings")}><Settings />Settings</DropdownMenuItem></DropdownMenuGroup>
+            <DropdownMenuGroup><DropdownMenuItem onClick={() => router.push(routes.app.settings)}><Settings />Settings</DropdownMenuItem></DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

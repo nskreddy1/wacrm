@@ -28,7 +28,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "concurrently --kill-others-on-fail --names web,api --prefix-colors cyan,green \"pnpm dev:web\" \"pnpm dev:api\"",
+    "dev": "concurrently --names web,api --prefix-colors cyan,green \"pnpm dev:web\" \"pnpm dev:api\"",
     "dev:web": "node --env-file-if-exists=.env.development.local scripts/run-web.mjs dev",
     "dev:api": "node --env-file-if-exists=.env.development.local --import tsx server/index.ts",
     "build": "next build",
