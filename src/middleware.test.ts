@@ -36,7 +36,7 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 // Imported after the mock is registered.
-const { middleware } = await import("./middleware");
+const { proxy: middleware } = await import("./proxy");
 
 beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
@@ -46,7 +46,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.DATABASE_PROVIDER;
   vi.clearAllMocks();
 });
 
@@ -55,24 +54,6 @@ const ROTATED = {
   value: "rotated-refresh-token",
   options: { path: "/", httpOnly: true },
 };
-
-describe("middleware — Neon Better Auth routing", () => {
-  it("redirects an unauthenticated protected request and preserves the return URL", async () => {
-    process.env.DATABASE_PROVIDER = "neon";
-    const res = await middleware(new NextRequest("https://app.test/bigin/org/account/home/contacts/list/all?owner=me"));
-    expect(res.status).toBe(307);
-    expect(res.headers.get("location")).toContain("/login?next=%2Fbigin%2Forg%2Faccount%2Fhome%2Fcontacts%2Flist%2Fall%3Fowner%3Dme");
-  });
-
-  it("allows a Better Auth session through and redirects auth pages", async () => {
-    process.env.DATABASE_PROVIDER = "neon";
-    const request = new NextRequest("https://app.test/login?invite=invite-1", {
-      headers: { cookie: "better-auth.session_token=session-token" },
-    });
-    const res = await middleware(request);
-    expect(res.headers.get("location")).toContain("/join/invite-1");
-  });
-});
 
 describe("middleware — refreshed auth cookies survive redirects", () => {
   it("carries the rotated token when redirecting a signed-in user off /login", async () => {
@@ -103,7 +84,8 @@ describe("middleware — refreshed auth cookies survive redirects", () => {
     );
 
     expect(res.status).toBe(307);
-    expect(res.headers.get("location")).toContain("/login");
+    expect(res.headers.get("location")).toBe("https://app.test/login");
+    expect(res.headers.get("location")).not.toContain("next=");
     expect(res.cookies.get(ROTATED.name)?.value).toBe("cleared");
   });
 
