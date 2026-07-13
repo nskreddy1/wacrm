@@ -208,3 +208,25 @@ Stop the existing dev process (or use a separate worktree/production build) and 
 ### Remaining live-data boundary
 
 The connected Supabase project still requires the repository baseline migrations and RLS policies before these test workspaces can be replaced by live persistence. This change intentionally did not add environment variables, execute migrations, or bypass account-scoped security.
+
+## 2026-07-13 — Full-route regression hardening
+
+### Changes
+
+- Consolidated canonical public/application/API URL generation in `src/lib/routing/routes.ts` and migrated shell navigation, create actions, notification links, and settings links to the registry.
+- Removed nonexistent `/admin` and `/flows/new` entries from the crawlable route set; flow creation now resolves to `/flows?create=1` rather than colliding with the dynamic flow ID route.
+- Added explicit backend-required boundaries for inbox, bookings, automation creation, agents, notifications, and settings. Missing Supabase configuration now renders a controlled diagnostic state without starting direct browser queries or substituting demo records.
+- Added the missing Flows shell navigation/title and constrained the dashboard/pipeline workspaces to prevent page-level horizontal overflow while preserving board-local scrolling.
+
+### Regression matrix
+
+- Browser-crawled 17 canonical application/auth routes at 941×456 and 375×667 in dark mode: 34 route/viewport checks completed with no 404, generic server page, or redirect loop after the fixes.
+- Before correction, inbox, bookings, automation creation, notifications, and settings crashed from unguarded Supabase client creation; agents exposed API failures; `/admin` returned 404; and `/flows/new` was parsed as a resource ID. Each has a controlled or canonical result now.
+- `pnpm typecheck`: passed.
+- `pnpm test`: passed (full Vitest suite).
+- `pnpm build`: passed; Next.js generated all 46 route entries.
+- `pnpm lint`: still blocked by repository-wide pre-existing React effect violations and hook dependency warnings outside this focused change.
+
+### External blocker
+
+Live persistence cannot be claimed in this VM because `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are absent from the runtime environment. The affected pages now state that requirement directly and remain stable; no RLS or authorization behavior was weakened.

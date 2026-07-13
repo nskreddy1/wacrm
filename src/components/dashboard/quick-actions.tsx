@@ -5,6 +5,7 @@ import { UserPlus, Briefcase, Radio, Zap } from 'lucide-react'
 import type { ComponentType } from 'react'
 
 import { useTranslations } from 'next-intl'
+import { routes } from '@/lib/routing/routes'
 
 // Quick-action shortcuts. Each navigates to the page that owns the
 // relevant "create" flow. We deliberately don't try to auto-open any
@@ -18,10 +19,10 @@ interface Action {
 }
 
 const ACTIONS: Action[] = [
-  { labelKey: 'newContact', href: '/contacts', icon: UserPlus, tint: 'text-primary' },
-  { labelKey: 'newDeal', href: '/pipelines', icon: Briefcase, tint: 'text-blue-400' },
-  { labelKey: 'newBroadcast', href: '/broadcasts/new', icon: Radio, tint: 'text-amber-400' },
-  { labelKey: 'newAutomation', href: '/automations/new', icon: Zap, tint: 'text-primary' },
+  { labelKey: 'newContact', href: routes.app.contacts, icon: UserPlus, tint: 'text-primary' },
+  { labelKey: 'newDeal', href: routes.app.pipelines, icon: Briefcase, tint: 'text-blue-400' },
+  { labelKey: 'newBroadcast', href: routes.app.newBroadcast, icon: Radio, tint: 'text-amber-400' },
+  { labelKey: 'newAutomation', href: routes.app.newAutomation, icon: Zap, tint: 'text-primary' },
 ]
 
 export function QuickActions() {

@@ -39,6 +39,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "@/lib/utils"
 import { isModulePath } from "@/lib/routes/dashboard-routes"
+import { routes } from "@/lib/routing/routes"
 
 type NavItem = {
   href: string
@@ -49,14 +50,15 @@ type NavItem = {
 }
 
 const primaryItems: NavItem[] = [
-  { href: "/pipelines", label: "Pipelines", icon: GitBranch },
-  { href: "/inbox", label: "Inbox", icon: Inbox, badge: "18" },
-  { href: "/contacts", label: "Contacts", icon: Users },
-  { href: "/bookings", label: "Bookings", icon: CalendarDays },
-  { href: "/broadcasts", label: "Broadcasts", shortLabel: "Campaigns", icon: Megaphone },
-  { href: "/automations", label: "Automations", shortLabel: "Flows", icon: Workflow },
-  { href: "/agents", label: "AI agents", shortLabel: "Agents", icon: Bot },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: routes.app.pipelines, label: "Pipelines", icon: GitBranch },
+  { href: routes.app.inbox, label: "Inbox", icon: Inbox, badge: "18" },
+  { href: routes.app.contacts, label: "Contacts", icon: Users },
+  { href: routes.app.bookings, label: "Bookings", icon: CalendarDays },
+  { href: routes.app.broadcasts, label: "Broadcasts", shortLabel: "Campaigns", icon: Megaphone },
+  { href: routes.app.automations, label: "Automations", shortLabel: "Rules", icon: Workflow },
+  { href: routes.app.flows, label: "Flows", icon: Workflow },
+  { href: routes.app.agents, label: "AI agents", shortLabel: "Agents", icon: Bot },
+  { href: routes.app.dashboard, label: "Dashboard", icon: LayoutDashboard },
 ]
 
 function isActive(pathname: string, href: string) {
@@ -67,7 +69,7 @@ function isActive(pathname: string, href: string) {
 
 function Brand({ compact }: { compact: boolean }) {
   return (
-    <Link href="/dashboard" className={cn("flex h-12 items-center text-white", compact ? "justify-center" : "gap-3 px-4")} aria-label="Relay CRM dashboard">
+    <Link href={routes.app.dashboard} className={cn("flex h-12 items-center text-white", compact ? "justify-center" : "gap-3 px-4")} aria-label="Relay CRM dashboard">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/10 text-[#25d891]">
         <MessageSquareText aria-hidden="true" />
       </span>

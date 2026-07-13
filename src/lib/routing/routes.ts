@@ -11,13 +11,30 @@ export const routes = {
   },
   app: {
     dashboard: "/dashboard",
-    account: (accountId: string) => `/accounts/${segment(accountId)}`,
-    contacts: (accountId: string) => `/accounts/${segment(accountId)}/contacts`,
-    contact: (accountId: string, contactId: string) =>
-      `/accounts/${segment(accountId)}/contacts/${segment(contactId)}`,
-    pipelines: (accountId: string) => `/accounts/${segment(accountId)}/pipelines`,
-    pipeline: (accountId: string, pipelineId: string) =>
-      `/accounts/${segment(accountId)}/pipelines/${segment(pipelineId)}`,
+    inbox: "/inbox",
+    contacts: "/contacts",
+    contact: (contactId: string) => `/contacts?contact=${segment(contactId)}`,
+    pipelines: "/pipelines",
+    pipeline: (pipelineId: string, view: "board" | "list" | "sheet" = "board") => {
+      const params = new URLSearchParams({ pipeline: pipelineId })
+      if (view !== "board") params.set("view", view)
+      return `/pipelines?${params.toString()}`
+    },
+    bookings: "/bookings",
+    broadcasts: "/broadcasts",
+    newBroadcast: "/broadcasts/new",
+    broadcast: (broadcastId: string) => `/broadcasts/${segment(broadcastId)}`,
+    automations: "/automations",
+    newAutomation: "/automations/new",
+    automation: (automationId: string) => `/automations/${segment(automationId)}`,
+    automationLogs: (automationId: string) => `/automations/${segment(automationId)}/logs`,
+    flows: "/flows",
+    newFlow: "/flows?create=1",
+    flow: (flowId: string) => `/flows/${segment(flowId)}`,
+    flowRuns: (flowId: string) => `/flows/${segment(flowId)}/runs`,
+    agents: "/agents",
+    notifications: "/notifications",
+    settings: "/settings",
     invite: (token: string) => `/join/${segment(token)}`,
   },
   api: {
@@ -25,9 +42,29 @@ export const routes = {
   },
 } as const
 
+export const canonicalAppRoutes = [
+  routes.app.dashboard,
+  routes.app.inbox,
+  routes.app.contacts,
+  routes.app.pipelines,
+  routes.app.bookings,
+  routes.app.broadcasts,
+  routes.app.newBroadcast,
+  routes.app.automations,
+  routes.app.newAutomation,
+  routes.app.flows,
+  routes.app.agents,
+  routes.app.notifications,
+  routes.app.settings,
+] as const
+
 export const authRouteSet = new Set<string>([
   routes.auth.login,
   routes.auth.signup,
   routes.auth.forgotPassword,
   routes.auth.resetPassword,
 ])
+
+export function isCanonicalAppPath(pathname: string) {
+  return canonicalAppRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
