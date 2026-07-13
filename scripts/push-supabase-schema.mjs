@@ -8,11 +8,13 @@ const { Client } = pg
 const projectRoot = process.cwd()
 const migrationsDirectory = path.join(projectRoot, 'supabase', 'migrations')
 const connectionString =
-  process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL
+  process.env.SUPABASE_DB_URL ??
+  process.env.POSTGRES_URL ??
+  process.env.DATABASE_URL
 
 if (!connectionString) {
   console.error(
-    'Missing SUPABASE_DB_URL (or DATABASE_URL). Set it to the Supabase Postgres connection string.',
+    'Missing SUPABASE_DB_URL, POSTGRES_URL, or DATABASE_URL. Set one to the Supabase Postgres connection string.',
   )
   process.exit(1)
 }
