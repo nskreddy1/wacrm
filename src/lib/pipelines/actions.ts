@@ -5,12 +5,12 @@ import { requireRole } from "@/lib/auth/account"
 import { pipelinePath } from "@/lib/routes/dashboard-routes"
 import type { PipelineDeal, SubPipeline } from "./domain"
 import { mapDeal } from "./mappers"
-import { dealInputSchema, savedViewInputSchema, subPipelineInputSchema, uuidSchema, type DealInput } from "./validation"
+import { dealInputSchema, formatPipelineError, savedViewInputSchema, subPipelineInputSchema, uuidSchema, type DealInput } from "./validation"
 
 export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string }
 
 function fail(error: unknown): ActionResult<never> {
-  return { ok: false, error: error instanceof Error ? error.message : "The change could not be saved" }
+  return { ok: false, error: formatPipelineError(error) }
 }
 
 async function verifyPipeline(accountId: string, pipelineId: string, supabase: Awaited<ReturnType<typeof requireRole>>["supabase"]) {
