@@ -13,8 +13,13 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
  *
  * The rest of the headers are straight blocks, safe to enforce today:
  *   - HSTS: only meaningful on HTTPS (no-op on http://localhost).
- *   - X-Content-Type-Options / X-Frame-Options / Referrer-Policy:
+ *   - X-Content-Type-Options / Referrer-Policy:
  *     baseline OWASP hardening, no behavioural cost.
+ *
+ * X-Frame-Options is intentionally omitted. v0 and Vercel previews render
+ * the application in an iframe, so DENY makes a healthy server appear as a
+ * failed preview. Framing policy remains visible in the report-only CSP and
+ * can be enforced at the deployment edge for a known production origin.
  *   - Permissions-Policy: we don't use camera / microphone / etc, so
  *     deny them. A supply-chain compromise or a forgotten plugin
  *     can't silently opt back in.
@@ -25,7 +30,6 @@ const SECURITY_HEADERS = [
     value: "max-age=63072000; includeSubDomains; preload",
   },
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     // Microphone is allowed for same-origin (`self`) so the inbox
@@ -71,6 +75,7 @@ const nextConfig: NextConfig = {
       process.env.SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
       process.env.NEXT_PUBLIC_zepo_SUPABASE_ANON_KEY ??
       process.env.zepo_SUPABASE_PUBLISHABLE_KEY ??
       process.env.SUPABASE_PUBLISHABLE_KEY,
