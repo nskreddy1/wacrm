@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { authRouteSet, routes } from "@/lib/routing/routes"
 
-const PUBLIC_PREFIXES = ["/auth/", "/join/", "/api/webhooks/", "/api/v1/"]
+const PUBLIC_PREFIXES = ["/auth/", "/join/", "/api/service/", "/api/webhooks/", "/api/v1/"]
 
 function isPublicPath(pathname: string) {
   return pathname === routes.home || authRouteSet.has(pathname) || PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
