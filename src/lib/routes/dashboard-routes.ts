@@ -55,12 +55,23 @@ export function orgPath(accountId: string, module = "dashboard") {
   return `/org/${segment(accountId)}/${module}`
 }
 
-export function pipelinePath(accountId: string, pipelineId: string, mode: PipelineMode = "board", state?: { subPipeline?: string; savedView?: string }) {
-  return enterpriseDealsPath(accountId, pipelineId, mode, state)
+export function pipelinePath(_accountId: string, pipelineId: string, mode: PipelineMode = "board", state?: { subPipeline?: string; savedView?: string }) {
+  const params = new URLSearchParams()
+  if (pipelineId) params.set("pipeline", pipelineId)
+  if (mode !== "board") params.set("view", mode)
+  if (state?.subPipeline) params.set("sub_pipeline", state.subPipeline)
+  if (state?.savedView) params.set("saved_view", state.savedView)
+  const query = params.toString()
+  return `/pipelines${query ? `?${query}` : ""}`
 }
 
-export function contactsPath(accountId: string) {
-  return enterpriseContactsPath(accountId)
+export function contactsPath(_accountId?: string, state?: { mode?: ContactViewMode; view?: string; contact?: string }) {
+  const params = new URLSearchParams()
+  if (state?.mode && state.mode !== "list") params.set("mode", state.mode)
+  if (state?.view && state.view !== "all") params.set("view", state.view)
+  if (state?.contact) params.set("contact", state.contact)
+  const query = params.toString()
+  return `/contacts${query ? `?${query}` : ""}`
 }
 
 export function accountIdFromPath(pathname: string): string | null {
@@ -72,9 +83,6 @@ export function isModulePath(pathname: string, module: string) {
   return pathname.includes(`/home/${module}/`) || pathname.includes(`/${module}/`) || pathname === `/${module}`
 }
 
-export function dashboardHref(accountId: string | null, href: string) {
-  if (!accountId) return href
-  if (href === "/pipelines") return enterpriseHomePath(accountId) + "/deals"
-  if (href === "/contacts") return contactsPath(accountId)
-  return orgPath(accountId, href.replace(/^\//, ""))
+export function dashboardHref(_accountId: string | null, href: string) {
+  return href
 }

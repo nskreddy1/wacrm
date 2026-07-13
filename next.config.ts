@@ -91,6 +91,16 @@ const nextConfig: NextConfig = {
    * they apply to every response regardless of which cache rule
    * matched.
    */
+  async redirects() {
+    return [
+      { source: "/bigin/org/:accountId/home/deals", destination: "/pipelines", permanent: false },
+      { source: "/bigin/org/:accountId/home/deals/:path*", destination: "/pipelines", permanent: false },
+      { source: "/org/:accountId/pipelines", destination: "/pipelines", permanent: false },
+      { source: "/org/:accountId/pipelines/:path*", destination: "/pipelines", permanent: false },
+      { source: "/bigin/org/:accountId/home/contacts", destination: "/contacts", permanent: false },
+      { source: "/bigin/org/:accountId/home/contacts/:path*", destination: "/contacts", permanent: false },
+    ]
+  },
   async headers() {
     return [
       {

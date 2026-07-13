@@ -1,22 +1,38 @@
 import { describe, expect, it } from "vitest"
-import { accountIdFromPath, enterpriseContactPath, enterpriseContactsPath, enterpriseDealsPath, isModulePath, isOpaqueId, isUuid, pipelineModeFromRoute } from "./dashboard-routes"
+import {
+  accountIdFromPath,
+  contactsPath,
+  dashboardHref,
+  enterpriseContactPath,
+  enterpriseContactsPath,
+  enterpriseDealsPath,
+  isModulePath,
+  isOpaqueId,
+  isUuid,
+  pipelineModeFromRoute,
+  pipelinePath,
+} from "./dashboard-routes"
 
 const accountId = "123e4567-e89b-42d3-a456-426614174000"
 const pipelineId = "223e4567-e89b-42d3-a456-426614174001"
 const subPipelineId = "323e4567-e89b-42d3-a456-426614174002"
 const viewId = "423e4567-e89b-42d3-a456-426614174003"
 
-describe("enterprise dashboard routes", () => {
-  it("builds canonical deal URLs with normalized query state", () => {
-    expect(enterpriseDealsPath(accountId, pipelineId, "board", { subPipeline: subPipelineId, savedView: viewId })).toBe(`/bigin/org/${accountId}/home/deals/kanban/${viewId}?pipeline=${pipelineId}&sub_pipeline=${subPipelineId}`)
+describe("dashboard routes", () => {
+  it("builds simple canonical module URLs", () => {
+    expect(dashboardHref(accountId, "/contacts")).toBe("/contacts")
+    expect(dashboardHref(accountId, "/pipelines")).toBe("/pipelines")
+    expect(contactsPath(accountId, { mode: "sheet", view: viewId })).toBe(`/contacts?mode=sheet&view=${viewId}`)
+    expect(pipelinePath(accountId, pipelineId, "sheet", { subPipeline: subPipelineId, savedView: viewId })).toBe(`/pipelines?pipeline=${pipelineId}&view=sheet&sub_pipeline=${subPipelineId}&saved_view=${viewId}`)
   })
 
-  it("builds list and contact routes that preserve context", () => {
+  it("retains legacy URL builders for compatibility redirects", () => {
+    expect(enterpriseDealsPath(accountId, pipelineId, "board", { subPipeline: subPipelineId, savedView: viewId })).toBe(`/bigin/org/${accountId}/home/deals/kanban/${viewId}?pipeline=${pipelineId}&sub_pipeline=${subPipelineId}`)
     expect(enterpriseContactsPath(accountId, "sheet", viewId)).toBe(`/bigin/org/${accountId}/home/contacts/sheet/${viewId}`)
     expect(enterpriseContactPath(accountId, pipelineId, { view: viewId, mode: "cards" })).toBe(`/bigin/org/${accountId}/home/contacts/${pipelineId}?view=${viewId}&mode=cards`)
   })
 
-  it("extracts tenant identity from canonical and legacy paths", () => {
+  it("extracts tenant identity only from legacy paths", () => {
     expect(accountIdFromPath(`/bigin/org/${accountId}/home/deals`)).toBe(accountId)
     expect(accountIdFromPath(`/org/${accountId}/pipelines`)).toBe(accountId)
     expect(accountIdFromPath("/pipelines")).toBeNull()

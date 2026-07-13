@@ -38,7 +38,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useAuth } from "@/hooks/use-auth"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "@/lib/utils"
-import { accountIdFromPath, dashboardHref, isModulePath } from "@/lib/routes/dashboard-routes"
+import { isModulePath } from "@/lib/routes/dashboard-routes"
 
 type NavItem = {
   href: string
@@ -79,7 +79,7 @@ function Brand({ compact }: { compact: boolean }) {
 function NavLink({ item, compact, pathname, onNavigate }: { item: NavItem; compact: boolean; pathname: string; onNavigate?: () => void }) {
   const active = isActive(pathname, item.href)
   const router = useRouter()
-  const href = dashboardHref(accountIdFromPath(pathname), item.href)
+  const href = item.href
   const link = (
     <Button
       render={<Link href={href} prefetch onMouseEnter={() => router.prefetch(href)} onFocus={() => router.prefetch(href)} onClick={onNavigate} />}
