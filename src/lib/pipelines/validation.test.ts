@@ -12,8 +12,12 @@ describe("pipeline UUID validation", () => {
     expect(uuidSchema.parse(stageId)).toBe(stageId)
   })
 
-  it("rejects legacy seed identifiers with invalid version and variant bits", () => {
-    expect(uuidSchema.safeParse("cccccccc-cccc-cccc-cccc-cccccccccccc").success).toBe(false)
+  it("accepts PostgreSQL UUIDs without RFC version and variant bits", () => {
+    expect(uuidSchema.safeParse("cccccccc-cccc-cccc-cccc-cccccccccccc").success).toBe(true)
+  })
+
+  it("rejects identifiers that do not have PostgreSQL UUID shape", () => {
+    expect(uuidSchema.safeParse("not-a-database-id").success).toBe(false)
   })
 
   it("accepts deal relationships backed by Supabase UUID columns", () => {
@@ -34,7 +38,7 @@ describe("pipeline UUID validation", () => {
   it("formats validation failures for people instead of serializing Zod issues", () => {
     const result = dealInputSchema.safeParse({
       pipelineId,
-      stageId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      stageId: "not-a-database-id",
       title: "Qualified opportunity",
       value: 1500,
       currency: "USD",

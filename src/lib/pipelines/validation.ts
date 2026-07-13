@@ -1,6 +1,12 @@
 import { z } from "zod"
 
-export const uuidSchema = z.string().uuid("Select a valid record and try again")
+// PostgreSQL's uuid type accepts the full UUID text shape, including seeded
+// identifiers without RFC version/variant bits. Relationship IDs come from
+// database records, so validate their shape without rejecting valid DB values.
+export const uuidSchema = z.string().regex(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  "Select a valid record and try again",
+)
 
 export function formatPipelineError(error: unknown): string {
   if (!(error instanceof z.ZodError)) {
