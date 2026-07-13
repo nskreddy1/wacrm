@@ -1,6 +1,19 @@
 import { z } from "zod"
 
-export const uuidSchema = z.string().uuid()
+export const uuidSchema = z.string().uuid("Select a valid record and try again")
+
+export function formatPipelineError(error: unknown): string {
+  if (!(error instanceof z.ZodError)) {
+    return error instanceof Error ? error.message : "The change could not be saved"
+  }
+
+  return error.issues
+    .map((issue) => {
+      const field = issue.path.at(-1)
+      return field ? `${String(field)}: ${issue.message}` : issue.message
+    })
+    .join("; ")
+}
 export const pipelineModeSchema = z.enum(["board", "list", "sheet"])
 export const dealPrioritySchema = z.enum(["low", "normal", "high", "hot"])
 

@@ -94,8 +94,8 @@ async function run() {
   await client.query('DELETE FROM public.ai_knowledge_documents WHERE account_id = $1', [account_id])
 
   console.log('Seeding channel_connections...')
-  const waConnId = 'a1111111-1111-1111-1111-111111111111'
-  const emailConnId = 'e2222222-2222-2222-2222-222222222222'
+  const waConnId = 'a1111111-1111-4111-8111-111111111111'
+  const emailConnId = 'e2222222-2222-4222-8222-222222222222'
 
   await client.query(`
     INSERT INTO public.channel_connections (
@@ -107,9 +107,9 @@ async function run() {
   `, [waConnId, account_id, user_id, emailConnId])
 
   console.log('Seeding tags...')
-  const tagWarmId = '33333333-3333-3333-3333-333333333333'
-  const tagVIPId = '44444444-4444-4444-4444-444444444444'
-  const tagUnsubId = '55555555-5555-5555-5555-555555555555'
+  const tagWarmId = '33333333-3333-4333-8333-333333333333'
+  const tagVIPId = '44444444-4444-4444-8444-444444444444'
+  const tagUnsubId = '55555555-5555-4555-8555-555555555555'
 
   await client.query(`
     INSERT INTO public.tags (id, account_id, user_id, name, color) VALUES
@@ -119,15 +119,15 @@ async function run() {
   `, [tagWarmId, account_id, user_id, tagVIPId, tagUnsubId])
 
   console.log('Seeding custom fields...')
-  const customFieldIndustryId = '66666666-6666-6666-6666-666666666666'
+  const customFieldIndustryId = '66666666-6666-4666-8666-666666666666'
   await client.query(`
     INSERT INTO public.custom_fields (id, account_id, user_id, field_name, field_type)
     VALUES ($1, $2, $3, 'Industry', 'text')
   `, [customFieldIndustryId, account_id, user_id])
 
   console.log('Seeding contacts...')
-  const contactJohnId = '77777777-7777-7777-7777-777777777777'
-  const contactJaneId = '88888888-8888-8888-8888-888888888888'
+  const contactJohnId = '77777777-7777-4777-8777-777777777777'
+  const contactJaneId = '88888888-8888-4888-8888-888888888888'
 
   await client.query(`
     INSERT INTO public.contacts (id, account_id, user_id, name, email, phone, company) VALUES
@@ -165,8 +165,8 @@ async function run() {
   `, [contactJohnId, tagWarmId, contactJaneId, tagVIPId])
 
   console.log('Seeding conversations...')
-  const convJohnId = '99999999-9999-9999-9999-999999999999'
-  const convJaneId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const convJohnId = '99999999-9999-4999-8999-999999999999'
+  const convJaneId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
 
   await client.query(`
     INSERT INTO public.conversations (
@@ -191,17 +191,17 @@ async function run() {
   `, [convJohnId, user_id, waConnId, convJaneId, emailConnId])
 
   console.log('Seeding pipelines...')
-  const pipelineId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+  const pipelineId = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb'
   await client.query(`
     INSERT INTO public.pipelines (id, account_id, user_id, name)
     VALUES ($1, $2, $3, 'Sales Pipeline')
   `, [pipelineId, account_id, user_id])
 
   console.log('Seeding pipeline stages...')
-  const stageLeadInId = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
-  const stageContactedId = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
-  const stageProposalId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
-  const stageWonId = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
+  const stageLeadInId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  const stageContactedId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  const stageProposalId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+  const stageWonId = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
 
   await client.query(`
     INSERT INTO public.pipeline_stages (id, pipeline_id, name, position, color) VALUES
@@ -234,7 +234,7 @@ async function run() {
   `, [account_id, user_id])
 
   console.log('Seeding broadcasts...')
-  const broadcastId = 'd1111111-1111-1111-1111-111111111111'
+  const broadcastId = 'd1111111-1111-4111-8111-111111111111'
   await client.query(`
     INSERT INTO public.broadcasts (
       id, account_id, user_id, name, template_name, scheduled_at, status,
@@ -250,7 +250,7 @@ async function run() {
   `, [broadcastId, contactJohnId, contactJaneId])
 
   console.log('Seeding automations...')
-  const autoId = 'd2222222-2222-2222-2222-222222222222'
+  const autoId = 'd2222222-2222-4222-8222-222222222222'
   await client.query(`
     INSERT INTO public.automations (id, account_id, user_id, name, trigger_type, is_active)
     VALUES ($1, $2, $3, 'Inbound Auto-Reply', 'message_received', TRUE)
@@ -263,7 +263,7 @@ async function run() {
   `, [autoId])
 
   console.log('Seeding flows...')
-  const flowId = 'f1111111-1111-1111-1111-111111111111'
+  const flowId = 'f1111111-1111-4111-8111-111111111111'
   await client.query(`
     INSERT INTO public.flows (id, account_id, user_id, name, trigger_type, status)
     VALUES ($1, $2, $3, 'Customer Onboarding Flow', 'manual', 'active')
