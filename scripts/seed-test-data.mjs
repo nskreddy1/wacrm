@@ -35,26 +35,51 @@ async function run() {
 
   // Auth users must be created through GoTrue. Writing auth.users directly omits
   // provider identities and other Auth-managed fields, which makes password login fail.
-  const { data: existingUsers, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers()
-  if (listUsersError) throw listUsersError
-
-  const existingUser = existingUsers.users.find(
-    (user) => user.id === user_id || user.email?.toLowerCase() === email,
+  const existingAuthUser = await client.query(
+    'SELECT id FROM auth.users WHERE id = $1 OR lower(email) = $2 LIMIT 1',
+    [user_id, email],
   )
-  if (existingUser) {
-    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(existingUser.id)
-    if (deleteUserError) throw deleteUserError
-  }
 
-  const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
-    id: user_id,
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { full_name: 'Test Administrator' },
-  })
-  if (createUserError) throw createUserError
-  if (createdUser.user.id !== user_id) throw new Error('Supabase Auth created an unexpected user ID')
+  if (existingAuthUser.rows.length > 0) {
+    // Repair users produced by older versions of this seed. Those versions wrote
+    // auth.users directly but omitted auth.identities, causing GoTrue to return 500.
+    await client.query(
+      `UPDATE auth.users
+       SET encrypted_password = crypt($2, gen_salt('bf')),
+           email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+           confirmation_token = '',
+           recovery_token = '',
+           email_change_token_new = '',
+           email_change = '',
+           raw_app_meta_data = '{"provider":"email","providers":["email"]}'::jsonb,
+           raw_user_meta_data = '{"full_name":"Test Administrator"}'::jsonb,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [user_id, password],
+    )
+    await client.query(
+      `INSERT INTO auth.identities
+         (provider_id, user_id, identity_data, provider, created_at, updated_at, email)
+       VALUES ($1, $1, jsonb_build_object('sub', $1::text, 'email', $2, 'email_verified', true),
+         'email', NOW(), NOW(), $2)
+       ON CONFLICT (provider_id, provider) DO UPDATE SET
+         user_id = EXCLUDED.user_id,
+         identity_data = EXCLUDED.identity_data,
+         email = EXCLUDED.email,
+         updated_at = NOW()`,
+      [user_id, email],
+    )
+  } else {
+    const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+      id: user_id,
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: 'Test Administrator' },
+    })
+    if (createUserError) throw createUserError
+    if (createdUser.user.id !== user_id) throw new Error('Supabase Auth created an unexpected user ID')
+  }
 
   console.log('Retrieving account_id from profiles...')
   // Wait a short bit or query immediately because trigger runs synchronously in the transaction
