@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
+import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
 import { getMockDashboard } from "@/lib/data/dashboard/mock-repository"
+import { getSupabaseDashboard } from "@/lib/data/dashboard/supabase-repository"
 import { getDataSource } from "@/lib/data/runtime"
 
 export const dynamic = "force-dynamic"
@@ -11,8 +13,11 @@ export async function GET() {
     return NextResponse.json({ data: getMockDashboard(), meta: { source } })
   }
 
-  return NextResponse.json(
-    { error: { code: "not_implemented", message: "Supabase dashboard adapter is not configured" } },
-    { status: 503 },
-  )
+  try {
+    const context = await getCurrentAccount()
+    const data = await getSupabaseDashboard(context)
+    return NextResponse.json({ data, meta: { source } })
+  } catch (error) {
+    return toErrorResponse(error)
+  }
 }
