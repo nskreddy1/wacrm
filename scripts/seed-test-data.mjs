@@ -1,5 +1,6 @@
 import pg from 'pg'
 import process from 'node:process'
+import { createClient } from '@supabase/supabase-js'
 
 const { Client } = pg
 const connectionString =
@@ -7,36 +8,53 @@ const connectionString =
   process.env.POSTGRES_URL ??
   process.env.DATABASE_URL ??
   'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
+const serviceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ??
+  process.env.zepo_SUPABASE_SERVICE_ROLE_KEY ??
+  process.env.zepo_SUPABASE_SECRET_KEY ??
+  process.env.SUPABASE_SECRET_KEY
 
-console.log(`Connecting to database: ${connectionString}`)
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error('Supabase URL and service-role credentials are required to seed an authenticated user')
+}
 
-const client = new Client({
-  connectionString,
+const client = new Client({ connectionString })
+const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
 })
 
 async function run() {
   await client.connect()
   console.log('Connected!')
 
-  console.log('Seeding auth.users...')
+  console.log('Seeding authenticated test user through Supabase Auth...')
   const user_id = 'e3bfb053-4f5b-4439-8093-7092b5c0909d'
+  const email = 'admin@example.com'
+  const password = 'password123'
 
-  // Bcrypt hash of 'password123'
-  const password_hash = '$2a$10$c1.0mP/s1iX4u/z0t6y3I.Pfe9W9D3XwV0u.B8xG3nK3/aZ9qU1F2'
+  // Auth users must be created through GoTrue. Writing auth.users directly omits
+  // provider identities and other Auth-managed fields, which makes password login fail.
+  const { data: existingUsers, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers()
+  if (listUsersError) throw listUsersError
 
-  await client.query(`
-    INSERT INTO auth.users (
-      id, instance_id, email, encrypted_password, email_confirmed_at, 
-      raw_app_meta_data, raw_user_meta_data, role, aud
-    ) VALUES (
-      $1, '00000000-0000-0000-0000-000000000000', 'admin@example.com', $2, NOW(),
-      '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Test Administrator"}'::jsonb,
-      'authenticated', 'authenticated'
-    ) ON CONFLICT (id) DO UPDATE SET
-      email = EXCLUDED.email,
-      encrypted_password = EXCLUDED.encrypted_password,
-      raw_user_meta_data = EXCLUDED.raw_user_meta_data
-  `, [user_id, password_hash])
+  const existingUser = existingUsers.users.find(
+    (user) => user.id === user_id || user.email?.toLowerCase() === email,
+  )
+  if (existingUser) {
+    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(existingUser.id)
+    if (deleteUserError) throw deleteUserError
+  }
+
+  const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+    id: user_id,
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: 'Test Administrator' },
+  })
+  if (createUserError) throw createUserError
+  if (createdUser.user.id !== user_id) throw new Error('Supabase Auth created an unexpected user ID')
 
   console.log('Retrieving account_id from profiles...')
   // Wait a short bit or query immediately because trigger runs synchronously in the transaction
