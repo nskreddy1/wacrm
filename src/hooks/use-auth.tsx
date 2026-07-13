@@ -3,12 +3,31 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react"
 import type { User } from "@supabase/supabase-js"
 import useSWR from "swr"
-import { demoSession } from "@/lib/demo/crm-data"
 import { DEFAULT_CURRENCY } from "@/lib/currency"
 import type { AccountRole } from "@/lib/auth/roles"
 
-type Profile = Omit<typeof demoSession.profile, "account_role"> & { account_role: AccountRole }
-type AccountSummary = typeof demoSession.account
+type Profile = {
+  id: string
+  full_name: string | null
+  email: string
+  avatar_url: string | null
+  role: string | null
+  beta_features: string[]
+  account_id: string
+  account_role: AccountRole
+}
+
+type AccountSummary = {
+  id: string
+  name: string
+  default_currency: string | null
+}
+
+type SessionUser = {
+  id: string
+  email?: string | null
+  created_at?: string
+}
 
 interface AuthContextValue {
   user: User | null
@@ -32,7 +51,7 @@ interface AuthContextValue {
 
 type SessionPayload = {
   data: {
-    user: typeof demoSession.user
+    user: SessionUser
     profile: Profile
     account: AccountSummary
   }
