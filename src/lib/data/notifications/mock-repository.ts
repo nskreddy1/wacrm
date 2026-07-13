@@ -12,7 +12,7 @@ const notifications: Notification[] = [
     title: "Mia Chen was assigned to you",
     body: "Customer care rollout needs a reply.",
     conversation_id: "conversation-1",
-    read_at: null,
+    read_at: undefined,
     created_at: new Date(now - 4 * 60_000).toISOString(),
   },
   {

@@ -51,7 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile: session?.profile ?? null,
     loading: isLoading,
     profileLoading: isLoading,
-    signOut: async () => { window.location.href = "/dashboard" },
+    signOut: async () => {
+      await fetch("/api/v1/session", { method: "DELETE" })
+      window.location.href = "/login"
+    },
     refreshProfile: async () => { await mutate() },
     accountId: session?.account.id ?? null,
     accountRole: role,
