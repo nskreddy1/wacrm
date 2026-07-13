@@ -223,7 +223,13 @@ export interface Notification {
 }
 
 export type ChannelKind = 'whatsapp' | 'email';
-export type ChannelProvider = 'meta' | 'twilio' | 'google' | 'resend';
+export type ChannelProvider =
+  | 'meta'
+  | 'twilio'
+  | 'google'
+  | 'microsoft'
+  | 'resend'
+  | 'smtp';
 export type ChannelConnectionStatus =
   | 'draft'
   | 'connected'

@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   if (!connection) return NextResponse.json({ error: 'Unknown destination' }, { status: 404 })
 
   const credentials = decryptProviderCredentials(connection)
-  if (credentials.provider !== 'twilio' || !validSignature(request.url, params, request.headers.get('x-twilio-signature'), credentials.authToken)) {
+  if (credentials.provider !== 'twilio' || !validSignature(request.url, params, request.headers.get('x-twilio-signature'), credentials.value.authToken)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
 
