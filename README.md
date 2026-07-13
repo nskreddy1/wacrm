@@ -93,6 +93,17 @@ the internal Express business API together. Browsers call same-origin
 `4000` by default. You'll be redirected to the canonical `/login` URL (or
 `/dashboard` if already signed in) without exposing return paths in the URL.
 
+If either default port is occupied, set `WEB_PORT` and `API_PORT` in
+`.env.development.local` (or export them for the process), then restart:
+
+```bash
+WEB_PORT=3100 API_PORT=4100 pnpm dev
+```
+
+The BFF derives its local Express target from `API_HOST` and `API_PORT`.
+`EXPRESS_API_URL` remains an optional highest-priority override for deployments
+where Express is reached at a separate internal URL.
+
 The production contract is also one command: run `npm run build`, then
 `npm start` to launch both managed processes. The equivalent `pnpm dev` and
 `pnpm start` commands use the same orchestration.

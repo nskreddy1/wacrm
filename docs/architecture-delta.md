@@ -1,87 +1,78 @@
 # Architecture delta: this fork vs. upstream wacrm docs
 
-> Compares this repository (branch `url-and-naming-conventions`, package version 0.8.0) against the upstream documentation snapshots in `docs/upstream-wacrm/`.
-> Last verified against code: 2026-07-13.
-> Authority order: live schema/migrations → source code → this document → upstream snapshots.
+> Current branch: `architecture-report`; package version: `0.8.0`
+> Last code audit: 2026-07-13
+> Authority: applied schema → repository migrations → source → local docs → `docs/upstream-wacrm/*`
 
-## 1. Backend topology — the biggest divergence
+## Current inventory
 
-Upstream docs say: "No ORM, no GraphQL layer, no dedicated backend. The Next server-side routes read and write Supabase directly."
+The audit found 530 tracked files: 409 under `src`, 40 SQL migrations, 20 local/upstream documentation files, 16 MCP files, 7 Express files and supporting root/CI/assets. Generated directories (`node_modules`, `.next`, `.git`, caches and build output) are excluded. The build exposes 29 page files and 60 route-handler files.
 
-This fork runs **two processes**:
+## 1. Dedicated backend topology
 
-| Process | Location | Role |
-| --- | --- | --- |
-| Web/BFF | Next.js 16 (`src/`) | UI, App Router API routes, webhook receivers, public `/api/v1` |
-| Business API | Express 5 (`server/`) | Internal domain API behind the BFF |
+Upstream snapshots describe Next.js routes talking directly to Supabase. This fork adds an internal Express 5 business API:
 
-- `npm run dev` / `npm start` use `concurrently` to launch both (`dev:web` + `dev:api`); the Express API listens on port 4000 by default (`server/config.ts`).
-- Browsers only ever call same-origin `/api/service/*`; `src/app/api/service/[...path]/route.ts` forwards authenticated requests to Express.
-- `server/app.ts` adds enterprise middleware upstream does not have: `helmet`, `pino-http` structured logging with `x-request-id` propagation and redaction of auth/cookie headers, JSON body limit, `GET /health/live` and `GET /health/ready` probes, and a `/v1/account` domain router behind Supabase-token authentication (`server/http/auth.ts`).
+| Process | Location | Default | Role |
+| --- | --- | --- | --- |
+| Web/BFF | `src/`, Next.js 16 | `WEB_PORT=3000` | UI, route handlers, webhooks, OAuth, public API and authenticated BFF |
+| Business API | `server/`, Express 5 | `API_HOST=127.0.0.1`, `API_PORT=4000` | Health probes, middleware and extracted domain APIs |
 
-## 2. Middleware and auth redirects
+`pnpm dev` and `pnpm start` supervise both. `scripts/run-web.mjs` validates `WEB_PORT`. `/api/service/*` uses `EXPRESS_API_URL` when set and otherwise derives its target from `API_HOST`/`API_PORT`. Express adds Helmet, structured/redacted Pino logging, request IDs, body limits, liveness/readiness and independent Supabase bearer authentication.
 
-- Upstream has `src/middleware.ts` (session refresh only). This fork uses the Next.js 16 convention `src/proxy.ts`.
-- The proxy enforces the clean-URL auth contract: unauthenticated requests to protected paths are redirected to exactly `/login` with the query string **stripped** (`target.search = ""`) — there is no `?next=` / `returnTo` parameter by design.
-- Authenticated users landing on `/` or an auth route are redirected to `/dashboard`, or to `/join/<token>` when an `?invite=` parameter is present (invitation flow is the only destination-preserving exception).
-- Public prefixes: `/auth/`, `/join/`, `/api/service/`, `/api/webhooks/`, `/api/v1/`.
+## 2. Next 16 proxy and routing
 
-## 3. Routing conventions (in transition)
+- Session/auth handling uses `src/proxy.ts`, not legacy `middleware.ts`.
+- Protected unauthenticated traffic redirects to clean `/login` without a return-path query.
+- Canonical pages use `/dashboard`, `/inbox`, `/contacts`, `/pipelines`, `/broadcasts`, `/automations`, `/flows`, `/agents`, `/bookings`, `/notifications` and `/settings`.
+- Legacy `/bigin/org/[accountId]/...` and `/org/[accountId]/...` pages still coexist. They are compatibility debt, not the V1 target.
+- `src/lib/routing/routes.ts` and `src/lib/routes/dashboard-routes.ts` still encode competing conventions.
 
-Route building is currently split across two modules with different conventions — consolidation to simple canonical URLs is in progress:
+## 3. Database history
 
-| Module | Convention | Status |
-| --- | --- | --- |
-| `src/lib/routing/routes.ts` | Canonical constants (`/login`, `/dashboard`, `/join/:token`) plus `/accounts/:accountId/...` builders | Canonical for auth/app entry; the `/accounts/...` builders are slated for replacement by simple paths |
-| `src/lib/routes/dashboard-routes.ts` | Legacy generators emitting `/bigin/org/:accountId/home/...` and `/org/:accountId/...` URLs | Legacy — to become compatibility redirects only |
+Upstream setup material begins with migrations `001`–`009` and snapshots discuss work through `030`. This fork contains `001`–`040`:
 
-Actual page directories include **both** simple and account-prefixed variants:
+- `031`–`037`: AI grants/fixes, profile RLS, interactive messages, dedupe and pipeline workspace.
+- `038`: omnichannel connections/identities, OAuth state, webhook receipts, channel-aware messages/conversations and notification delivery/preferences.
+- `039`: conversation uniqueness correction.
+- `040`: SMTP and Microsoft 365 provider constraint expansion.
 
-- Simple: `/dashboard`, `/inbox`, `/contacts`, `/pipelines`, `/broadcasts`, `/automations`, `/flows`, `/agents`, `/bookings`, `/notifications`, `/settings`
-- Legacy: `/org/[accountId]/pipelines/...`, `/bigin/org/[accountId]/home/contacts/...`, `/bigin/org/[accountId]/home/deals/...`
+The connected Supabase environment returned no public baseline tables at the last inspection. The migrations therefore remain repository intent until `001`–`040` are applied in order and RLS/persistence are verified live.
 
-Target state (enterprise V1): simple feature URLs only; the current account is resolved from the server-side membership context, never from the URL. Legacy paths become validated redirects.
+## 4. Provider state
 
-## 4. Database migrations — fork is ahead of the docs
+The authoritative provider list is Meta WhatsApp, Twilio WhatsApp, Gmail, Microsoft 365, Resend and SMTP. Capability contracts, schema, registry and a shared Settings surface exist, but support is intentionally uneven:
 
-Upstream setup docs list migrations `001`–`009`; the upstream changelog references up to `030`. This fork's `supabase/migrations/` contains `001`–`037`. Fork-only (beyond documented upstream):
+- Meta WhatsApp: mature legacy transport and webhook lifecycle; neutral backfill still needs live migration validation.
+- SMTP: encrypted settings and Nodemailer health/send adapter implemented; live DB/provider verification pending.
+- Twilio: setup/contracts and webhook boundary are partial; end-to-end transport is incomplete.
+- Resend: setup/contracts are staged; complete inbound/outbound lifecycle is not proven.
+- Gmail and Microsoft 365: schema/contracts only; OAuth, sync and transport are target work and UI marks them unavailable.
 
-| Migration | Adds |
-| --- | --- |
-| `031_ai_reply_slot_grant.sql` | AI reply slot grants |
-| `032_fix_ai_knowledge_membership.sql` | Knowledge-base membership fix |
-| `033_ai_reply_polish.sql` | AI reply refinements |
-| `034_fix_profiles_update_rls.sql` | Profiles RLS fix |
-| `035_interactive_messages.sql` | Interactive (button/list) messages |
-| `036_conversation_contact_dedup.sql` | Conversation/contact deduplication |
-| `037_pipeline_workspace.sql` | Pipeline workspace model |
+No provider silently falls back to another.
 
-Always check the directory itself; never trust a doc-listed migration count.
+## 5. Additional fork features
 
-## 5. Features present in this fork but absent from upstream docs
+- MCP server (`mcp-server/`, `docs/mcp.md`) consuming scoped public APIs.
+- Visual Flows with templates, runs and cron drain.
+- Agents, Bookings, Notifications, presence and quick replies.
+- AI playground, usage, OpenAI/Anthropic abstraction, knowledge retrieval and handoff tests.
+- Public REST API, hashed/scoped keys and signed outbound webhooks.
+- Express process and same-origin BFF.
+- Vitest suite with broad colocated coverage.
+- English message catalog and expanded responsive UI.
 
-- **MCP server** (`mcp-server/`, `docs/mcp.md`) — drive the CRM from AI assistants over the Model Context Protocol; read-only by default with opt-in writes.
-- **Flows** (`/flows`, `src/app/api/flows/*`, migrations `010`, `012`, `016`) — visual button-driven conversation builder with runs, cron drain, and templates. Upstream docs mention Flows in passing but have no dedicated page in the snapshot set.
-- **Agents page** (`/agents`), **Bookings** (`/bookings`), **Notifications** (`/notifications`, migration `027`), **member presence** (migration `024`), **quick replies** (`src/app/api/quick-replies/*`).
-- **AI extras**: playground (`/api/ai/playground`), usage metering (`/api/ai/usage`, `src/lib/ai/usage.ts`), provider abstraction (`src/lib/ai/providers/{openai,anthropic}.ts`), structured handoff logic (`src/lib/ai/handoff.ts`) with unit tests.
-- **Internationalization**: `messages/en.json` message catalog.
-- **Vitest test suite** (`vitest.config.ts`, `*.test.ts` colocated with sources) — upstream docs do not describe a test setup.
+## 6. Important architectural exceptions
 
-## 6. Local docs vs. web docs
-
-- `docs/public-api.md` (local) is the **authoritative** public API reference for this fork — it is richer than the upstream web page. The snapshot `docs/upstream-wacrm/public-api.md` is kept for comparison only.
-- `docs/mcp.md` documents the MCP server (no upstream equivalent).
-- `docs/upstream-wacrm/` holds the attributed snapshots of all 14 requested wacrm.tech pages.
+- Pipeline workspace code includes SQLite/demo repository paths; Supabase remains the production authority.
+- Demo APIs and in-memory cache/rate paths are not durable multi-instance storage.
+- Two lockfiles remain even though active development uses pnpm.
+- Repository-wide historical lint debt remains.
+- Next 16 permits alternate HTTP ports, but two dev servers from the same checkout contend for the same `.next/dev` lock; stop the original process or use a separate worktree/build for concurrent verification.
 
 ## 7. What still matches upstream
 
-- Supabase as the only data/auth provider (Postgres, Auth, Storage, Realtime, RLS on every table; account-scoped tenancy via migrations `017`–`020`).
-- Meta Cloud API WhatsApp integration with HMAC-verified webhooks, AES-256-GCM token encryption, template lifecycle management, broadcasts with incremental delivery counters.
-- Roles: owner / admin / agent / viewer with DB-enforced (RLS + RPC) permission checks.
-- Deterministic precedence: Flows → Automations → AI auto-reply.
-- Public REST API under `/api/v1` with scoped hashed keys and signed outbound webhooks.
-- Cron drain contract at `/api/automations/cron` protected by `AUTOMATION_CRON_SECRET`.
+Supabase remains the only production database/auth platform. Tenant data is account-scoped, roles remain owner/admin/agent/viewer, Meta uses encrypted credentials and HMAC verification, Flows precede Automations and AI auto-reply, and the public API remains additive with signed webhooks.
 
-## 8. Enterprise V1 direction (this fork's target)
+## 8. Target and authority
 
-See `docs/enterprise-v1-architecture.md` for the target-state architecture: one company / many role-based users, stable simple URLs, provider-neutral omnichannel layer (WhatsApp + Microsoft 365 + Gmail), hybrid AI decisioning, durable idempotent job processing, and full observability. V2 (multi-company membership + account switcher) is explicitly out of V1 scope.
+`docs/enterprise-v1-architecture.md` is the consolidated current-state report and Enterprise V1 contract. It separates implemented behavior from target behavior, contains the source/file-group catalog, provider matrix, migration chronology, validation record, risk register and implementation sequence. Upstream snapshots are historical comparison material and are not edited to describe this fork.

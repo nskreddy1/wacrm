@@ -1201,8 +1201,25 @@
   },
   "Settings": {
     "pageTitle": "Settings",
-    "pageDesc": "Everything in one place — your account and your workspace. Pick a section to manage it.",
-    "overview": {
+  "pageDesc": "Everything in one place — your account and your workspace. Pick a section to manage it.",
+  "groups": {
+    "account": "Account",
+    "workspace": "Workspace"
+  },
+  "sections": {
+    "overview": "Overview",
+    "profile": "Your profile",
+    "security": "Login & security",
+    "appearance": "Appearance",
+    "channels": "Channels",
+    "templates": "Templates",
+    "quick-replies": "Quick replies",
+    "fields": "Fields & tags",
+    "deals": "Deals & currency",
+    "members": "Team members",
+    "api": "API keys"
+  },
+  "overview": {
       "notSetup": "Not set up yet",
       "connected": "Connected",
       "needsReconnecting": "Needs reconnecting",
