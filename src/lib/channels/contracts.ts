@@ -56,9 +56,19 @@ export interface ChannelHealth {
   error?: string
 }
 
+export interface ChannelCapabilities {
+  send: boolean
+  receive: boolean
+  healthCheck: boolean
+  oauth: boolean
+  testMessage: boolean
+}
+
 export interface ChannelAdapter {
   readonly provider: ChannelProvider
   readonly channel: ChannelKind
-  send(message: OutboundChannelMessage): Promise<ChannelSendResult>
+  readonly capabilities: ChannelCapabilities
+  send?(message: OutboundChannelMessage): Promise<ChannelSendResult>
   checkHealth(connection: ChannelConnection): Promise<ChannelHealth>
+  sendTest?(connection: ChannelConnection, recipient: string): Promise<ChannelSendResult>
 }

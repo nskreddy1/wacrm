@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const matched = connections?.some((connection) => {
     try {
       const credentials = decryptProviderCredentials(connection)
-      return credentials.provider === 'meta' && credentials.verifyToken === token
+      return credentials.provider === 'meta' && credentials.value.verifyToken === token
     } catch { return false }
   })
   return matched ? new Response(challenge, { headers: { 'Content-Type': 'text/plain' } }) : NextResponse.json({ error: 'Invalid token' }, { status: 403 })
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
         .eq('provider', 'meta').eq('external_account_id', phoneNumberId).eq('is_enabled', true).maybeSingle()
       if (!connection) continue
       const credentials = decryptProviderCredentials(connection)
-      if (credentials.provider !== 'meta' || !verify(rawBody, request.headers.get('x-hub-signature-256'), credentials.appSecret)) {
+      if (credentials.provider !== 'meta' || !verify(rawBody, request.headers.get('x-hub-signature-256'), credentials.value.appSecret)) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
       }
 

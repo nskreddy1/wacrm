@@ -16,10 +16,23 @@ export interface ResendCredentials {
   apiKey: string
 }
 
+export interface SmtpCredentials {
+  username: string
+  password: string
+}
+
+export interface MetaCredentials {
+  accessToken: string
+  appSecret: string
+  verifyToken: string
+}
+
 export type ProviderCredentials =
   | { provider: 'twilio'; value: TwilioCredentials }
   | { provider: 'google'; value: GoogleCredentials }
   | { provider: 'resend'; value: ResendCredentials }
+  | { provider: 'smtp'; value: SmtpCredentials }
+  | { provider: 'meta'; value: MetaCredentials }
 
 function parseCredentials(value: string): ProviderCredentials {
   const parsed: unknown = JSON.parse(value)

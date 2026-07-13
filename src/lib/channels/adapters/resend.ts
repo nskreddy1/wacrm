@@ -5,6 +5,13 @@ import type { ChannelConnection } from '@/types'
 export class ResendEmailAdapter implements ChannelAdapter {
   readonly provider = 'resend' as const
   readonly channel = 'email' as const
+  readonly capabilities = {
+    send: true,
+    receive: false,
+    healthCheck: true,
+    oauth: false,
+    testMessage: true,
+  } as const
 
   async send(message: OutboundChannelMessage): Promise<ChannelSendResult> {
     const credentials = decryptProviderCredentials(message.connection)

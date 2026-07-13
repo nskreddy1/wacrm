@@ -14,6 +14,13 @@ function twilioAddress(value: string): string {
 export class TwilioWhatsAppAdapter implements ChannelAdapter {
   readonly provider = 'twilio' as const
   readonly channel = 'whatsapp' as const
+  readonly capabilities = {
+    send: true,
+    receive: true,
+    healthCheck: true,
+    oauth: false,
+    testMessage: false,
+  } as const
 
   async send(message: OutboundChannelMessage): Promise<ChannelSendResult> {
     const credentials = decryptProviderCredentials(message.connection)

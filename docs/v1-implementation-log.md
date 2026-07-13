@@ -100,3 +100,40 @@ Added `GET` and `PATCH /api/settings/channels`. Responses explicitly exclude enc
 ### Next action
 
 Establish the Supabase baseline safely, then implement the reusable Settings UI and provider connect flows before Gmail, Twilio, and Resend transport code.
+
+## 2026-07-13 — Provider-neutral connection setup and SMTP
+
+### Objective
+
+Complete the connection/setup slice before inbox transport: independently configure, test, enable, disable, and switch email or WhatsApp providers while keeping provider details outside CRM-domain records.
+
+### Changes
+
+- Added generic SMTP as an email provider alongside Google, Microsoft, Resend, Meta, and Twilio; no provider silently falls back to another.
+- Added migration `040_channel_connection_providers.sql` to extend the provider enum and channel/provider constraint for SMTP and Microsoft 365.
+- Added provider capability metadata, channel/provider compatibility checks, and channel-qualified adapter resolution.
+- Added a Nodemailer SMTP adapter with TLS 1.2 minimum, STARTTLS/implicit-TLS validation, health verification, optional test email, and secret-safe error normalization.
+- Expanded `POST /api/settings/channels` for encrypted save and provider tests, and retained account-scoped list and enable/disable/primary operations. Service-role access is only used after authenticated admin authorization and every operation is explicitly filtered by `account_id`.
+- Added a unified Settings → Channels panel. SMTP, Resend, and Twilio expose functional setup; Gmail, Microsoft, and Meta are visibly unavailable rather than falsely shown as connected. Legacy `?tab=whatsapp` links resolve to Channels.
+- Corrected the Meta and Twilio webhook credential accessors to use the established discriminated encrypted credential envelope.
+
+### Security and provider switching
+
+Credentials are encrypted with the existing AES-256-GCM helper and are never selected into API responses. Masked/omitted secrets preserve the existing ciphertext only when the provider is unchanged; switching providers requires new credentials. A connection cannot be enabled until a real provider health check succeeds, and enabling it deliberately makes it primary for that channel.
+
+### Validation
+
+- `pnpm typecheck`: passed.
+- `pnpm test`: passed, 656 tests across 71 files.
+- ESLint for all changed provider/API/settings files: passed.
+- `pnpm build`: passed on Next.js 16.2.6.
+- Full-repository `pnpm lint`: still fails on pre-existing lint debt in unrelated modules, matching the recorded baseline; this slice introduced no changed-file lint errors.
+- Browser verification was attempted at the required 941×681 dark viewport, but the local preview endpoint was unavailable (`ERR_CONNECTION_REFUSED`).
+
+### Supabase and external-provider status
+
+The connected Supabase project still has zero public tables and zero applied migrations. Repository migrations `001`–`039` must be applied in order before `040`; applying only the provider migration would be invalid, so no speculative database mutation was made. A real SMTP verification/test email remains pending until the database baseline exists and a test SMTP account/recipient is supplied. Gmail OAuth, Microsoft OAuth, Meta channel-connection migration, and full Twilio/Resend inbound/outbound transport remain separate later slices.
+
+### Provider replacement rule
+
+Production provider changes are connection configuration plus adapter changes. Conversations, contacts, messages, notifications, and other CRM-domain behavior continue to consume channel-neutral contracts and do not branch on provider SDK objects.
