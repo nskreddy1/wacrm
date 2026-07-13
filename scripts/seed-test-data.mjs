@@ -54,7 +54,7 @@ async function run() {
            raw_user_meta_data = '{"full_name":"Test Administrator"}'::jsonb,
            updated_at = NOW()
        WHERE id = $1`,
-      [user_id, password],
+      [user_id],
     )
     await client.query(
       `INSERT INTO auth.identities
