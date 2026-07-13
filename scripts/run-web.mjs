@@ -7,7 +7,9 @@ if (command !== "dev" && command !== "start") {
   process.exit(1)
 }
 
-const rawPort = process.env.WEB_PORT ?? "3000"
+// v0/Vercel Sandbox supplies PORT for the preview server. WEB_PORT remains
+// available as an explicit project-level override for self-hosted installs.
+const rawPort = process.env.WEB_PORT ?? process.env.PORT ?? "3000"
 const port = Number(rawPort)
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   console.error(`Invalid WEB_PORT: ${rawPort}. Expected an integer from 1 to 65535.`)

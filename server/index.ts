@@ -7,6 +7,18 @@ const server = app.listen(config.API_PORT, config.API_HOST, () => {
   console.log(`[api] listening on http://${config.API_HOST}:${config.API_PORT}`)
 })
 
+server.on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code === "EADDRINUSE") {
+    // During a v0 environment restart, the previous API process can remain
+    // alive briefly. Do not retry forever: that keeps concurrently in a
+    // broken initialization state and prevents the preview from attaching.
+    console.error(`[api] port ${config.API_PORT} is already in use`)
+  } else {
+    console.error("[api] failed to start", error)
+  }
+  process.exit(1)
+})
+
 let shuttingDown = false
 function shutdown(signal: string) {
   if (shuttingDown) return

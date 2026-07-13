@@ -18,6 +18,7 @@ export function loadServerConfig(environment: NodeJS.ProcessEnv = process.env): 
       environment.SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY:
       environment.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+      environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
       environment.NEXT_PUBLIC_zepo_SUPABASE_ANON_KEY ??
       environment.zepo_SUPABASE_PUBLISHABLE_KEY ??
       environment.SUPABASE_PUBLISHABLE_KEY,
