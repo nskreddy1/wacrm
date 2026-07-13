@@ -45,8 +45,7 @@ async function run() {
     // auth.users directly but omitted auth.identities, causing GoTrue to return 500.
     await client.query(
       `UPDATE auth.users
-       SET encrypted_password = crypt($2, gen_salt('bf')),
-           email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+       SET email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
            confirmation_token = '',
            recovery_token = '',
            email_change_token_new = '',
@@ -59,16 +58,24 @@ async function run() {
     )
     await client.query(
       `INSERT INTO auth.identities
-         (provider_id, user_id, identity_data, provider, created_at, updated_at, email)
-       VALUES ($1, $1, jsonb_build_object('sub', $1::text, 'email', $2, 'email_verified', true),
-         'email', NOW(), NOW(), $2)
+         (provider_id, user_id, identity_data, provider, created_at, updated_at)
+       VALUES ($1::text, $1::uuid, jsonb_build_object('sub', $1::text, 'email', $2::text, 'email_verified', true),
+         'email', NOW(), NOW())
        ON CONFLICT (provider_id, provider) DO UPDATE SET
          user_id = EXCLUDED.user_id,
          identity_data = EXCLUDED.identity_data,
-         email = EXCLUDED.email,
          updated_at = NOW()`,
       [user_id, email],
     )
+
+    // Let GoTrue generate the password hash and normalize all Auth-managed fields.
+    const { error: updateUserError } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: 'Test Administrator' },
+    })
+    if (updateUserError) throw updateUserError
   } else {
     const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
       id: user_id,
