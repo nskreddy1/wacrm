@@ -87,8 +87,15 @@ cp .env.local.example .env.local   # fill in Supabase + Meta creds
 npm run dev
 ```
 
-Open <http://localhost:3000>. You'll be redirected to `/login` (or
-`/dashboard` if already signed in).
+Open <http://localhost:3000>. The root command starts the Next.js web/BFF and
+the internal Express business API together. Browsers call same-origin
+`/api/service/*`; Next.js forwards authenticated requests to Express on port
+`4000` by default. You'll be redirected to the canonical `/login` URL (or
+`/dashboard` if already signed in) without exposing return paths in the URL.
+
+The production contract is also one command: run `npm run build`, then
+`npm start` to launch both managed processes. The equivalent `pnpm dev` and
+`pnpm start` commands use the same orchestration.
 
 ## 🚀 Deploy on Hostinger (recommended)
 
@@ -154,8 +161,9 @@ Key pages:
 
 ## Stack
 
-- **App** — Next.js 16 (App Router), React 19, TypeScript, Tailwind v4.
-- **Data** — Supabase (Postgres + Auth + Storage + RLS).
+- **Web/BFF** — Next.js 16 (App Router), React 19, TypeScript, Tailwind v4.
+- **Business API** — Express 5 behind the same-origin Next.js BFF.
+- **Data and auth** — Supabase (Postgres + Auth + Storage + Realtime + RLS), with no alternate database or authentication provider.
 - **WhatsApp** — Meta Cloud API (official WhatsApp Business API).
 
 ## Contributing
