@@ -10,7 +10,14 @@ const serverConfigSchema = z.object({
 export type ServerConfig = z.infer<typeof serverConfigSchema>
 
 export function loadServerConfig(environment: NodeJS.ProcessEnv = process.env): ServerConfig {
-  const result = serverConfigSchema.safeParse(environment)
+  const result = serverConfigSchema.safeParse({
+    ...environment,
+    NEXT_PUBLIC_SUPABASE_URL:
+      environment.NEXT_PUBLIC_SUPABASE_URL ?? environment.SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY:
+      environment.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+      environment.SUPABASE_PUBLISHABLE_KEY,
+  })
 
   if (!result.success) {
     const details = result.error.issues
