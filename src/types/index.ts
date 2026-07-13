@@ -187,7 +187,21 @@ export interface Conversation {
 // Notifications (migration 027)
 // ============================================================
 
-export type NotificationType = 'conversation_assigned';
+export type NotificationType =
+  | 'conversation_assigned'
+  | 'conversation_mentioned'
+  | 'customer_replied'
+  | 'provider_degraded'
+  | 'provider_disconnected'
+  | 'campaign_completed'
+  | 'sync_failed';
+
+export type NotificationEmailStatus =
+  | 'not_requested'
+  | 'pending'
+  | 'sent'
+  | 'failed'
+  | 'skipped';
 
 export interface Notification {
   id: string;
@@ -201,7 +215,51 @@ export interface Notification {
   actor_user_id?: string;
   title: string;
   body?: string;
+  metadata?: Record<string, unknown>;
+  email_status?: NotificationEmailStatus;
+  email_sent_at?: string;
   read_at?: string;
+  created_at: string;
+}
+
+export type ChannelKind = 'whatsapp' | 'email';
+export type ChannelProvider = 'meta' | 'twilio' | 'google' | 'resend';
+export type ChannelConnectionStatus =
+  | 'draft'
+  | 'connected'
+  | 'degraded'
+  | 'disconnected';
+
+export interface ChannelConnection {
+  id: string;
+  account_id: string;
+  created_by_user_id?: string;
+  channel: ChannelKind;
+  provider: ChannelProvider;
+  display_name: string;
+  external_account_id?: string;
+  external_identity?: string;
+  configuration: Record<string, unknown>;
+  status: ChannelConnectionStatus;
+  is_enabled: boolean;
+  is_primary: boolean;
+  last_connected_at?: string;
+  last_synced_at?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactIdentity {
+  id: string;
+  account_id: string;
+  contact_id: string;
+  channel: ChannelKind;
+  identity: string;
+  normalized_identity: string;
+  label?: string;
+  is_primary: boolean;
+  verified_at?: string;
   created_at: string;
 }
 
@@ -228,6 +286,12 @@ export interface Message {
   media_url?: string;
   template_name?: string;
   message_id?: string;
+  channel_connection_id?: string;
+  external_message_id?: string;
+  external_thread_id?: string;
+  subject?: string;
+  content_html?: string;
+  provider_payload?: Record<string, unknown>;
   status: MessageStatus;
   created_at: string;
   reply_to_message_id?: string;

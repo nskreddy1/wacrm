@@ -63,3 +63,40 @@ The architecture requires encrypted credentials, one-time OAuth state, verified 
 ### Next action
 
 Design and apply the omnichannel Supabase foundation as an idempotent migration, then add channel-neutral TypeScript contracts and tests before provider implementations depend on the schema.
+
+## 2026-07-13 — Omnichannel foundation started
+
+### Objective
+
+Create the reusable persistence and domain boundary required before provider-specific code is introduced.
+
+### Changes
+
+- Added migration `038_omnichannel_foundation.sql` with account-scoped channel connections, contact identities, webhook idempotency records, one-time Google OAuth state, channel-aware conversation/message columns, expanded notification delivery state, and notification preferences.
+- Added channel-neutral TypeScript contracts and a guarded provider adapter registry.
+- Added provider registry unit tests.
+- Extended shared message and notification types without removing legacy Meta fields, preserving incremental compatibility.
+
+### Supabase inspection
+
+The connected Supabase project currently returns no public tables and no RLS rows. It is therefore not at the repository's migration baseline (`001` through `037`), so migration `038` cannot safely be applied by itself because it intentionally references existing `accounts`, `contacts`, `conversations`, `messages`, and membership helpers. No destructive or speculative database action was performed. The database must first receive the repository baseline migrations in order; after that, `038` can be applied and its RLS/persistence probes executed.
+
+### Security notes
+
+Credential columns accept encrypted ciphertext only; public client policies never expose write access below account admin. Webhook events are idempotent by provider event ID, OAuth state stores a hash rather than plaintext state, and all new user-facing rows use account membership checks.
+
+### Validation
+
+- Channel registry and migration security tests: 7 passed.
+- TypeScript after shared contract changes: passed.
+- Hardened connection metadata grants so authenticated browser clients cannot select encrypted credentials or webhook secrets.
+- Corrected email-only contact support to reuse the existing canonical `contacts.email` column rather than introducing a duplicate field.
+- ESLint for changed TypeScript modules: passed.
+
+### Additional implementation
+
+Added `GET` and `PATCH /api/settings/channels`. Responses explicitly exclude encrypted credentials and webhook secrets; every query is account-scoped, reads require viewer membership, writes require admin membership, disconnected providers cannot be enabled, and primary-provider updates are constrained to the same channel.
+
+### Next action
+
+Establish the Supabase baseline safely, then implement the reusable Settings UI and provider connect flows before Gmail, Twilio, and Resend transport code.

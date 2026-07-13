@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 // Icon per notification type. Only one type exists today
 // (conversation_assigned) but this keeps future types a one-line add.
-const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
+const TYPE_ICON: Partial<Record<Notification["type"], typeof Bell>> = {
   conversation_assigned: UserPlus,
 };
 
