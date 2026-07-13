@@ -41,52 +41,22 @@ async function run() {
   )
 
   if (existingAuthUser.rows.length > 0) {
-    // Repair users produced by older versions of this seed. Those versions wrote
-    // auth.users directly but omitted auth.identities, causing GoTrue to return 500.
-    await client.query(
-      `UPDATE auth.users
-       SET email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
-           confirmation_token = '',
-           recovery_token = '',
-           email_change_token_new = '',
-           email_change = '',
-           raw_app_meta_data = '{"provider":"email","providers":["email"]}'::jsonb,
-           raw_user_meta_data = '{"full_name":"Test Administrator"}'::jsonb,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [user_id],
-    )
-    await client.query(
-      `INSERT INTO auth.identities
-         (provider_id, user_id, identity_data, provider, created_at, updated_at)
-       VALUES ($1::text, $1::uuid, jsonb_build_object('sub', $1::text, 'email', $2::text, 'email_verified', true),
-         'email', NOW(), NOW())
-       ON CONFLICT (provider_id, provider) DO UPDATE SET
-         user_id = EXCLUDED.user_id,
-         identity_data = EXCLUDED.identity_data,
-         updated_at = NOW()`,
-      [user_id, email],
-    )
-
-    // Let GoTrue generate the password hash and normalize all Auth-managed fields.
-    const { error: updateUserError } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name: 'Test Administrator' },
-    })
-    if (updateUserError) throw updateUserError
-  } else {
-    const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
-      id: user_id,
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name: 'Test Administrator' },
-    })
-    if (createUserError) throw createUserError
-    if (createdUser.user.id !== user_id) throw new Error('Supabase Auth created an unexpected user ID')
+    // Older versions wrote auth.users directly. Remove the malformed user and its
+    // generated application profile so GoTrue can recreate both consistently.
+    await client.query('DELETE FROM public.profiles WHERE user_id = $1', [user_id])
+    await client.query('DELETE FROM public.accounts WHERE owner_user_id = $1', [user_id])
+    await client.query('DELETE FROM auth.users WHERE id = $1', [user_id])
   }
+
+  const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+    id: user_id,
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: 'Test Administrator' },
+  })
+  if (createUserError) throw createUserError
+  if (createdUser.user.id !== user_id) throw new Error('Supabase Auth created an unexpected user ID')
 
   console.log('Retrieving account_id from profiles...')
   // Wait a short bit or query immediately because trigger runs synchronously in the transaction
