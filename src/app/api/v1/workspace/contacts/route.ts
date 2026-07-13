@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
 import {
   createMockContact,
   createMockContactField,
@@ -8,6 +9,12 @@ import {
   updateMockContact,
   updateMockContactPreferences,
 } from "@/lib/data/contacts/mock-repository"
+import {
+  createSupabaseContact,
+  deleteSupabaseContacts,
+  getSupabaseContactWorkspace,
+  updateSupabaseContact,
+} from "@/lib/data/contacts/supabase-repository"
 import type { ContactPreferences, ContactValue, FieldType } from "@/lib/data/contacts/types"
 import { getDataSource, getMockDataContext } from "@/lib/data/runtime"
 
@@ -18,39 +25,38 @@ function response(data: unknown, status = 200) {
 }
 
 function failure(error: unknown, status = 400) {
-  return NextResponse.json(
-    { error: { code: "request_failed", message: error instanceof Error ? error.message : "Request failed" } },
-    { status },
-  )
-}
-
-function context(request: Request) {
-  const accountId = new URL(request.url).searchParams.get("account")
-  return getMockDataContext(accountId)
+  return NextResponse.json({ error: { code: "request_failed", message: error instanceof Error ? error.message : "Request failed" } }, { status })
 }
 
 export async function GET(request: Request) {
-  const ctx = context(request)
-  if (ctx.source !== "mock") {
-    return failure(new Error("The Supabase workspace adapter is not available for this endpoint"), 503)
+  if (getDataSource() === "mock") {
+    return response(getMockContactWorkspace(getMockDataContext(new URL(request.url).searchParams.get("account")).accountId))
   }
-  return response(getMockContactWorkspace(ctx.accountId))
+  try {
+    return response(await getSupabaseContactWorkspace(await getCurrentAccount()))
+  } catch (error) {
+    return toErrorResponse(error)
+  }
 }
 
 export async function POST(request: Request) {
   try {
-    const ctx = context(request)
     const body = (await request.json()) as {
       kind?: string
       values?: Record<string, ContactValue>
       field?: { label: string; type: FieldType; options?: string[]; width?: number }
     }
-    if (body.kind === "field") {
-      if (!body.field?.label || !body.field.type) throw new Error("Field label and type are required")
-      return response(createMockContactField(body.field), 201)
+    if (getDataSource() === "mock") {
+      if (body.kind === "field") {
+        if (!body.field?.label || !body.field.type) throw new Error("Field label and type are required")
+        return response(createMockContactField(body.field), 201)
+      }
+      if (!body.values) throw new Error("Contact values are required")
+      return response(createMockContact(getMockDataContext().accountId, body.values), 201)
     }
+    if (body.kind === "field") return failure(new Error("Custom contact fields are not available yet"), 501)
     if (!body.values) throw new Error("Contact values are required")
-    return response(createMockContact(ctx.accountId, body.values), 201)
+    return response(await createSupabaseContact(await getCurrentAccount(), body.values), 201)
   } catch (error) {
     return failure(error)
   }
@@ -58,18 +64,21 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const ctx = context(request)
     const body = (await request.json()) as {
       kind?: string
       id?: string
       values?: Partial<Record<string, ContactValue>>
       preferences?: Partial<ContactPreferences>
     }
-    if (body.kind === "preferences") {
-      return response(updateMockContactPreferences(ctx.accountId, body.preferences ?? {}))
+    if (getDataSource() === "mock") {
+      const accountId = getMockDataContext().accountId
+      if (body.kind === "preferences") return response(updateMockContactPreferences(accountId, body.preferences ?? {}))
+      if (!body.id || !body.values) throw new Error("Contact id and values are required")
+      return response(updateMockContact(accountId, body.id, body.values))
     }
+    if (body.kind === "preferences") return response(body.preferences ?? {})
     if (!body.id || !body.values) throw new Error("Contact id and values are required")
-    return response(updateMockContact(ctx.accountId, body.id, body.values))
+    return response(await updateSupabaseContact(await getCurrentAccount(), body.id, body.values))
   } catch (error) {
     return failure(error)
   }
@@ -77,11 +86,13 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const ctx = context(request)
     const body = (await request.json()) as { ids?: string[] }
     if (!Array.isArray(body.ids)) throw new Error("Contact ids are required")
-    deleteMockContacts(ctx.accountId, body.ids)
-    return response({ deleted: body.ids.length })
+    if (getDataSource() === "mock") {
+      deleteMockContacts(getMockDataContext().accountId, body.ids)
+      return response({ deleted: body.ids.length })
+    }
+    return response({ deleted: await deleteSupabaseContacts(await getCurrentAccount(), body.ids) })
   } catch (error) {
     return failure(error)
   }
