@@ -66,7 +66,7 @@ export async function PATCH(request: Request) {
       preferences?: Partial<ContactPreferences>
     }
     if (body.kind === "preferences") {
-      return response(updateMockContactPreferences(body.preferences ?? {}))
+      return response(updateMockContactPreferences(ctx.accountId, body.preferences ?? {}))
     }
     if (!body.id || !body.values) throw new Error("Contact id and values are required")
     return response(updateMockContact(ctx.accountId, body.id, body.values))

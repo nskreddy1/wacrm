@@ -23,13 +23,36 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from "@/lib/rate-limit";
+import { getMockDatabase } from "@/lib/data/mock-db";
+import { DEMO_ACCOUNT_ID, DEMO_USER_ID, getDataSource } from "@/lib/data/runtime";
 
 export async function GET() {
+  if (getDataSource() === "mock") {
+    const database = getMockDatabase();
+    const account = database.accounts.find((row) => row.id === DEMO_ACCOUNT_ID);
+    const profile = database.profiles.find((row) => row.userId === DEMO_USER_ID);
+
+    if (!account || !profile) {
+      return NextResponse.json({ error: "Mock account is unavailable" }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      account: {
+        id: account.id,
+        name: account.name,
+        default_currency: account.defaultCurrency,
+      },
+      role: profile.role,
+      meta: { source: "mock" },
+    });
+  }
+
   try {
     const ctx = await getCurrentAccount();
     return NextResponse.json({
       account: ctx.account,
       role: ctx.role,
+      meta: { source: "supabase" },
     });
   } catch (err) {
     return toErrorResponse(err);
@@ -39,6 +62,44 @@ export async function GET() {
 const MAX_NAME_LEN = 80;
 
 export async function PATCH(request: Request) {
+  const body = (await request.json().catch(() => null)) as
+    | { name?: unknown }
+    | null;
+  const rawName = body?.name;
+
+  if (typeof rawName !== "string") {
+    return NextResponse.json(
+      { error: "'name' must be a string" },
+      { status: 400 },
+    );
+  }
+
+  const name = rawName.trim();
+  if (name.length === 0) {
+    return NextResponse.json(
+      { error: "Account name cannot be empty" },
+      { status: 400 },
+    );
+  }
+  if (name.length > MAX_NAME_LEN) {
+    return NextResponse.json(
+      { error: `Account name must be ${MAX_NAME_LEN} characters or fewer` },
+      { status: 400 },
+    );
+  }
+
+  if (getDataSource() === "mock") {
+    const account = getMockDatabase().accounts.find((row) => row.id === DEMO_ACCOUNT_ID);
+    if (!account) {
+      return NextResponse.json({ error: "Mock account is unavailable" }, { status: 500 });
+    }
+    account.name = name;
+    return NextResponse.json({
+      account: { id: account.id, name: account.name, default_currency: account.defaultCurrency },
+      meta: { source: "mock" },
+    });
+  }
+
   try {
     const ctx = await requireRole("admin");
 
@@ -51,32 +112,6 @@ export async function PATCH(request: Request) {
       RATE_LIMITS.adminAction,
     );
     if (!limit.success) return rateLimitResponse(limit);
-
-    const body = (await request.json().catch(() => null)) as
-      | { name?: unknown }
-      | null;
-    const rawName = body?.name;
-
-    if (typeof rawName !== "string") {
-      return NextResponse.json(
-        { error: "'name' must be a string" },
-        { status: 400 },
-      );
-    }
-
-    const name = rawName.trim();
-    if (name.length === 0) {
-      return NextResponse.json(
-        { error: "Account name cannot be empty" },
-        { status: 400 },
-      );
-    }
-    if (name.length > MAX_NAME_LEN) {
-      return NextResponse.json(
-        { error: `Account name must be ${MAX_NAME_LEN} characters or fewer` },
-        { status: 400 },
-      );
-    }
 
     // RLS allows this UPDATE because accounts_update requires
     // `is_account_member(id, 'admin')`, and requireRole already
