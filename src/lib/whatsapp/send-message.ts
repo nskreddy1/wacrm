@@ -267,7 +267,8 @@ export async function sendMessageToConversation(
 
   if (channelConnection) {
     const adapter = createChannelAdapter(channelConnection.provider);
-    if (!adapter) {
+    const adapterSend = adapter?.send?.bind(adapter);
+    if (!adapterSend) {
       throw new SendMessageError(
         'whatsapp_not_configured',
         `No adapter available for provider "${channelConnection.provider}"`,
@@ -284,7 +285,7 @@ export async function sendMessageToConversation(
 
     let providerMessageId = '';
     try {
-      const result = await adapter.send({
+      const result = await adapterSend({
         accountId,
         connection: channelConnection,
         recipient: { contactId: contact.id, identity: `+${sanitizedPhone}`, displayName: contact.name ?? undefined },
