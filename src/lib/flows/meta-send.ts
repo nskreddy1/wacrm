@@ -15,6 +15,7 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
+import { createChannelAdapter } from '@/lib/channels/adapters'
 import { supabaseAdmin } from './admin-client'
 
 // ------------------------------------------------------------
@@ -80,6 +81,63 @@ export async function engineSendText(
   const sanitized = sanitizePhoneForMeta(contact.phone)
   if (!isValidE164(sanitized)) {
     throw new Error(`contact phone invalid: ${contact.phone}`)
+  }
+
+  // Provider-neutral path first: if the account has an enabled non-Meta
+  // WhatsApp channel connection (e.g. Twilio), send through its adapter
+  // so bot/flow/auto-replies work on any provider, mirroring the
+  // fallback order in src/lib/whatsapp/send-message.ts.
+  const { data: channelConnection } = await db
+    .from('channel_connections')
+    .select('*')
+    .eq('account_id', args.accountId)
+    .eq('channel', 'whatsapp')
+    .eq('is_enabled', true)
+    .neq('provider', 'meta')
+    .order('is_primary', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (channelConnection) {
+    const adapter = createChannelAdapter(channelConnection.provider)
+    const adapterSend = adapter?.send?.bind(adapter)
+    if (!adapterSend) {
+      throw new Error(`No adapter available for provider "${channelConnection.provider}"`)
+    }
+    const result = await adapterSend({
+      accountId: args.accountId,
+      connection: channelConnection,
+      recipient: { contactId: contact.id, identity: `+${sanitized}` },
+      contentType: 'text',
+      text: args.text,
+      idempotencyKey: `bot-${args.conversationId}-${Date.now()}`,
+    })
+
+    const { error: msgErr } = await db.from('messages').insert({
+      conversation_id: args.conversationId,
+      sender_type: 'bot',
+      content_type: 'text',
+      content_text: args.text,
+      message_id: result.externalMessageId,
+      status: 'sent',
+      ai_generated: args.aiGenerated ?? false,
+    })
+    if (msgErr) {
+      throw new Error(
+        `sent via ${channelConnection.provider} but DB insert failed: ${msgErr.message}`,
+      )
+    }
+
+    await db
+      .from('conversations')
+      .update({
+        last_message_text: args.text,
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', args.conversationId)
+
+    return { whatsapp_message_id: result.externalMessageId }
   }
 
   const { data: config, error: configErr } = await db

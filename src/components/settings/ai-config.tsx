@@ -41,11 +41,13 @@ const HANDOFF_QUEUE = '__queue__';
 const PROVIDER_LABEL: Record<AiProvider, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic (Claude)',
+  gemini: 'Google (Gemini)',
 };
 
 const KEY_PLACEHOLDER: Record<AiProvider, string> = {
   openai: 'sk-...',
   anthropic: 'sk-ant-...',
+  gemini: 'AIza...',
 };
 
 export function AiConfig() {
@@ -75,6 +77,11 @@ export function AiConfig() {
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
   const [members, setMembers] = useState<AccountMember[]>([]);
+  // Proof token from a successful "Test key" call. Sent with Save so the
+  // server skips re-validating the same provider/model/key against the
+  // LLM API (the duplicate call could time out independently). Cleared
+  // whenever provider, model, or key changes.
+  const [validationProof, setValidationProof] = useState<string | null>(null);
 
   // Guard keyed on the account (not a bare boolean) so an in-place
   // account switch — ownership transfer, multi-account membership —
@@ -128,9 +135,11 @@ export function AiConfig() {
   // typed a custom model.
   const handleProviderChange = (next: AiProvider) => {
     setProvider(next);
+    setValidationProof(null);
     const isDefaultModel =
       model === AI_PROVIDER_DEFAULT_MODEL.openai ||
       model === AI_PROVIDER_DEFAULT_MODEL.anthropic ||
+      model === AI_PROVIDER_DEFAULT_MODEL.gemini ||
       model.trim() === '';
     if (isDefaultModel) setModel(AI_PROVIDER_DEFAULT_MODEL[next]);
   };
@@ -151,6 +160,7 @@ export function AiConfig() {
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
     handoff_agent_id: handoffAgentId || null,
+    validation_proof: validationProof ?? undefined,
   });
 
   const handleTest = async () => {
@@ -166,8 +176,13 @@ export function AiConfig() {
         }),
       });
       const data = await res.json();
-      if (res.ok) toast.success(t('testSuccess'));
-      else toast.error(data.error ?? t('testRejected'));
+      if (res.ok) {
+        setValidationProof(data.validation_proof ?? null);
+        toast.success(t('testSuccess'));
+      } else {
+        setValidationProof(null);
+        toast.error(data.error ?? t('testRejected'));
+      }
     } catch {
       toast.error(t('testNetworkError'));
     } finally {
@@ -269,6 +284,7 @@ export function AiConfig() {
               <div className="space-y-2">
                 <Label>{t('provider')}</Label>
                 <Select
+                  items={PROVIDER_LABEL}
                   value={provider}
                   onValueChange={(v) => handleProviderChange(v as AiProvider)}
                   disabled={disabled}
@@ -281,6 +297,7 @@ export function AiConfig() {
                     <SelectItem value="anthropic">
                       {PROVIDER_LABEL.anthropic}
                     </SelectItem>
+                    <SelectItem value="gemini">{PROVIDER_LABEL.gemini}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -290,7 +307,10 @@ export function AiConfig() {
                 <Input
                   id="ai-model"
                   value={model}
-                  onChange={(e) => setModel(e.target.value)}
+                  onChange={(e) => {
+                    setModel(e.target.value);
+                    setValidationProof(null);
+                  }}
                   placeholder={AI_PROVIDER_DEFAULT_MODEL[provider]}
                   disabled={disabled}
                 />
@@ -308,6 +328,7 @@ export function AiConfig() {
                     onChange={(e) => {
                       setApiKey(e.target.value);
                       setKeyEdited(true);
+                      setValidationProof(null);
                     }}
                     onFocus={() => {
                       if (!keyEdited && hasStoredKey) {
@@ -462,6 +483,10 @@ export function AiConfig() {
                 {t('handoffToDesc')}
               </p>
               <Select
+                items={{
+                  [HANDOFF_QUEUE]: t('handoffQueue'),
+                  ...Object.fromEntries(members.map((m) => [m.user_id, memberLabel(m)])),
+                }}
                 value={handoffAgentId || HANDOFF_QUEUE}
                 onValueChange={(v) =>
                   setHandoffAgentId(!v || v === HANDOFF_QUEUE ? '' : v)
