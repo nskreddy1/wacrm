@@ -77,6 +77,11 @@ export function AiConfig() {
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
   const [members, setMembers] = useState<AccountMember[]>([]);
+  // Proof token from a successful "Test key" call. Sent with Save so the
+  // server skips re-validating the same provider/model/key against the
+  // LLM API (the duplicate call could time out independently). Cleared
+  // whenever provider, model, or key changes.
+  const [validationProof, setValidationProof] = useState<string | null>(null);
 
   // Guard keyed on the account (not a bare boolean) so an in-place
   // account switch — ownership transfer, multi-account membership —
@@ -153,6 +158,7 @@ export function AiConfig() {
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
     handoff_agent_id: handoffAgentId || null,
+    validation_proof: validationProof ?? undefined,
   });
 
   const handleTest = async () => {
@@ -168,8 +174,13 @@ export function AiConfig() {
         }),
       });
       const data = await res.json();
-      if (res.ok) toast.success(t('testSuccess'));
-      else toast.error(data.error ?? t('testRejected'));
+      if (res.ok) {
+        setValidationProof(data.validation_proof ?? null);
+        toast.success(t('testSuccess'));
+      } else {
+        setValidationProof(null);
+        toast.error(data.error ?? t('testRejected'));
+      }
     } catch {
       toast.error(t('testNetworkError'));
     } finally {
