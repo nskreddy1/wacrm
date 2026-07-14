@@ -195,7 +195,29 @@ export default function InboxPage() {
         .eq("account_id", accountId)
         .maybeSingle();
 
-      setWhatsappConnected(data?.status === "connected");
+      if (data?.status === "connected") {
+        setWhatsappConnected(true);
+        return;
+      }
+
+      // Fall back to provider-neutral channel connections (e.g. Twilio),
+      // which live in channel_connections rather than whatsapp_config.
+      try {
+        const res = await fetch("/api/settings/channels");
+        if (res.ok) {
+          const payload: { connections?: Array<{ channel: string; is_enabled: boolean }> } =
+            await res.json();
+          const hasWhatsApp = (payload.connections ?? []).some(
+            (c) => c.channel === "whatsapp" && c.is_enabled
+          );
+          setWhatsappConnected(hasWhatsApp);
+          return;
+        }
+      } catch {
+        // Non-fatal: keep the banner if the check fails.
+      }
+
+      setWhatsappConnected(false);
     };
 
     checkConnection();

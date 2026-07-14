@@ -251,7 +251,10 @@ export async function sendMessageToConversation(
   // Provider-neutral path first: if the account has an enabled
   // WhatsApp channel connection (e.g. Twilio) use its adapter, so
   // outbound matches the inbound `channel_connections` pipeline.
-  const { data: channelConnection } = await db
+  // Uses the admin client: RLS restricts channel_connections (it holds
+  // encrypted credentials), and the caller is already authorized for
+  // this conversation and account above.
+  const { data: channelConnection } = await supabaseAdmin()
     .from('channel_connections')
     .select('*')
     .eq('account_id', accountId)
