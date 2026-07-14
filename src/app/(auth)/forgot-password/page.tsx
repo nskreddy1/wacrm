@@ -2,18 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { MessageSquare, CheckCircle, ArrowLeft } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -21,111 +15,72 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleReset = async (e: React.FormEvent) => {
-    e.preventDefault();
+  async function handleReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setError(null);
     setLoading(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?purpose=recovery`,
-    });
-
-    if (error) {
-      setError(error.message);
+    try {
+      const { error: resetError } = await createClient().auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        { redirectTo: `${window.location.origin}/auth/callback?purpose=recovery` },
+      );
+      if (resetError) {
+        setError(resetError.message);
+        return;
+      }
+      setSuccess(true);
+    } catch {
+      setError("We could not send the reset link. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setSuccess(true);
-    setLoading(false);
-  };
-
-  if (success) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Card className="w-full max-w-md border-border bg-card">
-          <CardHeader className="items-center text-center">
-            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-              <CheckCircle className="h-6 w-6 text-primary" />
-            </div>
-            <CardTitle className="text-xl text-foreground">
-              Check your email
-            </CardTitle>
-            <CardDescription className="text-muted-foreground">
-              We&apos;ve sent a password reset link to{" "}
-              <span className="text-foreground">{email}</span>. Please check your
-              inbox.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/login">
-              <Button
-                variant="outline"
-                className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                Back to sign in
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md border-border bg-card">
-        <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            <MessageSquare className="h-6 w-6 text-primary" />
+    <AuthShell
+      promoTitle="A clear path back to every customer conversation"
+      promoDescription="Secure recovery gets you back to your team inbox, pipeline, and follow-ups without losing momentum."
+    >
+      {success ? (
+        <div className="flex flex-col items-center gap-6 text-center">
+          <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <CheckCircle2 aria-hidden="true" />
+          </span>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">Check your email</h1>
+            <p className="text-pretty leading-relaxed text-muted-foreground">
+              If an account exists for <strong className="font-medium text-foreground">{email}</strong>, a secure reset link is on its way.
+            </p>
           </div>
-          <CardTitle className="text-xl text-foreground">Reset password</CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Enter your email and we&apos;ll send you a reset link
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleReset} className="flex flex-col gap-4">
-            {error && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-                {error}
-              </div>
-            )}
+          <Button variant="outline" className="w-full" render={<Link href="/login" />}>
+            <ArrowLeft data-icon="inline-start" aria-hidden="true" /> Back to sign in
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-7">
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium text-primary">Account recovery</p>
+            <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Reset your password</h1>
+            <p className="text-pretty leading-relaxed text-muted-foreground">Enter your account email and we&apos;ll send you a secure reset link.</p>
+          </div>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email" className="text-muted-foreground">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
-            </div>
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="mt-2 h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {loading ? "Sending..." : "Send reset link"}
-            </Button>
+          <form onSubmit={handleReset}>
+            <FieldGroup>
+              {error && <FieldError>{error}</FieldError>}
+              <Field>
+                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <Input id="email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(error)} />
+              </Field>
+              <Button type="submit" disabled={loading} className="w-full">{loading ? "Sending link..." : "Send reset link"}</Button>
+            </FieldGroup>
           </form>
 
-          <Link
-            href="/login"
-            className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to sign in
+          <Link href="/login" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <ArrowLeft aria-hidden="true" /> Back to sign in
           </Link>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      )}
+    </AuthShell>
   );
 }

@@ -3,8 +3,8 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, MessageSquareText, UsersRound } from "lucide-react";
-import { SignupPromoPanel } from "@/components/auth/signup-promo-panel";
+import { CheckCircle2, UsersRound } from "lucide-react";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -99,22 +99,8 @@ function SignupPageInner() {
   };
 
   return (
-    <main className="min-h-screen bg-muted p-3 sm:p-6">
-      <div className="mx-auto grid min-h-[calc(100vh-1.5rem)] max-w-7xl overflow-hidden rounded-2xl bg-background p-4 shadow-xl sm:min-h-[calc(100vh-3rem)] sm:p-6 lg:grid-cols-[minmax(26rem,0.9fr)_minmax(32rem,1.1fr)] lg:gap-6">
-        <section className="flex min-h-full flex-col px-2 py-2 sm:px-8 lg:px-10">
-          <Link
-            href="/"
-            className="flex w-fit items-center gap-2 font-semibold tracking-tight text-foreground"
-            aria-label="WACRM home"
-          >
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <MessageSquareText aria-hidden="true" />
-            </span>
-            WACRM
-          </Link>
-
-          <div className="flex flex-1 items-center justify-center py-10">
-            {success ? (
+    <AuthShell>
+      {success ? (
               <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
                 <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <CheckCircle2 aria-hidden="true" />
@@ -245,12 +231,7 @@ function SignupPageInner() {
                   </Link>
                 </p>
               </div>
-            )}
-          </div>
-        </section>
-
-        <SignupPromoPanel />
-      </div>
-    </main>
+      )}
+    </AuthShell>
   );
 }
