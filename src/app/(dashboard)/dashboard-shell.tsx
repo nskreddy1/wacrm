@@ -29,11 +29,15 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
 }
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
+  // DashboardCacheProvider must wrap AuthProvider: AuthProvider's
+  // useSWR("/api/v1/session") relies on the global fetcher configured
+  // by SWRConfig — nested the other way, the session never fetches and
+  // every consumer of useAuth() renders permanent fallbacks.
   return (
-    <AuthProvider>
-      <DashboardCacheProvider>
+    <DashboardCacheProvider>
+      <AuthProvider>
         <DashboardShellInner>{children}</DashboardShellInner>
-      </DashboardCacheProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </DashboardCacheProvider>
   )
 }

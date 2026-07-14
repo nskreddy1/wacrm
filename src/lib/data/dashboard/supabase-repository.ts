@@ -21,7 +21,9 @@ export async function getSupabaseDashboard(ctx: AccountContext): Promise<Dashboa
     ctx.supabase.from("conversations").select("id, assigned_agent_id, last_message_at, updated_at, status").eq("account_id", ctx.accountId).neq("status", "closed"),
     ctx.supabase.from("contacts").select("id, created_at", { count: "exact" }).eq("account_id", ctx.accountId).gte("created_at", since),
     ctx.supabase.from("deals").select("id, title, value, currency, status, updated_at").eq("account_id", ctx.accountId),
-    ctx.supabase.from("messages").select("id, created_at, sender_type, content_text").eq("account_id", ctx.accountId).gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()).order("created_at", { ascending: false }),
+    // `messages` has no account_id column — scope through the FK to
+    // conversations with an inner-join filter (RLS also enforces this).
+    ctx.supabase.from("messages").select("id, created_at, sender_type, content_text, conversation:conversations!inner(account_id)").eq("conversation.account_id", ctx.accountId).gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()).order("created_at", { ascending: false }),
     ctx.supabase.from("profiles").select("user_id, full_name").eq("account_id", ctx.accountId),
   ])
 
@@ -46,8 +48,8 @@ export async function getSupabaseDashboard(ctx: AccountContext): Promise<Dashboa
   }))
   const recentDeals = (deals.data ?? []).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, Math.max(0, 4 - recentMessages.length)).map((deal) => ({ title: `${deal.title} was updated`, time: relativeTime(deal.updated_at), type: "Deal" }))
 
-  const volume = Array.from({ length: 14 }, (_, index) => {
-    const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() - (13 - index))
+  const volume = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() - (6 - index))
     const next = new Date(day); next.setDate(next.getDate() + 1)
     return (messages.data ?? []).filter((message) => { const at = new Date(message.created_at); return at >= day && at < next }).length
   })

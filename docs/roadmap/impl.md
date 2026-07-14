@@ -1,3 +1,4 @@
+3
 Context (what exists today)
 
 DB: Supabase, 41 migrations applied. Multi-tenant via accounts + profiles (account_role: owner/admin/agent/viewer), RLS everywhere via is_account_member().

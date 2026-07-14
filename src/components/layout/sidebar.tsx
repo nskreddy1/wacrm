@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   GitBranch,
+  GitFork,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -36,11 +37,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth } from "@/hooks/use-auth"
+import { useNavigation } from "@/hooks/use-navigation"
 import { useTheme } from "@/hooks/use-theme"
 import { useTotalUnread } from "@/hooks/use-total-unread"
 import { cn } from "@/lib/utils"
 import { isModulePath } from "@/lib/routes/dashboard-routes"
 import { routes } from "@/lib/routing/routes"
+import type { NavIconName } from "@/lib/navigation/config"
 import type { AccountRole } from "@/lib/auth/roles"
 
 type NavItem = {
@@ -51,35 +54,19 @@ type NavItem = {
   badge?: string
 }
 
-type NavGroup = {
-  label: string
-  items: NavItem[]
+/** Maps serializable icon names from the navigation API to lucide components. */
+const navIcons: Record<NavIconName, ComponentType<{ className?: string }>> = {
+  "git-branch": GitBranch,
+  inbox: Inbox,
+  users: Users,
+  "calendar-days": CalendarDays,
+  megaphone: Megaphone,
+  workflow: Workflow,
+  "git-fork": GitFork,
+  bot: Bot,
+  "layout-dashboard": LayoutDashboard,
+  settings: Settings,
 }
-
-const navGroups: NavGroup[] = [
-  {
-    label: "Engage",
-    items: [
-      { href: routes.app.pipelines, label: "Pipelines", icon: GitBranch },
-      { href: routes.app.inbox, label: "Inbox", icon: Inbox },
-      { href: routes.app.contacts, label: "Contacts", icon: Users },
-      { href: routes.app.bookings, label: "Bookings", icon: CalendarDays },
-    ],
-  },
-  {
-    label: "Automate",
-    items: [
-      { href: routes.app.broadcasts, label: "Broadcasts", shortLabel: "Campaigns", icon: Megaphone },
-      { href: routes.app.automations, label: "Automations", shortLabel: "Rules", icon: Workflow },
-      { href: routes.app.flows, label: "Flows", icon: Workflow },
-      { href: routes.app.agents, label: "AI agents", shortLabel: "Agents", icon: Bot },
-    ],
-  },
-  {
-    label: "Insights",
-    items: [{ href: routes.app.dashboard, label: "Dashboard", icon: LayoutDashboard }],
-  },
-]
 
 const roleLabels: Record<AccountRole, string> = {
   owner: "Workspace owner",
@@ -150,18 +137,25 @@ function NavLink({ item, compact, pathname, onNavigate }: { item: NavItem; compa
 }
 
 function NavGroups({ compact, pathname, unreadBadge, onNavigate }: { compact: boolean; pathname: string; unreadBadge?: string; onNavigate?: () => void }) {
+  const { groups } = useNavigation()
   return (
     <>
-      {navGroups.map((group, index) => (
-        <div key={group.label} className="flex flex-col">
+      {groups.map((group, index) => (
+        <div key={group.key} className="flex flex-col">
           {!compact && (
             <span className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-white/40">{group.label}</span>
           )}
           {compact && index > 0 && <Separator className="mx-auto my-1 w-8 bg-white/10" />}
           {group.items.map((item) => (
             <NavLink
-              key={item.href}
-              item={item.href === routes.app.inbox && unreadBadge ? { ...item, badge: unreadBadge } : item}
+              key={item.key}
+              item={{
+                href: item.href,
+                label: item.label,
+                shortLabel: item.shortLabel,
+                icon: navIcons[item.icon] ?? LayoutDashboard,
+                badge: item.counter === "inbox-unread" ? unreadBadge : undefined,
+              }}
               compact={compact}
               pathname={pathname}
               onNavigate={onNavigate}
