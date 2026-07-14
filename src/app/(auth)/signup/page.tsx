@@ -3,21 +3,20 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { CheckCircle2, UsersRound } from "lucide-react";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { MessageSquare, CheckCircle, UsersRound } from "lucide-react";
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldSeparator,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { createClient } from "@/lib/supabase/client";
 
-// `useSearchParams` opts the component out of static prerendering
-// unless wrapped in Suspense — same pattern as /login.
 export default function SignupPage() {
   return (
     <Suspense fallback={null}>
@@ -28,12 +27,10 @@ export default function SignupPage() {
 
 function SignupPageInner() {
   const searchParams = useSearchParams();
-  // When the user lands here from `/join/<token>` we carry the
-  // invite token in the query so it survives the signup → email
-  // verification → redirect round-trip. `emailRedirectTo` below
-  // points back at /join/<token> so the user lands on the redeem
-  // step after verifying instead of being dropped on /dashboard.
   const inviteToken = searchParams.get("invite");
+  const loginHref = inviteToken
+    ? `/login?invite=${encodeURIComponent(inviteToken)}`
+    : "/login";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -43,202 +40,198 @@ function SignupPageInner() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignup = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError(null);
 
+    const normalizedName = fullName.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (normalizedName.length < 2) {
+      setError("Enter your full name to continue.");
+      return;
+    }
+
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("Passwords do not match.");
       return;
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+      setError("Password must be at least 6 characters.");
       return;
     }
 
     setLoading(true);
-    const supabase = createClient();
 
-    // If we have an invite token, point Supabase's verification
-    // email back at the join page so the user can accept after
-    // verifying. Without a token, Supabase uses its default
-    // redirect (the app root).
-    const emailRedirectTo = inviteToken
-      ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
-      : undefined;
+    try {
+      const supabase = createClient();
+      const emailRedirectTo = inviteToken
+        ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
+        : undefined;
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+      const { data, error: signupError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: { full_name: normalizedName },
+          ...(emailRedirectTo ? { emailRedirectTo } : {}),
         },
-        ...(emailRedirectTo ? { emailRedirectTo } : {}),
-      },
-    });
+      });
 
-    if (error) {
-      setError(error.message);
+      if (signupError) {
+        setError(signupError.message);
+        return;
+      }
+
+      if (!data.user) {
+        setError("We could not create your account. Please try again.");
+        return;
+      }
+
+      setEmail(normalizedEmail);
+      setSuccess(true);
+    } catch {
+      setError("Something went wrong while creating your account. Try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setSuccess(true);
-    setLoading(false);
   };
 
-  if (success) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Card className="w-full max-w-md border-border bg-card">
-          <CardHeader className="items-center text-center">
-            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-              <CheckCircle className="h-6 w-6 text-primary" />
-            </div>
-            <CardTitle className="text-xl text-foreground">
-              Check your email
-            </CardTitle>
-            <CardDescription className="text-muted-foreground">
-              We&apos;ve sent a confirmation link to{" "}
-              <span className="text-foreground">{email}</span>. Please check your
-              inbox and click the link to verify your account.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link
-              href={
-                inviteToken
-                  ? `/login?invite=${encodeURIComponent(inviteToken)}`
-                  : "/login"
-              }
-            >
-              <Button
-                variant="outline"
-                className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                Back to sign in
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md border-border bg-card">
-        <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            {inviteToken ? (
-              <UsersRound className="h-6 w-6 text-primary" />
-            ) : (
-              <MessageSquare className="h-6 w-6 text-primary" />
-            )}
-          </div>
-          <CardTitle className="text-xl text-foreground">
-            {inviteToken ? "Create account & join" : "Create account"}
-          </CardTitle>
-          <CardDescription className="text-muted-foreground">
-            {inviteToken
-              ? "Verify your email, then accept the invitation to join your team."
-              : "Get started with CRM Template for WhatsApp"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSignup} className="flex flex-col gap-4">
-            {error && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-                {error}
+    <AuthShell>
+      {success ? (
+              <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
+                <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <CheckCircle2 aria-hidden="true" />
+                </span>
+                <div className="flex flex-col gap-2">
+                  <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">
+                    Check your email
+                  </h1>
+                  <p className="text-pretty leading-relaxed text-muted-foreground">
+                    We sent a confirmation link to <strong className="font-medium text-foreground">{email}</strong>.
+                    Verify your email to finish creating your WACRM account.
+                  </p>
+                </div>
+                <Button variant="outline" className="w-full" render={<Link href={loginHref} />}>
+                  Back to sign in
+                </Button>
               </div>
-            )}
+            ) : (
+              <div className="w-full max-w-md">
+                <div className="mb-7 flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary lg:hidden">
+                    {inviteToken && <UsersRound aria-hidden="true" />}
+                    {inviteToken ? "Team invitation" : "Your customer workspace"}
+                  </div>
+                  <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+                    {inviteToken ? "Create your account & join" : "Create your account"}
+                  </h1>
+                  <p className="text-pretty leading-relaxed text-muted-foreground">
+                    {inviteToken
+                      ? "Verify your email, then accept your invitation to join the team."
+                      : "Start organizing every WhatsApp relationship in one place."}
+                  </p>
+                </div>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="fullName" className="text-muted-foreground">
-                Full name
-              </Label>
-              <Input
-                id="fullName"
-                type="text"
-                placeholder="John Doe"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
-            </div>
+                <FieldGroup>
+                  <Button type="button" variant="outline" className="w-full" aria-disabled="true">
+                    <span data-icon="inline-start" className="font-semibold" aria-hidden="true">G</span>
+                    Continue with Google
+                  </Button>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email" className="text-muted-foreground">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
-            </div>
+                  <FieldSeparator>or</FieldSeparator>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password" className="text-muted-foreground">
-                Password
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
-            </div>
+                  <form onSubmit={handleSignup} className="contents">
+                    {error && <FieldError>{error}</FieldError>}
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="confirmPassword" className="text-muted-foreground">
-                Confirm password
-              </Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Repeat your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
-            </div>
+                    <Field>
+                      <FieldLabel htmlFor="fullName">Full name</FieldLabel>
+                      <Input
+                        id="fullName"
+                        name="name"
+                        type="text"
+                        autoComplete="name"
+                        placeholder="Enter your name"
+                        value={fullName}
+                        onChange={(event) => setFullName(event.target.value)}
+                        required
+                        aria-invalid={Boolean(error)}
+                      />
+                    </Field>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="mt-2 h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {loading ? "Creating account..." : "Create account"}
-            </Button>
-          </form>
+                    <Field>
+                      <FieldLabel htmlFor="email">Email</FieldLabel>
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        placeholder="Enter your email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        required
+                        aria-invalid={Boolean(error)}
+                      />
+                    </Field>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link
-              href={
-                inviteToken
-                  ? `/login?invite=${encodeURIComponent(inviteToken)}`
-                  : "/login"
-              }
-              className="text-primary hover:text-primary/80"
-            >
-              Sign in
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field>
+                        <FieldLabel htmlFor="password">Password</FieldLabel>
+                        <Input
+                          id="password"
+                          name="password"
+                          type="password"
+                          autoComplete="new-password"
+                          placeholder="At least 6 characters"
+                          value={password}
+                          onChange={(event) => setPassword(event.target.value)}
+                          minLength={6}
+                          required
+                          aria-invalid={Boolean(error)}
+                        />
+                      </Field>
+
+                      <Field>
+                        <FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
+                        <Input
+                          id="confirmPassword"
+                          name="confirmPassword"
+                          type="password"
+                          autoComplete="new-password"
+                          placeholder="Repeat password"
+                          value={confirmPassword}
+                          onChange={(event) => setConfirmPassword(event.target.value)}
+                          minLength={6}
+                          required
+                          aria-invalid={Boolean(error)}
+                        />
+                      </Field>
+                    </div>
+
+                    <Field orientation="horizontal">
+                      <Checkbox id="terms" aria-describedby="terms-label" />
+                      <FieldLabel id="terms-label" htmlFor="terms" className="text-sm font-normal text-muted-foreground">
+                        I agree to the Terms, Privacy Policy, and Fees.
+                      </FieldLabel>
+                    </Field>
+
+                    <Button type="submit" disabled={loading} className="w-full">
+                      {loading ? "Creating account..." : "Create account"}
+                    </Button>
+                  </form>
+                </FieldGroup>
+
+                <p className="mt-5 text-sm text-muted-foreground">
+                  Already have an account?{" "}
+                  <Link href={loginHref} className="font-medium text-primary hover:underline">
+                    Sign in
+                  </Link>
+                </p>
+              </div>
+      )}
+    </AuthShell>
   );
 }
