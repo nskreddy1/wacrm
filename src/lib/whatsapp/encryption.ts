@@ -26,7 +26,26 @@ import crypto from 'crypto'
  *   `src/app/api/whatsapp/send/route.ts`.
  */
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!
+// Read lazily so a missing var fails with a clear, actionable error at
+// call time instead of `Buffer.from(undefined)` throwing a cryptic
+// "first argument must be of type string" TypeError deep in crypto.
+function getEncryptionKey(): Buffer {
+  const raw = process.env.ENCRYPTION_KEY
+  if (!raw) {
+    throw new Error(
+      'ENCRYPTION_KEY environment variable is not set. Add it to this ' +
+        'deployment environment (it must be the same 64-char hex key used ' +
+        'when the credentials were saved).',
+    )
+  }
+  const key = Buffer.from(raw, 'hex')
+  if (key.length !== 32) {
+    throw new Error(
+      `ENCRYPTION_KEY must be 32 bytes of hex (64 chars), got ${key.length} bytes`,
+    )
+  }
+  return key
+}
 // 12 bytes is the NIST-recommended IV length for GCM — keeps the
 // counter block well below 2^32 and matches the default web-crypto
 // behaviour, so any future port is straightforward.
@@ -36,11 +55,7 @@ const AUTH_TAG_LENGTH = 16
 
 export function encrypt(text: string): string {
   const iv = crypto.randomBytes(GCM_IV_LENGTH)
-  const cipher = crypto.createCipheriv(
-    'aes-256-gcm',
-    Buffer.from(ENCRYPTION_KEY, 'hex'),
-    iv,
-  )
+  const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv)
   let encrypted = cipher.update(text, 'utf8', 'hex')
   encrypted += cipher.final('hex')
   const authTag = cipher.getAuthTag()
@@ -65,11 +80,7 @@ export function decrypt(encryptedText: string): string {
         `Encrypted token has unexpected GCM auth-tag length ${authTag.length}`,
       )
     }
-    const decipher = crypto.createDecipheriv(
-      'aes-256-gcm',
-      Buffer.from(ENCRYPTION_KEY, 'hex'),
-      iv,
-    )
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), iv)
     decipher.setAuthTag(authTag)
     let decrypted = decipher.update(ctHex, 'hex', 'utf8')
     decrypted += decipher.final('utf8')
@@ -85,11 +96,7 @@ export function decrypt(encryptedText: string): string {
         `Encrypted token has unexpected CBC IV length ${iv.length}`,
       )
     }
-    const decipher = crypto.createDecipheriv(
-      'aes-256-cbc',
-      Buffer.from(ENCRYPTION_KEY, 'hex'),
-      iv,
-    )
+    const decipher = crypto.createDecipheriv('aes-256-cbc', getEncryptionKey(), iv)
     let decrypted = decipher.update(ctHex, 'hex', 'utf8')
     decrypted += decipher.final('utf8')
     return decrypted
