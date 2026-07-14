@@ -41,7 +41,6 @@ import { useNavigation } from "@/hooks/use-navigation"
 import { useTheme } from "@/hooks/use-theme"
 import { useTotalUnread } from "@/hooks/use-total-unread"
 import { cn } from "@/lib/utils"
-import { isModulePath } from "@/lib/routes/dashboard-routes"
 import { routes } from "@/lib/routing/routes"
 import type { NavIconName } from "@/lib/navigation/config"
 import type { AccountRole } from "@/lib/auth/roles"
@@ -84,9 +83,7 @@ function initialsOf(name: string | null | undefined, email: string | null | unde
 }
 
 function isActive(pathname: string, href: string) {
-  const moduleName = href.replace(/^\//, "")
-  const enterpriseModule = moduleName === "pipelines" ? "deals" : moduleName
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)) || isModulePath(pathname, enterpriseModule)
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`))
 }
 
 function Brand({ compact }: { compact: boolean }) {

@@ -1,9 +1,7 @@
 "use client"
 
 import { useMemo, type ReactNode } from "react"
-import { usePathname } from "next/navigation"
 import { SWRConfig, type State } from "swr"
-import { accountIdFromPath } from "@/lib/routes/dashboard-routes"
 
 const DEFAULT_DEDUPE_MS = 15_000
 const MAX_CACHE_ENTRIES = 150
@@ -48,16 +46,10 @@ async function dashboardFetcher<T>(resource: RequestInfo | URL): Promise<T> {
 }
 
 export function DashboardCacheProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname()
-  const accountId = accountIdFromPath(pathname) ?? "legacy"
-  const provider = useMemo(() => {
-    void accountId
-    return new BoundedMemoryCache()
-  }, [accountId])
+  const provider = useMemo(() => new BoundedMemoryCache(), [])
 
   return (
     <SWRConfig
-      key={accountId}
       value={{
         provider: () => provider,
         fetcher: dashboardFetcher,
