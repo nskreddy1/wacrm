@@ -135,9 +135,11 @@ export function AiConfig() {
   // typed a custom model.
   const handleProviderChange = (next: AiProvider) => {
     setProvider(next);
+    setValidationProof(null);
     const isDefaultModel =
       model === AI_PROVIDER_DEFAULT_MODEL.openai ||
       model === AI_PROVIDER_DEFAULT_MODEL.anthropic ||
+      model === AI_PROVIDER_DEFAULT_MODEL.gemini ||
       model.trim() === '';
     if (isDefaultModel) setModel(AI_PROVIDER_DEFAULT_MODEL[next]);
   };
@@ -305,7 +307,10 @@ export function AiConfig() {
                 <Input
                   id="ai-model"
                   value={model}
-                  onChange={(e) => setModel(e.target.value)}
+                  onChange={(e) => {
+                    setModel(e.target.value);
+                    setValidationProof(null);
+                  }}
                   placeholder={AI_PROVIDER_DEFAULT_MODEL[provider]}
                   disabled={disabled}
                 />
@@ -323,6 +328,7 @@ export function AiConfig() {
                     onChange={(e) => {
                       setApiKey(e.target.value);
                       setKeyEdited(true);
+                      setValidationProof(null);
                     }}
                     onFocus={() => {
                       if (!keyEdited && hasStoredKey) {
