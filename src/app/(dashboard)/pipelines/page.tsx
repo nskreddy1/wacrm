@@ -14,7 +14,7 @@ export default async function PipelinesPage({
 
   if (!snapshot) {
     return (
-      <main className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-background p-6">
+      <main className="flex min-h-full items-center justify-center bg-background p-6">
         <p className="text-sm text-muted-foreground">No pipeline is available for this account.</p>
       </main>
     )
