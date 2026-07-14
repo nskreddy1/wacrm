@@ -3,21 +3,34 @@
 import Link from "next/link"
 import useSWR from "swr"
 import { ArrowUpRight, CalendarPlus, ChevronRight, Circle, GitBranch, MessageSquareText, Plus, Send, Users } from "lucide-react"
+import { useAuth } from "@/hooks/use-auth"
 import type { DashboardData } from "@/lib/data/dashboard/mock-repository"
 
 type DashboardResponse = { data: DashboardData; meta: { source: "mock" | "supabase" } }
 
+function greetingForHour(hour: number) {
+  if (hour < 12) return "Good morning"
+  if (hour < 18) return "Good afternoon"
+  return "Good evening"
+}
+
 export function DashboardWorkspace() {
   const { data, error, isLoading } = useSWR<DashboardResponse>("/api/v1/dashboard")
+  const { profile, account } = useAuth()
   const dashboardData = data?.data
   const icons = [MessageSquareText, Users, GitBranch, Send]
+
+  const firstName = profile?.full_name?.trim().split(/\s+/)[0] || "there"
+  const workspaceName = account?.name ?? "your workspace"
+  const today = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date())
+  const greeting = greetingForHour(new Date().getHours())
 
   if (error) return <div className="flex min-h-96 items-center justify-center text-sm text-destructive">Unable to load dashboard data.</div>
   if (isLoading || !dashboardData) return <div className="flex min-h-96 items-center justify-center text-sm text-muted-foreground">Loading dashboard…</div>
 
   return <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
     <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-      <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Monday, July 12</p><h2 className="mt-1 text-2xl font-semibold tracking-tight text-balance">Good morning, Sam</h2><p className="mt-1 text-sm text-muted-foreground">Here is what needs your attention across Acme Support.</p></div>
+      <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{today}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight text-balance">{`${greeting}, ${firstName}`}</h2><p className="mt-1 text-sm text-muted-foreground">{`Here is what needs your attention across ${workspaceName}.`}</p></div>
       <div className="flex gap-2"><Link href="/contacts" className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-medium"><Plus className="size-4" /> Add contact</Link><Link href="/inbox" className="flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground"><MessageSquareText className="size-4" /> Open inbox</Link></div>
     </section>
 

@@ -1,4 +1,4 @@
-# Phase 2 — Sidebar Real Data + Grouped Navigation (TODO)
+# Phase 2 — Sidebar Real Data + Grouped Navigation (DONE)
 
 `src/components/layout/sidebar.tsx` currently hardcodes "Sam Silva",
 "sam@relaycrm.demo", "Acme Support", and a fake `badge: "18"` on Inbox.
