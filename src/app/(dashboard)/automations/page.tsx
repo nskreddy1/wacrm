@@ -43,6 +43,7 @@ import {
 import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/lib/automations/templates"
 import { triggerMeta, formatRelative } from "@/lib/automations/trigger-meta"
 import { cn } from "@/lib/utils"
+import { pageContainerClassName } from "@/components/layout/page-container"
 import { FeatureLoading, FeatureState } from "@/components/ui/feature-state"
 
 const TEMPLATE_ORDER: TemplateSlug[] = [
@@ -154,7 +155,7 @@ export default function AutomationsPage() {
   const showTemplates = automations.length < 3
 
   return (
-    <div className="space-y-6">
+    <div className={cn(pageContainerClassName, "space-y-6")}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>

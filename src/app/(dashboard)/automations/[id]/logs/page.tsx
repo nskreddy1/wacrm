@@ -20,6 +20,7 @@ import type {
 } from "@/types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { pageContainerClassName } from "@/components/layout/page-container"
 import { formatRelative } from "@/lib/automations/trigger-meta"
 
 export default function AutomationLogsPage({
@@ -84,7 +85,7 @@ export default function AutomationLogsPage({
   }
 
   return (
-    <div className="space-y-6">
+    <div className={cn(pageContainerClassName, "space-y-6")}>
       <div className="flex items-center gap-3">
         <button
           type="button"
