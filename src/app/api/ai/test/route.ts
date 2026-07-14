@@ -4,6 +4,7 @@ import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { validateAiCredentials } from '@/lib/ai/validate'
 import { AiError, type AiProvider } from '@/lib/ai/types'
+import { createValidationProof } from '@/lib/ai/validation-proof'
 
 /**
  * POST /api/ai/test  (admin+)
@@ -88,7 +89,15 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({
+      ok: true,
+      validation_proof: createValidationProof({
+        accountId,
+        provider,
+        model,
+        apiKey: apiKeyPlain,
+      }),
+    })
   } catch (err) {
     return toErrorResponse(err)
   }

@@ -9,6 +9,7 @@ import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { validateAiCredentials } from '@/lib/ai/validate'
 import { embedTexts } from '@/lib/ai/embeddings'
 import { AiError, type AiProvider } from '@/lib/ai/types'
+import { verifyValidationProof } from '@/lib/ai/validation-proof'
 
 function bad(message: string) {
   return NextResponse.json({ error: message }, { status: 400 })
@@ -155,7 +156,14 @@ export async function POST(request: Request) {
       provider !== existing.provider ||
       model !== existing.model
 
-    if (credentialsChanged) {
+    const hasValidTestProof = verifyValidationProof(body.validation_proof, {
+      accountId,
+      provider,
+      model,
+      apiKey: apiKeyPlain,
+    })
+
+    if (credentialsChanged && !hasValidTestProof) {
       try {
         await validateAiCredentials({
           provider,
