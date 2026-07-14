@@ -175,7 +175,7 @@ export default function FlowRunsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
+    <div className="mx-auto max-w-4xl p-4 sm:p-6 lg:p-8">
       <button
         type="button"
         onClick={() => router.push(`/flows/${flow.id}`)}

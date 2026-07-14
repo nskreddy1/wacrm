@@ -13,7 +13,11 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    // h-dvh (not h-screen/100vh) tracks the *actual* dynamic viewport so the
+    // shell never exceeds the visible area — 100vh can overshoot in embedded
+    // previews and mobile browsers, producing a phantom page-level scrollbar
+    // alongside the <main> scrollbar. overscroll-none stops scroll chaining.
+    <div className="flex h-dvh overflow-hidden overscroll-none bg-background">
       <Sidebar
         open={sidebarOpen}
         collapsed={sidebarCollapsed}
