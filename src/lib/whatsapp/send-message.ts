@@ -35,6 +35,7 @@ import {
   type InteractiveMessagePayload,
 } from '@/lib/whatsapp/interactive';
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
+import { createChannelAdapter } from '@/lib/channels/adapters';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import {
   sanitizePhoneForMeta,
@@ -245,6 +246,105 @@ export async function sendMessageToConversation(
       'Invalid phone number format',
       400
     );
+  }
+
+  // Provider-neutral path first: if the account has an enabled
+  // WhatsApp channel connection (e.g. Twilio) use its adapter, so
+  // outbound matches the inbound `channel_connections` pipeline.
+  const { data: channelConnection } = await db
+    .from('channel_connections')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('channel', 'whatsapp')
+    .eq('is_enabled', true)
+    .neq('provider', 'meta')
+    .order('is_primary', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (channelConnection) {
+    const adapter = createChannelAdapter(channelConnection.provider);
+    if (!adapter) {
+      throw new SendMessageError(
+        'whatsapp_not_configured',
+        `No adapter available for provider "${channelConnection.provider}"`,
+        400
+      );
+    }
+    if (messageType === 'template' || messageType === 'interactive') {
+      throw new SendMessageError(
+        'bad_request',
+        `${messageType} messages are not supported on the ${channelConnection.provider} provider yet — send a text message instead.`,
+        400
+      );
+    }
+
+    let providerMessageId = '';
+    try {
+      const result = await adapter.send({
+        accountId,
+        connection: channelConnection,
+        recipient: { contactId: contact.id, identity: `+${sanitizedPhone}`, displayName: contact.name ?? undefined },
+        contentType: (isMediaKind ? messageType : 'text') as 'text' | 'image' | 'video' | 'document' | 'audio',
+        text: contentText ?? undefined,
+        mediaUrl: mediaUrl ?? undefined,
+        idempotencyKey: `msg-${conversationId}-${Date.now()}`,
+      });
+      providerMessageId = result.externalMessageId;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown provider error';
+      console.error('[send-message] channel adapter send failed:', message);
+      throw new SendMessageError('provider_error', `${channelConnection.provider} error: ${message}`, 502);
+    }
+
+    const { data: messageRecord, error: msgError } = await db
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_type: 'agent',
+        content_type: messageType,
+        content_text: contentText ?? null,
+        media_url: mediaUrl || null,
+        message_id: providerMessageId,
+        status: 'sent',
+        reply_to_message_id: replyToMessageId || null,
+      })
+      .select()
+      .single();
+
+    if (msgError) {
+      throw new SendMessageError(
+        'db_error',
+        `Message sent but failed to save to DB: ${msgError.message}`,
+        500
+      );
+    }
+
+    await db
+      .from('conversations')
+      .update({
+        last_message_text: contentText || `[${messageType}]`,
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId);
+
+    try {
+      await supabaseAdmin()
+        .from('flow_runs')
+        .update({
+          status: 'paused_by_agent',
+          ended_at: new Date().toISOString(),
+          end_reason: 'agent_replied',
+        })
+        .eq('account_id', accountId)
+        .eq('contact_id', contact.id)
+        .eq('status', 'active');
+    } catch (err) {
+      console.error('[flows] pause-on-agent-send threw:', err instanceof Error ? err.message : err);
+    }
+
+    return { messageId: messageRecord.id, whatsappMessageId: providerMessageId };
   }
 
   // WhatsApp config, account-scoped.
