@@ -121,7 +121,7 @@ function NavLink({ item, compact, pathname, onNavigate }: { item: NavItem; compa
       variant="ghost"
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative h-14 rounded-none text-white/72 hover:bg-white/8 hover:text-white",
+        "relative h-12 rounded-none text-white/72 hover:bg-white/8 hover:text-white",
         compact ? "w-full flex-col gap-1 px-1 text-[10px]" : "w-full justify-start gap-3 px-4",
         active && "bg-[#08b982] text-white hover:bg-[#08b982] hover:text-white"
       )}
@@ -199,10 +199,10 @@ export function Sidebar({
 
   return (
     <TooltipProvider delay={250}>
-      <aside className={cn("hidden h-screen shrink-0 flex-col overflow-hidden bg-[#07475a] text-white transition-[width] duration-200 md:flex", collapsed ? "w-[72px]" : "w-60")}>
+      <aside className={cn("hidden h-full shrink-0 flex-col overflow-hidden bg-[#07475a] text-white transition-[width] duration-200 md:flex", collapsed ? "w-[72px]" : "w-60")}>
         <Brand compact={collapsed} />
         <Separator className="bg-white/10" />
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1" scrollBarClassName="w-1.5 opacity-0 transition-opacity duration-200 data-hovering:opacity-100 data-scrolling:opacity-100">
           <nav className="flex flex-col py-1" aria-label="Primary navigation">
             <NavGroups compact={collapsed} pathname={pathname} unreadBadge={unreadBadge} />
           </nav>
@@ -219,7 +219,7 @@ export function Sidebar({
           </Tooltip>
           <DropdownMenu>
             <Tooltip>
-              <TooltipTrigger render={<DropdownMenuTrigger render={<Button variant="ghost" aria-label="Open account menu" className={cn("h-14 rounded-none text-white hover:bg-white/8", collapsed ? "w-full px-0" : "justify-start gap-3 px-4")} />} />}>
+                <TooltipTrigger render={<DropdownMenuTrigger render={<Button variant="ghost" aria-label="Open account menu" className={cn("h-12 rounded-none text-white hover:bg-white/8", collapsed ? "w-full px-0" : "justify-start gap-3 px-4")} />} />}>
                 <Avatar size="sm"><AvatarFallback className="bg-[#d9f7e9] font-semibold text-[#073b4c]">{initials}</AvatarFallback></Avatar>
                 {!collapsed && (
                   <span className="min-w-0 text-left">
@@ -256,7 +256,7 @@ export function Sidebar({
         <aside className={cn("relative flex h-full w-72 flex-col bg-[#07475a] text-white shadow-xl transition-transform", open ? "translate-x-0" : "-translate-x-full")}>
           <Brand compact={false} />
           <Separator className="bg-white/10" />
-          <ScrollArea className="min-h-0 flex-1">
+          <ScrollArea className="min-h-0 flex-1" scrollBarClassName="w-1.5 opacity-0 transition-opacity duration-200 data-hovering:opacity-100 data-scrolling:opacity-100">
             <nav className="flex flex-col py-1" aria-label="Mobile navigation">
               <NavGroups compact={false} pathname={pathname} unreadBadge={unreadBadge} onNavigate={onClose} />
               <NavLink item={{ href: "/settings", label: "Settings", icon: Settings }} compact={false} pathname={pathname} onNavigate={onClose} />
