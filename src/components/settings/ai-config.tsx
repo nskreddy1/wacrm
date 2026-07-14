@@ -269,6 +269,7 @@ export function AiConfig() {
               <div className="space-y-2">
                 <Label>{t('provider')}</Label>
                 <Select
+                  items={PROVIDER_LABEL}
                   value={provider}
                   onValueChange={(v) => handleProviderChange(v as AiProvider)}
                   disabled={disabled}
@@ -462,6 +463,10 @@ export function AiConfig() {
                 {t('handoffToDesc')}
               </p>
               <Select
+                items={{
+                  [HANDOFF_QUEUE]: t('handoffQueue'),
+                  ...Object.fromEntries(members.map((m) => [m.user_id, memberLabel(m)])),
+                }}
                 value={handoffAgentId || HANDOFF_QUEUE}
                 onValueChange={(v) =>
                   setHandoffAgentId(!v || v === HANDOFF_QUEUE ? '' : v)
