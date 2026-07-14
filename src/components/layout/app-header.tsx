@@ -107,8 +107,8 @@ export function AppHeader() {
             }
           />
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Create new</DropdownMenuLabel>
             <DropdownMenuGroup>
+              <DropdownMenuLabel>Create new</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => router.push(routes.app.contacts)}>
                 <UserPlus />
                 Contact
@@ -141,9 +141,11 @@ export function AppHeader() {
             }
           />
           <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>
-              Notifications{unread.length > 0 ? ` (${unread.length} unread)` : ""}
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>
+                Notifications{unread.length > 0 ? ` (${unread.length} unread)` : ""}
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               {recentNotifications.length === 0 && (
