@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
+import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { decryptProviderCredentials } from '@/lib/channels/credentials'
 import { persistInboundChannelMessage } from '@/lib/channels/inbound'
 
@@ -63,18 +64,36 @@ export async function POST(request: Request) {
         const type = String(message.type || 'text')
         const media = message[type] as Record<string, unknown> | undefined
         const timestamp = Number(message.timestamp)
-        await persistInboundChannelMessage(db, connection, {
+        const inboundText = typeof text?.body === 'string' ? text.body : typeof media?.caption === 'string' ? media.caption : undefined
+        const result = await persistInboundChannelMessage(db, connection, {
           provider: 'meta',
           externalMessageId: String(message.id),
           externalThreadId: from,
           from,
           to: metadata.display_phone_number,
           name: typeof profile?.name === 'string' ? profile.name : undefined,
-          text: typeof text?.body === 'string' ? text.body : typeof media?.caption === 'string' ? media.caption : undefined,
+          text: inboundText,
           contentType: ['image', 'document', 'audio', 'video'].includes(type) ? type as 'image' | 'document' | 'audio' | 'video' : 'text',
           occurredAt: Number.isFinite(timestamp) ? new Date(timestamp * 1000).toISOString() : undefined,
           payload: message,
         })
+
+        // AI auto-reply for plain-text inbound, mirroring the Twilio
+        // channel webhook. Awaited inside `after()` so Meta gets its 200
+        // immediately while the LLM call finishes in the background.
+        // `dispatchInboundToAiReply` owns its eligibility gates +
+        // try/catch and never throws.
+        if (!result.duplicate && result.conversationId && result.contactId && inboundText?.trim()) {
+          const { conversationId, contactId } = result
+          after(async () => {
+            await dispatchInboundToAiReply({
+              accountId: connection.account_id,
+              conversationId,
+              contactId,
+              configOwnerUserId: connection.created_by_user_id ?? '',
+            })
+          })
+        }
       }
     }
   }

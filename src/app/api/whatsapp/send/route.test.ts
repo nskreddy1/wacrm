@@ -143,14 +143,18 @@ vi.mock('@/lib/whatsapp/encryption', () => ({
   isLegacyFormat: vi.fn(() => false),
 }))
 
-const { sendTemplateMessage } = vi.hoisted(() => ({
-  sendTemplateMessage: vi.fn(async () => ({ messageId: 'wamid-1' })),
+// The send core delegates the actual provider send + message persistence
+// to the unified outbound orchestrator — mock it at that seam.
+const { sendChannelMessage } = vi.hoisted(() => ({
+  sendChannelMessage: vi.fn(async () => ({
+    externalMessageId: 'wamid-1',
+    provider: 'meta',
+    connectionId: 'conn-1',
+    dbMessageInserted: true,
+    dbMessageId: 'msg-1',
+  })),
 }))
-vi.mock('@/lib/whatsapp/meta-api', () => ({
-  sendTemplateMessage,
-  sendTextMessage: vi.fn(),
-  sendMediaMessage: vi.fn(),
-}))
+vi.mock('@/lib/orchestration/outbound', () => ({ sendChannelMessage }))
 
 import { POST } from './route'
 
@@ -180,7 +184,7 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
     createdConversation = null
     contactRow = CONTACT
     supabaseMock = makeSupabaseMock()
-    sendTemplateMessage.mockClear()
+    sendChannelMessage.mockClear()
   })
 
   afterEach(() => {
@@ -202,23 +206,19 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
       contact_id: 'contact-1',
     })
 
-    // The template was sent to the contact's number.
-    expect(sendTemplateMessage).toHaveBeenCalledTimes(1)
-    const args = (sendTemplateMessage.mock.calls[0] as unknown[])[0] as Record<
+    // The template was handed to the orchestrator for the new thread.
+    expect(sendChannelMessage).toHaveBeenCalledTimes(1)
+    const args = (sendChannelMessage.mock.calls[0] as unknown[])[0] as Record<
       string,
       unknown
     >
-    // Meta wants the bare E.164 digits — sanitizePhoneForMeta strips the '+'.
-    expect(args.to).toBe('15551234567')
-    expect(args.templateName).toBe('order_update')
-
-    // The outbound message was persisted under the new conversation.
-    expect(messageInserts).toHaveLength(1)
-    expect(messageInserts[0]).toMatchObject({
-      conversation_id: 'conv-new',
-      content_type: 'template',
-      template_name: 'order_update',
-      sender_type: 'agent',
+    expect(args.accountId).toBe('acct-1')
+    expect(args.conversationId).toBe('conv-new')
+    expect(args.senderType).toBe('agent')
+    expect(args.payload).toMatchObject({
+      kind: 'template',
+      templateName: 'order_update',
+      language: 'en_US',
     })
   })
 
@@ -234,7 +234,11 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
     expect(res.status).toBe(200)
 
     expect(conversationInserts).toHaveLength(0)
-    expect(messageInserts[0]).toMatchObject({ conversation_id: 'conv-existing' })
+    const args = (sendChannelMessage.mock.calls[0] as unknown[])[0] as Record<
+      string,
+      unknown
+    >
+    expect(args.conversationId).toBe('conv-existing')
   })
 
   it('404s when the contact is not in the caller account', async () => {
@@ -245,7 +249,7 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
 
     expect(res.status).toBe(404)
     expect(json.error).toMatch(/contact not found/i)
-    expect(sendTemplateMessage).not.toHaveBeenCalled()
+    expect(sendChannelMessage).not.toHaveBeenCalled()
   })
 
   it('400s when neither conversation_id nor contact_id is provided', async () => {
