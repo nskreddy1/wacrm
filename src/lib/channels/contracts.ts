@@ -34,6 +34,16 @@ export type OutboundMessagePayload =
       language: string
       /** Pre-built Meta template components (header/body/buttons parameters). */
       components?: unknown[]
+      /**
+       * Twilio Content API template SID (`HX…`). Required for template sends
+       * on the Twilio provider; ignored by the Meta adapter.
+       */
+      contentSid?: string
+      /**
+       * Twilio Content variables, positional or named,
+       * e.g. `{ "1": "12/1", "2": "3pm" }`.
+       */
+      contentVariables?: Record<string, string>
     }
   | {
       kind: 'interactive'

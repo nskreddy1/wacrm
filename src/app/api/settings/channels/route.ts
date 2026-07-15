@@ -119,6 +119,15 @@ export async function POST(request: Request) {
     if (error) throw error
     return NextResponse.json({ connection: enrich(data) }, { status: parsed.data.id ? 200 : 201 })
   } catch (error) {
+    if (error instanceof Error && error.message.includes('ENCRYPTION_KEY')) {
+      // Server misconfiguration, not a client error — tell the admin
+      // exactly what to fix instead of an opaque 500.
+      console.error('[settings/channels] ENCRYPTION_KEY misconfigured:', error.message)
+      return NextResponse.json(
+        { error: 'Server is missing the ENCRYPTION_KEY environment variable (64-char hex). Add it to the deployment and retry.' },
+        { status: 503 },
+      )
+    }
     if (error instanceof Error && /required|configuration|Port 587/.test(error.message)) return NextResponse.json({ error: error.message }, { status: 400 })
     return toErrorResponse(error)
   }

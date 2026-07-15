@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { decryptProviderCredentials } from '@/lib/channels/credentials'
 import { persistInboundChannelMessage } from '@/lib/channels/inbound'
+import { applyMessageDeliveryStatus, mapTwilioStatus } from '@/lib/orchestration/status'
 
 export const maxDuration = 30
 
@@ -21,18 +22,56 @@ export async function POST(request: Request) {
   const rawBody = await request.text()
   const params = new URLSearchParams(rawBody)
   const to = params.get('To')?.replace(/^whatsapp:/, '')
+  const from = params.get('From')?.replace(/^whatsapp:/, '')
   const messageSid = params.get('MessageSid')
-  if (!to || !messageSid) return NextResponse.json({ error: 'Invalid Twilio payload' }, { status: 400 })
+  if (!messageSid) return NextResponse.json({ error: 'Invalid Twilio payload' }, { status: 400 })
+
+  // Twilio hits this same URL for two things:
+  //   - inbound messages (SmsStatus=received, our number in `To`)
+  //   - delivery-status callbacks for our outbound sends
+  //     (MessageStatus=queued|sent|delivered|read|failed|…, our number in `From`)
+  const messageStatus = params.get('MessageStatus')
+  const isStatusCallback = !!messageStatus && messageStatus !== 'received'
+
+  // Our WhatsApp sender number owns the connection in both directions.
+  const connectionIdentity = isStatusCallback ? from : to
+  if (!connectionIdentity) return NextResponse.json({ error: 'Invalid Twilio payload' }, { status: 400 })
 
   const db = supabaseAdmin()
   const { data: connection } = await db.from('channel_connections').select('*')
-    .eq('provider', 'twilio').eq('external_identity', to).eq('is_enabled', true).maybeSingle()
+    .eq('provider', 'twilio').eq('external_identity', connectionIdentity).eq('is_enabled', true).maybeSingle()
   if (!connection) return NextResponse.json({ error: 'Unknown destination' }, { status: 404 })
 
   const credentials = decryptProviderCredentials(connection)
   if (credentials.provider !== 'twilio' || !validSignature(request.url, params, request.headers.get('x-twilio-signature'), credentials.value.authToken)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
+
+  if (isStatusCallback) {
+    // Unified delivery tracking (Phase 2c). Ack Twilio immediately;
+    // mirrors run in the background. Pre-send churn (queued/sending)
+    // maps to null and is deliberately ignored.
+    const mapped = mapTwilioStatus(messageStatus)
+    if (mapped) {
+      const errorCode = params.get('ErrorCode') || undefined
+      after(async () => {
+        try {
+          await applyMessageDeliveryStatus({
+            externalMessageId: messageSid,
+            status: mapped,
+            occurredAt: new Date().toISOString(),
+            errorCode,
+            errorMessage: errorCode ? `Twilio error ${errorCode}` : undefined,
+          })
+        } catch (error) {
+          console.error('[twilio-webhook] status apply failed:', error)
+        }
+      })
+    }
+    return new Response(null, { status: 204 })
+  }
+
+  if (!to) return NextResponse.json({ error: 'Invalid Twilio payload' }, { status: 400 })
 
   const mediaType = params.get('MediaContentType0') || ''
   const contentType = mediaType.startsWith('image/') ? 'image' : mediaType.startsWith('audio/') ? 'audio' : mediaType.startsWith('video/') ? 'video' : mediaType ? 'document' : 'text'

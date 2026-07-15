@@ -94,10 +94,21 @@ recipient) flows through one function.
 
 ### 2c. Status callbacks — `todo`
 
-- [ ] Meta: extract legacy status handler into `src/lib/orchestration/status.ts`,
-      shared by legacy webhook and `/api/channels/webhooks/meta`.
-- [ ] Twilio: `StatusCallback` param on sends + status POST handling in
-      `/api/channels/webhooks/twilio`.
+- [x] Shared status module `src/lib/orchestration/status.ts` created —
+      `applyMessageDeliveryStatus()` (messages mirror + broadcast_recipients
+      ladder-guarded mirror + `message.status_updated` fan-out) with
+      colocated tests. Legacy Meta webhook delegation still pending.
+- [ ] Meta: legacy webhook `handleStatusUpdate` delegates to the shared
+      `status.ts` module (incremental cutover).
+- [x] Twilio: `StatusCallback` param on sends (adapter derives the callback
+      URL from `NEXT_PUBLIC_SITE_URL` / `VERCEL_PROJECT_PRODUCTION_URL`) +
+      status POST handling in `/api/channels/webhooks/twilio` (signature
+      validated against the sender connection, ack-first via `after()`).
+- [x] Twilio native templates: `OutboundMessagePayload` template branch
+      extended with `contentSid` / `contentVariables`; the adapter sends
+      Content API templates (`ContentSid` + `ContentVariables`), and the
+      orchestrator's strict gate lets Twilio templates with a `contentSid`
+      through instead of rejecting them.
 - [ ] Resend: webhook for delivered/bounced/complained.
 - [ ] Broadcasts enqueue recipients into the outbox instead of looping sends.
 
@@ -145,3 +156,4 @@ recipient) flows through one function.
 | Date | Change |
 |---|---|
 | 2026-07-15 | Plan created; analysis of legacy vs omnichannel foundation completed. |
+| 2026-07-15 | Phase 2c (Twilio): native Content-API template sends (`contentSid`/`contentVariables` on the template payload), `StatusCallback` on all Twilio sends, status-callback handling in the Twilio webhook, and new shared `src/lib/orchestration/status.ts` with tests. |
