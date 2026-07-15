@@ -7,7 +7,7 @@ import { buildSystemPrompt } from './defaults'
 import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
-import { engineSendText } from '@/lib/flows/meta-send'
+import { sendChannelMessage } from '@/lib/orchestration/outbound'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 interface DispatchArgs {
@@ -179,12 +179,15 @@ export async function dispatchInboundToAiReply(
     }
     if (claimed !== true) return // lost the per-conversation cap race
 
-    await engineSendText({
+    // Channel-agnostic send: the orchestrator resolves the conversation's
+    // channel connection (Meta / Twilio / legacy config) and persists the
+    // message row. Replaces the Meta-hardcoded engineSendText path.
+    await sendChannelMessage({
       accountId,
-      userId: configOwnerUserId,
       conversationId,
       contactId,
-      text,
+      payload: { kind: 'text', text },
+      senderType: 'bot',
       aiGenerated: true,
     })
   } catch (err) {

@@ -11,11 +11,44 @@ export interface ChannelRecipient {
   displayName?: string
 }
 
+/**
+ * Typed payload union for outbound messages.
+ *
+ * Adapters pick the branch(es) they support and throw for unsupported kinds.
+ * The flat legacy fields on OutboundChannelMessage (text/html/subject/mediaUrl)
+ * remain for backward compatibility with existing adapters; new callers should
+ * prefer `payload`.
+ */
+export type OutboundMessagePayload =
+  | { kind: 'text'; text: string }
+  | {
+      kind: 'media'
+      mediaKind: 'image' | 'video' | 'document' | 'audio'
+      url: string
+      caption?: string
+      filename?: string
+    }
+  | {
+      kind: 'template'
+      templateName: string
+      language: string
+      /** Pre-built Meta template components (header/body/buttons parameters). */
+      components?: unknown[]
+    }
+  | {
+      kind: 'interactive'
+      /** Raw provider interactive payload (e.g. Meta `interactive` object). */
+      interactive: Record<string, unknown>
+    }
+  | { kind: 'email'; subject: string; text?: string; html?: string }
+
 export interface OutboundChannelMessage {
   accountId: string
   connection: ChannelConnection
   recipient: ChannelRecipient
   contentType: ContentType
+  /** Preferred typed payload. Takes precedence over the flat fields below. */
+  payload?: OutboundMessagePayload
   text?: string
   html?: string
   subject?: string
