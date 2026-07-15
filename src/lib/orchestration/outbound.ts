@@ -160,9 +160,16 @@ async function sendViaConnection(
   }
   // Strict mode: refuse to silently degrade rich payloads on providers
   // without native support (message text matters — callers map it to 400).
+  // Twilio DOES support templates natively via the Content API — a
+  // template payload carrying a `contentSid` (HX…) passes through.
+  const twilioNativeTemplate =
+    connection.provider === 'twilio' &&
+    args.payload.kind === 'template' &&
+    !!args.payload.contentSid
   if (
     args.strictProviderSupport &&
     connection.provider !== 'meta' &&
+    !twilioNativeTemplate &&
     (args.payload.kind === 'template' || args.payload.kind === 'interactive')
   ) {
     throw new Error(
