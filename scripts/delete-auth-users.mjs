@@ -13,7 +13,10 @@ if (error) {
 console.log(`[v0] found ${data.users.length} auth user(s)`)
 for (const user of data.users) {
   const { error: delErr } = await db.auth.admin.deleteUser(user.id)
-  console.log(`[v0] delete ${user.email ?? user.id}:`, delErr ? delErr.message : "OK")
+  console.log(
+    `[v0] delete ${user.email ?? user.id}:`,
+    delErr ? `${delErr.status ?? ""} ${delErr.code ?? ""} ${delErr.message ?? JSON.stringify(delErr)}` : "OK",
+  )
 }
 
 const { data: after } = await db.auth.admin.listUsers({ page: 1, perPage: 10 })
