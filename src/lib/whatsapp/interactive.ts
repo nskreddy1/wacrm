@@ -237,3 +237,38 @@ export function interactivePayloadPreviewText(
   if (body) return body
   return payload.kind === 'buttons' ? '[buttons]' : '[list]'
 }
+
+/**
+ * Build the raw Meta `interactive` object for a validated structured
+ * payload — the shape POSTed to Graph as `{ type: 'interactive',
+ * interactive: <this> }`. Shared by every caller that rides the
+ * unified outbound orchestrator's `{ kind: 'interactive' }` payload.
+ */
+export function buildMetaInteractiveObject(
+  payload: InteractiveMessagePayload,
+): Record<string, unknown> {
+  if (payload.kind === 'buttons') {
+    return {
+      type: 'button',
+      ...(payload.header ? { header: { type: 'text', text: payload.header } } : {}),
+      body: { text: payload.body },
+      ...(payload.footer ? { footer: { text: payload.footer } } : {}),
+      action: {
+        buttons: payload.buttons.map((b) => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title },
+        })),
+      },
+    }
+  }
+  return {
+    type: 'list',
+    ...(payload.header ? { header: { type: 'text', text: payload.header } } : {}),
+    body: { text: payload.body },
+    ...(payload.footer ? { footer: { text: payload.footer } } : {}),
+    action: {
+      button: payload.button_label,
+      sections: payload.sections,
+    },
+  }
+}

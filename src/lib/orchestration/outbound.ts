@@ -38,6 +38,8 @@ export interface SendChannelMessageArgs {
   senderUserId?: string
   aiGenerated?: boolean
   replyToExternalMessageId?: string
+  /** Our `messages.id` of the reply target (persisted as reply_to_message_id). */
+  replyToDbMessageId?: string
   /** Persisted messages.content_type override (defaults derived from payload). */
   contentTypeOverride?: ContentType
   /** Structured interactive payload persisted for inbox round-trip rendering. */
@@ -60,6 +62,7 @@ function contentTypeFor(payload: OutboundMessagePayload): ContentType {
     case 'interactive':
       return 'interactive' as ContentType
     case 'template':
+      return 'template'
     case 'email':
     default:
       return 'text'
@@ -149,6 +152,18 @@ async function sendViaConnection(
   if (!adapterSend) {
     throw new Error(`No adapter available for provider "${connection.provider}"`)
   }
+  // Template + interactive payloads are Meta-shaped. Non-Meta adapters
+  // (e.g. Twilio WhatsApp) would silently degrade them to the flat
+  // preview text — refuse loudly instead so callers can surface a
+  // meaningful error to the user.
+  if (
+    connection.provider !== 'meta' &&
+    (args.payload.kind === 'template' || args.payload.kind === 'interactive')
+  ) {
+    throw new Error(
+      `${args.payload.kind} messages are not supported on the ${connection.provider} provider yet — send a text message instead.`,
+    )
+  }
   const sanitized = sanitizePhoneForMeta(contact.phone)
   const identity =
     connection.channel === 'whatsapp'
@@ -184,7 +199,7 @@ async function sendViaConnection(
  */
 export async function sendChannelMessage(
   args: SendChannelMessageArgs,
-): Promise<SendChannelMessageResult & { dbMessageInserted: boolean }> {
+): Promise<SendChannelMessageResult & { dbMessageInserted: boolean; dbMessageId: string }> {
   const db = channelAdmin()
 
   // 1. Conversation → contact + pinned connection.
@@ -237,20 +252,36 @@ export async function sendChannelMessage(
 
   // 4. Persist message + conversation preview.
   const preview = previewTextFor(args.payload)
-  const { error: msgErr } = await db.from('messages').insert({
-    conversation_id: args.conversationId,
-    sender_type: args.senderType ?? 'bot',
-    ...(args.senderUserId ? { sender_id: args.senderUserId } : {}),
-    content_type: args.contentTypeOverride ?? contentTypeFor(args.payload),
-    content_text:
-      args.payload.kind === 'media' ? (args.payload.caption ?? null) : preview,
-    ...(args.interactivePersistPayload
-      ? { interactive_payload: args.interactivePersistPayload }
-      : {}),
-    message_id: result.externalMessageId,
-    status: 'sent',
-    ai_generated: args.aiGenerated ?? false,
-  })
+  const contentText =
+    args.payload.kind === 'media'
+      ? (args.payload.caption ?? null)
+      : args.payload.kind === 'template'
+        ? null
+        : preview
+  const { data: msgRow, error: msgErr } = await db
+    .from('messages')
+    .insert({
+      conversation_id: args.conversationId,
+      sender_type: args.senderType ?? 'bot',
+      ...(args.senderUserId ? { sender_id: args.senderUserId } : {}),
+      content_type: args.contentTypeOverride ?? contentTypeFor(args.payload),
+      content_text: contentText,
+      ...(args.payload.kind === 'media' ? { media_url: args.payload.url } : {}),
+      ...(args.payload.kind === 'template'
+        ? { template_name: args.payload.templateName }
+        : {}),
+      ...(args.replyToDbMessageId
+        ? { reply_to_message_id: args.replyToDbMessageId }
+        : {}),
+      ...(args.interactivePersistPayload
+        ? { interactive_payload: args.interactivePersistPayload }
+        : {}),
+      message_id: result.externalMessageId,
+      status: 'sent',
+      ai_generated: args.aiGenerated ?? false,
+    })
+    .select('id')
+    .single()
   if (msgErr) {
     // The provider accepted the message — surface the persistence failure
     // loudly but include the external id so callers can reconcile.
@@ -268,5 +299,5 @@ export async function sendChannelMessage(
     })
     .eq('id', args.conversationId)
 
-  return { ...result, dbMessageInserted: true }
+  return { ...result, dbMessageInserted: true, dbMessageId: msgRow.id as string }
 }
