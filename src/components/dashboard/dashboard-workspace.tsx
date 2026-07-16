@@ -4,7 +4,7 @@ import Link from "next/link"
 import useSWR from "swr"
 import { ArrowUpRight, CalendarPlus, ChevronRight, Circle, GitBranch, MessageSquareText, Plus, Send, Users } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
-import type { DashboardData } from "@/lib/data/dashboard/mock-repository"
+import type { DashboardData } from "@/lib/data/dashboard/types"
 
 type DashboardResponse = { data: DashboardData; meta: { source: "mock" | "supabase" } }
 

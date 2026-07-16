@@ -6,9 +6,8 @@ import { getDataSource } from "@/lib/data/runtime"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const source = getDataSource()
-  if (source === "mock") return NextResponse.json({ data: { unreadConversations: 3 }, meta: { source } })
   try {
+    const source = getDataSource()
     const context = await getCurrentAccount()
     const { count, error } = await context.supabase
       .from("conversations")

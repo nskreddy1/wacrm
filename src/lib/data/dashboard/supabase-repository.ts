@@ -1,7 +1,7 @@
 import "server-only"
 
 import type { AccountContext } from "@/lib/auth/account"
-import type { DashboardData } from "./mock-repository"
+import type { DashboardData } from "./types"
 
 function compactCurrency(value: number, currency: string) {
   return new Intl.NumberFormat("en", { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 }).format(value)

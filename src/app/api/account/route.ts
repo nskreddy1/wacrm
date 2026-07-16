@@ -23,31 +23,11 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from "@/lib/rate-limit";
-import { getMockDatabase } from "@/lib/data/mock-db";
-import { DEMO_ACCOUNT_ID, DEMO_USER_ID, getDataSource } from "@/lib/data/runtime";
+import { getDataSource } from "@/lib/data/runtime";
 
 export async function GET() {
-  if (getDataSource() === "mock") {
-    const database = getMockDatabase();
-    const account = database.accounts.find((row) => row.id === DEMO_ACCOUNT_ID);
-    const profile = database.profiles.find((row) => row.userId === DEMO_USER_ID);
-
-    if (!account || !profile) {
-      return NextResponse.json({ error: "Mock account is unavailable" }, { status: 500 });
-    }
-
-    return NextResponse.json({
-      account: {
-        id: account.id,
-        name: account.name,
-        default_currency: account.defaultCurrency,
-      },
-      role: profile.role,
-      meta: { source: "mock" },
-    });
-  }
-
   try {
+    getDataSource();
     const ctx = await getCurrentAccount();
     return NextResponse.json({
       account: ctx.account,
@@ -88,19 +68,8 @@ export async function PATCH(request: Request) {
     );
   }
 
-  if (getDataSource() === "mock") {
-    const account = getMockDatabase().accounts.find((row) => row.id === DEMO_ACCOUNT_ID);
-    if (!account) {
-      return NextResponse.json({ error: "Mock account is unavailable" }, { status: 500 });
-    }
-    account.name = name;
-    return NextResponse.json({
-      account: { id: account.id, name: account.name, default_currency: account.defaultCurrency },
-      meta: { source: "mock" },
-    });
-  }
-
   try {
+    getDataSource();
     const ctx = await requireRole("admin");
 
     // Per-user limit on admin-class mutations. Bounds accidental
