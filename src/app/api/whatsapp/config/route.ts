@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import {
   registerPhoneNumber,
   subscribeWabaToApp,
@@ -177,6 +178,15 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Config mutations hit Meta's API for credential verification on
+    // every save — bound the rate so a stuck retry loop can't hammer
+    // Meta with a bad token (which reads as credential stuffing from
+    // their side).
+    const limit = checkRateLimit(`config:${user.id}`, RATE_LIMITS.configMutation)
+    if (!limit.success) {
+      return rateLimitResponse(limit)
     }
 
     const accountId = await resolveAccountId(supabase, user.id)

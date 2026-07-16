@@ -32,6 +32,24 @@ export function verifyMetaWebhookSignature(
     return false
   }
 
+  return verifyMetaSignatureWithSecret(rawBody, signatureHeader, secret)
+}
+
+/**
+ * Core Meta HMAC-SHA256 verification against an explicit secret.
+ *
+ * Used directly by the omnichannel webhook
+ * (`/api/channels/webhooks/meta`), which resolves the app secret from
+ * the matched connection's encrypted credentials rather than a global
+ * env var. Fail-closed: missing/empty secret or malformed header
+ * rejects the request.
+ */
+export function verifyMetaSignatureWithSecret(
+  rawBody: string,
+  signatureHeader: string | null,
+  secret: string,
+): boolean {
+  if (!secret) return false
   if (!signatureHeader) return false
   if (!signatureHeader.startsWith('sha256=')) return false
 

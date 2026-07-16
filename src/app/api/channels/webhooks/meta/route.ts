@@ -1,19 +1,11 @@
-import crypto from 'node:crypto'
 import { NextResponse, after } from 'next/server'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { decryptProviderCredentials } from '@/lib/channels/credentials'
 import { persistInboundChannelMessage } from '@/lib/channels/inbound'
+import { verifyMetaSignatureWithSecret } from '@/lib/whatsapp/webhook-signature'
 
 export const maxDuration = 30
-
-function verify(raw: string, header: string | null, secret: string) {
-  if (!header?.startsWith('sha256=')) return false
-  const expected = `sha256=${crypto.createHmac('sha256', secret).update(raw).digest('hex')}`
-  const a = Buffer.from(header)
-  const b = Buffer.from(expected)
-  return a.length === b.length && crypto.timingSafeEqual(a, b)
-}
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams
@@ -50,7 +42,7 @@ export async function POST(request: Request) {
         .eq('provider', 'meta').eq('external_account_id', phoneNumberId).eq('is_enabled', true).maybeSingle()
       if (!connection) continue
       const credentials = decryptProviderCredentials(connection)
-      if (credentials.provider !== 'meta' || !verify(rawBody, request.headers.get('x-hub-signature-256'), credentials.value.appSecret)) {
+      if (credentials.provider !== 'meta' || !verifyMetaSignatureWithSecret(rawBody, request.headers.get('x-hub-signature-256'), credentials.value.appSecret)) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
       }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { channelAdmin } from '@/lib/channels/admin-client'
 import { createChannelAdapter } from '@/lib/channels/adapters'
 import { encryptProviderCredentials, type ProviderCredentials } from '@/lib/channels/credentials'
@@ -60,6 +61,10 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const { accountId, userId } = await requireRole('admin')
+    // Save + test both hit external provider APIs (Twilio health check,
+    // SMTP handshake) — bound the rate per user like /api/whatsapp/config.
+    const limit = checkRateLimit(`config:${userId}`, RATE_LIMITS.configMutation)
+    if (!limit.success) return rateLimitResponse(limit)
     const body: unknown = await request.json()
     if (typeof body !== 'object' || body === null || !('action' in body)) return NextResponse.json({ error: 'Invalid channel request' }, { status: 400 })
 
@@ -135,7 +140,10 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { accountId } = await requireRole('admin')
+    const { accountId, userId } = await requireRole('admin')
+    // Same bucket as POST — enable/primary toggles are config mutations.
+    const limit = checkRateLimit(`config:${userId}`, RATE_LIMITS.configMutation)
+    if (!limit.success) return rateLimitResponse(limit)
     const parsed = patchSchema.safeParse(await request.json())
     if (!parsed.success || (parsed.data.isEnabled === undefined && parsed.data.isPrimary === undefined)) return NextResponse.json({ error: 'Invalid channel connection update' }, { status: 400 })
     const admin = channelAdmin()
