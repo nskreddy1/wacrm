@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/whatsapp/encryption'
+import { AI_PROVIDER_DEFAULT_MODEL } from './defaults'
 import type { AiConfig } from './types'
 
 interface AiConfigRow {
@@ -41,7 +42,11 @@ export async function loadAiConfig(
     .maybeSingle()
 
   if (error) throw error
-  if (!data) return null
+  // Env fallback: an account with no AI setup at all still gets Gemini
+  // auto-reply when the deployment provides a shared GEMINI_API_KEY.
+  // An EXPLICIT off must win over the fallback, so a row with
+  // `is_active = false` returns null and never falls through.
+  if (!data) return envFallbackConfig()
 
   const row = data as AiConfigRow
   // The Playground passes requireActive:false so an admin can test the
@@ -49,8 +54,8 @@ export async function loadAiConfig(
   if (requireActive && !row.is_active) return null
   // Defensive: the column is NOT NULL, but a partial write / manual DB
   // edit could leave it empty. Treat a missing key as "not configured"
-  // rather than letting decrypt() throw on null.
-  if (!row.api_key) return null
+  // (env fallback applies) rather than letting decrypt() throw on null.
+  if (!row.api_key) return envFallbackConfig()
 
   // The embeddings key is optional and independent of the chat key —
   // a corrupt/undecryptable one should downgrade to lexical KB, not
@@ -79,6 +84,35 @@ export async function loadAiConfig(
     autoReplyMaxPerConversation: row.auto_reply_max_per_conversation,
     handoffAgentId: row.handoff_agent_id,
     embeddingsApiKey,
+    keySource: 'account',
+  }
+}
+
+/** Cap for accounts riding the shared env key — a bit more generous than
+ *  the per-account default (3) since there's no admin to raise it, but
+ *  still bounded so one chatty thread can't burn the shared key. */
+const ENV_FALLBACK_MAX_PER_CONVERSATION = 10
+
+/**
+ * Zero-setup Gemini config backed by the deployment's shared
+ * `GEMINI_API_KEY`. Returned when the account has no usable BYO key of
+ * its own (no `ai_configs` row, or a row with an empty key). Returns
+ * null when the env var isn't set — the pre-fallback behaviour.
+ */
+export function envFallbackConfig(): AiConfig | null {
+  const key = process.env.GEMINI_API_KEY?.trim()
+  if (!key) return null
+  return {
+    provider: 'gemini',
+    model: AI_PROVIDER_DEFAULT_MODEL.gemini,
+    apiKey: key,
+    systemPrompt: null,
+    isActive: true,
+    autoReplyEnabled: true,
+    autoReplyMaxPerConversation: ENV_FALLBACK_MAX_PER_CONVERSATION,
+    handoffAgentId: null,
+    embeddingsApiKey: null,
+    keySource: 'env',
   }
 }
 

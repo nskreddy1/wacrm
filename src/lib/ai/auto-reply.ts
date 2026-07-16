@@ -112,11 +112,12 @@ export async function dispatchInboundToAiReply(
       knowledge,
     })
 
-    const { text, handoff, usage } = await generateReply({
-      config,
-      systemPrompt,
-      messages,
-    })
+    const { text, handoff, usage, sentiment, escalationReason } =
+      await generateReply({
+        config,
+        systemPrompt,
+        messages,
+      })
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
     // never adds latency to the customer-facing send: `logAiUsage`
@@ -130,32 +131,84 @@ export async function dispatchInboundToAiReply(
       provider: config.provider,
       model: config.model,
       usage,
+      keySource: config.keySource,
     })
 
     if (handoff || !text) {
       // The model can't (or shouldn't) answer — stop auto-replying on
       // this thread and hand it to a human. We (a) pause the bot here
-      // (sticky until re-enabled), (b) route the conversation to the
-      // configured handoff agent — null leaves it in the shared queue —
-      // and (c) leave a short internal note so whoever picks it up has
-      // context. Assigning fires the `on_conversation_assigned` trigger,
-      // which notifies the agent.
+      // (sticky until re-enabled), (b) route the conversation: the
+      // explicitly configured handoff agent wins, else round-robin
+      // across the account's members, else the shared queue — and
+      // (c) leave a short internal note (with sentiment + reason) so
+      // whoever picks it up has context. Assigning fires the
+      // `on_conversation_assigned` trigger, which notifies the agent;
+      // an unassigned escalation fans out to every member instead so an
+      // empty queue never goes silent.
+      const reason = escalationReason ?? (handoff ? 'human_requested' : 'out_of_scope')
       const summary = buildHandoffSummary({
         messages,
         replyCount: conv.ai_reply_count ?? 0,
+        sentiment,
+        escalationReason: reason,
       })
       const update: Record<string, unknown> = {
         ai_autoreply_disabled: true,
         ai_handoff_summary: summary,
+        ai_sentiment: sentiment,
+        ai_escalation_reason: reason,
+        ai_escalated_at: new Date().toISOString(),
       }
-      // Only set the assignee when a target is configured AND the thread
-      // isn't already owned — never stomp an existing human assignment.
-      if (config.handoffAgentId && !conv.assigned_agent_id) {
-        update.assigned_agent_id = config.handoffAgentId
+      // Never stomp an existing human assignment.
+      let assignee: string | null = null
+      if (!conv.assigned_agent_id) {
+        if (config.handoffAgentId) {
+          assignee = config.handoffAgentId
+        } else {
+          // Round-robin over the account's members. A missing RPC (mig-
+          // ration not applied) or empty account degrades to unassigned.
+          const { data: rrAgent, error: rrErr } = await db.rpc(
+            'claim_round_robin_agent',
+            { p_account_id: accountId },
+          )
+          if (rrErr) {
+            console.error(
+              '[ai auto-reply] claim_round_robin_agent failed (leaving unassigned):',
+              rrErr,
+            )
+          } else if (typeof rrAgent === 'string' && rrAgent) {
+            assignee = rrAgent
+          }
+        }
       }
+      if (assignee) update.assigned_agent_id = assignee
       await db.from('conversations').update(update).eq('id', conversationId)
+
+      // Unassigned escalation → notify every member of the account so
+      // someone sees it (the assignment trigger only fires on assign).
+      if (!assignee && !conv.assigned_agent_id) {
+        await notifyAllMembersOfEscalation(db, {
+          accountId,
+          conversationId,
+          contactId,
+          sentiment,
+          reason,
+        })
+      }
       return
     }
+
+    // Non-escalated turn: keep the latest classified sentiment on the
+    // conversation (cheap single UPDATE; best-effort).
+    void db
+      .from('conversations')
+      .update({ ai_sentiment: sentiment })
+      .eq('id', conversationId)
+      .then(({ error }) => {
+        if (error) {
+          console.error('[ai auto-reply] sentiment update failed:', error)
+        }
+      })
 
     // Atomically claim a reply slot: the cap check + increment happen in
     // one UPDATE, so concurrent inbounds can never overshoot the cap. If
@@ -192,5 +245,53 @@ export async function dispatchInboundToAiReply(
     })
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err)
+  }
+}
+
+/**
+ * Escalation landed in the shared queue (no handoff agent configured,
+ * round-robin found no member) — insert a notification for EVERY account
+ * member so the escalation is never silent. Best-effort: a failure here
+ * must not fail the escalation itself (the conversation is already
+ * paused and annotated).
+ */
+async function notifyAllMembersOfEscalation(
+  db: ReturnType<typeof supabaseAdmin>,
+  args: {
+    accountId: string
+    conversationId: string
+    contactId: string
+    sentiment: string
+    reason: string
+  },
+): Promise<void> {
+  try {
+    const { data: members, error } = await db
+      .from('profiles')
+      .select('user_id')
+      .eq('account_id', args.accountId)
+    if (error || !members || members.length === 0) return
+
+    const readable = args.reason.replace(/_/g, ' ')
+    const feeling =
+      args.sentiment && args.sentiment !== 'neutral'
+        ? ` — customer seems ${args.sentiment}`
+        : ''
+    const rows = members.map((m) => ({
+      account_id: args.accountId,
+      user_id: m.user_id,
+      type: 'ai_escalation',
+      conversation_id: args.conversationId,
+      contact_id: args.contactId,
+      actor_user_id: null,
+      title: 'Customer needs help',
+      body: `AI escalated a conversation (${readable})${feeling} — unassigned in the shared queue.`,
+    }))
+    const { error: insErr } = await db.from('notifications').insert(rows)
+    if (insErr) {
+      console.error('[ai auto-reply] escalation fan-out insert failed:', insErr)
+    }
+  } catch (err) {
+    console.error('[ai auto-reply] escalation fan-out threw:', err)
   }
 }
