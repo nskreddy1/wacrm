@@ -7,10 +7,26 @@ import {
   type ChatMessage,
   type GenerateResult,
 } from './types'
-import { HANDOFF_SENTINEL, META_SENTINEL, aiRequestTimeoutMs } from './defaults'
+import {
+  HANDOFF_SENTINEL,
+  META_SENTINEL,
+  OPENAI_COMPAT_BASE_URL,
+  aiRequestTimeoutMs,
+} from './defaults'
 import { generateOpenAi } from './providers/openai'
 import { generateAnthropic } from './providers/anthropic'
 import { generateGemini } from './providers/gemini'
+
+/** Human-readable names used in provider error messages. */
+const PROVIDER_ERROR_LABEL: Partial<Record<AiConfig['provider'], string>> = {
+  nvidia: 'NVIDIA',
+  groq: 'Groq',
+  openrouter: 'OpenRouter',
+  together: 'Together AI',
+  mistral: 'Mistral',
+  deepseek: 'DeepSeek',
+  xai: 'xAI',
+}
 
 export interface GenerateArgs {
   config: AiConfig
@@ -47,11 +63,36 @@ export async function generateReply(args: GenerateArgs): Promise<GenerateResult>
     case 'gemini':
       result = await generateGemini(providerArgs)
       break
-    default:
-      throw new AiError(`Unsupported AI provider: ${config.provider}`, {
-        code: 'unsupported_provider',
-        status: 400,
+    case 'custom': {
+      // Bring-your-own OpenAI-compatible endpoint, per-account base URL.
+      const baseUrl = config.baseUrl?.trim()
+      if (!baseUrl) {
+        throw new AiError(
+          'A base URL is required for the custom OpenAI-compatible provider.',
+          { code: 'missing_base_url', status: 400 },
+        )
+      }
+      result = await generateOpenAi(providerArgs, {
+        baseUrl,
+        providerLabel: 'Custom endpoint',
       })
+      break
+    }
+    default: {
+      // OpenAI-compatible presets (NVIDIA NIM, Groq, OpenRouter, Together,
+      // Mistral, DeepSeek, xAI) — same protocol, registry-provided URL.
+      const baseUrl = OPENAI_COMPAT_BASE_URL[config.provider]
+      if (!baseUrl) {
+        throw new AiError(`Unsupported AI provider: ${config.provider}`, {
+          code: 'unsupported_provider',
+          status: 400,
+        })
+      }
+      result = await generateOpenAi(providerArgs, {
+        baseUrl,
+        providerLabel: PROVIDER_ERROR_LABEL[config.provider] ?? config.provider,
+      })
+    }
   }
 
   return parseGeneration(result.text, result.usage)

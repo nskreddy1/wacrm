@@ -6,7 +6,39 @@
 // whether the account is on OpenAI or Anthropic.
 // ============================================================
 
-export type AiProvider = 'openai' | 'anthropic' | 'gemini'
+export type AiProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  // OpenAI-compatible presets — same chat/completions protocol as OpenAI,
+  // different base URL. All served by the shared `generateOpenAi` adapter.
+  | 'nvidia'
+  | 'groq'
+  | 'openrouter'
+  | 'together'
+  | 'mistral'
+  | 'deepseek'
+  | 'xai'
+  // Bring-your-own OpenAI-compatible endpoint (`baseUrl` required).
+  | 'custom'
+
+export const AI_PROVIDERS: readonly AiProvider[] = [
+  'openai',
+  'anthropic',
+  'gemini',
+  'nvidia',
+  'groq',
+  'openrouter',
+  'together',
+  'mistral',
+  'deepseek',
+  'xai',
+  'custom',
+]
+
+export function isAiProvider(value: unknown): value is AiProvider {
+  return typeof value === 'string' && AI_PROVIDERS.includes(value as AiProvider)
+}
 
 /**
  * Account AI setup, decrypted and ready to use. Produced by
@@ -17,6 +49,10 @@ export interface AiConfig {
   provider: AiProvider
   model: string
   apiKey: string
+  /** OpenAI-compatible endpoint base URL. Only meaningful when
+   *  `provider === 'custom'` (e.g. `https://my-gateway.example.com/v1`);
+   *  presets derive their URL from the registry in `defaults.ts`. */
+  baseUrl?: string | null
   systemPrompt: string | null
   isActive: boolean
   autoReplyEnabled: boolean

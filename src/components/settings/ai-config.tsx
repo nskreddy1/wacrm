@@ -42,12 +42,28 @@ const PROVIDER_LABEL: Record<AiProvider, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic (Claude)',
   gemini: 'Google (Gemini)',
+  nvidia: 'NVIDIA (NIM)',
+  groq: 'Groq',
+  openrouter: 'OpenRouter',
+  together: 'Together AI',
+  mistral: 'Mistral',
+  deepseek: 'DeepSeek',
+  xai: 'xAI (Grok)',
+  custom: 'Custom (OpenAI-compatible)',
 };
 
 const KEY_PLACEHOLDER: Record<AiProvider, string> = {
   openai: 'sk-...',
   anthropic: 'sk-ant-...',
   gemini: 'AIza...',
+  nvidia: 'nvapi-...',
+  groq: 'gsk_...',
+  openrouter: 'sk-or-...',
+  together: 'API key',
+  mistral: 'API key',
+  deepseek: 'sk-...',
+  xai: 'xai-...',
+  custom: 'API key',
 };
 
 export function AiConfig() {
@@ -63,6 +79,8 @@ export function AiConfig() {
   const [configured, setConfigured] = useState(false);
   const [provider, setProvider] = useState<AiProvider>('openai');
   const [model, setModel] = useState(AI_PROVIDER_DEFAULT_MODEL.openai);
+  // Endpoint base URL, only shown/sent for the custom provider.
+  const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [keyEdited, setKeyEdited] = useState(false);
   const [showKey, setShowKey] = useState(false);
