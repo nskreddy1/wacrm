@@ -31,9 +31,14 @@ async function fetchAiAccountStatus(accountId: string): Promise<AiAccountStatus>
     if (!res.ok) return { autoReplyOn: false }; // don't cache a transient failure
     const j = await res.json();
     const status = {
-      // AI auto-reply is "live" only when configured, the master switch
-      // is on, and the inbound bot is enabled.
-      autoReplyOn: !!(j?.configured && j?.is_active && j?.auto_reply_enabled),
+      // Server-computed effective status — mirrors loadAiConfig, including
+      // the shared env-key fallback, so accounts with no BYO key still get
+      // the Take over / Resume AI toggle. Falls back to the legacy fields
+      // for a stale server that doesn't send auto_reply_live yet.
+      autoReplyOn:
+        typeof j?.auto_reply_live === "boolean"
+          ? j.auto_reply_live
+          : !!(j?.configured && j?.is_active && j?.auto_reply_enabled),
     };
     statusCache.set(accountId, status);
     return status;

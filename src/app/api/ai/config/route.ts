@@ -44,14 +44,34 @@ export async function GET() {
       )
     }
 
-    if (!data) return NextResponse.json({ configured: false })
+    // `auto_reply_live` mirrors `loadAiConfig`'s effective decision —
+    // INCLUDING the shared env-key fallback — so the inbox banner shows
+    // the Take over / Resume AI toggle for accounts that ride the env
+    // key with no ai_configs row of their own. An explicit row with
+    // `is_active = false` wins over the fallback (same rule as the bot).
+    const envFallback = !!process.env.GEMINI_API_KEY?.trim()
+
+    if (!data) {
+      return NextResponse.json({
+        configured: false,
+        env_fallback: envFallback,
+        auto_reply_live: envFallback,
+      })
+    }
     // The keys are selected only to derive the has_* flags; neither is
     // returned to the client.
     const { api_key, embeddings_api_key, ...safe } = data
+    const autoReplyLive = api_key
+      ? !!(data.is_active && data.auto_reply_enabled)
+      : data.is_active === false
+        ? false
+        : envFallback
     return NextResponse.json({
       configured: true,
       has_key: !!api_key,
       has_embeddings_key: !!embeddings_api_key,
+      env_fallback: envFallback,
+      auto_reply_live: autoReplyLive,
       ...safe,
     })
   } catch (err) {

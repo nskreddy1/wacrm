@@ -29,6 +29,10 @@ export interface AiConfig {
    *  knowledge base is embedded and semantic retrieval turns on; when
    *  null, retrieval falls back to lexical full-text search. */
   embeddingsApiKey: string | null
+  /** Which key pays for the call: the account's own BYO key, or the
+   *  shared `process.env.GEMINI_API_KEY` fallback. Logged to
+   *  `ai_usage_log.key_source` so shared-key spend is auditable. */
+  keySource: 'account' | 'env'
 }
 
 /** A single conversation turn in the shape both providers accept. */
@@ -54,14 +58,30 @@ export interface ProviderResult {
   usage: AiUsage | null
 }
 
+/** Customer sentiment classified by the model in the [[META]] tail. */
+export type AiSentiment = 'angry' | 'frustrated' | 'neutral' | 'happy'
+
+/** Why the model asked for a human, from the [[META]] tail. */
+export type AiEscalationReason =
+  | 'human_requested'
+  | 'angry_customer'
+  | 'out_of_scope'
+  | 'needs_account_data'
+  | 'purchase_ready'
+
 /** Outcome of a generation call. */
 export interface GenerateResult {
-  /** The reply text, with any handoff sentinel stripped. */
+  /** The reply text, with any handoff sentinel / [[META]] tail stripped. */
   text: string
   /** True when the model asked to hand off to a human (auto-reply mode). */
   handoff: boolean
   /** Provider token usage for this call, or null when unavailable. */
   usage: AiUsage | null
+  /** Classified customer sentiment; 'neutral' when meta is missing/bad. */
+  sentiment: AiSentiment
+  /** Escalation reason when handing off; null when not escalating (or
+   *  when only the legacy bare [[HANDOFF]] sentinel was emitted). */
+  escalationReason: AiEscalationReason | null
 }
 
 /**

@@ -20,8 +20,12 @@ const MAX_QUOTE_LEN = 160
 export function buildHandoffSummary(args: {
   messages: ChatMessage[]
   replyCount: number
+  /** Classified customer sentiment for this thread, when available. */
+  sentiment?: string | null
+  /** Why the model escalated (e.g. 'human_requested'), when available. */
+  escalationReason?: string | null
 }): string {
-  const { messages, replyCount } = args
+  const { messages, replyCount, sentiment, escalationReason } = args
 
   const lastCustomer = [...messages]
     .reverse()
@@ -32,7 +36,12 @@ export function buildHandoffSummary(args: {
       ? 'without replying'
       : `after ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`
 
-  const base = `🤖 AI agent handed off ${replies}.`
+  let base = `🤖 AI agent handed off ${replies}.`
+
+  const context: string[] = []
+  if (escalationReason) context.push(`Reason: ${escalationReason.replace(/_/g, ' ')}`)
+  if (sentiment && sentiment !== 'neutral') context.push(`customer seems ${sentiment}`)
+  if (context.length > 0) base += ` ${context.join('; ')}.`
 
   if (!lastCustomer) return base
 
