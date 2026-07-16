@@ -1,6 +1,11 @@
 import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  type BaseMessage,
+} from '@langchain/core/messages'
+import {
   AiError,
-  type AiConfig,
   type AiEscalationReason,
   type AiSentiment,
   type AiUsage,
@@ -10,23 +15,15 @@ import {
 import {
   HANDOFF_SENTINEL,
   META_SENTINEL,
-  OPENAI_COMPAT_BASE_URL,
   aiRequestTimeoutMs,
 } from './defaults'
-import { generateOpenAi } from './providers/openai'
-import { generateAnthropic } from './providers/anthropic'
-import { generateGemini } from './providers/gemini'
-
-/** Human-readable names used in provider error messages. */
-const PROVIDER_ERROR_LABEL: Partial<Record<AiConfig['provider'], string>> = {
-  nvidia: 'NVIDIA',
-  groq: 'Groq',
-  openrouter: 'OpenRouter',
-  together: 'Together AI',
-  mistral: 'Mistral',
-  deepseek: 'DeepSeek',
-  xai: 'xAI',
-}
+import {
+  normalizeLcUsage,
+  providerLabel,
+  resolveChatModel,
+  toAiError,
+} from './model'
+import type { AiConfig } from './types'
 
 export interface GenerateArgs {
   config: AiConfig
@@ -37,65 +34,121 @@ export interface GenerateArgs {
 }
 
 /**
+ * Collapse consecutive same-role turns into one (joined with blank
+ * lines). Anthropic requires strictly alternating roles; merging is
+ * also harmless for the other providers and keeps the transcript
+ * compact.
+ */
+export function mergeConsecutive(messages: ChatMessage[]): ChatMessage[] {
+  const out: ChatMessage[] = []
+  for (const m of messages) {
+    const last = out[out.length - 1]
+    if (last && last.role === m.role) {
+      last.content = `${last.content}\n\n${m.content}`
+    } else {
+      out.push({ role: m.role, content: m.content })
+    }
+  }
+  return out
+}
+
+/**
+ * Normalize the transcript for the target provider. Anthropic's
+ * Messages API additionally requires the turns to begin with `user`,
+ * so leading assistant turns (an agent greeting before the customer
+ * said anything) are dropped and an empty transcript gets a
+ * placeholder — guaranteeing a valid, non-empty payload.
+ */
+function normalizeTurns(
+  messages: ChatMessage[],
+  provider: AiConfig['provider'],
+): ChatMessage[] {
+  const merged = mergeConsecutive(messages)
+  if (provider !== 'anthropic') return merged
+  while (merged.length > 0 && merged[0].role === 'assistant') {
+    merged.shift()
+  }
+  if (merged.length === 0) {
+    return [{ role: 'user', content: '(The customer has not sent a message yet.)' }]
+  }
+  return merged
+}
+
+/** Map our provider-agnostic turns to LangChain message objects. */
+function toLcMessages(
+  systemPrompt: string,
+  turns: ChatMessage[],
+): BaseMessage[] {
+  return [
+    new SystemMessage(systemPrompt),
+    ...turns.map((m) =>
+      m.role === 'assistant'
+        ? new AIMessage(m.content)
+        : new HumanMessage(m.content),
+    ),
+  ]
+}
+
+/** Extract the plain assistant text from a LangChain message content
+ *  value (string, or an array of typed content parts). */
+function contentToText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part
+        if (
+          part &&
+          typeof part === 'object' &&
+          (part as { type?: unknown }).type === 'text' &&
+          typeof (part as { text?: unknown }).text === 'string'
+        ) {
+          return (part as { text: string }).text
+        }
+        return ''
+      })
+      .join('')
+  }
+  return ''
+}
+
+/**
  * Generate the next reply from the account's configured provider.
- * Dispatches to the right adapter, then parses the handoff sentinel out
- * of the raw text. Throws `AiError` on any provider/network failure.
+ * Resolves the LangChain chat model, invokes it with the transcript,
+ * then parses the handoff sentinel out of the raw text. Throws
+ * `AiError` on any provider/network failure.
  */
 export async function generateReply(args: GenerateArgs): Promise<GenerateResult> {
   const { config, systemPrompt, messages } = args
-  const timeoutMs = aiRequestTimeoutMs()
-  const providerArgs = {
-    apiKey: config.apiKey,
-    model: config.model,
+  const label = providerLabel(config.provider)
+
+  // Config problems (missing base URL, unknown provider) throw typed
+  // AiErrors synchronously — let them propagate untouched.
+  const model = resolveChatModel(config)
+  const lcMessages = toLcMessages(
     systemPrompt,
-    messages,
-    timeoutMs,
+    normalizeTurns(messages, config.provider),
+  )
+
+  let response
+  try {
+    response = await model.invoke(lcMessages, {
+      // Same env-driven per-call timeout as the old fetch adapters.
+      signal: AbortSignal.timeout(aiRequestTimeoutMs()),
+    })
+  } catch (err) {
+    throw toAiError(err, label)
   }
 
-  let result: { text: string; usage: AiUsage | null }
-  switch (config.provider) {
-    case 'openai':
-      result = await generateOpenAi(providerArgs)
-      break
-    case 'anthropic':
-      result = await generateAnthropic(providerArgs)
-      break
-    case 'gemini':
-      result = await generateGemini(providerArgs)
-      break
-    case 'custom': {
-      // Bring-your-own OpenAI-compatible endpoint, per-account base URL.
-      const baseUrl = config.baseUrl?.trim()
-      if (!baseUrl) {
-        throw new AiError(
-          'A base URL is required for the custom OpenAI-compatible provider.',
-          { code: 'missing_base_url', status: 400 },
-        )
-      }
-      result = await generateOpenAi(providerArgs, {
-        baseUrl,
-        providerLabel: 'Custom endpoint',
-      })
-      break
-    }
-    default: {
-      // OpenAI-compatible presets (NVIDIA NIM, Groq, OpenRouter, Together,
-      // Mistral, DeepSeek, xAI) — same protocol, registry-provided URL.
-      const baseUrl = OPENAI_COMPAT_BASE_URL[config.provider]
-      if (!baseUrl) {
-        throw new AiError(`Unsupported AI provider: ${config.provider}`, {
-          code: 'unsupported_provider',
-          status: 400,
-        })
-      }
-      result = await generateOpenAi(providerArgs, {
-        baseUrl,
-        providerLabel: PROVIDER_ERROR_LABEL[config.provider] ?? config.provider,
-      })
-    }
+  const text = contentToText(response.content).trim()
+  if (!text) {
+    throw new AiError(`${label} returned an empty response.`, {
+      code: 'empty_response',
+    })
   }
 
-  return parseGeneration(result.text, result.usage)
+  const usage: AiUsage | null = normalizeLcUsage(response.usage_metadata)
+  return parseGeneration(text, usage)
 }
 
 const SENTIMENTS: readonly AiSentiment[] = [

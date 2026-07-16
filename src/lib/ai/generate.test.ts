@@ -1,6 +1,18 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { generateReply, parseGeneration } from './generate'
 import { AiError, type AiConfig } from './types'
+
+// Mock only the chat-model factory — usage normalization, provider
+// labels, and error mapping stay real so the tests exercise the same
+// code paths production does.
+const { resolveChatModelMock } = vi.hoisted(() => ({
+  resolveChatModelMock: vi.fn(),
+}))
+vi.mock('./model', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./model')>()
+  return { ...actual, resolveChatModel: resolveChatModelMock }
+})
 
 function config(overrides: Partial<AiConfig> = {}): AiConfig {
   return {
@@ -13,30 +25,23 @@ function config(overrides: Partial<AiConfig> = {}): AiConfig {
     autoReplyMaxPerConversation: 3,
     handoffAgentId: null,
     embeddingsApiKey: null,
+    keySource: 'account',
     ...overrides,
   }
 }
 
-function okResponse(json: unknown): Response {
-  return {
-    ok: true,
-    status: 200,
-    json: async () => json,
-  } as unknown as Response
+/** Fake LangChain chat model whose `invoke` we control per test. */
+function fakeModel(invoke: ReturnType<typeof vi.fn>) {
+  return { invoke } as unknown
 }
 
-function errResponse(status: number, json: unknown): Response {
-  return {
-    ok: false,
-    status,
-    json: async () => json,
-  } as unknown as Response
+function aiMessage(content: unknown, usage_metadata?: unknown) {
+  return { content, usage_metadata }
 }
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn())
+  resolveChatModelMock.mockReset()
 })
-afterEach(() => vi.unstubAllGlobals())
 
 describe('parseGeneration', () => {
   it('returns text with no handoff', () => {
@@ -44,65 +49,156 @@ describe('parseGeneration', () => {
       text: 'Hello there',
       handoff: false,
       usage: null,
+      sentiment: 'neutral',
+      escalationReason: null,
     })
   })
 
   it('detects + strips the handoff sentinel', () => {
-    expect(parseGeneration('[[HANDOFF]]')).toEqual({
+    expect(parseGeneration('[[HANDOFF]]')).toMatchObject({
       text: '',
       handoff: true,
-      usage: null,
     })
-    expect(parseGeneration('Let me get a human [[HANDOFF]]')).toEqual({
+    expect(parseGeneration('Let me get a human [[HANDOFF]]')).toMatchObject({
       text: 'Let me get a human',
       handoff: true,
-      usage: null,
     })
   })
 
   it('passes usage straight through', () => {
     const usage = { promptTokens: 10, completionTokens: 5, totalTokens: 15 }
-    expect(parseGeneration('Hi', usage)).toEqual({
-      text: 'Hi',
+    expect(parseGeneration('Hi', usage)).toMatchObject({ text: 'Hi', usage })
+  })
+
+  it('parses and strips the [[META]] tail', () => {
+    const res = parseGeneration(
+      'I will get a person to help.\n[[META]]{"sentiment":"angry","escalate":true,"reason":"angry_customer"}',
+    )
+    expect(res).toEqual({
+      text: 'I will get a person to help.',
+      handoff: true,
+      usage: null,
+      sentiment: 'angry',
+      escalationReason: 'angry_customer',
+    })
+  })
+
+  it('degrades gracefully on malformed meta', () => {
+    const res = parseGeneration('Hi there\n[[META]]{not json')
+    expect(res).toEqual({
+      text: 'Hi there',
       handoff: false,
-      usage,
+      usage: null,
+      sentiment: 'neutral',
+      escalationReason: null,
     })
   })
 })
 
-describe('generateReply — OpenAI', () => {
-  it('calls the chat completions endpoint and returns the reply', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      okResponse({
-        choices: [{ message: { content: 'Sure — happy to help!' } }],
-        usage: { prompt_tokens: 42, completion_tokens: 8, total_tokens: 50 },
+describe('generateReply', () => {
+  it('invokes the resolved model and returns the parsed reply + usage', async () => {
+    const invoke = vi.fn().mockResolvedValue(
+      aiMessage('Sure — happy to help!', {
+        input_tokens: 42,
+        output_tokens: 8,
+        total_tokens: 50,
       }),
     )
-    vi.stubGlobal('fetch', fetchMock)
+    resolveChatModelMock.mockReturnValue(fakeModel(invoke))
 
     const res = await generateReply({
-      config: config({ provider: 'openai' }),
+      config: config(),
       systemPrompt: 'sys',
       messages: [{ role: 'user', content: 'Hi' }],
     })
 
-    expect(res).toEqual({
+    expect(res).toMatchObject({
       text: 'Sure — happy to help!',
       handoff: false,
       usage: { promptTokens: 42, completionTokens: 8, totalTokens: 50 },
     })
-    const [url, opts] = fetchMock.mock.calls[0]
-    expect(url).toContain('api.openai.com')
-    expect(opts.headers.Authorization).toBe('Bearer sk-test')
+    // System prompt first, then the customer turn.
+    const msgs = invoke.mock.calls[0][0]
+    expect(msgs[0]).toBeInstanceOf(SystemMessage)
+    expect(msgs[0].content).toBe('sys')
+    expect(msgs[1]).toBeInstanceOf(HumanMessage)
+    expect(msgs[1].content).toBe('Hi')
   })
 
-  it('maps a 401 to an invalid_key AiError', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        errResponse(401, { error: { message: 'Incorrect API key' } }),
-      ),
+  it('joins array content parts and sums usage without a total', async () => {
+    const invoke = vi.fn().mockResolvedValue(
+      aiMessage([{ type: 'text', text: 'Hi ' }, { type: 'text', text: 'there!' }], {
+        input_tokens: 30,
+        output_tokens: 6,
+      }),
     )
+    resolveChatModelMock.mockReturnValue(fakeModel(invoke))
+
+    const res = await generateReply({
+      config: config({ provider: 'anthropic' }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Hello' }],
+    })
+
+    expect(res).toMatchObject({
+      text: 'Hi there!',
+      usage: { promptTokens: 30, completionTokens: 6, totalTokens: 36 },
+    })
+  })
+
+  it('detects handoff in the model output', async () => {
+    const invoke = vi.fn().mockResolvedValue(aiMessage('[[HANDOFF]]'))
+    resolveChatModelMock.mockReturnValue(fakeModel(invoke))
+
+    const res = await generateReply({
+      config: config(),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'I want to speak to a person' }],
+    })
+    expect(res.handoff).toBe(true)
+    expect(res.text).toBe('')
+  })
+
+  it('merges consecutive same-role turns', async () => {
+    const invoke = vi.fn().mockResolvedValue(aiMessage('ok'))
+    resolveChatModelMock.mockReturnValue(fakeModel(invoke))
+
+    await generateReply({
+      config: config(),
+      systemPrompt: 'sys',
+      messages: [
+        { role: 'user', content: 'Hi' },
+        { role: 'user', content: 'Anyone there?' },
+      ],
+    })
+
+    const msgs = invoke.mock.calls[0][0]
+    expect(msgs).toHaveLength(2) // system + one merged user turn
+    expect(msgs[1].content).toBe('Hi\n\nAnyone there?')
+  })
+
+  it('drops a leading assistant turn for Anthropic so the transcript starts on the customer', async () => {
+    const invoke = vi.fn().mockResolvedValue(aiMessage('ok'))
+    resolveChatModelMock.mockReturnValue(fakeModel(invoke))
+
+    await generateReply({
+      config: config({ provider: 'anthropic' }),
+      systemPrompt: 'sys',
+      messages: [
+        { role: 'assistant', content: 'Welcome!' },
+        { role: 'user', content: 'Hi' },
+      ],
+    })
+
+    const msgs = invoke.mock.calls[0][0]
+    expect(msgs).toHaveLength(2) // system + user only
+    expect(msgs[1]).toBeInstanceOf(HumanMessage)
+    expect(msgs[1].content).toBe('Hi')
+  })
+
+  it('maps a 401 provider failure to an invalid_key AiError', async () => {
+    const err = Object.assign(new Error('Incorrect API key'), { status: 401 })
+    resolveChatModelMock.mockReturnValue(fakeModel(vi.fn().mockRejectedValue(err)))
 
     await expect(
       generateReply({
@@ -114,81 +210,31 @@ describe('generateReply — OpenAI', () => {
   })
 
   it('throws on an empty completion', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: '' } }] })),
-    )
+    resolveChatModelMock.mockReturnValue(fakeModel(vi.fn().mockResolvedValue(aiMessage('   '))))
+
     await expect(
       generateReply({
         config: config(),
         systemPrompt: 'sys',
         messages: [{ role: 'user', content: 'Hi' }],
       }),
-    ).rejects.toBeInstanceOf(AiError)
+    ).rejects.toMatchObject({ code: 'empty_response' })
   })
-})
 
-describe('generateReply — Anthropic', () => {
-  it('calls the messages endpoint with the version header and parses text blocks', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      okResponse({
-        content: [{ type: 'text', text: 'Hi there!' }],
-        usage: { input_tokens: 30, output_tokens: 6 },
+  it('propagates config AiErrors from the model factory untouched', async () => {
+    resolveChatModelMock.mockImplementation(() => {
+      throw new AiError('A base URL is required for the custom OpenAI-compatible provider.', {
+        code: 'missing_base_url',
+        status: 400,
+      })
+    })
+
+    await expect(
+      generateReply({
+        config: config({ provider: 'custom' }),
+        systemPrompt: 'sys',
+        messages: [{ role: 'user', content: 'Hi' }],
       }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-
-    const res = await generateReply({
-      config: config({ provider: 'anthropic', apiKey: 'sk-ant-x' }),
-      systemPrompt: 'sys',
-      messages: [{ role: 'user', content: 'Hello' }],
-    })
-
-    // Anthropic reports input/output only — total is summed by normalizeUsage.
-    expect(res).toEqual({
-      text: 'Hi there!',
-      handoff: false,
-      usage: { promptTokens: 30, completionTokens: 6, totalTokens: 36 },
-    })
-    const [url, opts] = fetchMock.mock.calls[0]
-    expect(url).toContain('api.anthropic.com')
-    expect(opts.headers['x-api-key']).toBe('sk-ant-x')
-    expect(opts.headers['anthropic-version']).toBeTruthy()
-  })
-
-  it('detects handoff in the model output', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        okResponse({ content: [{ type: 'text', text: '[[HANDOFF]]' }] }),
-      ),
-    )
-    const res = await generateReply({
-      config: config({ provider: 'anthropic' }),
-      systemPrompt: 'sys',
-      messages: [{ role: 'user', content: 'I want to speak to a person' }],
-    })
-    expect(res.handoff).toBe(true)
-    expect(res.text).toBe('')
-  })
-
-  it('drops a leading assistant turn so the payload starts on the customer', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(okResponse({ content: [{ type: 'text', text: 'ok' }] }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    await generateReply({
-      config: config({ provider: 'anthropic' }),
-      systemPrompt: 'sys',
-      messages: [
-        { role: 'assistant', content: 'Welcome!' },
-        { role: 'user', content: 'Hi' },
-      ],
-    })
-
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.messages[0].role).toBe('user')
-    expect(body.messages).toHaveLength(1)
+    ).rejects.toMatchObject({ code: 'missing_base_url', status: 400 })
   })
 })
