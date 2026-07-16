@@ -29,6 +29,11 @@ export interface AiConfig {
    *  knowledge base is embedded and semantic retrieval turns on; when
    *  null, retrieval falls back to lexical full-text search. */
   embeddingsApiKey: string | null
+  /** Where `apiKey` came from: the account's own encrypted BYO key
+   *  ('account') or the platform-wide `GEMINI_API_KEY` env fallback
+   *  ('env'). Logged to `ai_usage_log` so shared-key spend is auditable
+   *  per tenant. */
+  keySource: 'account' | 'env'
 }
 
 /** A single conversation turn in the shape both providers accept. */

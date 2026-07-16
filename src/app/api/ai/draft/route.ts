@@ -121,6 +121,7 @@ export async function POST(request: Request) {
         provider: config.provider,
         model: config.model,
         usage,
+        keySource: config.keySource,
       })
     } catch (logErr) {
       console.error('[ai/draft] usage log skipped:', logErr)

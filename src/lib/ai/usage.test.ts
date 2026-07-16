@@ -29,7 +29,24 @@ describe('logAiUsage', () => {
       prompt_tokens: 30,
       completion_tokens: 6,
       total_tokens: 36,
+      key_source: 'account',
     })
+  })
+
+  it('records key_source env when the call ran on the env fallback key', async () => {
+    const { db, insert } = fakeDb()
+    await logAiUsage(db, {
+      accountId: 'acct-1',
+      conversationId: 'conv-1',
+      mode: 'auto_reply',
+      provider: 'gemini',
+      model: 'gemini-flash-latest',
+      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      keySource: 'env',
+    })
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ key_source: 'env' }),
+    )
   })
 
   it('is a no-op when the provider reported no usage', async () => {

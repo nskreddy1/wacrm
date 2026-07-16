@@ -130,6 +130,7 @@ export async function dispatchInboundToAiReply(
       provider: config.provider,
       model: config.model,
       usage,
+      keySource: config.keySource,
     })
 
     if (handoff || !text) {

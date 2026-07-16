@@ -11,6 +11,9 @@ export interface LogAiUsageArgs {
   model: string
   /** Provider usage; a no-op when null (nothing worth recording). */
   usage: AiUsage | null
+  /** Whether the call ran on the account's BYO key or the platform-wide
+   *  env fallback. Defaults to 'account' for legacy callers. */
+  keySource?: 'account' | 'env'
 }
 
 /**
@@ -41,6 +44,7 @@ export async function logAiUsage(
       prompt_tokens: args.usage.promptTokens,
       completion_tokens: args.usage.completionTokens,
       total_tokens: args.usage.totalTokens,
+      key_source: args.keySource ?? 'account',
     })
     if (error) {
       console.error('[ai usage] log insert failed:', error)
