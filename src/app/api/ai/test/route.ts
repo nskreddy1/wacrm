@@ -3,7 +3,12 @@ import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { validateAiCredentials } from '@/lib/ai/validate'
-import { AiError, type AiProvider } from '@/lib/ai/types'
+import {
+  AiError,
+  AI_PROVIDERS,
+  isAiProvider,
+  type AiProvider,
+} from '@/lib/ai/types'
 import { createValidationProof } from '@/lib/ai/validation-proof'
 
 /**
@@ -27,16 +32,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const provider = body.provider as AiProvider
-    if (provider !== 'openai' && provider !== 'anthropic' && provider !== 'gemini') {
+    if (!isAiProvider(body.provider)) {
       return NextResponse.json(
-        { error: 'provider must be "openai", "anthropic", or "gemini"' },
+        { error: `provider must be one of: ${AI_PROVIDERS.join(', ')}` },
         { status: 400 },
       )
     }
+    const provider: AiProvider = body.provider
     const model = typeof body.model === 'string' ? body.model.trim() : ''
     if (!model) {
       return NextResponse.json({ error: 'model is required' }, { status: 400 })
+    }
+
+    // Custom OpenAI-compatible endpoint needs its base URL to be testable.
+    let baseUrl: string | null = null
+    if (provider === 'custom') {
+      const rawBaseUrl =
+        typeof body.base_url === 'string' ? body.base_url.trim().replace(/\/+$/, '') : ''
+      if (!rawBaseUrl) {
+        return NextResponse.json(
+          { error: 'base_url is required for the custom provider' },
+          { status: 400 },
+        )
+      }
+      try {
+        if (new URL(rawBaseUrl).protocol !== 'https:') throw new Error()
+      } catch {
+        return NextResponse.json(
+          { error: 'base_url must be a valid https URL' },
+          { status: 400 },
+        )
+      }
+      baseUrl = rawBaseUrl
     }
 
     const rawKey = typeof body.api_key === 'string' ? body.api_key.trim() : ''
@@ -68,12 +95,14 @@ export async function POST(request: Request) {
         provider,
         model,
         apiKey: apiKeyPlain,
+        baseUrl,
         systemPrompt: null,
         isActive: true,
         autoReplyEnabled: false,
         autoReplyMaxPerConversation: 3,
         handoffAgentId: null,
         embeddingsApiKey: null,
+        keySource: 'account',
       })
     } catch (err) {
       if (err instanceof AiError) {
@@ -96,6 +125,7 @@ export async function POST(request: Request) {
         provider,
         model,
         apiKey: apiKeyPlain,
+        baseUrl,
       }),
     })
   } catch (err) {

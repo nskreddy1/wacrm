@@ -14,6 +14,36 @@ export const AI_PROVIDER_DEFAULT_MODEL: Record<AiProvider, string> = {
   openai: 'gpt-5.4-mini',
   anthropic: 'claude-haiku-4-5-20251001',
   gemini: 'gemini-flash-latest',
+  nvidia: 'meta/llama-3.3-70b-instruct',
+  groq: 'llama-3.3-70b-versatile',
+  openrouter: 'openai/gpt-4o-mini',
+  together: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+  mistral: 'mistral-small-latest',
+  deepseek: 'deepseek-chat',
+  xai: 'grok-3-mini',
+  custom: '',
+}
+
+/**
+ * Chat-completions base URLs for the OpenAI-compatible preset providers.
+ * All speak the exact same protocol as OpenAI (`POST {base}/chat/completions`
+ * with a Bearer key) — only the host differs — so one adapter serves them
+ * all. `custom` is intentionally absent: its base URL lives per-account in
+ * `ai_configs.base_url`.
+ */
+export const OPENAI_COMPAT_BASE_URL: Partial<Record<AiProvider, string>> = {
+  nvidia: 'https://integrate.api.nvidia.com/v1',
+  groq: 'https://api.groq.com/openai/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+  together: 'https://api.together.xyz/v1',
+  mistral: 'https://api.mistral.ai/v1',
+  deepseek: 'https://api.deepseek.com',
+  xai: 'https://api.x.ai/v1',
+}
+
+/** Providers that use the shared OpenAI-compatible adapter. */
+export function isOpenAiCompatProvider(provider: AiProvider): boolean {
+  return provider === 'custom' || provider in OPENAI_COMPAT_BASE_URL
 }
 
 /**

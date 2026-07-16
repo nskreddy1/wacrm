@@ -8,6 +8,8 @@ type ProofPayload = {
   provider: AiProvider
   model: string
   keyHash: string
+  /** Custom-provider endpoint the test ran against ('' for presets). */
+  baseUrl?: string
   expiresAt: number
 }
 
@@ -36,12 +38,14 @@ export function createValidationProof(args: {
   provider: AiProvider
   model: string
   apiKey: string
+  baseUrl?: string | null
 }): string {
   const payload: ProofPayload = {
     accountId: args.accountId,
     provider: args.provider,
     model: args.model,
     keyHash: keyHash(args.apiKey),
+    baseUrl: args.baseUrl ?? '',
     expiresAt: Date.now() + PROOF_TTL_MS,
   }
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
@@ -55,6 +59,7 @@ export function verifyValidationProof(
     provider: AiProvider
     model: string
     apiKey: string
+    baseUrl?: string | null
   },
 ): boolean {
   if (typeof proof !== 'string') return false
@@ -77,7 +82,8 @@ export function verifyValidationProof(
       payload.accountId === args.accountId &&
       payload.provider === args.provider &&
       payload.model === args.model &&
-      payload.keyHash === keyHash(args.apiKey)
+      payload.keyHash === keyHash(args.apiKey) &&
+      (payload.baseUrl ?? '') === (args.baseUrl ?? '')
     )
   } catch {
     return false
