@@ -195,6 +195,7 @@ export async function POST(request: Request) {
           autoReplyMaxPerConversation: maxPer,
           handoffAgentId: null,
           embeddingsApiKey: null,
+          keySource: 'account',
         })
       } catch (err) {
         if (err instanceof AiError) {

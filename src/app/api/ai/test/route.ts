@@ -74,6 +74,7 @@ export async function POST(request: Request) {
         autoReplyMaxPerConversation: 3,
         handoffAgentId: null,
         embeddingsApiKey: null,
+        keySource: 'account',
       })
     } catch (err) {
       if (err instanceof AiError) {
