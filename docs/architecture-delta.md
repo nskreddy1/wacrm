@@ -63,8 +63,8 @@ No provider silently falls back to another.
 
 ## 6. Important architectural exceptions
 
-- Pipeline workspace code includes SQLite/demo repository paths; Supabase remains the production authority.
-- Demo APIs and in-memory cache/rate paths are not durable multi-instance storage.
+- ~~Pipeline workspace code includes SQLite/demo repository paths~~ — resolved 2026-07 (fork-sync-and-audit pass): SQLite/demo/mock repositories were removed from all production paths; Supabase is the only data source and missing config fails fast.
+- In-memory cache/rate paths are not durable multi-instance storage.
 - Two lockfiles remain even though active development uses pnpm.
 - Repository-wide historical lint debt remains.
 - Next 16 permits alternate HTTP ports, but two dev servers from the same checkout contend for the same `.next/dev` lock; stop the original process or use a separate worktree/build for concurrent verification.
@@ -76,3 +76,13 @@ Supabase remains the only production database/auth platform. Tenant data is acco
 ## 8. Target and authority
 
 `docs/enterprise-v1-architecture.md` is the consolidated current-state report and Enterprise V1 contract. It separates implemented behavior from target behavior, contains the source/file-group catalog, provider matrix, migration chronology, validation record, risk register and implementation sequence. Upstream snapshots are historical comparison material and are not edited to describe this fork.
+
+## 9. Changelog
+
+### 2026-07-16 — fork-sync-and-audit pass
+
+- **Phase A (audit):** added `docs/wacrm-audit/comparison/justification.md` — a per-family justification table for every `src/lib/*`, `src/app/api/*` and `server/` group with keep/removed/needs-fix/flagged verdicts. Recorded the Twilio broadcast/template gap with a recommendation (route broadcasts through the orchestrator + Twilio Content API sync); implementation deferred pending user decision. The Express `/api/service/*` BFF is flagged: auth/allowlist verified enforced but no production consumer exists.
+- **Phase B (strict demo removal, merged earlier as PR #35):** removed `lib/demo/`, `lib/data/mock-db.ts`, mock repositories, `api/demo/crm`, `sqlite-pipeline-repository` and `better-sqlite3`. `getDataSource()` is Supabase-only and fails fast when env config is missing.
+- **Phase C (dual-provider correctness):** Twilio webhook signature validation now reconstructs the canonical public URL (`NEXT_PUBLIC_SITE_URL` → `x-forwarded-proto/host` → `request.url`) instead of trusting raw `request.url` behind the proxy; still fail-closed. The omnichannel Meta webhook (`/api/channels/webhooks/meta`) now verifies HMAC through the shared `verifyMetaSignatureWithSecret` helper (same code path as `/api/whatsapp/webhook`). Verified end-to-end Twilio flows: inbox composer + contact-detail sends, flows sends and AI auto-reply all route through `lib/orchestration/outbound.ts`; inbound persists via `persistInboundChannelMessage` with realtime via the `messages` postgres_changes subscription; delivery status mirrors through `applyMessageDeliveryStatus`.
+- **Phase D (security hardening):** automations cron secret comparison is now timing-safe (matching flows cron). Added a `configMutation` rate-limit bucket (10/min per user) to `/api/whatsapp/config` POST and `/api/settings/channels` POST/PATCH — these verify credentials against external provider APIs on every call. Verified: all webhook routes fail closed; credentials AES-256-GCM encrypted before write (`encryptProviderCredentials`, `encrypt`); service-role clients justified per call site; security headers unchanged from the audited baseline.
+- **Verification:** 661 vitest tests pass (73 files), `next build` clean, grep gates pass (no mock data source, no `lib/demo`, no SQLite imports outside tests, no raw `request.url` in Twilio signature validation).

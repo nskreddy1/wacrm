@@ -18,6 +18,39 @@ function validSignature(url: string, params: URLSearchParams, signature: string 
   return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
+/**
+ * Reconstruct the canonical public URL Twilio signed against.
+ *
+ * Behind Vercel/proxies, `request.url` reflects the internal origin
+ * (e.g. `http://localhost:3000/...`), not the public URL Twilio hit —
+ * so signature validation against raw `request.url` fails (or worse,
+ * could false-pass if an attacker controls the internal host). Order:
+ *   1. `NEXT_PUBLIC_SITE_URL` — operator's explicit canonical origin
+ *      (same source the Twilio adapter uses for its statusCallback URL).
+ *   2. `x-forwarded-proto` / `x-forwarded-host` — set by Vercel and
+ *      standard reverse proxies.
+ *   3. `request.url` — direct (unproxied) deployments.
+ * The original path + query are always preserved.
+ */
+function canonicalWebhookUrl(request: Request): string {
+  const requestUrl = new URL(request.url)
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+  if (explicit) {
+    try {
+      const origin = new URL(explicit).origin
+      return `${origin}${requestUrl.pathname}${requestUrl.search}`
+    } catch {
+      // Malformed env value — fall through to forwarded headers.
+    }
+  }
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
+  if (forwardedHost) {
+    return `${forwardedProto || 'https'}://${forwardedHost}${requestUrl.pathname}${requestUrl.search}`
+  }
+  return request.url
+}
+
 export async function POST(request: Request) {
   const rawBody = await request.text()
   const params = new URLSearchParams(rawBody)
@@ -43,7 +76,7 @@ export async function POST(request: Request) {
   if (!connection) return NextResponse.json({ error: 'Unknown destination' }, { status: 404 })
 
   const credentials = decryptProviderCredentials(connection)
-  if (credentials.provider !== 'twilio' || !validSignature(request.url, params, request.headers.get('x-twilio-signature'), credentials.value.authToken)) {
+  if (credentials.provider !== 'twilio' || !validSignature(canonicalWebhookUrl(request), params, request.headers.get('x-twilio-signature'), credentials.value.authToken)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
 

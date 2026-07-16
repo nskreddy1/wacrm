@@ -167,6 +167,14 @@ export const RATE_LIMITS = {
    *  capping a stampede; excess inbounds simply don't get an auto-reply
    *  (they still land in the inbox for a human). */
   aiAutoReplyAccount: { limit: 30, windowMs: 60_000 },
+  /** Provider/channel configuration mutations: saving WhatsApp config,
+   *  creating/updating/testing channel connections. These verify
+   *  credentials against external provider APIs (Meta, Twilio) on
+   *  every call, so beyond ordinary abuse-bounding this also protects
+   *  our standing with the provider — a loop hammering a bad token
+   *  looks like credential stuffing from THEIR side. 10/min per user
+   *  is ample for a human working through a setup form. */
+  configMutation: { limit: 10, windowMs: 60_000 },
 } as const;
 
 /** Test-only helper. Clears the in-memory state so unit tests don't
