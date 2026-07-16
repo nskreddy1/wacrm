@@ -88,12 +88,6 @@ export interface AiUsage {
   totalTokens: number
 }
 
-/** Raw text + usage a provider adapter returns before handoff parsing. */
-export interface ProviderResult {
-  text: string
-  usage: AiUsage | null
-}
-
 /** Customer sentiment classified by the model in the [[META]] tail. */
 export type AiSentiment = 'angry' | 'frustrated' | 'neutral' | 'happy'
 
