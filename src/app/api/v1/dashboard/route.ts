@@ -1,19 +1,14 @@
 import { NextResponse } from "next/server"
 
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
-import { getMockDashboard } from "@/lib/data/dashboard/mock-repository"
 import { getSupabaseDashboard } from "@/lib/data/dashboard/supabase-repository"
 import { getDataSource } from "@/lib/data/runtime"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const source = getDataSource()
-  if (source === "mock") {
-    return NextResponse.json({ data: getMockDashboard(), meta: { source } })
-  }
-
   try {
+    const source = getDataSource()
     const context = await getCurrentAccount()
     const data = await getSupabaseDashboard(context)
     return NextResponse.json({ data, meta: { source } })

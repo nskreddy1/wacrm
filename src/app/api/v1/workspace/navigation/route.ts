@@ -15,12 +15,8 @@ import { navigationForRole } from "@/lib/navigation/config"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const source = getDataSource()
-  if (source === "mock") {
-    return NextResponse.json({ data: { groups: navigationForRole("owner") }, meta: { source } })
-  }
-
   try {
+    const source = getDataSource()
     const context = await getCurrentAccount()
     return NextResponse.json({ data: { groups: navigationForRole(context.role) }, meta: { source } })
   } catch (error) {

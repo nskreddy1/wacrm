@@ -1,9 +1,14 @@
 import "server-only"
 
-export type DataSource = "mock" | "supabase"
-
-export const DEMO_ACCOUNT_ID = "00000000-0000-4000-8000-000000000001"
-export const DEMO_USER_ID = "00000000-0000-4000-8000-000000000001"
+/**
+ * Production data source: Supabase only.
+ *
+ * The previous "mock" data source (in-memory demo data returned whenever
+ * Supabase env vars were missing) has been removed. Missing configuration
+ * now fails fast with a clear server error instead of silently serving
+ * demo data.
+ */
+export type DataSource = "supabase"
 
 export function hasSupabaseDataConfig() {
   return Boolean(
@@ -12,20 +17,17 @@ export function hasSupabaseDataConfig() {
   )
 }
 
+/**
+ * Returns the active data source, failing fast when Supabase is not
+ * configured. Callers should invoke this inside their try/catch so the
+ * configuration error surfaces as a clean 500 rather than an unhandled
+ * exception.
+ */
 export function getDataSource(): DataSource {
-  return hasSupabaseDataConfig() ? "supabase" : "mock"
-}
-
-export type RequestDataContext = {
-  accountId: string
-  userId: string
-  source: DataSource
-}
-
-export function getMockDataContext(accountId?: string | null): RequestDataContext {
-  return {
-    accountId: accountId || DEMO_ACCOUNT_ID,
-    userId: DEMO_USER_ID,
-    source: "mock",
+  if (!hasSupabaseDataConfig()) {
+    throw new Error(
+      "Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are required). Demo mode has been removed.",
+    )
   }
+  return "supabase"
 }

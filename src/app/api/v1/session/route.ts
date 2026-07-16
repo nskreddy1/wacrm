@@ -1,35 +1,13 @@
 import { NextResponse } from "next/server"
 
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
-import { DEMO_ACCOUNT_ID, DEMO_USER_ID, getDataSource } from "@/lib/data/runtime"
+import { getDataSource } from "@/lib/data/runtime"
 
 export const dynamic = "force-dynamic"
 
-function mockSession() {
-  return {
-    user: { id: DEMO_USER_ID, email: "sam@acme.example" },
-    profile: {
-      id: DEMO_USER_ID,
-      full_name: "Sam Silva",
-      email: "sam@acme.example",
-      avatar_url: null,
-      role: "owner",
-      beta_features: [],
-      account_id: DEMO_ACCOUNT_ID,
-      account_role: "owner",
-    },
-    account: { id: DEMO_ACCOUNT_ID, name: "Acme Support", default_currency: "USD" },
-  }
-}
-
 export async function GET() {
-  const source = getDataSource()
-
-  if (source === "mock") {
-    return NextResponse.json({ data: mockSession(), meta: { source } })
-  }
-
   try {
+    const source = getDataSource()
     const context = await getCurrentAccount()
     const { data: profile, error: profileError } = await context.supabase
       .from("profiles")
@@ -68,15 +46,12 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  if (getDataSource() === "mock") {
-    return NextResponse.json({ data: { signed_out: true }, meta: { source: "mock" } })
-  }
-
   try {
+    const source = getDataSource()
     const context = await getCurrentAccount()
     const { error } = await context.supabase.auth.signOut()
     if (error) throw error
-    return NextResponse.json({ data: { signed_out: true }, meta: { source: "supabase" } })
+    return NextResponse.json({ data: { signed_out: true }, meta: { source } })
   } catch (error) {
     return toErrorResponse(error)
   }

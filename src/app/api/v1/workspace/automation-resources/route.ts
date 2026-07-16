@@ -2,16 +2,12 @@ import { NextResponse } from "next/server"
 
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
 import { getDataSource } from "@/lib/data/runtime"
-import { demoStages } from "@/lib/demo/crm-data"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const source = getDataSource()
-  if (source === "mock") {
-    return NextResponse.json({ data: { tags: [{ id: "tag-vip", name: "VIP" }, { id: "tag-lead", name: "Lead" }], templates: [], customFields: [], pipelines: [{ id: "sales", name: "Sales Pipeline" }], stages: demoStages.map((stage, position) => ({ id: stage.id, name: stage.name, pipeline_id: "sales", position })), members: [] }, meta: { source } })
-  }
   try {
+    const source = getDataSource()
     const context = await getCurrentAccount()
     const [tags, templates, customFields, pipelines, members] = await Promise.all([
       context.supabase.from("tags").select("*").eq("account_id", context.accountId).order("name"),
