@@ -60,12 +60,20 @@ export function AppHeader() {
     refreshInterval: 60_000,
   })
 
-  const segment = pathname.split("/").filter(Boolean)[0] ?? "dashboard"
+  const segments = pathname.split("/").filter(Boolean)
+  const segment = segments[0] ?? "dashboard"
   const title = titles[segment] ?? "Workspace"
+  const isAutomationEditor =
+    segment === "automations" &&
+    (segments[1] === "new" || (segments[1] && segments[2] === "edit"))
 
   const notifications = notificationsData?.data ?? []
   const unread = notifications.filter((notification) => !notification.read_at)
   const recentNotifications = notifications.slice(0, 5)
+
+  // The automation editor owns its command bar. Keeping both headers costs
+  // valuable canvas height and creates competing save/create actions.
+  if (isAutomationEditor) return null
 
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-4">
