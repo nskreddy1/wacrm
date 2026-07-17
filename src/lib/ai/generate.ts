@@ -1,10 +1,4 @@
 import {
-  AIMessage,
-  HumanMessage,
-  SystemMessage,
-  type BaseMessage,
-} from '@langchain/core/messages'
-import {
   AiError,
   type AiEscalationReason,
   type AiSentiment,
@@ -12,18 +6,24 @@ import {
   type ChatMessage,
   type GenerateResult,
 } from './types'
-import {
-  HANDOFF_SENTINEL,
-  META_SENTINEL,
-  aiRequestTimeoutMs,
-} from './defaults'
-import {
-  normalizeLcUsage,
-  providerLabel,
-  resolveChatModel,
-  toAiError,
-} from './model'
+import { HANDOFF_SENTINEL, META_SENTINEL } from './defaults'
+import { providerLabel } from './errors'
+import { getAiEngine } from './engine-flag'
+import { generateReplyDirect } from './engines/direct/generate'
+import { generateReplyLangChain } from './engines/langchain/generate'
 import type { AiConfig } from './types'
+
+// ============================================================
+// Shared dispatch layer for chat generation.
+//
+// `generateReply` keeps the exact public signature callers use
+// (auto-reply.ts, validate.ts, /api/ai/draft, /api/ai/playground);
+// the platform `ai_engine` flag picks the engine underneath:
+//   - 'direct'    → engines/direct (hand-rolled fetch adapters)
+//   - 'langchain' → engines/langchain
+// Both engines return raw `{ text, usage }`; the empty-response
+// check and sentinel/meta parsing below are engine-agnostic.
+// ============================================================
 
 export interface GenerateArgs {
   config: AiConfig
@@ -58,8 +58,12 @@ export function mergeConsecutive(messages: ChatMessage[]): ChatMessage[] {
  * so leading assistant turns (an agent greeting before the customer
  * said anything) are dropped and an empty transcript gets a
  * placeholder — guaranteeing a valid, non-empty payload.
+ *
+ * Used on the LangChain path; the direct adapters carry their own
+ * (identical) normalization internally, preserving their original
+ * behavior verbatim.
  */
-function normalizeTurns(
+export function normalizeTurns(
   messages: ChatMessage[],
   provider: AiConfig['provider'],
 ): ChatMessage[] {
@@ -74,81 +78,34 @@ function normalizeTurns(
   return merged
 }
 
-/** Map our provider-agnostic turns to LangChain message objects. */
-function toLcMessages(
-  systemPrompt: string,
-  turns: ChatMessage[],
-): BaseMessage[] {
-  return [
-    new SystemMessage(systemPrompt),
-    ...turns.map((m) =>
-      m.role === 'assistant'
-        ? new AIMessage(m.content)
-        : new HumanMessage(m.content),
-    ),
-  ]
-}
-
-/** Extract the plain assistant text from a LangChain message content
- *  value (string, or an array of typed content parts). */
-function contentToText(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part
-        if (
-          part &&
-          typeof part === 'object' &&
-          (part as { type?: unknown }).type === 'text' &&
-          typeof (part as { text?: unknown }).text === 'string'
-        ) {
-          return (part as { text: string }).text
-        }
-        return ''
-      })
-      .join('')
-  }
-  return ''
-}
-
 /**
- * Generate the next reply from the account's configured provider.
- * Resolves the LangChain chat model, invokes it with the transcript,
- * then parses the handoff sentinel out of the raw text. Throws
- * `AiError` on any provider/network failure.
+ * Generate the next reply from the account's configured provider via
+ * whichever engine the platform flag selects, then parse the handoff
+ * sentinel / meta line out of the raw text. Throws `AiError` on any
+ * provider/network failure — with identical error codes across
+ * engines.
  */
 export async function generateReply(args: GenerateArgs): Promise<GenerateResult> {
   const { config, systemPrompt, messages } = args
-  const label = providerLabel(config.provider)
+  const engine = await getAiEngine()
 
-  // Config problems (missing base URL, unknown provider) throw typed
-  // AiErrors synchronously — let them propagate untouched.
-  const model = resolveChatModel(config)
-  const lcMessages = toLcMessages(
-    systemPrompt,
-    normalizeTurns(messages, config.provider),
-  )
+  const raw =
+    engine === 'langchain'
+      ? await generateReplyLangChain({
+          config,
+          systemPrompt,
+          turns: normalizeTurns(messages, config.provider),
+        })
+      : await generateReplyDirect({ config, systemPrompt, messages })
 
-  let response
-  try {
-    response = await model.invoke(lcMessages, {
-      // Same env-driven per-call timeout as the old fetch adapters.
-      signal: AbortSignal.timeout(aiRequestTimeoutMs()),
-    })
-  } catch (err) {
-    throw toAiError(err, label)
-  }
-
-  const text = contentToText(response.content).trim()
+  const text = raw.text.trim()
   if (!text) {
-    throw new AiError(`${label} returned an empty response.`, {
+    throw new AiError(`${providerLabel(config.provider)} returned an empty response.`, {
       code: 'empty_response',
     })
   }
 
-  const usage: AiUsage | null = normalizeLcUsage(response.usage_metadata)
-  return parseGeneration(text, usage)
+  return parseGeneration(text, raw.usage)
 }
 
 const SENTIMENTS: readonly AiSentiment[] = [
