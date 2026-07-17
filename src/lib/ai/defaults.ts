@@ -64,6 +64,19 @@ export const META_SENTINEL = '[[META]]'
  *  bounds token spend on the caller's own key. */
 export const MAX_OUTPUT_TOKENS = 1024
 
+// ------------------------------------------------------------
+// Embeddings tunables — shared by both engines (direct fetch and
+// LangChain). 1536-dim text-embedding-3-small matches the
+// `vector(1536)` column in migration 030.
+// ------------------------------------------------------------
+
+export const EMBEDDING_MODEL = 'text-embedding-3-small'
+export const EMBEDDING_DIMENSIONS = 1536
+
+/** OpenAI accepts an array input; keep batches modest so a big re-index
+ *  stays under request-size limits and partial failures are cheap. */
+export const EMBEDDING_BATCH_SIZE = 96
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 const DEFAULT_CONTEXT_MESSAGE_LIMIT = 20
 
