@@ -1,9 +1,9 @@
 import crypto from 'node:crypto'
 import { NextResponse, after } from 'next/server'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
-import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { decryptProviderCredentials } from '@/lib/channels/credentials'
 import { persistInboundChannelMessage } from '@/lib/channels/inbound'
+import { orchestrateInboundChannelMessage } from '@/lib/channels/orchestrate-inbound'
 import { applyMessageDeliveryStatus, mapTwilioStatus } from '@/lib/orchestration/status'
 
 export const maxDuration = 30
@@ -122,18 +122,17 @@ export async function POST(request: Request) {
     payload: Object.fromEntries(params.entries()),
   })
 
-  // AI auto-reply for plain-text inbound, matching the Meta webhook's
-  // behavior. Awaited inside `after()` so Twilio gets its TwiML ack
-  // immediately while the LLM call finishes in the background.
-  // `dispatchInboundToAiReply` owns its eligibility gates + try/catch
-  // and never throws.
-  if (!result.duplicate && result.conversationId && result.contactId && inboundText?.trim()) {
-    const { conversationId, contactId } = result
+  if (!result.duplicate) {
     after(async () => {
-      await dispatchInboundToAiReply({
+      await orchestrateInboundChannelMessage({
         accountId: connection.account_id,
-        conversationId,
-        contactId,
+        conversationId: result.conversationId,
+        contactId: result.contactId,
+        externalMessageId: messageSid,
+        text: inboundText,
+        contentType,
+        contactCreated: result.contactCreated,
+        isFirstInboundMessage: result.isFirstInboundMessage,
         configOwnerUserId: connection.created_by_user_id ?? '',
       })
     })
