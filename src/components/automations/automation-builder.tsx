@@ -547,12 +547,14 @@ function DealPipelineFields({
 function SendTemplateFields({
   templateName,
   language,
+  provider,
   onChange,
   t,
 }: {
   templateName: string
   language: string
-  onChange: (patch: { template_name: string; language: string }) => void
+  provider: string
+  onChange: (patch: { template_name: string; language: string; template_provider?: string }) => void
   t: ReturnType<typeof useTranslations>
 }) {
   const { templates } = useResources()
@@ -584,10 +586,10 @@ function SendTemplateFields({
 
   // Encode name + language in the option value so two templates that
   // share a name across languages stay distinct.
-  const toValue = (name: string, lang: string) => `${name}::${lang}`
-  const current = templateName ? toValue(templateName, language) : ""
+  const toValue = (name: string, lang: string, source: string) => `${source}::${name}::${lang}`
+  const current = templateName ? toValue(templateName, language, provider || 'meta') : ""
   const hasMatch = templates.some(
-    (t) => toValue(t.name, t.language ?? "en_US") === current,
+    (t) => toValue(t.name, t.language ?? "en_US", t.provider ?? 'meta') === current,
   )
 
   return (
@@ -595,8 +597,8 @@ function SendTemplateFields({
       <select
         value={current}
         onChange={(e) => {
-          const [name, lang] = e.target.value.split("::")
-          onChange({ template_name: name ?? "", language: lang ?? "" })
+          const [source, name, lang] = e.target.value.split("::")
+          onChange({ template_name: name ?? "", language: lang ?? "", template_provider: source || 'meta' })
         }}
         className={SELECT_CLASS}
       >
@@ -604,8 +606,8 @@ function SendTemplateFields({
         {templates.map((tmpl) => {
           const lang = tmpl.language ?? "en_US"
           return (
-            <option key={tmpl.id} value={toValue(tmpl.name, lang)}>
-              {tmpl.name} ({lang})
+            <option key={tmpl.id} value={toValue(tmpl.name, lang, tmpl.provider ?? 'meta')}>
+              [{(tmpl.provider ?? 'meta').toUpperCase()}] {tmpl.name} ({lang})
             </option>
           )
         })}
@@ -1308,8 +1310,9 @@ function StepEditor({
       return (
         <SendTemplateFields
           templateName={(cfg.template_name as string) ?? ""}
-          language={(cfg.language as string) ?? ""}
-          onChange={(patch) => set(patch)}
+      language={(cfg.language as string) ?? ""}
+      provider={(cfg.template_provider as string) ?? "meta"}
+      onChange={(patch) => set(patch)}
           t={t}
         />
       )
