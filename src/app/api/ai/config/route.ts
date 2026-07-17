@@ -15,6 +15,7 @@ import {
   type AiProvider,
 } from '@/lib/ai/types'
 import { verifyValidationProof } from '@/lib/ai/validation-proof'
+import { OLLAMA_PLACEHOLDER_KEY } from '@/lib/ai/defaults'
 
 function bad(message: string) {
   return NextResponse.json({ error: message }, { status: 400 })
@@ -110,25 +111,32 @@ export async function POST(request: Request) {
     const model = typeof body.model === 'string' ? body.model.trim() : ''
     if (!model) return bad('model is required')
 
-    // Base URL is only meaningful (and required) for the custom
-    // OpenAI-compatible provider; presets derive theirs from the registry.
+    // Base URL is only meaningful for the custom OpenAI-compatible
+    // provider (required, https-only) and for Ollama (optional — falls
+    // back to OLLAMA_BASE_URL / the local daemon; http allowed since
+    // Ollama typically runs on localhost or a private network).
     let baseUrl: string | null = null
-    if (provider === 'custom') {
+    if (provider === 'custom' || provider === 'ollama') {
       const rawBaseUrl =
         typeof body.base_url === 'string' ? body.base_url.trim().replace(/\/+$/, '') : ''
-      if (!rawBaseUrl) {
+      if (!rawBaseUrl && provider === 'custom') {
         return bad('base_url is required for the custom provider')
       }
-      let parsed: URL
-      try {
-        parsed = new URL(rawBaseUrl)
-      } catch {
-        return bad('base_url must be a valid URL')
+      if (rawBaseUrl) {
+        let parsed: URL
+        try {
+          parsed = new URL(rawBaseUrl)
+        } catch {
+          return bad('base_url must be a valid URL')
+        }
+        if (provider === 'custom' && parsed.protocol !== 'https:') {
+          return bad('base_url must use https')
+        }
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+          return bad('base_url must be an http(s) URL')
+        }
+        baseUrl = rawBaseUrl
       }
-      if (parsed.protocol !== 'https:') {
-        return bad('base_url must use https')
-      }
-      baseUrl = rawBaseUrl
     }
 
     const systemPrompt =
@@ -161,7 +169,7 @@ export async function POST(request: Request) {
       handoffAgentId = rawHandoff
     }
 
-    const rawKey = typeof body.api_key === 'string' ? body.api_key.trim() : ''
+    let rawKey = typeof body.api_key === 'string' ? body.api_key.trim() : ''
 
     // Embeddings key (optional, for semantic KB search): a non-empty
     // string sets/replaces it; an explicit null clears it; absent leaves
@@ -178,6 +186,14 @@ export async function POST(request: Request) {
       .select('id, provider, model, api_key, base_url')
       .eq('account_id', accountId)
       .maybeSingle()
+
+    // Ollama ignores auth entirely — when the admin leaves the key blank
+    // and there's nothing stored, persist a harmless placeholder so the
+    // row still counts as "configured" (an empty api_key would fall
+    // through to the shared env-key fallback in loadAiConfig).
+    if (!rawKey && provider === 'ollama' && !existing?.api_key) {
+      rawKey = OLLAMA_PLACEHOLDER_KEY
+    }
 
     let apiKeyPlain: string
     if (rawKey) {

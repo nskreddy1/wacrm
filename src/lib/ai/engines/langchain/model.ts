@@ -3,7 +3,12 @@ import { ChatOpenAI } from '@langchain/openai'
 import { ChatAnthropic } from '@langchain/anthropic'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { AiError, type AiConfig, type AiUsage } from '../../types'
-import { MAX_OUTPUT_TOKENS, OPENAI_COMPAT_BASE_URL } from '../../defaults'
+import {
+  MAX_OUTPUT_TOKENS,
+  OPENAI_COMPAT_BASE_URL,
+  OLLAMA_PLACEHOLDER_KEY,
+  resolveOllamaBaseUrl,
+} from '../../defaults'
 
 // ============================================================
 // AiConfig → LangChain chat model.
@@ -46,6 +51,17 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         maxRetries: 0,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
       })
+    case 'ollama': {
+      // Self-hosted Ollama — OpenAI-compatible /v1 endpoint, no real
+      // API key (the daemon ignores auth, ChatOpenAI needs a non-empty one).
+      return new ChatOpenAI({
+        apiKey: apiKey || OLLAMA_PLACEHOLDER_KEY,
+        model,
+        maxRetries: 0,
+        maxTokens: MAX_OUTPUT_TOKENS,
+        configuration: { baseURL: resolveOllamaBaseUrl(config.baseUrl) },
+      })
+    }
     case 'custom': {
       // Bring-your-own OpenAI-compatible endpoint, per-account base URL.
       const baseUrl = config.baseUrl?.trim()

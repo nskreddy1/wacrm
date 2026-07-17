@@ -19,6 +19,10 @@ export type AiProvider =
   | 'mistral'
   | 'deepseek'
   | 'xai'
+  // Self-hosted Ollama server (OpenAI-compatible /v1 endpoint). No API
+  // key required; base URL defaults to the local daemon and can be
+  // overridden per-account (`baseUrl`) or via `OLLAMA_BASE_URL`.
+  | 'ollama'
   // Bring-your-own OpenAI-compatible endpoint (`baseUrl` required).
   | 'custom'
 
@@ -33,6 +37,7 @@ export const AI_PROVIDERS: readonly AiProvider[] = [
   'mistral',
   'deepseek',
   'xai',
+  'ollama',
   'custom',
 ]
 

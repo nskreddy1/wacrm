@@ -1,5 +1,10 @@
 import { AiError, type AiConfig, type ChatMessage } from '../../types'
-import { OPENAI_COMPAT_BASE_URL, aiRequestTimeoutMs } from '../../defaults'
+import {
+  OPENAI_COMPAT_BASE_URL,
+  OLLAMA_PLACEHOLDER_KEY,
+  aiRequestTimeoutMs,
+  resolveOllamaBaseUrl,
+} from '../../defaults'
 import { providerLabel } from '../../errors'
 import { generateOpenAi } from './openai'
 import { generateAnthropic } from './anthropic'
@@ -48,6 +53,20 @@ export async function generateReplyDirect(
       return generateAnthropic(providerArgs)
     case 'gemini':
       return generateGemini(providerArgs)
+    case 'ollama': {
+      // Self-hosted Ollama — OpenAI-compatible /v1 endpoint, no real
+      // API key (the daemon ignores auth, adapters need a non-empty one).
+      return generateOpenAi(
+        {
+          ...providerArgs,
+          apiKey: config.apiKey || OLLAMA_PLACEHOLDER_KEY,
+        },
+        {
+          baseUrl: resolveOllamaBaseUrl(config.baseUrl),
+          providerLabel: providerLabel('ollama'),
+        },
+      )
+    }
     case 'custom': {
       // Bring-your-own OpenAI-compatible endpoint, per-account base URL.
       const baseUrl = config.baseUrl?.trim()
