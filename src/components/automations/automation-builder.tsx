@@ -712,47 +712,51 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-background">
-      {/* Top bar. At sub-sm widths the "Active" label is hidden and the
-          switch moves to the right of the save button, so the name input
-          gets maximum width. */}
-      <header className="flex flex-shrink-0 items-center gap-2 border-b border-border bg-card/80 px-3 py-3 sm:gap-3 sm:px-4">
-        <button
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:flex-nowrap sm:gap-3 sm:px-4">
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={() => router.push("/automations")}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label={t("backToAutomations")}
         >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <input
-          value={state.name}
-          onChange={(e) => patchTop("name", e.target.value)}
-          placeholder={t("untitled")}
-          className="min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 text-sm font-semibold text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none sm:text-base"
-        />
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="hidden sm:inline">{t("active")}</span>
+          <ArrowLeft aria-hidden="true" />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <label htmlFor="automation-name" className="sr-only">
+            Automation name
+          </label>
+          <input
+            id="automation-name"
+            value={state.name}
+            onChange={(e) => patchTop("name", e.target.value)}
+            placeholder={t("untitled")}
+            className="w-full truncate rounded-md bg-transparent px-2 py-1 text-sm font-semibold text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none sm:text-base"
+          />
+          <p className="hidden px-2 text-xs text-muted-foreground sm:block">
+            {state.steps.length === 0 ? "Trigger only" : `${state.steps.length} top-level steps`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1">
+          <span className="hidden text-xs font-medium text-muted-foreground sm:inline">
+            {state.is_active ? t("active") : "Draft"}
+          </span>
           <Switch
             checked={state.is_active}
             onCheckedChange={(v) => patchTop("is_active", !!v)}
             aria-label={t("activeAria")}
           />
         </div>
-        <Button
-          onClick={save}
-          disabled={saving}
-          className="bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        <Button onClick={save} disabled={saving}>
+          {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
           {isEditing ? t("save") : t("saveDraft")}
         </Button>
       </header>
 
-      {/* Canvas */}
-      <div className="relative flex-1 overflow-y-auto">
-        <div className="absolute inset-0 bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none" />
-        <div className="relative mx-auto flex max-w-2xl flex-col items-center gap-0 px-4 py-10">
+      <div className="relative min-h-0 flex-1 overflow-auto bg-muted/30">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] [background-size:20px_20px]" />
+        <div className="relative mx-auto flex min-h-full max-w-3xl flex-col items-center px-4 py-6 sm:px-8 sm:py-8">
           <ResourcesProvider>
             <TriggerCard
               type={state.trigger_type}
