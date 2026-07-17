@@ -21,6 +21,7 @@ export const AI_PROVIDER_DEFAULT_MODEL: Record<AiProvider, string> = {
   mistral: 'mistral-small-latest',
   deepseek: 'deepseek-chat',
   xai: 'grok-3-mini',
+  ollama: 'qwen2.5:0.5b',
   custom: '',
 }
 
@@ -43,8 +44,34 @@ export const OPENAI_COMPAT_BASE_URL: Partial<Record<AiProvider, string>> = {
 
 /** Providers that use the shared OpenAI-compatible adapter. */
 export function isOpenAiCompatProvider(provider: AiProvider): boolean {
-  return provider === 'custom' || provider in OPENAI_COMPAT_BASE_URL
+  return (
+    provider === 'custom' ||
+    provider === 'ollama' ||
+    provider in OPENAI_COMPAT_BASE_URL
+  )
 }
+
+/** Where the local Ollama daemon's OpenAI-compatible endpoint lives by
+ *  default. */
+export const OLLAMA_DEFAULT_BASE_URL = 'http://localhost:11434/v1'
+
+/**
+ * Resolve the Ollama base URL for a config: the account's own
+ * `base_url` wins, then the deployment-wide `OLLAMA_BASE_URL` env var,
+ * then the local daemon default. Unlike `custom`, http is allowed —
+ * Ollama typically runs on localhost or a private network.
+ */
+export function resolveOllamaBaseUrl(configBaseUrl?: string | null): string {
+  const own = configBaseUrl?.trim().replace(/\/+$/, '')
+  if (own) return own
+  const env = process.env.OLLAMA_BASE_URL?.trim().replace(/\/+$/, '')
+  if (env) return env
+  return OLLAMA_DEFAULT_BASE_URL
+}
+
+/** Placeholder bearer token sent to Ollama — the daemon ignores auth,
+ *  but the OpenAI-compatible adapters require a non-empty key. */
+export const OLLAMA_PLACEHOLDER_KEY = 'ollama'
 
 /**
  * Sentinel the model is instructed to emit (in auto-reply mode) when it

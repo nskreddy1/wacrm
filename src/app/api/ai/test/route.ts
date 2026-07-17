@@ -10,6 +10,7 @@ import {
   type AiProvider,
 } from '@/lib/ai/types'
 import { createValidationProof } from '@/lib/ai/validation-proof'
+import { OLLAMA_PLACEHOLDER_KEY } from '@/lib/ai/defaults'
 
 /**
  * POST /api/ai/test  (admin+)
@@ -44,30 +45,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'model is required' }, { status: 400 })
     }
 
-    // Custom OpenAI-compatible endpoint needs its base URL to be testable.
+    // Custom OpenAI-compatible endpoint needs its base URL to be
+    // testable (https-only). Ollama's is optional — http allowed since
+    // the daemon typically runs on localhost or a private network.
     let baseUrl: string | null = null
-    if (provider === 'custom') {
+    if (provider === 'custom' || provider === 'ollama') {
       const rawBaseUrl =
         typeof body.base_url === 'string' ? body.base_url.trim().replace(/\/+$/, '') : ''
-      if (!rawBaseUrl) {
+      if (!rawBaseUrl && provider === 'custom') {
         return NextResponse.json(
           { error: 'base_url is required for the custom provider' },
           { status: 400 },
         )
       }
-      try {
-        if (new URL(rawBaseUrl).protocol !== 'https:') throw new Error()
-      } catch {
-        return NextResponse.json(
-          { error: 'base_url must be a valid https URL' },
-          { status: 400 },
-        )
+      if (rawBaseUrl) {
+        try {
+          const proto = new URL(rawBaseUrl).protocol
+          if (provider === 'custom' && proto !== 'https:') throw new Error()
+          if (proto !== 'https:' && proto !== 'http:') throw new Error()
+        } catch {
+          return NextResponse.json(
+            { error: 'base_url must be a valid URL' },
+            { status: 400 },
+          )
+        }
+        baseUrl = rawBaseUrl
       }
-      baseUrl = rawBaseUrl
     }
 
     const rawKey = typeof body.api_key === 'string' ? body.api_key.trim() : ''
     let apiKeyPlain = rawKey
+    // Ollama ignores auth — test with the placeholder when no key given.
+    if (!apiKeyPlain && provider === 'ollama') {
+      apiKeyPlain = OLLAMA_PLACEHOLDER_KEY
+    }
     if (!apiKeyPlain) {
       const { data: existing } = await supabase
         .from('ai_configs')

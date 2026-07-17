@@ -23,6 +23,7 @@ const PROVIDER_ERROR_LABEL: Partial<Record<AiProvider, string>> = {
   mistral: 'Mistral',
   deepseek: 'DeepSeek',
   xai: 'xAI',
+  ollama: 'Ollama',
   custom: 'Custom endpoint',
 }
 

@@ -49,6 +49,7 @@ const PROVIDER_LABEL: Record<AiProvider, string> = {
   mistral: 'Mistral',
   deepseek: 'DeepSeek',
   xai: 'xAI (Grok)',
+  ollama: 'Ollama (self-hosted)',
   custom: 'Custom (OpenAI-compatible)',
 };
 
@@ -63,6 +64,7 @@ const KEY_PLACEHOLDER: Record<AiProvider, string> = {
   mistral: 'API key',
   deepseek: 'sk-...',
   xai: 'xai-...',
+  ollama: 'Not required',
   custom: 'API key',
 };
 
@@ -120,6 +122,7 @@ export function AiConfig() {
         setConfigured(true);
         setProvider(data.provider);
         setModel(data.model);
+        setBaseUrl(data.base_url ?? '');
         setSystemPrompt(data.system_prompt ?? '');
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
@@ -155,10 +158,8 @@ export function AiConfig() {
     setProvider(next);
     setValidationProof(null);
     const isDefaultModel =
-      model === AI_PROVIDER_DEFAULT_MODEL.openai ||
-      model === AI_PROVIDER_DEFAULT_MODEL.anthropic ||
-      model === AI_PROVIDER_DEFAULT_MODEL.gemini ||
-      model.trim() === '';
+      model.trim() === '' ||
+      Object.values(AI_PROVIDER_DEFAULT_MODEL).includes(model);
     if (isDefaultModel) setModel(AI_PROVIDER_DEFAULT_MODEL[next]);
   };
 
@@ -168,9 +169,16 @@ export function AiConfig() {
   const embeddingsKeyPayload = () =>
     embeddingsKeyEdited ? embeddingsKey.trim() || null : undefined;
 
+  // Base URL only applies to custom (required) and ollama (optional).
+  const baseUrlPayload = () =>
+    provider === 'custom' || provider === 'ollama'
+      ? baseUrl.trim() || null
+      : null;
+
   const buildBody = () => ({
     provider,
     model: model.trim(),
+    base_url: baseUrlPayload(),
     api_key: keyPayload(),
     embeddings_api_key: embeddingsKeyPayload(),
     system_prompt: systemPrompt.trim() || null,
@@ -190,6 +198,7 @@ export function AiConfig() {
         body: JSON.stringify({
           provider,
           model: model.trim(),
+          base_url: baseUrlPayload(),
           api_key: keyPayload(),
         }),
       });
