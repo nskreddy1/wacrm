@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Sparkles, CheckCircle2, Trash2, Eye, EyeOff } from 'lucide-react';
+import {
+  Loader2,
+  Sparkles,
+  CheckCircle2,
+  Trash2,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { canEditSettings } from '@/lib/auth/roles';
 import { Button } from '@/components/ui/button';
@@ -27,7 +34,14 @@ import {
 import { SettingsPanelHead } from './settings-panel-head';
 import { AiKnowledgeCard } from './ai-knowledge';
 import { AI_PROVIDER_DEFAULT_MODEL } from '@/lib/ai/defaults';
+import {
+  AI_PROVIDER_OPTIONS,
+  getProviderCapabilities,
+  normalizeProviderBaseUrl,
+  OLLAMA_DEFAULT_BASE_URL,
+} from '@/lib/ai/providers';
 import type { AiProvider } from '@/lib/ai/types';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { AccountMember } from '@/types';
 import { fetchAccountMembers, memberLabel } from '@/lib/account/members';
 import { useTranslations } from 'next-intl';
@@ -38,35 +52,9 @@ const MASKED_KEY = '••••••••••••••••';
 // unassigned" choice gets a sentinel that maps to null in the payload.
 const HANDOFF_QUEUE = '__queue__';
 
-const PROVIDER_LABEL: Record<AiProvider, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic (Claude)',
-  gemini: 'Google (Gemini)',
-  nvidia: 'NVIDIA (NIM)',
-  groq: 'Groq',
-  openrouter: 'OpenRouter',
-  together: 'Together AI',
-  mistral: 'Mistral',
-  deepseek: 'DeepSeek',
-  xai: 'xAI (Grok)',
-  ollama: 'Ollama (self-hosted)',
-  custom: 'Custom (OpenAI-compatible)',
-};
-
-const KEY_PLACEHOLDER: Record<AiProvider, string> = {
-  openai: 'sk-...',
-  anthropic: 'sk-ant-...',
-  gemini: 'AIza...',
-  nvidia: 'nvapi-...',
-  groq: 'gsk_...',
-  openrouter: 'sk-or-...',
-  together: 'API key',
-  mistral: 'API key',
-  deepseek: 'sk-...',
-  xai: 'xai-...',
-  ollama: 'Not required',
-  custom: 'API key',
-};
+const PROVIDER_LABEL = Object.fromEntries(
+  AI_PROVIDER_OPTIONS.map(({ value, label }) => [value, label])
+) as Record<AiProvider, string>;
 
 export function AiConfig() {
   const { accountId, accountRole, profileLoading } = useAuth();
@@ -140,7 +128,7 @@ export function AiConfig() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!accountId || loadedAccountIdRef.current === accountId) return;
@@ -157,23 +145,27 @@ export function AiConfig() {
   const handleProviderChange = (next: AiProvider) => {
     setProvider(next);
     setValidationProof(null);
+    const capabilities = getProviderCapabilities(next);
+    if (!capabilities.supportsBaseUrl) setBaseUrl('');
+    if (next === 'ollama' && !baseUrl.trim())
+      setBaseUrl(OLLAMA_DEFAULT_BASE_URL);
     const isDefaultModel =
       model.trim() === '' ||
       Object.values(AI_PROVIDER_DEFAULT_MODEL).includes(model);
     if (isDefaultModel) setModel(AI_PROVIDER_DEFAULT_MODEL[next]);
   };
 
-  const keyPayload = () => (keyEdited ? apiKey.trim() : undefined);
+  const providerCapabilities = getProviderCapabilities(provider);
+  const keyPayload = () =>
+    providerCapabilities.requiresApiKey && keyEdited
+      ? apiKey.trim()
+      : undefined;
 
   // undefined = leave unchanged; '' typed = null (clear); text = set.
   const embeddingsKeyPayload = () =>
     embeddingsKeyEdited ? embeddingsKey.trim() || null : undefined;
 
-  // Base URL only applies to custom (required) and ollama (optional).
-  const baseUrlPayload = () =>
-    provider === 'custom' || provider === 'ollama'
-      ? baseUrl.trim() || null
-      : null;
+  const baseUrlPayload = () => normalizeProviderBaseUrl(provider, baseUrl);
 
   const buildBody = () => ({
     provider,
@@ -222,7 +214,7 @@ export function AiConfig() {
       toast.error(t('missingModel'));
       return;
     }
-    if (!configured && !keyEdited) {
+    if (!configured && providerCapabilities.requiresApiKey && !keyEdited) {
       toast.error(t('missingApiKey'));
       return;
     }
@@ -274,9 +266,27 @@ export function AiConfig() {
 
   if (loading || profileLoading) {
     return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t('loadFailed')} {/* Re-using label or a global one, wait, loading is better. Let's use useTranslations from overview or just hardcode Loading... actually I should add loading to aiConfig */}
-        {/* Wait, I didn't add loading to aiConfig. I'll just use loading. */}
+      <div
+        className="flex flex-col gap-6"
+        aria-busy="true"
+        aria-label={t('loading')}
+      >
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-full max-w-xl" />
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-full max-w-lg" />
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </CardContent>
+        </Card>
+        <span className="sr-only">{t('loading')}</span>
       </div>
     );
   }
@@ -285,13 +295,10 @@ export function AiConfig() {
 
   return (
     <div>
-      <SettingsPanelHead
-        title={t('title')}
-        description={t('description')}
-      />
+      <SettingsPanelHead title={t('title')} description={t('description')} />
 
       {!canEdit && (
-        <p className="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        <p className="border-border bg-muted/40 text-muted-foreground mb-4 rounded-md border px-3 py-2 text-sm">
           {t('adminOnlyConfig')}
         </p>
       )}
@@ -300,11 +307,10 @@ export function AiConfig() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4 text-primary" /> {t('providerAndKey')}
+              <Sparkles className="text-primary h-4 w-4" />{' '}
+              {t('providerAndKey')}
             </CardTitle>
-            <CardDescription>
-              {t('encryptionNotice')}
-            </CardDescription>
+            <CardDescription>{t('encryptionNotice')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -320,11 +326,11 @@ export function AiConfig() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="openai">{PROVIDER_LABEL.openai}</SelectItem>
-                    <SelectItem value="anthropic">
-                      {PROVIDER_LABEL.anthropic}
-                    </SelectItem>
-                    <SelectItem value="gemini">{PROVIDER_LABEL.gemini}</SelectItem>
+                    {AI_PROVIDER_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -344,61 +350,116 @@ export function AiConfig() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="ai-key">{t('apiKey')}</Label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    id="ai-key"
-                    type={showKey ? 'text' : 'password'}
-                    value={apiKey}
-                    onChange={(e) => {
-                      setApiKey(e.target.value);
-                      setKeyEdited(true);
-                      setValidationProof(null);
-                    }}
-                    onFocus={() => {
-                      if (!keyEdited && hasStoredKey) {
-                        setApiKey('');
-                        setKeyEdited(true);
-                      }
-                    }}
-                    placeholder={KEY_PLACEHOLDER[provider]}
-                    disabled={disabled}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey((s) => !s)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
-                  >
-                    {showKey ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={handleTest}
-                  disabled={disabled || testing}
-                >
-                  {testing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                  )}
-                  {t('testKey')}
-                </Button>
+            {providerCapabilities.supportsBaseUrl && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="ai-base-url">{t('baseUrl')}</Label>
+                <Input
+                  id="ai-base-url"
+                  type="url"
+                  value={baseUrl}
+                  onChange={(event) => {
+                    setBaseUrl(event.target.value);
+                    setValidationProof(null);
+                  }}
+                  placeholder={
+                    provider === 'ollama'
+                      ? OLLAMA_DEFAULT_BASE_URL
+                      : 'https://ai.example.com/v1'
+                  }
+                  disabled={disabled}
+                />
+                <p className="text-muted-foreground text-xs">
+                  {provider === 'ollama'
+                    ? t('ollamaBaseUrlHint')
+                    : t('customBaseUrlHint')}
+                </p>
               </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              {providerCapabilities.requiresApiKey ? (
+                <>
+                  <Label htmlFor="ai-key">{t('apiKey')}</Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        id="ai-key"
+                        type={showKey ? 'text' : 'password'}
+                        value={apiKey}
+                        onChange={(e) => {
+                          setApiKey(e.target.value);
+                          setKeyEdited(true);
+                          setValidationProof(null);
+                        }}
+                        onFocus={() => {
+                          if (!keyEdited && hasStoredKey) {
+                            setApiKey('');
+                            setKeyEdited(true);
+                          }
+                        }}
+                        placeholder={providerCapabilities.keyPlaceholder}
+                        disabled={disabled}
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowKey((s) => !s)}
+                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
+                        tabIndex={-1}
+                        aria-label={showKey ? t('hideApiKey') : t('showApiKey')}
+                      >
+                        {showKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleTest}
+                      disabled={disabled || testing}
+                    >
+                      {testing ? (
+                        <Loader2
+                          data-icon="inline-start"
+                          className="animate-spin"
+                        />
+                      ) : (
+                        <CheckCircle2 data-icon="inline-start" />
+                      )}
+                      {t('testKey')}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="border-border flex items-center justify-between gap-4 rounded-md border p-3">
+                  <p className="text-muted-foreground text-sm">
+                    {t('ollamaKeylessHint')}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={handleTest}
+                    disabled={disabled || testing}
+                  >
+                    {testing ? (
+                      <Loader2
+                        data-icon="inline-start"
+                        className="animate-spin"
+                      />
+                    ) : (
+                      <CheckCircle2 data-icon="inline-start" />
+                    )}
+                    {t('testConnection')}
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="ai-embeddings-key">
                 {t('embeddingsKey')}{' '}
-                <span className="font-normal text-muted-foreground">
+                <span className="text-muted-foreground font-normal">
                   {t('optionalSemanticSearch')}
                 </span>
               </Label>
@@ -420,7 +481,7 @@ export function AiConfig() {
                 disabled={disabled}
                 autoComplete="off"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {t('embeddingsHint', {
                   sameKeyText: provider === 'openai' ? t('sameKeyText') : '',
                 })}
@@ -432,9 +493,7 @@ export function AiConfig() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t('behaviour')}</CardTitle>
-            <CardDescription>
-              {t('behaviourDesc')}
-            </CardDescription>
+            <CardDescription>{t('behaviourDesc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -449,12 +508,12 @@ export function AiConfig() {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+            <div className="border-border flex items-center justify-between gap-4 rounded-md border p-3">
               <div>
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-foreground text-sm font-medium">
                   {t('enableAssistant')}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {t('enableAssistantDesc')}
                 </p>
               </div>
@@ -465,12 +524,12 @@ export function AiConfig() {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+            <div className="border-border flex items-center justify-between gap-4 rounded-md border p-3">
               <div>
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-foreground text-sm font-medium">
                   {t('autoReply')}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {t('autoReplyDesc')}
                 </p>
               </div>
@@ -484,7 +543,7 @@ export function AiConfig() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <Label htmlFor="ai-max">{t('maxAutoReplies')}</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {t('maxAutoRepliesDesc')}
                 </p>
               </div>
@@ -496,7 +555,7 @@ export function AiConfig() {
                 value={maxPerConversation}
                 onChange={(e) =>
                   setMaxPerConversation(
-                    Math.min(20, Math.max(1, Number(e.target.value) || 1)),
+                    Math.min(20, Math.max(1, Number(e.target.value) || 1))
                   )
                 }
                 disabled={disabled || !autoReplyEnabled}
@@ -506,13 +565,15 @@ export function AiConfig() {
 
             <div className="space-y-2">
               <Label htmlFor="ai-handoff">{t('handoffTo')}</Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {t('handoffToDesc')}
               </p>
               <Select
                 items={{
                   [HANDOFF_QUEUE]: t('handoffQueue'),
-                  ...Object.fromEntries(members.map((m) => [m.user_id, memberLabel(m)])),
+                  ...Object.fromEntries(
+                    members.map((m) => [m.user_id, memberLabel(m)])
+                  ),
                 }}
                 value={handoffAgentId || HANDOFF_QUEUE}
                 onValueChange={(v) =>
