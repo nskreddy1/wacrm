@@ -2,13 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { ChatOpenAI } from '@langchain/openai'
 import { ChatAnthropic } from '@langchain/anthropic'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
-import {
-  normalizeLcUsage,
-  providerLabel,
-  resolveChatModel,
-  toAiError,
-} from './model'
-import { AiError, type AiConfig, type AiProvider } from './types'
+import { normalizeLcUsage, resolveChatModel } from './model'
+import { providerLabel, toAiError } from '../../errors'
+import { AiError, type AiConfig, type AiProvider } from '../../types'
 
 function config(overrides: Partial<AiConfig> = {}): AiConfig {
   return {
