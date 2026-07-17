@@ -11,10 +11,11 @@ import {
 // ============================================================
 // Platform settings — super-admin control surface.
 //
-// The interim API for flipping the platform-wide `ai_engine` flag
-// (a full super-admin UI is a future phase). Both methods require an
-// authenticated Supabase user whose email is on the
-// SUPER_ADMIN_EMAILS allowlist; everyone else gets 403.
+// The API behind the /admin page for flipping the platform-wide
+// `ai_engine` flag. Both methods require an authenticated Supabase
+// user who is a platform super admin (profiles.platform_role =
+// 'super_admin', or the SUPER_ADMIN_EMAILS env escape hatch);
+// everyone else gets 403.
 //
 // The table itself has RLS enabled with no policies, so reads/writes
 // only ever happen here through the service-role client — after the
@@ -31,7 +32,7 @@ async function requireSuperAdmin(): Promise<NextResponse | null> {
   if (!user) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
-  if (!isSuperAdmin(user.email)) {
+  if (!(await isSuperAdmin(user))) {
     return NextResponse.json(
       { error: 'Super admin access required' },
       { status: 403 },

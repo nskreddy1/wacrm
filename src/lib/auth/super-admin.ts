@@ -1,16 +1,27 @@
+import { supabaseAdmin } from '@/lib/ai/admin-client'
+
 // ============================================================
 // Super admin — platform-level operator identity.
 //
-// There is no super-admin role in the database (yet); operators are
-// identified by an env allowlist so platform-wide switches (like the
-// AI engine flag) can ship before the full super-admin UI phase.
+// Two sources of truth, checked in order:
 //
-//   SUPER_ADMIN_EMAILS="ops@example.com, cto@example.com"
+//   1. `profiles.platform_role = 'super_admin'` — the DB-backed role
+//      seeded by migration 045 (admin@wacrm.app) and the foundation
+//      for the future multi-role platform-admin phase.
+//   2. SUPER_ADMIN_EMAILS env allowlist — an operational escape hatch
+//      ("break glass") that works even if the DB row is wrong:
 //
-// Comparison is case-insensitive and whitespace-tolerant. An unset /
-// empty var means NOBODY is a super admin — the platform-settings
-// API simply returns 403 for everyone.
+//        SUPER_ADMIN_EMAILS="ops@example.com, cto@example.com"
+//
+// Comparison is case-insensitive and whitespace-tolerant. No DB row
+// and no allowlist match means NOT a super admin — the admin surfaces
+// simply return 403 / redirect.
 // ============================================================
+
+export type SuperAdminUser = {
+  id: string
+  email?: string | null
+}
 
 /** Parse the allowlist from env: comma-separated, trimmed, lowercased. */
 function allowlist(): string[] {
@@ -20,12 +31,41 @@ function allowlist(): string[] {
     .filter((e) => e.length > 0)
 }
 
-/**
- * Is this email a platform super admin? `null`/`undefined`/empty
- * emails are never super admins.
- */
-export function isSuperAdmin(email: string | null | undefined): boolean {
+/** Env-only check — sync, no DB. Exposed for tests and cheap paths. */
+export function isAllowlistedSuperAdmin(
+  email: string | null | undefined,
+): boolean {
   const normalized = email?.trim().toLowerCase()
   if (!normalized) return false
   return allowlist().includes(normalized)
+}
+
+/**
+ * Is this authenticated user a platform super admin?
+ *
+ * Env allowlist wins first (no query needed); otherwise the profile's
+ * `platform_role` decides. A DB error fails CLOSED (returns false) —
+ * an outage must never widen access to platform-wide switches.
+ */
+export async function isSuperAdmin(
+  user: SuperAdminUser | null | undefined,
+): Promise<boolean> {
+  if (!user?.id) return false
+  if (isAllowlistedSuperAdmin(user.email)) return true
+
+  try {
+    const { data, error } = await supabaseAdmin()
+      .from('profiles')
+      .select('platform_role')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (error) {
+      console.error('[auth/super-admin] role read failed:', error.message)
+      return false
+    }
+    return data?.platform_role === 'super_admin'
+  } catch (err) {
+    console.error('[auth/super-admin] role read threw:', err)
+    return false
+  }
 }
