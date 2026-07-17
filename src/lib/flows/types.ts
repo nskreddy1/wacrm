@@ -309,15 +309,15 @@ export const DEFAULT_FALLBACK_POLICY: FlowFallbackPolicy = {
 
 /**
  * Normalised view of an inbound message that the runner needs. The
- * webhook lifts this out of the raw Meta payload before invoking the
- * runner; keeps the runner free of any WhatsApp-API specifics.
+ * provider webhook lifts this out of the raw payload before invoking the
+ * runner, keeping the runner free of provider-specific payload details.
  */
 export type ParsedInbound =
   | {
       kind: "text";
       /** The user's typed message body. */
       text: string;
-      /** Meta's `messages[0].id` — used for idempotency. */
+      /** Provider external message ID — used for idempotency. */
       meta_message_id: string;
     }
   | {

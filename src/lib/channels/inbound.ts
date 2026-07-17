@@ -23,11 +23,21 @@ interface ConnectionRow {
   external_identity: string | null
 }
 
+export type PersistInboundChannelMessageResult =
+  | { duplicate: true }
+  | {
+      duplicate: false
+      conversationId: string
+      contactId: string
+      contactCreated: boolean
+      isFirstInboundMessage: boolean
+    }
+
 export async function persistInboundChannelMessage(
   db: SupabaseClient,
   connection: ConnectionRow,
   message: InboundChannelMessage,
-) {
+): Promise<PersistInboundChannelMessageResult> {
   const normalizedFrom = normalizePhone(message.from.replace(/^whatsapp:/, ''))
   const eventId = `${connection.id}:${message.externalMessageId}`
   const { data: event, error: eventError } = await db
@@ -53,6 +63,7 @@ export async function persistInboundChannelMessage(
   try {
     const ownerId = connection.created_by_user_id ?? await resolveAuditUserId(db, connection.account_id)
     let contactId: string
+    let contactCreated = false
     const { data: identity } = await db
       .from('contact_identities')
       .select('contact_id')
@@ -80,6 +91,7 @@ export async function persistInboundChannelMessage(
           .single()
         if (error) throw error
         contactId = created.id
+        contactCreated = true
       }
       const { error: identityError } = await db.from('contact_identities').upsert({
         account_id: connection.account_id,
@@ -113,6 +125,14 @@ export async function persistInboundChannelMessage(
       conversation = created
     }
 
+    const { count: priorInboundCount, error: countError } = await db
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', conversation.id)
+      .eq('sender_type', 'customer')
+    if (countError) throw countError
+    const isFirstInboundMessage = (priorInboundCount ?? 0) === 0
+
     const timestamp = message.occurredAt || new Date().toISOString()
     const { error: messageError } = await db.from('messages').insert({
       conversation_id: conversation.id,
@@ -139,7 +159,13 @@ export async function persistInboundChannelMessage(
     if (conversationError) throw conversationError
 
     await db.from('channel_webhook_events').update({ status: 'processed', processed_at: new Date().toISOString() }).eq('id', event.id)
-    return { duplicate: false, conversationId: conversation.id, contactId }
+    return {
+      duplicate: false,
+      conversationId: conversation.id,
+      contactId,
+      contactCreated,
+      isFirstInboundMessage,
+    }
   } catch (error) {
     await db.from('channel_webhook_events').update({
       status: 'failed',

@@ -1,8 +1,8 @@
 import { NextResponse, after } from 'next/server'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
-import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { decryptProviderCredentials } from '@/lib/channels/credentials'
 import { persistInboundChannelMessage } from '@/lib/channels/inbound'
+import { orchestrateInboundChannelMessage } from '@/lib/channels/orchestrate-inbound'
 import { verifyMetaSignatureWithSecret } from '@/lib/whatsapp/webhook-signature'
 
 export const maxDuration = 30
@@ -70,18 +70,19 @@ export async function POST(request: Request) {
           payload: message,
         })
 
-        // AI auto-reply for plain-text inbound, mirroring the Twilio
-        // channel webhook. Awaited inside `after()` so Meta gets its 200
-        // immediately while the LLM call finishes in the background.
-        // `dispatchInboundToAiReply` owns its eligibility gates +
-        // try/catch and never throws.
-        if (!result.duplicate && result.conversationId && result.contactId && inboundText?.trim()) {
-          const { conversationId, contactId } = result
+        if (!result.duplicate) {
           after(async () => {
-            await dispatchInboundToAiReply({
+            await orchestrateInboundChannelMessage({
               accountId: connection.account_id,
-              conversationId,
-              contactId,
+              conversationId: result.conversationId,
+              contactId: result.contactId,
+              externalMessageId: String(message.id),
+              text: inboundText,
+              contentType: ['image', 'document', 'audio', 'video'].includes(type)
+                ? type as 'image' | 'document' | 'audio' | 'video'
+                : 'text',
+              contactCreated: result.contactCreated,
+              isFirstInboundMessage: result.isFirstInboundMessage,
               configOwnerUserId: connection.created_by_user_id ?? '',
             })
           })

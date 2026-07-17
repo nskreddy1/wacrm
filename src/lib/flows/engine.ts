@@ -21,9 +21,8 @@
  *   - Type definitions — `types.ts`.
  *
  * Concurrency model:
- *   - Idempotency on `meta_message_id`: the runner refuses to advance
- *     an active run twice for the same Meta message — protects against
- *     Meta's retries.
+ *   - Idempotency on `meta_message_id`: the legacy field stores any
+ *     provider's external message ID, so retries cannot advance a run twice.
  *   - Optimistic UPDATE with `current_node_key` precondition: two
  *     simultaneous taps for the same run collide at the DB layer; the
  *     second is a no-op.
