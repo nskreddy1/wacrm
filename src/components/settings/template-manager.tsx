@@ -64,6 +64,7 @@ const categoryColors: Record<string, string> = {
 };
 
 interface TemplateFormData {
+  provider: 'meta' | 'twilio';
   name: string;
   category: MessageTemplate['category'];
   language: string;
@@ -78,6 +79,7 @@ interface TemplateFormData {
 }
 
 const emptyForm: TemplateFormData = {
+  provider: 'meta',
   name: '',
   category: 'Marketing',
   language: 'en_US',
@@ -133,7 +135,9 @@ export function TemplateManager() {
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [syncing, setSyncing] = useState<'meta' | 'twilio' | null>(null);
+  const [query, setQuery] = useState('');
+  const [providerFilter, setProviderFilter] = useState<'all' | 'meta' | 'twilio'>('all');
   const [form, setForm] = useState<TemplateFormData>(emptyForm);
   // Non-null when the dialog is editing an existing row — switches the
   // submit handler from POST /submit to PATCH /[id] and changes the
@@ -215,6 +219,7 @@ export function TemplateManager() {
     }
 
     return {
+      provider: form.provider,
       name: form.name.trim(),
       category: form.category,
       language: form.language.trim() || 'en_US',
@@ -236,6 +241,7 @@ export function TemplateManager() {
   function openEdit(template: MessageTemplate) {
     setEditingId(template.id);
     setForm({
+      provider: template.provider ?? 'meta',
       name: template.name,
       category: template.category,
       language: template.language || 'en_US',
@@ -264,13 +270,18 @@ export function TemplateManager() {
     try {
       setSubmitting(true);
       const isEdit = editingId !== null;
+      if (isEdit && form.provider === 'twilio') {
+        throw new Error('Twilio templates are versioned. Create a new template instead of editing this one.');
+      }
       const url = isEdit
         ? `/api/whatsapp/templates/${editingId}`
-        : '/api/whatsapp/templates/submit';
+        : form.provider === 'twilio'
+          ? '/api/whatsapp/templates/twilio'
+          : '/api/whatsapp/templates/submit';
       const res = await fetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildSubmitPayload()),
+        body: JSON.stringify(form.provider === 'twilio' ? { action: 'create', ...buildSubmitPayload() } : buildSubmitPayload()),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -301,11 +312,15 @@ export function TemplateManager() {
     }
   }
 
-  async function handleSyncFromMeta() {
+  async function handleSync(provider: 'meta' | 'twilio') {
     if (!user) return;
-    setSyncing(true);
+    setSyncing(provider);
     try {
-      const res = await fetch('/api/whatsapp/templates/sync', { method: 'POST' });
+      const res = await fetch(provider === 'twilio' ? '/api/whatsapp/templates/twilio' : '/api/whatsapp/templates/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: provider === 'twilio' ? JSON.stringify({ action: 'sync' }) : undefined,
+      });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error || `Sync failed (HTTP ${res.status})`);
@@ -339,7 +354,7 @@ export function TemplateManager() {
       console.error('Template sync error:', err);
       toast.error(err instanceof Error ? err.message : t('toastSyncError'));
     } finally {
-      setSyncing(false);
+      setSyncing(null);
     }
   }
 
@@ -457,6 +472,16 @@ export function TemplateManager() {
 
   const headerNeedsMedia =
     form.header_format !== 'none' && form.header_format !== 'text';
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleTemplates = templates.filter((template) => {
+    const provider = template.provider ?? 'meta';
+    if (providerFilter !== 'all' && provider !== providerFilter) return false;
+    if (!normalizedQuery) return true;
+    return [template.name, template.language, template.category, template.status, template.body_text, provider]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(normalizedQuery));
+  });
+  const previewText = (text: string) => text.replace(/\{\{(\d+)\}\}/g, (_, index) => form.body_samples[Number(index) - 1] || `{{${index}}}`);
 
   async function handleHeaderImageFile(file: File) {
     if (!['image/jpeg', 'image/png'].includes(file.type)) {
@@ -488,14 +513,13 @@ export function TemplateManager() {
         description={t('description')}
         action={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleSyncFromMeta}
-              disabled={syncing}
-              title={t('syncTitle')}
-            >
-              <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? t('syncing') : t('syncFromMeta')}
+            <Button variant="outline" onClick={() => handleSync('meta')} disabled={syncing !== null} title={t('syncTitle')}>
+              <RefreshCw className={`size-4 ${syncing === 'meta' ? 'animate-spin' : ''}`} />
+              {syncing === 'meta' ? t('syncing') : t('syncFromMeta')}
+            </Button>
+            <Button variant="outline" onClick={() => handleSync('twilio')} disabled={syncing !== null} title="Sync templates from Twilio Content API">
+              <RefreshCw className={`size-4 ${syncing === 'twilio' ? 'animate-spin' : ''}`} />
+              {syncing === 'twilio' ? 'Syncing…' : 'Sync from Twilio'}
             </Button>
             <Button onClick={openCreate}>
               <Plus className="size-4" />
@@ -504,6 +528,14 @@ export function TemplateManager() {
           </div>
         }
       />
+
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row">
+        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, body, language, category, status…" aria-label="Search templates" className="flex-1" />
+        <Select value={providerFilter} onValueChange={(value) => setProviderFilter(value as typeof providerFilter)}>
+          <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All providers</SelectItem><SelectItem value="meta">Meta</SelectItem><SelectItem value="twilio">Twilio</SelectItem></SelectContent>
+        </Select>
+      </div>
 
       {templates.length === 0 ? (
         <Card>
@@ -516,7 +548,7 @@ export function TemplateManager() {
         </Card>
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
-          {templates.map((template) => {
+          {visibleTemplates.map((template) => {
             const statusKey = template.status || 'DRAFT';
             const status = templateStatusConfig[statusKey];
             return (
@@ -525,6 +557,7 @@ export function TemplateManager() {
                   <div className="space-y-2 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-medium text-foreground">{template.name}</h3>
+                      <Badge variant="outline" className="text-xs uppercase">{template.provider ?? 'meta'}</Badge>
                       <Badge
                         className={`text-xs border ${categoryColors[template.category] || ''}`}
                       >
@@ -658,6 +691,14 @@ export function TemplateManager() {
           )}
 
           <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Template provider</Label>
+              <Select value={form.provider} onValueChange={(value) => setForm({ ...form, provider: value as 'meta' | 'twilio' })} disabled={editingId !== null}>
+                <SelectTrigger className="w-full bg-muted border-border text-foreground"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="meta">Meta WhatsApp Business</SelectItem><SelectItem value="twilio">Twilio Content API</SelectItem></SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">The template will be created and submitted for approval through this provider.</p>
+            </div>
             <div className="space-y-2">
               <Label className="text-muted-foreground">{t('templateName')}</Label>
               <Input
@@ -903,6 +944,23 @@ export function TemplateManager() {
                   })}
                 </div>
               )}
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-border bg-muted/40 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-foreground">Message preview</Label>
+                <Badge variant="outline" className="uppercase">{form.provider}</Badge>
+              </div>
+              <div className="ml-auto max-w-sm rounded-lg rounded-tr-sm bg-primary p-3 text-primary-foreground shadow-sm">
+                {form.header_format === 'image' && form.header_media_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.header_media_url} alt="Template header preview" className="mb-2 max-h-36 w-full rounded object-cover" />
+                )}
+                {form.header_format === 'text' && form.header_content && <p className="mb-1 font-semibold">{previewText(form.header_content)}</p>}
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{previewText(form.body_text) || 'Your message will appear here.'}</p>
+                {form.footer_text && <p className="mt-2 text-xs opacity-75">{form.footer_text}</p>}
+                {form.buttons.length > 0 && <div className="mt-3 flex flex-col gap-1 border-t border-primary-foreground/20 pt-2">{form.buttons.map((button, index) => <span key={`${button.type}-${index}`} className="text-center text-xs font-medium">{button.text || 'Button'}</span>)}</div>}
+              </div>
             </div>
 
             <div className="space-y-2">

@@ -397,7 +397,9 @@ export interface MessageTemplate {
   buttons?: TemplateButton[];
   sample_values?: TemplateSampleValues;
   status?: MessageTemplateStatus;
+  provider?: 'meta' | 'twilio';
   meta_template_id?: string;
+  twilio_content_sid?: string;
   rejection_reason?: string;
   quality_score?: 'GREEN' | 'YELLOW' | 'RED';
   submission_error?: string;

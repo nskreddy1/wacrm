@@ -60,10 +60,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     items: [
       { key: "broadcasts", href: "/broadcasts", label: "Broadcasts", shortLabel: "Campaigns", icon: "megaphone", minRole: "agent" },
       { key: "automations", href: "/automations", label: "Automations", shortLabel: "Rules", icon: "workflow", minRole: "agent" },
-      // "Flows" (visual flow builder) intentionally hidden from the nav —
-      // Automations covers the trigger→action use cases the product needs.
-      // The /flows routes and engine remain functional; re-add the item here
-      // if the visual builder is ever brought back.
+      { key: "flows", href: "/flows", label: "Flows", shortLabel: "Flows", icon: "git-fork", minRole: "agent" },
       { key: "agents", href: "/agents", label: "AI agents", shortLabel: "Agents", icon: "bot", minRole: "agent" },
     ],
   },

@@ -21,6 +21,7 @@ import { supabaseAdmin } from './admin-client'
 import { engineSendText, engineSendTemplate, engineSendInteractive } from './meta-send'
 import { validateInteractivePayload } from '@/lib/whatsapp/interactive'
 import { isDeliverableUrl } from '@/lib/webhooks/ssrf'
+import { sendChannelMessage } from '@/lib/orchestration/outbound'
 
 // ------------------------------------------------------------
 // Public API
@@ -407,6 +408,34 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
             })
             .map((k) => String(cfg.variables![k]))
         : []
+      const provider = String((cfg as SendTemplateStepConfig & { template_provider?: string }).template_provider ?? 'meta')
+      if (provider === 'twilio') {
+        const { data: template, error } = await db
+          .from('message_templates')
+          .select('id,status,twilio_content_sid')
+          .eq('account_id', args.automation.account_id)
+          .eq('provider', 'twilio')
+          .eq('name', cfg.template_name)
+          .eq('language', cfg.language)
+          .maybeSingle()
+        if (error || !template) throw new Error('Twilio template is missing from this account')
+        if (template.status !== 'APPROVED') throw new Error('Twilio template is not approved')
+        if (!template.twilio_content_sid) throw new Error('Twilio template has no Content SID')
+        const sent = await sendChannelMessage({
+          accountId: args.automation.account_id,
+          conversationId,
+          contactId: args.contactId,
+          payload: {
+            kind: 'template',
+            templateName: cfg.template_name,
+            language: cfg.language || 'en_US',
+            contentSid: template.twilio_content_sid,
+            contentVariables: Object.fromEntries(params.map((value, index) => [String(index + 1), value])),
+          },
+          strictProviderSupport: true,
+        })
+        return `template sent via Twilio (${sent.externalMessageId})`
+      }
       const { whatsapp_message_id } = await engineSendTemplate({
         accountId: args.automation.account_id,
         userId: args.automation.user_id,
