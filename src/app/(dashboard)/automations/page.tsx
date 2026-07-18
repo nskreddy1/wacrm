@@ -2,36 +2,33 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 import {
-  Zap,
-  Plus,
-  MoreVertical,
-  Copy,
-  Pencil,
-  Trash2,
-  FileText,
-  MessageCircle,
   Clock,
-  Users,
-  PhoneCall,
+  Copy,
+  FileText,
   Loader2,
+  MessageCircle,
+  MoreVertical,
+  Pencil,
+  PhoneCall,
+  PlayCircle,
+  Plus,
   RefreshCw,
+  Trash2,
+  Users,
+  Zap,
 } from "lucide-react"
 
-import { useCan } from "@/hooks/use-can"
-import { useTranslations } from "next-intl"
 import type { Automation } from "@/types"
+import { useCan } from "@/hooks/use-can"
+import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/lib/automations/templates"
+import { formatRelative, triggerMeta } from "@/lib/automations/trigger-meta"
+import { cn } from "@/lib/utils"
+import { pageContainerClassName } from "@/components/layout/page-container"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { GatedButton } from "@/components/ui/gated-button"
-import { Switch } from "@/components/ui/switch"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -40,11 +37,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/lib/automations/templates"
-import { triggerMeta, formatRelative } from "@/lib/automations/trigger-meta"
-import { cn } from "@/lib/utils"
-import { pageContainerClassName } from "@/components/layout/page-container"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { FeatureLoading, FeatureState } from "@/components/ui/feature-state"
+import { GatedButton } from "@/components/ui/gated-button"
+import { Switch } from "@/components/ui/switch"
 
 const TEMPLATE_ORDER: TemplateSlug[] = [
   "welcome_message",
@@ -66,6 +69,7 @@ export default function AutomationsPage() {
   const t = useTranslations("Automations.list")
   const [automations, setAutomations] = useState<Automation[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<Automation | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -82,35 +86,56 @@ export default function AutomationsPage() {
   }
 
   useEffect(() => {
-    load()
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/automations", { cache: "no-store" })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload?.error ?? "Failed to load automations")
+        if (!cancelled) setAutomations((payload.automations ?? []) as Automation[])
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load automations")
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  async function toggleActive(a: Automation, next: boolean) {
-    // Optimistic flip so the switch feels instant.
-    setAutomations((prev) =>
-      prev?.map((x) => (x.id === a.id ? { ...x, is_active: next } : x)) ?? prev,
+  async function toggleActive(automation: Automation, next: boolean) {
+    setAutomations((current) =>
+      current?.map((item) =>
+        item.id === automation.id ? { ...item, is_active: next } : item,
+      ) ?? current,
     )
-    const res = await fetch(`/api/automations/${a.id}`, {
+    const response = await fetch(`/api/automations/${automation.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ is_active: next }),
     })
-    if (!res.ok) {
-      // Roll back on error.
-      setAutomations((prev) =>
-        prev?.map((x) => (x.id === a.id ? { ...x, is_active: !next } : x)) ?? prev,
+    if (!response.ok) {
+      setAutomations((current) =>
+        current?.map((item) =>
+          item.id === automation.id ? { ...item, is_active: !next } : item,
+        ) ?? current,
       )
-      const body = await res.json().catch(() => ({}))
+      const body = await response.json().catch(() => ({}))
       toast.error(body?.error ?? t("toasts.updateError"))
       return
     }
     toast.success(next ? t("toasts.activated") : t("toasts.paused"))
   }
 
-  async function duplicate(a: Automation) {
-    const res = await fetch(`/api/automations/${a.id}/duplicate`, { method: "POST" })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
+  async function duplicate(automation: Automation) {
+    const response = await fetch(`/api/automations/${automation.id}/duplicate`, {
+      method: "POST",
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
       toast.error(body?.error ?? t("toasts.duplicateError"))
       return
     }
@@ -121,10 +146,12 @@ export default function AutomationsPage() {
   async function confirmDelete() {
     if (!pendingDelete) return
     setDeleting(true)
-    const res = await fetch(`/api/automations/${pendingDelete.id}`, { method: "DELETE" })
+    const response = await fetch(`/api/automations/${pendingDelete.id}`, {
+      method: "DELETE",
+    })
     setDeleting(false)
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
       toast.error(body?.error ?? t("toasts.deleteError"))
       return
     }
@@ -133,7 +160,13 @@ export default function AutomationsPage() {
     load()
   }
 
-  async function startFromTemplate(slug: TemplateSlug) {
+  function startBlank() {
+    setCreateOpen(false)
+    router.push("/automations/new")
+  }
+
+  function startFromTemplate(slug: TemplateSlug) {
+    setCreateOpen(false)
     router.push(`/automations/new?template=${slug}`)
   }
 
@@ -152,81 +185,109 @@ export default function AutomationsPage() {
 
   if (automations === null) return <FeatureLoading label="Loading automation rules" />
 
-  const showTemplates = automations.length < 3
-
   return (
-    <div className={cn(pageContainerClassName, "space-y-6")}>
-      <div className="flex items-center justify-between">
+    <div className={cn(pageContainerClassName, "flex flex-col gap-6")}>
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("subtitle")}
-          </p>
+          <h1 className="text-2xl font-semibold text-foreground">{t("title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
         <GatedButton
           canAct={canCreate}
           gateReason="create automations"
-          onClick={() => router.push("/automations/new")}
-          className="bg-primary text-primary-foreground hover:bg-primary/90"
+          onClick={() => setCreateOpen(true)}
         >
-          <Plus className="h-4 w-4" />
+          <Plus data-icon="inline-start" />
           {t("create")}
         </GatedButton>
-      </div>
-
-      {showTemplates && (
-        <section>
-          <h2 className="mb-3 text-sm font-semibold text-muted-foreground">{t("templatesTitle")}</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {TEMPLATE_ORDER.map((slug) => {
-              const t = AUTOMATION_TEMPLATES[slug]
-              const Icon = TEMPLATE_ICON[slug]
-              return (
-                <button
-                  key={slug}
-                  onClick={() => startFromTemplate(slug)}
-                  className="group flex flex-col items-start rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-card/80"
-                >
-                  <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/15">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="text-sm font-semibold text-foreground">{t.name}</div>
-                  <p className="mt-1 text-xs text-muted-foreground">{t.description}</p>
-                </button>
-              )
-            })}
-          </div>
-        </section>
-      )}
+      </header>
 
       {automations.length === 0 ? (
-        <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            <Zap className="h-6 w-6 text-primary" />
-          </div>
-          <p className="mt-3 text-sm font-medium text-foreground">{t("emptyTitle")}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t("emptyDesc")}
-          </p>
-        </div>
+        <EmptyState onCreate={() => setCreateOpen(true)} canCreate={canCreate} t={t} />
       ) : (
-        <ul className="space-y-3">
-          {automations.map((a) => (
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {automations.map((automation) => (
             <AutomationCard
-              key={a.id}
-              automation={a}
-              onToggle={(next) => toggleActive(a, next)}
-              onEdit={() => router.push(`/automations/${a.id}/edit`)}
-              onDuplicate={() => duplicate(a)}
-              onLogs={() => router.push(`/automations/${a.id}/logs`)}
-              onDelete={() => setPendingDelete(a)}
+              key={automation.id}
+              automation={automation}
+              onToggle={(next) => toggleActive(automation, next)}
+              onEdit={() => router.push(`/automations/${automation.id}/edit`)}
+              onDuplicate={() => duplicate(automation)}
+              onLogs={() => router.push(`/automations/${automation.id}/logs`)}
+              onDelete={() => setPendingDelete(automation)}
               t={t}
             />
           ))}
         </ul>
       )}
 
-      <Dialog open={!!pendingDelete} onOpenChange={(v) => !v && setPendingDelete(null)}>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto bg-popover text-popover-foreground sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{t("createTitle")}</DialogTitle>
+            <DialogDescription>{t("createDesc")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t("startTemplate")}
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {TEMPLATE_ORDER.map((slug) => {
+                const template = AUTOMATION_TEMPLATES[slug]
+                const Icon = TEMPLATE_ICON[slug]
+                return (
+                  <button
+                    key={slug}
+                    type="button"
+                    onClick={() => startFromTemplate(slug)}
+                    className="flex flex-col gap-2.5 rounded-lg border border-border bg-background p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted active:scale-[0.99] motion-reduce:transform-none"
+                  >
+                    <Icon className="size-5 text-primary" aria-hidden />
+                    <span className="text-sm font-semibold text-popover-foreground">
+                      {template.name}
+                    </span>
+                    <span className="text-xs leading-relaxed text-muted-foreground">
+                      {template.description}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-border pt-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t("startBlank")}
+            </p>
+            <button
+              type="button"
+              onClick={startBlank}
+              className="flex items-center gap-3 rounded-lg border border-border bg-background p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted active:scale-[0.99] motion-reduce:transform-none"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
+                <Plus className="size-5" aria-hidden />
+              </span>
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="text-sm font-semibold text-popover-foreground">
+                  {t("blankTitle")}
+                </span>
+                <span className="text-xs leading-relaxed text-muted-foreground">
+                  {t("blankDesc")}
+                </span>
+              </span>
+            </button>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+              {t("cancel")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("deleteTitle")}</DialogTitle>
@@ -235,24 +296,49 @@ export default function AutomationsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setPendingDelete(null)}
-              disabled={deleting}
-            >
+            <Button variant="ghost" onClick={() => setPendingDelete(null)} disabled={deleting}>
               {t("cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={deleting}
-            >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <Trash2 data-icon="inline-start" />
+              )}
               {t("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function EmptyState({
+  onCreate,
+  canCreate,
+  t,
+}: {
+  onCreate: () => void
+  canCreate: boolean
+  t: ReturnType<typeof useTranslations>
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
+      <div className="flex size-14 items-center justify-center rounded-full bg-muted">
+        <Zap className="size-6 text-muted-foreground" aria-hidden />
+      </div>
+      <h2 className="mt-4 text-base font-medium text-foreground">{t("emptyTitle")}</h2>
+      <p className="mt-1 max-w-md text-sm text-muted-foreground">{t("emptyDesc")}</p>
+      <GatedButton
+        canAct={canCreate}
+        gateReason="create automations"
+        onClick={onCreate}
+        className="mt-5"
+      >
+        <Plus data-icon="inline-start" />
+        {t("createFirst")}
+      </GatedButton>
     </div>
   )
 }
@@ -275,89 +361,72 @@ function AutomationCard({
   t: ReturnType<typeof useTranslations>
 }) {
   const meta = triggerMeta(automation.trigger_type)
+
   return (
-    <li className="rounded-xl border border-border bg-card transition-colors hover:border-border">
-      <div className="flex items-center gap-4 p-4">
-        <div
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10"
-          aria-hidden
-        >
-          <Zap className="h-5 w-5 text-primary" />
+    <li className="flex flex-col rounded-lg border border-border bg-card p-4 transition-colors hover:border-border">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Zap className="size-4 shrink-0 text-primary" aria-hidden />
+          <h2 className="truncate text-sm font-semibold text-foreground">{automation.name}</h2>
         </div>
+        <Badge variant={automation.is_active ? "default" : "secondary"}>
+          <PlayCircle data-icon="inline-start" />
+          {automation.is_active ? t("statusActive") : t("statusPaused")}
+        </Badge>
+      </div>
 
-        <button
-          type="button"
-          onClick={onEdit}
-          className="min-w-0 flex-1 text-left"
-        >
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-foreground">
-              {automation.name}
-            </span>
-            {automation.is_active && (
-              <span className="relative flex h-2 w-2" aria-label="active">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-              </span>
-            )}
-          </div>
-          {automation.description && (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{automation.description}</p>
-          )}
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span
-              className={cn(
-                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                meta.pillClass,
-              )}
-            >
-              {meta.label}
-            </span>
-            <span className="tabular-nums">
-              {automation.execution_count === 1
-                ? t("runs", { count: automation.execution_count })
-                : t("runsPlural", { count: automation.execution_count })}
-            </span>
-            <span aria-hidden>·</span>
-            <span>{t("lastRun", { time: formatRelative(automation.last_executed_at) })}</span>
-          </div>
-        </button>
+      <p className="mt-2 line-clamp-2 min-h-8 text-xs text-muted-foreground">
+        {automation.description || meta.label}
+      </p>
 
-        <div className="flex items-center gap-3">
-          <Switch
-            checked={automation.is_active}
-            onCheckedChange={(v) => onToggle(!!v)}
-            aria-label={automation.is_active ? t("deactivate") : t("activate")}
-          />
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+        <Badge variant="outline">{meta.label}</Badge>
+        <span className="tabular-nums">
+          {automation.execution_count === 1
+            ? t("runs", { count: automation.execution_count })
+            : t("runsPlural", { count: automation.execution_count })}
+        </span>
+        <span aria-hidden>·</span>
+        <span>{t("lastRun", { time: formatRelative(automation.last_executed_at) })}</span>
+      </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Open menu"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[popup-open]:bg-muted"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-3">
+        <Switch
+          checked={automation.is_active}
+          onCheckedChange={(value) => onToggle(!!value)}
+          aria-label={automation.is_active ? t("deactivate") : t("activate")}
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={t("openMenu", { name: automation.name })}
+            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[popup-open]:bg-muted"
+          >
+            <MoreVertical className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
               <DropdownMenuItem onClick={onEdit}>
-                <Pencil className="h-4 w-4" />
+                <Pencil />
                 {t("edit")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onDuplicate}>
-                <Copy className="h-4 w-4" />
+                <Copy />
                 {t("duplicate")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onLogs}>
-                <FileText className="h-4 w-4" />
+                <FileText />
                 {t("viewLogs")}
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                <Trash2 className="h-4 w-4" />
+                <Trash2 />
                 {t("delete")}
               </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </li>
   )
