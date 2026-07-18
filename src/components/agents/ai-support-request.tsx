@@ -165,7 +165,10 @@ export function AiSupportRequestCard() {
           <div className="flex flex-col gap-4">
             <div className="space-y-2">
               <Label>Topic</Label>
-              <Select value={topic} onValueChange={setTopic}>
+              <Select
+                value={topic}
+                onValueChange={(v) => setTopic(v ?? TOPICS[0].value)}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
