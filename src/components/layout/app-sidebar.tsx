@@ -164,9 +164,8 @@ function NavGroups() {
 }
 
 function FooterMenu() {
-  const pathname = usePathname()
   const router = useRouter()
-  const { mode, toggleMode } = useTheme()
+  const { mode, setMode } = useTheme()
   const { signOut, profile, accountRole } = useAuth()
   const { isMobile, setOpenMobile } = useSidebar()
 
@@ -182,33 +181,6 @@ function FooterMenu() {
 
   return (
     <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          tooltip="Settings"
-          isActive={isActive(pathname, "/settings")}
-          render={
-            <Link
-              href={routes.app.settings}
-              onClick={() => {
-                if (isMobile) setOpenMobile(false)
-              }}
-            />
-          }
-        >
-          <Settings aria-hidden="true" />
-          <span>Settings</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          tooltip={mode === "dark" ? "Light mode" : "Dark mode"}
-          onClick={toggleMode}
-          aria-label={mode === "dark" ? "Use light mode" : "Use dark mode"}
-        >
-          {mode === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-          <span>{mode === "dark" ? "Light mode" : "Dark mode"}</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -238,9 +210,33 @@ function FooterMenu() {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => router.push(routes.app.settings)}>
-                <Settings /> Workspace settings
+              <DropdownMenuItem
+                onClick={() => {
+                  router.push(routes.app.settings)
+                  if (isMobile) setOpenMobile(false)
+                }}
+              >
+                <Settings /> Settings
               </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Theme</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setMode("light")}>
+                <Sun /> Light
+                <span className="ml-auto text-xs text-muted-foreground" aria-hidden="true">
+                  {mode === "light" ? "Selected" : ""}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setMode("dark")}>
+                <Moon /> Dark
+                <span className="ml-auto text-xs text-muted-foreground" aria-hidden="true">
+                  {mode === "dark" ? "Selected" : ""}
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut /> Sign out
               </DropdownMenuItem>
