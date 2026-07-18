@@ -63,7 +63,7 @@ export function EditorHeader() {
         {/* ---- left: back · icon · name · status · edited ---- */}
         <button
           type="button"
-          onClick={() => router.push("/flows")}
+          onClick={() => router.push("/automations")}
           title="Back to Flows"
           aria-label="Back to Flows"
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -98,7 +98,7 @@ export function EditorHeader() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.push(`/flows/${flow.id}/runs`)}
+            onClick={() => router.push(`/automations/flows/${flow.id}/runs`)}
           >
             <History className="h-3.5 w-3.5" />
             Runs

@@ -33,6 +33,7 @@ import {
   ArrowUp,
   MousePointerClick,
   List,
+  Smartphone,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -754,32 +755,90 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
         </Button>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-auto bg-muted/30">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] [background-size:20px_20px]" />
-        <div className="relative mx-auto flex min-h-full max-w-3xl flex-col items-center px-4 py-6 sm:px-8 sm:py-8">
-          <ResourcesProvider>
-            <TriggerCard
-              type={state.trigger_type}
-              config={state.trigger_config}
-              onTypeChange={(tVal) => patchTop("trigger_type", tVal)}
-              onConfigChange={(c) => patchTop("trigger_config", c)}
-              t={t}
-            />
-            <StepList
-              steps={state.steps}
-              parentPath={[]}
-              expandedId={expandedId}
-              setExpandedId={setExpandedId}
-              updateStep={updateStep}
-              addStepAt={addStepAt}
-              deleteStepAt={deleteStepAt}
-              moveStepAt={moveStepAt}
-            />
-          </ResourcesProvider>
+      <div className="flex min-h-0 flex-1 bg-muted/30">
+        <div className="relative min-h-0 flex-1 overflow-auto">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] [background-size:20px_20px]" />
+          <div className="relative mx-auto flex min-h-full max-w-3xl flex-col items-center px-4 py-6 sm:px-8 sm:py-8">
+            <ResourcesProvider>
+              <TriggerCard
+                type={state.trigger_type}
+                config={state.trigger_config}
+                onTypeChange={(tVal) => patchTop("trigger_type", tVal)}
+                onConfigChange={(c) => patchTop("trigger_config", c)}
+                t={t}
+              />
+              <StepList
+                steps={state.steps}
+                parentPath={[]}
+                expandedId={expandedId}
+                setExpandedId={setExpandedId}
+                updateStep={updateStep}
+                addStepAt={addStepAt}
+                deleteStepAt={deleteStepAt}
+                moveStepAt={moveStepAt}
+              />
+            </ResourcesProvider>
+          </div>
         </div>
+        <PreviewRail steps={state.steps} />
       </div>
     </div>
   )
+}
+
+// ------------------------------------------------------------
+// Preview rail
+// ------------------------------------------------------------
+
+function PreviewRail({ steps }: { steps: BuilderStep[] }) {
+  const messages = collectPreviewMessages(steps)
+  return (
+    <aside className="hidden w-80 shrink-0 border-l border-border bg-card p-4 xl:flex xl:flex-col xl:gap-4" aria-label="Automation preview">
+      <div className="flex items-center gap-2">
+        <Smartphone className="size-4 text-primary" aria-hidden />
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Preview</h2>
+          <p className="text-xs text-muted-foreground">What the customer will see</p>
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col rounded-[2rem] border-8 border-foreground/90 bg-background p-3 shadow-sm">
+        <div className="mx-auto mb-4 h-1 w-14 rounded-full bg-muted-foreground/40" />
+        {messages.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+            <span className="flex size-10 items-center justify-center rounded-full bg-muted"><MessageSquare className="size-4 text-muted-foreground" /></span>
+            <p className="text-sm font-medium text-foreground">No message to preview</p>
+            <p className="text-xs leading-5 text-muted-foreground">Add a message, buttons, list, or template step.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 overflow-y-auto">
+            {messages.map((message, index) => (
+              <div key={`${message}-${index}`} className="ml-6 rounded-xl rounded-br-sm bg-primary px-3 py-2 text-xs leading-5 text-primary-foreground shadow-sm">
+                {message}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-auto pt-4 text-center text-[10px] text-muted-foreground">Only visible to your team</p>
+      </div>
+    </aside>
+  )
+}
+
+function collectPreviewMessages(steps: BuilderStep[]): string[] {
+  const messages: string[] = []
+  for (const step of steps) {
+    if (step.step_type === "send_message" && typeof step.step_config.text === "string" && step.step_config.text.trim()) {
+      messages.push(step.step_config.text.trim())
+    } else if ((step.step_type === "send_buttons" || step.step_type === "send_list") && typeof step.step_config.text === "string") {
+      messages.push(step.step_config.text || (step.step_type === "send_buttons" ? "Interactive buttons" : "Interactive list"))
+    } else if (step.step_type === "send_template") {
+      messages.push(typeof step.step_config.template_name === "string" && step.step_config.template_name ? `Template: ${step.step_config.template_name}` : "WhatsApp template")
+    }
+    if (step.branches) {
+      messages.push(...collectPreviewMessages(step.branches.yes), ...collectPreviewMessages(step.branches.no))
+    }
+  }
+  return messages
 }
 
 // ------------------------------------------------------------

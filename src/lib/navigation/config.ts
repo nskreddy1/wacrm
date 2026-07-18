@@ -59,8 +59,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     label: "Automate",
     items: [
       { key: "broadcasts", href: "/broadcasts", label: "Broadcasts", shortLabel: "Campaigns", icon: "megaphone", minRole: "agent" },
-      { key: "automations", href: "/automations", label: "Automations", shortLabel: "Rules", icon: "workflow", minRole: "agent" },
-      { key: "flows", href: "/flows", label: "Flows", shortLabel: "Flows", icon: "git-fork", minRole: "agent" },
+      { key: "automations", href: "/automations", label: "Automations", shortLabel: "Automate", icon: "workflow", minRole: "agent" },
       { key: "agents", href: "/agents", label: "AI agents", shortLabel: "Agents", icon: "bot", minRole: "agent" },
     ],
   },
