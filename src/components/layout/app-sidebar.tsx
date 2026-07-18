@@ -14,9 +14,7 @@ import {
   LogOut,
   Megaphone,
   MessageSquareText,
-  Moon,
   Settings,
-  Sun,
   Users,
   Workflow,
 } from "lucide-react"
@@ -51,6 +49,7 @@ import { useNavigation } from "@/hooks/use-navigation"
 import { useTheme } from "@/hooks/use-theme"
 import { useTotalUnread } from "@/hooks/use-total-unread"
 import { routes } from "@/lib/routing/routes"
+import { cn } from "@/lib/utils"
 import type { NavIconName } from "@/lib/navigation/config"
 import type { AccountRole } from "@/lib/auth/roles"
 
@@ -222,17 +221,21 @@ function FooterMenu() {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuLabel>Theme</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setMode("light")}>
-                <Sun /> Light
-                <span className="ml-auto text-xs text-muted-foreground" aria-hidden="true">
-                  {mode === "light" ? "Selected" : ""}
-                </span>
+              <DropdownMenuItem onClick={() => setMode("light")} aria-current={mode === "light" ? "true" : undefined}>
+                <span
+                  className={cn("size-2 rounded-full bg-foreground", mode !== "light" && "opacity-0")}
+                  aria-hidden="true"
+                />
+                Light
+                {mode === "light" && <span className="sr-only">Selected</span>}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setMode("dark")}>
-                <Moon /> Dark
-                <span className="ml-auto text-xs text-muted-foreground" aria-hidden="true">
-                  {mode === "dark" ? "Selected" : ""}
-                </span>
+              <DropdownMenuItem onClick={() => setMode("dark")} aria-current={mode === "dark" ? "true" : undefined}>
+                <span
+                  className={cn("size-2 rounded-full bg-foreground", mode !== "dark" && "opacity-0")}
+                  aria-hidden="true"
+                />
+                Dark
+                {mode === "dark" && <span className="sr-only">Selected</span>}
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
