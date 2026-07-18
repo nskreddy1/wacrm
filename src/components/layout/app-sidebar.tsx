@@ -201,13 +201,13 @@ function FooterMenu() {
             <ChevronsUpDown className="ml-auto size-4" aria-hidden="true" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side={isMobile ? "bottom" : "right"} align="end" className="w-56">
-            <DropdownMenuGroup>
+            {/* <DropdownMenuGroup>
               <DropdownMenuLabel>
                 {displayName}
                 {displayEmail && <span className="block font-normal text-muted-foreground">{displayEmail}</span>}
               </DropdownMenuLabel>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator /> */}
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={() => {
