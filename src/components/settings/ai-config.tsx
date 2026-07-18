@@ -56,7 +56,15 @@ const PROVIDER_LABEL = Object.fromEntries(
   AI_PROVIDER_OPTIONS.map(({ value, label }) => [value, label])
 ) as Record<AiProvider, string>;
 
-export function AiConfig() {
+export function AiConfig({
+  hidePersona = false,
+}: {
+  /** Hide the persona/system-prompt textarea — persona editing lives on
+   *  the Bots tab now; this keeps the field out of the Connection view
+   *  while old deployments and the settings page keep it. The stored
+   *  prompt is left untouched (buildBody omits it when hidden). */
+  hidePersona?: boolean;
+} = {}) {
   const { accountId, accountRole, profileLoading } = useAuth();
   const canEdit = accountRole ? canEditSettings(accountRole) : false;
   const t = useTranslations('Settings.aiConfig');
@@ -173,7 +181,9 @@ export function AiConfig() {
     base_url: baseUrlPayload(),
     api_key: keyPayload(),
     embeddings_api_key: embeddingsKeyPayload(),
-    system_prompt: systemPrompt.trim() || null,
+    // When the persona field is hidden the user can't have edited it —
+    // omit it so the server leaves the stored prompt untouched.
+    system_prompt: hidePersona ? undefined : systemPrompt.trim() || null,
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
