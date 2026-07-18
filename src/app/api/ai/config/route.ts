@@ -140,6 +140,10 @@ export async function POST(request: Request) {
       }
     }
 
+    // Absent field = "leave unchanged" (the Connection view hides the
+    // persona textarea now that personas live on bots); a present-but-
+    // empty string still clears it deliberately.
+    const promptProvided = 'system_prompt' in body
     const systemPrompt =
       typeof body.system_prompt === 'string' && body.system_prompt.trim()
         ? body.system_prompt.trim()
@@ -278,11 +282,13 @@ export async function POST(request: Request) {
       provider,
       model,
       base_url: baseUrl,
-      system_prompt: systemPrompt,
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
       auto_reply_max_per_conversation: maxPer,
     }
+    // Same partial-save discipline as handoff_agent_id below: only touch
+    // the stored persona when the form actually sent the field.
+    if (promptProvided) shared.system_prompt = systemPrompt
     // Only touch the handoff target when the form actually sent the field,
     // so a partial save (e.g. flipping a toggle) doesn't wipe it.
     if (handoffProvided) shared.handoff_agent_id = handoffAgentId
