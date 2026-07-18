@@ -14,9 +14,7 @@ import {
   LogOut,
   Megaphone,
   MessageSquareText,
-  Moon,
   Settings,
-  Sun,
   Users,
   Workflow,
 } from "lucide-react"
@@ -51,6 +49,7 @@ import { useNavigation } from "@/hooks/use-navigation"
 import { useTheme } from "@/hooks/use-theme"
 import { useTotalUnread } from "@/hooks/use-total-unread"
 import { routes } from "@/lib/routing/routes"
+import { cn } from "@/lib/utils"
 import type { NavIconName } from "@/lib/navigation/config"
 import type { AccountRole } from "@/lib/auth/roles"
 
@@ -164,9 +163,8 @@ function NavGroups() {
 }
 
 function FooterMenu() {
-  const pathname = usePathname()
   const router = useRouter()
-  const { mode, toggleMode } = useTheme()
+  const { mode, setMode } = useTheme()
   const { signOut, profile, accountRole } = useAuth()
   const { isMobile, setOpenMobile } = useSidebar()
 
@@ -182,33 +180,6 @@ function FooterMenu() {
 
   return (
     <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          tooltip="Settings"
-          isActive={isActive(pathname, "/settings")}
-          render={
-            <Link
-              href={routes.app.settings}
-              onClick={() => {
-                if (isMobile) setOpenMobile(false)
-              }}
-            />
-          }
-        >
-          <Settings aria-hidden="true" />
-          <span>Settings</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          tooltip={mode === "dark" ? "Light mode" : "Dark mode"}
-          onClick={toggleMode}
-          aria-label={mode === "dark" ? "Use light mode" : "Use dark mode"}
-        >
-          {mode === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-          <span>{mode === "dark" ? "Light mode" : "Dark mode"}</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -230,17 +201,45 @@ function FooterMenu() {
             <ChevronsUpDown className="ml-auto size-4" aria-hidden="true" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side={isMobile ? "bottom" : "right"} align="end" className="w-56">
-            <DropdownMenuGroup>
+            {/* <DropdownMenuGroup>
               <DropdownMenuLabel>
                 {displayName}
                 {displayEmail && <span className="block font-normal text-muted-foreground">{displayEmail}</span>}
               </DropdownMenuLabel>
             </DropdownMenuGroup>
+            <DropdownMenuSeparator /> */}
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={() => {
+                  router.push(routes.app.settings)
+                  if (isMobile) setOpenMobile(false)
+                }}
+              >
+                <Settings /> Settings
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => router.push(routes.app.settings)}>
-                <Settings /> Workspace settings
+              <DropdownMenuLabel>Theme</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setMode("light")} aria-current={mode === "light" ? "true" : undefined}>
+                <span
+                  className={cn("size-2 rounded-full bg-foreground", mode !== "light" && "opacity-0")}
+                  aria-hidden="true"
+                />
+                Light
+                {mode === "light" && <span className="sr-only">Selected</span>}
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setMode("dark")} aria-current={mode === "dark" ? "true" : undefined}>
+                <span
+                  className={cn("size-2 rounded-full bg-foreground", mode !== "dark" && "opacity-0")}
+                  aria-hidden="true"
+                />
+                Dark
+                {mode === "dark" && <span className="sr-only">Selected</span>}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut /> Sign out
               </DropdownMenuItem>
