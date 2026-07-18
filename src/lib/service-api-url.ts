@@ -16,6 +16,12 @@ export function resolveServiceApiUrl(
     return url.toString().replace(/\/$/, '')
   }
 
+  if (environment.VERCEL === "1" || environment.NODE_ENV === "production") {
+    throw new Error(
+      "EXPRESS_API_URL is required in production. Configure it with the HTTPS URL of the API Vercel project.",
+    )
+  }
+
   const host = environment.API_HOST?.trim() || DEFAULT_API_HOST
   const rawPort = environment.API_PORT ?? String(DEFAULT_API_PORT)
   const port = Number(rawPort)

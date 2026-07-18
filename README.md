@@ -101,12 +101,32 @@ WEB_PORT=3100 API_PORT=4100 pnpm dev
 ```
 
 The BFF derives its local Express target from `API_HOST` and `API_PORT`.
-`EXPRESS_API_URL` remains an optional highest-priority override for deployments
-where Express is reached at a separate internal URL.
+`EXPRESS_API_URL` is the highest-priority override and is required on Vercel.
 
-The production contract is also one command: run `npm run build`, then
-`npm start` to launch both managed processes. The equivalent `pnpm dev` and
-`pnpm start` commands use the same orchestration.
+For self-hosted production, run `npm run build`, then `npm start` to launch both
+managed processes. The equivalent `pnpm dev` and `pnpm start` commands use the
+same orchestration.
+
+## Deploy on Vercel
+
+Use Vercel's standard two-project setup for this repository:
+
+1. Create the **web project** from the repository root with Framework Preset
+   **Next.js**. The root `vercel.json` makes this setting explicit.
+2. Create a separate **API project** from the same repository. Set its Framework
+   Preset to **Other**, and deploy it with `vercel.api.json` as its local config.
+   The exported `api/index.ts` Express app is a Vercel Function and does not call
+   `listen()`.
+3. Add the existing Supabase/server environment variables to both projects.
+4. Set `EXPRESS_API_URL=https://<api-project-domain>` on the web project, without
+   a trailing path. The browser continues to call same-origin `/api/service/*`,
+   and the Next.js BFF forwards authenticated calls to the API project.
+
+Ports `3000` and `4000` are local/self-hosted defaults only. Vercel owns the
+public listeners and exposes each deployment through HTTPS, so do not set
+`WEB_PORT`, `API_PORT`, or `PORT` to connect the two production projects. The
+web deployment fails clearly when `EXPRESS_API_URL` is missing rather than
+trying the unreachable local address `127.0.0.1:4000`.
 
 ## 🚀 Deploy on Hostinger (recommended)
 

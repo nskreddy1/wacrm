@@ -13,6 +13,27 @@ describe("resolveServiceApiUrl", () => {
     )
   })
 
+  it("requires an explicit API URL on Vercel", () => {
+    expect(() => resolveServiceApiUrl({ VERCEL: "1" })).toThrow(
+      "EXPRESS_API_URL is required in production",
+    )
+  })
+
+  it("requires an explicit API URL in other production environments", () => {
+    expect(() => resolveServiceApiUrl({ NODE_ENV: "production" })).toThrow(
+      "EXPRESS_API_URL is required in production",
+    )
+  })
+
+  it("uses an explicit API URL on Vercel", () => {
+    expect(
+      resolveServiceApiUrl({
+        VERCEL: "1",
+        EXPRESS_API_URL: "https://wacrm-api.example.com/",
+      }),
+    ).toBe("https://wacrm-api.example.com")
+  })
+
   it("prefers an explicit EXPRESS_API_URL", () => {
     expect(
       resolveServiceApiUrl({
