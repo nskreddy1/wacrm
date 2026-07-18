@@ -375,17 +375,19 @@ export function BotEditor({
 
           {/* Advanced */}
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full justify-between px-2 text-sm font-medium"
-              >
-                Advanced
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
+            <CollapsibleTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full justify-between px-2 text-sm font-medium"
                 />
-              </Button>
+              }
+            >
+              Advanced
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
+              />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 pt-3">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -436,7 +438,7 @@ export function BotEditor({
                   <Select
                     value={handoffAgentId || HANDOFF_QUEUE}
                     onValueChange={(v) =>
-                      setHandoffAgentId(v === HANDOFF_QUEUE ? '' : v)
+                      setHandoffAgentId(!v || v === HANDOFF_QUEUE ? '' : v)
                     }
                   >
                     <SelectTrigger>

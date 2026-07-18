@@ -142,17 +142,19 @@ function TemplateCard({
       </div>
 
       <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-1 h-auto p-1 text-xs text-muted-foreground"
-          >
-            Preview prompt
-            <ChevronDown
-              className={`ml-1 h-3 w-3 transition-transform ${previewOpen ? 'rotate-180' : ''}`}
+        <CollapsibleTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-1 h-auto p-1 text-xs text-muted-foreground"
             />
-          </Button>
+          }
+        >
+          Preview prompt
+          <ChevronDown
+            className={`ml-1 h-3 w-3 transition-transform ${previewOpen ? 'rotate-180' : ''}`}
+          />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <pre className="mt-1 max-h-48 overflow-y-auto rounded-md bg-muted p-2.5 text-xs whitespace-pre-wrap text-muted-foreground">
