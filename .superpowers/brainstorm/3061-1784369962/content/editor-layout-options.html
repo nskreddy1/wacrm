@@ -1,0 +1,54 @@
+<style>
+  .layout-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:24px; }
+  .layout-card { border:1px solid #334155; border-radius:14px; overflow:hidden; cursor:pointer; background:#111827; transition:border-color 160ms ease-out, transform 160ms ease-out; }
+  .layout-card:hover { border-color:#60a5fa; }
+  .layout-card:active { transform:scale(.985); }
+  .layout-card.selected { border-color:#3b82f6; box-shadow:0 0 0 2px #3b82f6; }
+  .frame { height:260px; display:flex; flex-direction:column; background:#0b1220; color:#cbd5e1; font:10px/1.4 system-ui,sans-serif; }
+  .top { height:32px; display:flex; align-items:center; justify-content:space-between; padding:0 9px; border-bottom:1px solid #293548; background:#101827; }
+  .body { min-height:0; flex:1; display:flex; }
+  .rail { width:32px; padding:7px 5px; border-right:1px solid #293548; display:flex; flex-direction:column; gap:6px; }
+  .rail i { height:22px; border-radius:5px; background:#253247; display:block; }
+  .library { width:78px; padding:7px; border-right:1px solid #293548; }
+  .search { height:19px; border:1px solid #334155; border-radius:5px; margin-bottom:7px; }
+  .item { height:26px; border:1px solid #334155; border-radius:6px; margin-bottom:5px; background:#172033; }
+  .canvas { flex:1; position:relative; background-image:radial-gradient(#334155 1px,transparent 1px); background-size:14px 14px; }
+  .node { position:absolute; width:58px; min-height:30px; padding:6px; border:1px solid #3b82f6; border-radius:7px; background:#172033; box-shadow:0 3px 8px #02061780; }
+  .node.a { left:14%; top:19%; }.node.b { left:42%; top:43%; }.node.c { left:69%; top:22%; }
+  .edge { position:absolute; height:1px; background:#64748b; transform-origin:left; }
+  .edge.e1 { left:29%; top:34%; width:33%; transform:rotate(22deg); }.edge.e2 { left:56%; top:49%; width:25%; transform:rotate(-30deg); }
+  .inspector { width:88px; padding:7px; border-left:1px solid #293548; background:#101827; }
+  .field { height:22px; border:1px solid #334155; border-radius:5px; margin:6px 0; }
+  .drawer { position:absolute; left:8px; right:8px; bottom:8px; height:52px; border:1px solid #334155; border-radius:8px; background:#111827; padding:6px; }
+  .floating { position:absolute; right:8px; top:8px; width:90px; padding:7px; border:1px solid #334155; border-radius:8px; background:#111827ee; }
+  .card-copy { padding:14px; }
+  .card-copy h3 { margin:0 0 5px; font-size:15px; color:#f8fafc; }.card-copy p { margin:0; font-size:12px; color:#94a3b8; }
+  .badge { display:inline-block; margin-top:9px; padding:3px 7px; border-radius:999px; background:#16365f; color:#93c5fd; font-size:10px; font-weight:700; }
+  @media(max-width:900px){.layout-grid{grid-template-columns:1fr}.frame{height:230px}}
+</style>
+<h2>Choose the enterprise editor&apos;s spatial model</h2>
+<p class="subtitle">All three use the same React Flow document model. The difference is how much UI stays visible while users build.</p>
+<div class="layout-grid">
+  <div class="layout-card" data-choice="a-progressive-workbench" onclick="toggleSelect(this)">
+    <div class="frame">
+      <div class="top"><b>Lead qualification</b><span>Saved · Test · Publish</span></div>
+      <div class="body"><div class="rail"><i></i><i></i><i></i><i></i></div><div class="canvas"><div class="edge e1"></div><div class="edge e2"></div><div class="node a">Trigger<br><small>New lead</small></div><div class="node b">Condition<br><small>Score ≥ 70</small></div><div class="node c">Action<br><small>Assign owner</small></div><div class="floating"><b>Selected node</b><div class="field"></div><div class="field"></div></div></div></div>
+    </div>
+    <div class="card-copy"><h3>A. Progressive workbench</h3><p>Canvas-first. A compact rail opens the library, inspector, validation, or test panel only when needed.</p><span class="badge">Recommended</span></div>
+  </div>
+  <div class="layout-card" data-choice="b-three-pane-studio" onclick="toggleSelect(this)">
+    <div class="frame">
+      <div class="top"><b>Lead qualification</b><span>Saved · Test · Publish</span></div>
+      <div class="body"><div class="library"><div class="search"></div><div class="item"></div><div class="item"></div><div class="item"></div><div class="item"></div></div><div class="canvas"><div class="edge e1"></div><div class="edge e2"></div><div class="node a">Trigger</div><div class="node b">Condition</div><div class="node c">Action</div></div><div class="inspector"><b>Configuration</b><div class="field"></div><div class="field"></div><div class="field"></div><div class="field"></div></div></div>
+    </div>
+    <div class="card-copy"><h3>B. Three-pane studio</h3><p>Library, canvas, and inspector remain visible. Fast for experts, but crowded on smaller laptop viewports.</p></div>
+  </div>
+  <div class="layout-card" data-choice="c-canvas-bottom-console" onclick="toggleSelect(this)">
+    <div class="frame">
+      <div class="top"><b>Lead qualification</b><span>Saved · Add step · Test</span></div>
+      <div class="body"><div class="rail"><i></i><i></i><i></i></div><div class="canvas"><div class="edge e1"></div><div class="edge e2"></div><div class="node a">Trigger</div><div class="node b">Condition</div><div class="node c">Action</div><div class="drawer"><b>Test run &amp; validation console</b><br><small>Input · Trace · Output · 2 warnings</small></div></div><div class="inspector"><b>Configuration</b><div class="field"></div><div class="field"></div></div></div>
+    </div>
+    <div class="card-copy"><h3>C. Canvas + console</h3><p>Persistent inspector with a bottom execution console. Strong debugging story, less vertical room for large graphs.</p></div>
+  </div>
+</div>
+<p class="subtitle" style="margin-top:18px">Click the layout that best matches how your team should work. You can also describe a hybrid.</p>
