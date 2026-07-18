@@ -4,7 +4,12 @@ import { ChatAnthropic } from '@langchain/anthropic'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { normalizeLcUsage, resolveChatModel } from './model'
 import { providerLabel, toAiError } from '../../errors'
-import { AiError, type AiConfig, type AiProvider } from '../../types'
+import {
+  AiError,
+  BOTLESS_PERSONA_DEFAULTS,
+  type AiConfig,
+  type AiProvider,
+} from '../../types'
 
 function config(overrides: Partial<AiConfig> = {}): AiConfig {
   return {
@@ -18,6 +23,7 @@ function config(overrides: Partial<AiConfig> = {}): AiConfig {
     handoffAgentId: null,
     embeddingsApiKey: null,
     keySource: 'account',
+    ...BOTLESS_PERSONA_DEFAULTS,
     ...overrides,
   }
 }

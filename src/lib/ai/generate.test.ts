@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { generateReply, parseGeneration } from './generate'
-import { AiError, type AiConfig } from './types'
+import { AiError, BOTLESS_PERSONA_DEFAULTS, type AiConfig } from './types'
 
 // Mock only the chat-model factory — usage normalization, provider
 // labels, and error mapping stay real so the tests exercise the same
@@ -9,8 +9,9 @@ import { AiError, type AiConfig } from './types'
 const { resolveChatModelMock } = vi.hoisted(() => ({
   resolveChatModelMock: vi.fn(),
 }))
-vi.mock('./model', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./model')>()
+vi.mock('./engines/langchain/model', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./engines/langchain/model')>()
   return { ...actual, resolveChatModel: resolveChatModelMock }
 })
 
@@ -26,6 +27,7 @@ function config(overrides: Partial<AiConfig> = {}): AiConfig {
     handoffAgentId: null,
     embeddingsApiKey: null,
     keySource: 'account',
+    ...BOTLESS_PERSONA_DEFAULTS,
     ...overrides,
   }
 }
