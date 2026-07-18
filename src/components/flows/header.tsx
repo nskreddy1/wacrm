@@ -32,6 +32,8 @@ import {
   PlayCircle,
   Save,
   Trash2,
+  Undo2,
+  Redo2,
   Workflow,
 } from "lucide-react";
 
@@ -52,6 +54,10 @@ export function EditorHeader() {
     saving,
     activating,
     canActivate,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
     save,
     setStatus,
     deleteFlow,
@@ -95,6 +101,28 @@ export function EditorHeader() {
 
         {/* ---- right: runs · delete · activate · save ---- */}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center rounded-md border border-border bg-muted p-0.5" aria-label="Edit history">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={undo}
+              disabled={!canUndo}
+              aria-label="Undo"
+              title="Undo (Ctrl/⌘ Z)"
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={redo}
+              disabled={!canRedo}
+              aria-label="Redo"
+              title="Redo (Ctrl/⌘ Shift Z)"
+            >
+              <Redo2 />
+            </Button>
+          </div>
           <Button
             variant="ghost"
             size="sm"

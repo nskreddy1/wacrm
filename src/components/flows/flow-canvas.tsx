@@ -55,9 +55,11 @@ import {
   type NodeChange,
   type NodeProps,
   type OnNodeDrag,
+  type OnReconnect,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Plus, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { useTranslations } from 'next-intl';
 
@@ -75,6 +77,7 @@ import {
   applyEdgeConnection,
   deriveCanvasEdges,
   outgoingSlots,
+  validateEdgeConnection,
 } from '@/lib/flows/edges';
 import { autoLayout, shouldAutoLayout } from '@/lib/flows/layout';
 import {
@@ -443,13 +446,47 @@ function FlowCanvasInner() {
         (n) => n.node_key === connection.source
       );
       if (!sourceNode) return;
-      // Self-loops are a footgun (a button whose target is its own
-      // node = infinite reprompt). Reject silently — the user can
-      // still wire one via the per-node dropdown if they really want.
-      if (connection.source === connection.target) return;
+      const validation = validateEdgeConnection(
+        builderNodes,
+        connection.source,
+        connection.sourceHandle,
+        connection.target
+      );
+      if (!validation.valid) {
+        toast.error("Connection not allowed", { description: validation.reason });
+        return;
+      }
       const patch = applyEdgeConnection(
         sourceNode,
         connection.sourceHandle,
+        connection.target
+      );
+      if (patch) updateNodeConfig(connection.source, patch);
+    },
+    [builderNodes, updateNodeConfig]
+  );
+
+  const handleReconnect = useCallback<OnReconnect>(
+    (oldEdge, connection) => {
+      const sourceHandle = oldEdge.sourceHandle;
+      if (!sourceHandle || !connection.source || !connection.target) return;
+      const sourceNode = builderNodes.find(
+        (node) => node.node_key === connection.source
+      );
+      if (!sourceNode) return;
+      const validation = validateEdgeConnection(
+        builderNodes,
+        connection.source,
+        sourceHandle,
+        connection.target
+      );
+      if (!validation.valid) {
+        toast.error("Connection not allowed", { description: validation.reason });
+        return;
+      }
+      const patch = applyEdgeConnection(
+        sourceNode,
+        sourceHandle,
         connection.target
       );
       if (patch) updateNodeConfig(connection.source, patch);
@@ -533,6 +570,8 @@ function FlowCanvasInner() {
           onNodeDragStop={handleNodeDragStop}
           onNodeClick={handleNodeClick}
           onConnect={handleConnect}
+          onReconnect={handleReconnect}
+          edgesReconnectable
           onNodesDelete={handleNodesDelete}
           onEdgesDelete={handleEdgesDelete}
           // Default is "Backspace" only — accept both so Mac users

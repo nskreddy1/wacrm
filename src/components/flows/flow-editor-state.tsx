@@ -90,6 +90,10 @@ export interface FlowEditorContextValue {
   activating: boolean;
   issues: ValidationIssue[];
   canActivate: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
 
   // Node mutations. addNode returns the generated key so the caller
   // (a NodeCard "Add" button or canvas "+" button) can scroll to /
@@ -258,14 +262,72 @@ export function FlowEditorProvider({
 
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
-  // dirty flips on user edits; status-only updates (after the activate
-  // API succeeds) use setStateRaw so they don't falsely re-flag the
-  // form as dirty.
+  // Keep a compact editor history. A single mutation is one undo step;
+  // position changes are recorded on drag-stop rather than every frame.
+  const historyRef = useRef<{ past: BuilderState[]; future: BuilderState[] }>({
+    past: [],
+    future: [],
+  });
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [dirty, setDirty] = useState(false);
   const setState = useCallback<typeof setStateRaw>((updaterOrValue) => {
-    setDirty(true);
-    setStateRaw(updaterOrValue);
+    setStateRaw((previous) => {
+      const next =
+        typeof updaterOrValue === "function"
+          ? updaterOrValue(previous)
+          : updaterOrValue;
+      if (Object.is(next, previous)) return previous;
+      historyRef.current.past = [
+        ...historyRef.current.past.slice(-49),
+        previous,
+      ];
+      historyRef.current.future = [];
+      setDirty(true);
+      setHistoryVersion((version) => version + 1);
+      return next;
+    });
   }, []);
+
+  const undo = useCallback(() => {
+    setStateRaw((current) => {
+      const previous = historyRef.current.past.at(-1);
+      if (!previous) return current;
+      historyRef.current.past = historyRef.current.past.slice(0, -1);
+      historyRef.current.future = [current, ...historyRef.current.future].slice(0, 50);
+      setDirty(true);
+      setHistoryVersion((version) => version + 1);
+      return previous;
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setStateRaw((current) => {
+      const next = historyRef.current.future[0];
+      if (!next) return current;
+      historyRef.current.future = historyRef.current.future.slice(1);
+      historyRef.current.past = [...historyRef.current.past.slice(-49), current];
+      setDirty(true);
+      setHistoryVersion((version) => version + 1);
+      return next;
+    });
+  }, []);
+
+  const canUndo = historyRef.current.past.length > 0;
+  const canRedo = historyRef.current.future.length > 0;
+  void historyVersion;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      event.preventDefault();
+      if (event.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [redo, undo]);
 
   // Cross-view "look here" signal (see FlowEditorContextValue docs).
   // Tracked via a ref alongside state so a rapid second click on a
@@ -528,6 +590,10 @@ export function FlowEditorProvider({
       activating,
       issues,
       canActivate,
+      canUndo,
+      canRedo,
+      undo,
+      redo,
       addNode,
       updateNode,
       updateNodeConfig,
@@ -549,6 +615,10 @@ export function FlowEditorProvider({
       activating,
       issues,
       canActivate,
+      canUndo,
+      canRedo,
+      undo,
+      redo,
       addNode,
       updateNode,
       updateNodeConfig,

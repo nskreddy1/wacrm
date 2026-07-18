@@ -24,6 +24,63 @@
 
 import type { BuilderNode } from "@/components/flows/shared";
 
+export interface ConnectionValidation {
+  valid: boolean;
+  reason?: string;
+}
+
+/**
+ * Validate a proposed canvas connection before mutating node config.
+ * Flows are intentionally acyclic: a cycle can keep an active run alive
+ * forever, so the editor rejects it at the interaction boundary.
+ */
+export function validateEdgeConnection(
+  nodes: BuilderNode[],
+  sourceKey: string,
+  sourceHandle: string,
+  targetKey: string,
+): ConnectionValidation {
+  const source = nodes.find((node) => node.node_key === sourceKey);
+  const target = nodes.find((node) => node.node_key === targetKey);
+
+  if (!source || !target) {
+    return { valid: false, reason: "The source or target node no longer exists." };
+  }
+  if (sourceKey === targetKey) {
+    return { valid: false, reason: "A node cannot connect to itself." };
+  }
+  if (target.node_type === "start") {
+    return { valid: false, reason: "Start nodes can only be flow entry points." };
+  }
+  if (outgoingSlots(source).every((slot) => slot.id !== sourceHandle)) {
+    return { valid: false, reason: "That output is no longer available." };
+  }
+
+  // Ignore the source slot being replaced, then test whether the target can
+  // already reach the source. If it can, adding source → target closes a cycle.
+  const adjacency = new Map<string, string[]>();
+  for (const edge of deriveCanvasEdges(nodes)) {
+    if (edge.source === sourceKey && edge.sourceHandle === sourceHandle) continue;
+    adjacency.set(edge.source, [...(adjacency.get(edge.source) ?? []), edge.target]);
+  }
+  const pending = [targetKey];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const key = pending.pop()!;
+    if (key === sourceKey) {
+      return {
+        valid: false,
+        reason: "This connection would create a loop. Flows must move forward.",
+      };
+    }
+    if (visited.has(key)) continue;
+    visited.add(key);
+    pending.push(...(adjacency.get(key) ?? []));
+  }
+
+  return { valid: true };
+}
+
 export interface CanvasEdge {
   /** Stable per-edge id — required by React-Flow. */
   id: string;

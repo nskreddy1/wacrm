@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -33,12 +34,17 @@ import {
   ArrowUp,
   MousePointerClick,
   List,
+  AlertCircle,
+  CheckCircle2,
+  Workflow,
+  ArrowRight,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,6 +68,10 @@ import {
 } from "@/components/interactive/interactive-builder"
 import { interactivePayloadPreviewText } from "@/lib/whatsapp/interactive"
 import { createClient } from "@/lib/supabase/client"
+import {
+  validateStepsForActivation,
+  validateTriggerForActivation,
+} from "@/lib/automations/validate"
 import { cn } from "@/lib/utils"
 
 // ------------------------------------------------------------
@@ -632,6 +642,13 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
   const [state, setState] = useState<BuilderInitial>(initial)
   const [saving, setSaving] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const savedSnapshot = useRef(JSON.stringify(initial))
+  const dirty = JSON.stringify(state) !== savedSnapshot.current
+  const stepCount = countSteps(state.steps)
+  const activationIssues = [
+    ...validateTriggerForActivation(state.trigger_type, state.trigger_config),
+    ...validateStepsForActivation(state.steps),
+  ]
 
   function patchTop<K extends keyof BuilderInitial>(key: K, value: BuilderInitial[K]) {
     setState((s) => ({ ...s, [key]: value }))
@@ -702,6 +719,7 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
         }
         return
       }
+      savedSnapshot.current = JSON.stringify(state)
       toast.success(isEditing ? t("toasts.saved") : t("toasts.created"))
       if (!isEditing && body?.automation?.id) {
         router.replace(`/automations/${body.automation.id}/edit`)
@@ -734,8 +752,20 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
             placeholder={t("untitled")}
             className="w-full truncate rounded-md bg-transparent px-2 py-1 text-sm font-semibold text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none sm:text-base"
           />
-          <p className="hidden px-2 text-xs text-muted-foreground sm:block">
-            {state.steps.length === 0 ? "Trigger only" : `${state.steps.length} top-level steps`}
+          <p className="hidden items-center gap-2 px-2 text-xs text-muted-foreground sm:flex" aria-live="polite">
+            <span>{stepCount === 0 ? "Trigger only" : `${stepCount} ${stepCount === 1 ? "step" : "steps"}`}</span>
+            <span aria-hidden="true">·</span>
+            {dirty ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-1.5 rounded-full bg-warning" />
+                Unsaved changes
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                Saved
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1">
@@ -745,7 +775,13 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
           <Switch
             checked={state.is_active}
             onCheckedChange={(v) => patchTop("is_active", !!v)}
+            disabled={!state.is_active && activationIssues.length > 0}
             aria-label={t("activeAria")}
+            title={
+              !state.is_active && activationIssues.length > 0
+                ? "Complete the required fields before activating"
+                : undefined
+            }
           />
         </div>
         <Button onClick={save} disabled={saving}>
@@ -754,30 +790,67 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
         </Button>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-auto bg-muted/30">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] [background-size:20px_20px]" />
-        <div className="relative mx-auto flex min-h-full max-w-3xl flex-col items-center px-4 py-6 sm:px-8 sm:py-8">
-          <ResourcesProvider>
-            <TriggerCard
-              type={state.trigger_type}
-              config={state.trigger_config}
-              onTypeChange={(tVal) => patchTop("trigger_type", tVal)}
-              onConfigChange={(c) => patchTop("trigger_config", c)}
-              t={t}
-            />
-            <StepList
-              steps={state.steps}
-              parentPath={[]}
-              expandedId={expandedId}
-              setExpandedId={setExpandedId}
-              updateStep={updateStep}
-              addStepAt={addStepAt}
-              deleteStepAt={deleteStepAt}
-              moveStepAt={moveStepAt}
-            />
-          </ResourcesProvider>
+      <main className="min-h-0 flex-1 overflow-auto bg-muted/30">
+        <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+          <div className="flex flex-col gap-1 text-center">
+            <p className="text-sm font-medium text-foreground">Build your automation from top to bottom</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Choose what starts it, then add the actions that should happen in order.
+            </p>
+          </div>
+
+          {activationIssues.length > 0 && (
+            <Alert variant="destructive" className="mx-auto max-w-xl">
+              <AlertCircle aria-hidden="true" />
+              <AlertTitle>
+                {activationIssues.length} {activationIssues.length === 1 ? "item needs" : "items need"} attention
+              </AlertTitle>
+              <AlertDescription>
+                {activationIssues[0].message}
+                {activationIssues.length > 1 ? ` and ${activationIssues.length - 1} more.` : "."}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex flex-col items-center">
+            <ResourcesProvider>
+              <TriggerCard
+                type={state.trigger_type}
+                config={state.trigger_config}
+                onTypeChange={(tVal) => patchTop("trigger_type", tVal)}
+                onConfigChange={(c) => patchTop("trigger_config", c)}
+                t={t}
+              />
+              <StepList
+                steps={state.steps}
+                parentPath={[]}
+                expandedId={expandedId}
+                setExpandedId={setExpandedId}
+                updateStep={updateStep}
+                addStepAt={addStepAt}
+                deleteStepAt={deleteStepAt}
+                moveStepAt={moveStepAt}
+              />
+            </ResourcesProvider>
+          </div>
+
+          <aside className="mx-auto flex w-full max-w-xl flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Workflow aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-foreground">Need advanced branching?</h2>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Build a Flow for a visual canvas, reusable paths, and precise connection control.
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => router.push("/flows?new=1")}>
+              Build a Flow
+              <ArrowRight data-icon="inline-end" aria-hidden="true" />
+            </Button>
+          </aside>
         </div>
-      </div>
+      </main>
     </div>
   )
 }
@@ -1536,6 +1609,17 @@ function previewFor(step: BuilderStep): string {
 // ------------------------------------------------------------
 // Tree mutation helpers
 // ------------------------------------------------------------
+
+function countSteps(steps: BuilderStep[]): number {
+  return steps.reduce(
+    (total, step) =>
+      total +
+      1 +
+      countSteps(step.branches?.yes ?? []) +
+      countSteps(step.branches?.no ?? []),
+    0,
+  )
+}
 
 function insertAt(
   steps: BuilderStep[],

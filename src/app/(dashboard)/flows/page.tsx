@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Workflow,
@@ -82,6 +82,7 @@ const TEMPLATE_ICONS = {
 
 export default function FlowsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const canCreate = useCan("send-messages");
   const t = useTranslations("Flows.list");
   const [flows, setFlows] = useState<FlowRow[]>([]);
@@ -94,6 +95,10 @@ export default function FlowsPage() {
   const [filter, setFilter] = useState<UnifiedFilter>("all");
   const [pendingRuleDelete, setPendingRuleDelete] = useState<Automation | null>(null);
   const [deletingRule, setDeletingRule] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") setCreateOpen(true);
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;

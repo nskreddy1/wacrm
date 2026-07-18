@@ -4,12 +4,43 @@ import {
   deriveCanvasEdges,
   outgoingSlots,
   unlinkNodeReferences,
+  validateEdgeConnection,
 } from "./edges";
 import type { BuilderNode } from "@/components/flows/shared";
 
 function nodes(...ns: BuilderNode[]): BuilderNode[] {
   return ns;
 }
+
+describe("validateEdgeConnection", () => {
+  const graph: BuilderNode[] = [
+    { node_key: "start", node_type: "start", config: { next_node_key: "message" } },
+    { node_key: "message", node_type: "send_message", config: { text: "Hi", next_node_key: "end" } },
+    { node_key: "end", node_type: "end", config: {} },
+  ];
+
+  it("accepts a forward connection", () => {
+    expect(validateEdgeConnection(graph, "start", "next", "end")).toEqual({ valid: true });
+  });
+
+  it("rejects self-links and links into the start node", () => {
+    expect(validateEdgeConnection(graph, "message", "next", "message").valid).toBe(false);
+    expect(validateEdgeConnection(graph, "message", "next", "start").valid).toBe(false);
+  });
+
+  it("rejects a connection that would create a cycle", () => {
+    const result = validateEdgeConnection(graph, "end", "next", "message");
+    // End has no output, so it is rejected before graph traversal.
+    expect(result.valid).toBe(false);
+
+    const branched: BuilderNode[] = [
+      { node_key: "a", node_type: "send_message", config: { text: "A", next_node_key: "b" } },
+      { node_key: "b", node_type: "send_message", config: { text: "B", next_node_key: "c" } },
+      { node_key: "c", node_type: "send_message", config: { text: "C", next_node_key: "" } },
+    ];
+    expect(validateEdgeConnection(branched, "c", "next", "a").valid).toBe(false);
+  });
+});
 
 describe("deriveCanvasEdges — single-outgoing node types", () => {
   it("derives a `next` edge from send_message", () => {
