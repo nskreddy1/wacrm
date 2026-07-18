@@ -5,6 +5,14 @@ import { toast } from 'sonner';
 import { Bot, RotateCcw, Send, Loader2, UserCircle2, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { BotRow } from './bot-types';
 
 interface Turn {
   role: 'user' | 'assistant';
@@ -18,6 +26,31 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Bot picker — defaults to the active bot; other bots can be
+  // test-driven here before activating them for customers.
+  const [bots, setBots] = useState<BotRow[]>([]);
+  const [botId, setBotId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/ai/bots');
+        const data = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok) return;
+        const list: BotRow[] = data.bots ?? [];
+        setBots(list);
+        const active = list.find((b) => b.is_active);
+        if (active) setBotId(active.id);
+      } catch {
+        // Picker is a bonus — the playground still works bot-less.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -38,6 +71,7 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
         // Send only role+content — the server ignores anything else.
         body: JSON.stringify({
           messages: next.map((t) => ({ role: t.role, content: t.content })),
+          botId: botId ?? undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -83,22 +117,52 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
     <div className="flex h-[60vh] min-h-[420px] flex-col rounded-xl border border-border bg-card">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Bot className="h-4 w-4 text-primary" />
+        <div className="flex min-w-0 items-center gap-2">
+          <Bot className="h-4 w-4 shrink-0 text-primary" />
           <span className="text-sm font-medium text-foreground">Playground</span>
-          <span className="text-xs text-muted-foreground">
+          <span className="hidden text-xs text-muted-foreground sm:inline">
             — test replies as if you were a customer
           </span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setTurns([])}
-          disabled={turns.length === 0 || sending}
-          className="text-muted-foreground"
-        >
-          <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
-        </Button>
+        <div className="flex items-center gap-2">
+          {bots.length > 0 && (
+            <Select
+              value={botId ?? ''}
+              onValueChange={(v) => {
+                setBotId(v);
+                // A different bot = a different persona; a stale
+                // transcript would misattribute its replies.
+                setTurns([]);
+              }}
+              disabled={sending}
+            >
+              <SelectTrigger
+                className="h-8 w-44 text-xs"
+                aria-label="Bot to test"
+              >
+                <SelectValue placeholder="Pick a bot" />
+              </SelectTrigger>
+              <SelectContent>
+                {bots.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.emoji ? `${b.emoji} ` : ''}
+                    {b.name}
+                    {b.is_active ? ' (active)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setTurns([])}
+            disabled={turns.length === 0 || sending}
+            className="text-muted-foreground"
+          >
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+          </Button>
+        </div>
       </div>
 
       {/* Transcript */}
