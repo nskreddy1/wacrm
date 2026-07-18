@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import {
   conversationFlowToDocument,
   documentToConversationFlow,
@@ -13,44 +14,70 @@ const flow: ConversationFlowRecord = {
   status: 'draft',
   trigger_type: 'keyword',
   trigger_config: { keywords: ['pricing'] },
-  entry_node_id: 'message-1',
+  entry_node_id: 'start-1',
 }
 
 const nodes: ConversationFlowNodeRecord[] = [
   {
-    node_key: 'message-1',
-    node_type: 'message',
-    config: { body: 'How can we help?', next_node_id: 'branch-1' },
-    position_x: 240,
+    node_key: 'start-1',
+    node_type: 'start',
+    config: { next_node_key: 'buttons-1', future_key: 'preserved' },
+    position_x: 120,
     position_y: 120,
   },
   {
-    node_key: 'branch-1',
-    node_type: 'branch',
-    config: { field: 'reply', yes_node_id: 'assign-1', no_node_id: 'wait-1' },
-    position_x: 480,
-    position_y: 240,
+    node_key: 'buttons-1',
+    node_type: 'send_buttons',
+    config: {
+      text: 'How can we help?',
+      buttons: [
+        { reply_id: 'sales', title: 'Sales', next_node_key: 'condition-1' },
+        { reply_id: 'support', title: 'Support', next_node_key: 'end-1' },
+      ],
+    },
+    position_x: 360,
+    position_y: 120,
   },
   {
-    node_key: 'assign-1',
-    node_type: 'assign',
-    config: { team: 'sales' },
-    position_x: 720,
+    node_key: 'condition-1',
+    node_type: 'condition',
+    config: {
+      subject: 'var',
+      subject_key: 'qualified',
+      operator: 'present',
+      true_next: 'end-1',
+      false_next: 'message-1',
+    },
+    position_x: 600,
     position_y: 160,
   },
   {
-    node_key: 'wait-1',
-    node_type: 'wait_for_reply',
-    config: { timeout_minutes: 60 },
-    position_x: 720,
-    position_y: 320,
+    node_key: 'message-1',
+    node_type: 'send_message',
+    config: { text: 'Thanks', next_node_key: 'end-1' },
+    position_x: 840,
+    position_y: 240,
+  },
+  {
+    node_key: 'end-1',
+    node_type: 'end',
+    config: {},
+    position_x: 1080,
+    position_y: 120,
   },
 ]
 
 describe('conversation flow adapter', () => {
-  it('round-trips node keys, graph pointers, configuration, and positions', () => {
-    const payload = documentToConversationFlow(conversationFlowToDocument(flow, nodes))
+  it('round-trips runtime pointer fields, unknown config, and positions', () => {
+    const document = conversationFlowToDocument(flow, nodes)
+    expect(document.nodes.find((node) => node.id === 'start-1')?.config).toEqual({
+      future_key: 'preserved',
+    })
+    expect(document.edges.map((edge) => edge.sourceHandle)).toEqual(
+      expect.arrayContaining([undefined, 'button:sales', 'button:support', 'true', 'false']),
+    )
 
+    const payload = documentToConversationFlow(document)
     expect(payload).toEqual({
       name: flow.name,
       description: flow.description,
