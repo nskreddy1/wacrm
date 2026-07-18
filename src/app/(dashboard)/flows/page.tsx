@@ -16,7 +16,17 @@ import {
   HelpCircle,
   UserPlus,
   FileText,
+  Zap,
 } from "lucide-react";
+
+import type { Automation } from "@/types";
+import {
+  mergeUnifiedItems,
+  filterUnifiedItems,
+  type FlowRow,
+  type UnifiedFilter,
+} from "@/components/flows/unified-items";
+import { AutomationRuleCard } from "@/components/flows/automation-rule-card";
 
 import { useTranslations } from "next-intl";
 import { useCan } from "@/hooks/use-can";
@@ -42,19 +52,6 @@ import { pageContainerClassName } from "@/components/layout/page-container";
  * chip in the header is the only remaining signal that the surface
  * is new. The previous per-account beta gate was removed in PR #134.
  */
-
-interface FlowRow {
-  id: string;
-  name: string;
-  description: string | null;
-  status: "draft" | "active" | "archived";
-  trigger_type: "keyword" | "first_inbound_message" | "manual";
-  trigger_config: { keywords?: string[] } | Record<string, unknown>;
-  execution_count: number;
-  last_executed_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 const STATUS_LABELS = (t: ReturnType<typeof useTranslations>): Record<FlowRow["status"], string> => ({
   draft: t("statusDraft"),
@@ -93,14 +90,19 @@ export default function FlowsPage() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [filter, setFilter] = useState<UnifiedFilter>("all");
+  const [pendingRuleDelete, setPendingRuleDelete] = useState<Automation | null>(null);
+  const [deletingRule, setDeletingRule] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [flowsRes, tmplRes] = await Promise.all([
+        const [flowsRes, tmplRes, autoRes] = await Promise.all([
           fetch("/api/flows"),
           fetch("/api/flows/templates"),
+          fetch("/api/automations", { cache: "no-store" }),
         ]);
         if (!flowsRes.ok) {
           throw new Error(`Failed to load flows: ${flowsRes.status}`);
@@ -114,6 +116,12 @@ export default function FlowsPage() {
             templates: TemplateSummary[];
           };
           if (!cancelled) setTemplates(tmplJson.templates ?? []);
+        }
+        // Classic automations are secondary content on this page —
+        // tolerate a failure the same way templates are tolerated.
+        if (autoRes.ok) {
+          const autoJson = (await autoRes.json()) as { automations: Automation[] };
+          if (!cancelled) setAutomations(autoJson.automations ?? []);
         }
       } catch (err) {
         if (!cancelled) {
@@ -192,6 +200,52 @@ export default function FlowsPage() {
     }
   }
 
+  async function toggleRule(a: Automation, next: boolean) {
+    setAutomations((prev) => prev.map((x) => (x.id === a.id ? { ...x, is_active: next } : x)));
+    const res = await fetch(`/api/automations/${a.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ is_active: next }),
+    });
+    if (!res.ok) {
+      setAutomations((prev) => prev.map((x) => (x.id === a.id ? { ...x, is_active: !next } : x)));
+      const body = await res.json().catch(() => ({}));
+      toast.error(body?.error ?? t("ruleUpdateError"));
+      return;
+    }
+    toast.success(next ? t("ruleActivated") : t("rulePaused"));
+  }
+
+  async function duplicateRule(a: Automation) {
+    const res = await fetch(`/api/automations/${a.id}/duplicate`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      toast.error(body?.error ?? t("ruleDuplicateError"));
+      return;
+    }
+    const listRes = await fetch("/api/automations", { cache: "no-store" });
+    if (listRes.ok) {
+      const json = (await listRes.json()) as { automations: Automation[] };
+      setAutomations(json.automations ?? []);
+    }
+    toast.success(t("ruleDuplicated"));
+  }
+
+  async function confirmRuleDelete() {
+    if (!pendingRuleDelete) return;
+    setDeletingRule(true);
+    const res = await fetch(`/api/automations/${pendingRuleDelete.id}`, { method: "DELETE" });
+    setDeletingRule(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      toast.error(body?.error ?? t("ruleDeleteError"));
+      return;
+    }
+    setAutomations((prev) => prev.filter((x) => x.id !== pendingRuleDelete.id));
+    setPendingRuleDelete(null);
+    toast.success(t("ruleDeleted"));
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -199,6 +253,9 @@ export default function FlowsPage() {
       </div>
     );
   }
+
+  const items = filterUnifiedItems(mergeUnifiedItems(flows, automations), filter);
+  const isEmpty = flows.length === 0 && automations.length === 0;
 
   return (
     <div className={cn(pageContainerClassName, "space-y-6")}>
