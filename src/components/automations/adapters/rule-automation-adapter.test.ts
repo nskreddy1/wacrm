@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BuilderInitial } from '@/components/automations/automation-builder'
 import {
   documentToRuleAutomation,
+  RuleAdapterError,
   ruleAutomationToDocument,
 } from './rule-automation-adapter'
 
@@ -38,6 +39,23 @@ describe('rule automation adapter', () => {
       is_active: initial.is_active,
       steps: initial.steps.map(stripClientIds),
     })
+  })
+
+  it('preserves existing server identities in the editor document', () => {
+    const document = ruleAutomationToDocument({
+      ...initial,
+      steps: [{ ...initial.steps[0], sourceRef: 'server-step-1' }],
+    })
+
+    expect(document.nodes[0].sourceRef).toBe('server-step-1')
+  })
+
+  it('rejects disconnected graphs instead of silently dropping nodes', () => {
+    const document = ruleAutomationToDocument(initial)
+    document.edges = document.edges.filter((edge) => edge.target !== 'delay-1')
+
+    expect(() => documentToRuleAutomation(document)).toThrowError(RuleAdapterError)
+    expect(() => documentToRuleAutomation(document)).toThrow(/connected/i)
   })
 })
 

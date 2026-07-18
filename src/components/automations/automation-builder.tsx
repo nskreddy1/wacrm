@@ -72,6 +72,8 @@ import { cn } from "@/lib/utils"
 export interface BuilderStep {
   /** Client id; the API assigns real UUIDs server-side. */
   cid: string
+  /** Existing server identity, retained by editor adapters but never posted. */
+  sourceRef?: string
   step_type: AutomationStepType
   step_config: Record<string, unknown>
   branches?: { yes: BuilderStep[]; no: BuilderStep[] }
@@ -1793,6 +1795,7 @@ export interface ServerStepNode {
 export function fromServerSteps(nodes: ServerStepNode[]): BuilderStep[] {
   return nodes.map((n) => ({
     cid: cid(),
+    sourceRef: n.id,
     step_type: n.step_type as AutomationStepType,
     step_config: n.step_config ?? {},
     branches:
