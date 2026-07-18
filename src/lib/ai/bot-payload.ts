@@ -174,9 +174,9 @@ export function parseBotPayload(body: Record<string, unknown>): ParsedBotPayload
       fields.auto_reply_max_per_conversation = null
     } else {
       const n = Number(body.auto_reply_max_per_conversation)
-      if (!Number.isInteger(n) || n < 1 || n > 20) {
+      if (!Number.isInteger(n) || n < 0 || n > 500) {
         throw new BotPayloadError(
-          'auto_reply_max_per_conversation must be an integer between 1 and 20',
+          'auto_reply_max_per_conversation must be an integer between 0 (unlimited) and 500',
         )
       }
       fields.auto_reply_max_per_conversation = n
