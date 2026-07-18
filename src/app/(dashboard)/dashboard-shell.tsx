@@ -1,6 +1,5 @@
 "use client"
 
-import { AppHeader } from "@/components/layout/app-header"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { DashboardCacheProvider } from "@/components/providers/dashboard-cache-provider"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -15,7 +14,6 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
     <SidebarProvider className="h-dvh overflow-hidden overscroll-none">
       <AppSidebar />
       <SidebarInset className="flex min-w-0 flex-col overflow-hidden">
-        <AppHeader />
         <main className="min-h-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
       </SidebarInset>
     </SidebarProvider>
