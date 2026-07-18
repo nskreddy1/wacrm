@@ -5,7 +5,15 @@ export function resolveServiceApiUrl(
   environment: Record<string, string | undefined> = process.env,
 ): string {
   if (environment.EXPRESS_API_URL) {
-    return environment.EXPRESS_API_URL
+    const url = new URL(environment.EXPRESS_API_URL)
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      throw new Error('EXPRESS_API_URL must use http or https')
+    }
+    if (url.username || url.password) {
+      throw new Error('EXPRESS_API_URL must not contain credentials')
+    }
+    url.pathname = url.pathname.replace(/\/$/, '')
+    return url.toString().replace(/\/$/, '')
   }
 
   const host = environment.API_HOST?.trim() || DEFAULT_API_HOST
