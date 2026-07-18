@@ -7,6 +7,7 @@ import { buildSystemPrompt } from './defaults'
 import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
+import { isWithinWorkingHours } from './working-hours'
 import { sendChannelMessage } from '@/lib/orchestration/outbound'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
@@ -135,17 +136,18 @@ export async function dispatchInboundToAiReply(
     }
 
     // Ground the reply in the account's knowledge base (best-effort).
-    const knowledge = await retrieveKnowledge(
-      db,
-      accountId,
-      config,
-      latestUserMessage(messages),
-    )
+    // A bot can opt out (`use_knowledge_base = false`) — e.g. a pure
+    // greeter/booking persona that should never quote docs.
+    const knowledge = config.useKnowledgeBase
+      ? await retrieveKnowledge(db, accountId, config, latestUserMessage(messages))
+      : []
 
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      tone: config.tone,
+      language: config.language,
     })
 
     const { text, handoff, usage, sentiment, escalationReason } =
@@ -268,6 +270,15 @@ export async function dispatchInboundToAiReply(
     }
     if (claimed !== true) return // lost the per-conversation cap race
 
+    // Greeting: on the bot's very first reply in this conversation,
+    // prepend the configured greeting so the customer gets a proper
+    // hello + the answer in one message (one send, no double-text).
+    // `ai_reply_count` was 0 when we read it and the claim above just
+    // took slot #1, so this condition can only be true once per thread.
+    const greeting = config.greetingMessage?.trim()
+    const outbound =
+      greeting && (conv.ai_reply_count ?? 0) === 0 ? `${greeting}\n\n${text}` : text
+
     // Channel-agnostic send: the orchestrator resolves the conversation's
     // channel connection (Meta / Twilio / legacy config) and persists the
     // message row. Replaces the Meta-hardcoded engineSendText path.
@@ -275,7 +286,7 @@ export async function dispatchInboundToAiReply(
       accountId,
       conversationId,
       contactId,
-      payload: { kind: 'text', text },
+      payload: { kind: 'text', text: outbound },
       senderType: 'bot',
       aiGenerated: true,
     })

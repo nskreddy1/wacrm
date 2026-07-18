@@ -6,6 +6,7 @@ import { validateAiCredentials } from '@/lib/ai/validate'
 import {
   AiError,
   AI_PROVIDERS,
+  BOTLESS_PERSONA_DEFAULTS,
   isAiProvider,
   type AiProvider,
 } from '@/lib/ai/types'
@@ -114,6 +115,7 @@ export async function POST(request: Request) {
         handoffAgentId: null,
         embeddingsApiKey: null,
         keySource: 'account',
+        ...BOTLESS_PERSONA_DEFAULTS,
       })
     } catch (err) {
       if (err instanceof AiError) {

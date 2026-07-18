@@ -1,11 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { AI_PROVIDER_DEFAULT_MODEL } from './defaults'
-import type {
-  AiConfig,
-  BotTone,
-  OutsideHoursBehavior,
-  WorkingHours,
+import {
+  BOTLESS_PERSONA_DEFAULTS,
+  type AiConfig,
+  type BotTone,
+  type OutsideHoursBehavior,
+  type WorkingHours,
 } from './types'
 
 interface AiConfigRow {
@@ -47,18 +48,7 @@ const BOT_COLUMNS =
 
 /** Fields every AiConfig carries when there is NO bot — behavior-neutral
  *  defaults so callers can read them unconditionally. */
-const NO_BOT_FIELDS = {
-  botId: null,
-  botName: null,
-  tone: null,
-  language: null,
-  temperature: null,
-  greetingMessage: null,
-  workingHours: null,
-  outsideHoursBehavior: 'silent' as const,
-  awayMessage: null,
-  useKnowledgeBase: true,
-}
+const NO_BOT_FIELDS = BOTLESS_PERSONA_DEFAULTS
 
 /**
  * Fetch the bot persona to merge: the explicitly requested bot when
