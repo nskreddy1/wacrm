@@ -84,24 +84,27 @@ export async function POST(request: Request) {
     const knowledge = config.useKnowledgeBase
       ? await retrieveKnowledge(supabase, accountId, config, latestUserMessage(messages))
       : []
+    // Mirror the live auto-reply path: on the FIRST bot reply of a
+    // conversation the configured greeting is prepended (auto-reply
+    // checks ai_reply_count === 0; here "no prior assistant turn in the
+    // transcript" is the stateless equivalent). Decided before generation
+    // so the model is told not to greet again on top of it.
+    const isFirstReply = !messages.some((m) => m.role === 'assistant')
+    const greeting = config.greetingMessage?.trim()
+    const willGreet = Boolean(greeting) && isFirstReply
+
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
       tone: config.tone,
       language: config.language,
+      greetingSent: willGreet,
     })
 
     const { text, handoff } = await generateReply({ config, systemPrompt, messages })
 
-    // Mirror the live auto-reply path: on the FIRST bot reply of a
-    // conversation the configured greeting is prepended (auto-reply
-    // checks ai_reply_count === 0; here "no prior assistant turn in the
-    // transcript" is the stateless equivalent).
-    const isFirstReply = !messages.some((m) => m.role === 'assistant')
-    const greeting = config.greetingMessage?.trim()
-    const reply =
-      greeting && isFirstReply && !handoff ? `${greeting}\n\n${text}` : text
+    const reply = greeting && willGreet && !handoff ? `${greeting}\n\n${text}` : text
 
     return NextResponse.json({ reply, handoff })
   } catch (err) {

@@ -139,8 +139,12 @@ export function buildSystemPrompt(args: {
   /** Reply language; 'auto'/null keeps the default mirror-the-customer
    *  guideline, anything else appends an explicit language directive. */
   language?: string | null
+  /** True when the configured greeting message will be mechanically
+   *  prepended to this reply — tells the model NOT to greet again,
+   *  preventing the double-hello on the first bot reply. */
+  greetingSent?: boolean
 }): string {
-  const { userPrompt, mode, knowledge, tone, language } = args
+  const { userPrompt, mode, knowledge, tone, language, greetingSent } = args
   const parts: string[] = [
     'You are a customer-messaging assistant for a business that uses a WhatsApp CRM. ' +
       'You are shown the recent WhatsApp conversation between the business (assistant) and a customer (user). ' +
@@ -160,6 +164,15 @@ export function buildSystemPrompt(args: {
       `After your reply (or after ${HANDOFF_SENTINEL}), end your output with exactly one final line in this exact format and nothing after it:\n` +
         `${META_SENTINEL}{"sentiment":"angry|frustrated|neutral|happy","escalate":true|false,"reason":"human_requested|angry_customer|out_of_scope|needs_account_data|purchase_ready|none"}\n` +
         'Pick the single sentiment that best matches the customer\'s latest messages. Set "escalate" to true whenever a human should take over (same conditions as the handoff rule, plus a customer ready to buy who needs a person, or a request needing their account data). When "escalate" is false, use "reason":"none". This metadata line is machine-read and stripped before sending — the customer never sees it.',
+    )
+  }
+
+  if (greetingSent) {
+    parts.push(
+      'IMPORTANT: A configured welcome message is automatically placed immediately before your reply, in the same message the customer receives. ' +
+        'The customer has therefore ALREADY been greeted. Never output a greeting of any kind — no "hi", "hello", "hey", "welcome", wave emojis, or self-introduction. ' +
+        'If the customer\u2019s message is itself just a greeting or small talk, reply with a single short sentence asking what they need (e.g. "What can I do for you?") — with no hello in front of it. ' +
+        'Otherwise, answer their message directly, starting with the substance.',
     )
   }
 
