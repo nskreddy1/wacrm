@@ -167,6 +167,37 @@ export interface AiConfig {
   useKnowledgeBase: boolean
 }
 
+/**
+ * Behavior-neutral values for the bot-persona slice of `AiConfig` —
+ * what every config carries when the account has no active bot. Spread
+ * this wherever an `AiConfig` is built outside `loadAiConfig` (creden-
+ * tial validation, tests) so those sites stay bot-agnostic.
+ */
+export const BOTLESS_PERSONA_DEFAULTS = {
+  botId: null,
+  botName: null,
+  tone: null,
+  language: null,
+  temperature: null,
+  greetingMessage: null,
+  workingHours: null,
+  outsideHoursBehavior: 'silent',
+  awayMessage: null,
+  useKnowledgeBase: true,
+} satisfies Pick<
+  AiConfig,
+  | 'botId'
+  | 'botName'
+  | 'tone'
+  | 'language'
+  | 'temperature'
+  | 'greetingMessage'
+  | 'workingHours'
+  | 'outsideHoursBehavior'
+  | 'awayMessage'
+  | 'useKnowledgeBase'
+>
+
 /** A single conversation turn in the shape both providers accept. */
 export interface ChatMessage {
   role: 'user' | 'assistant'
