@@ -93,7 +93,17 @@ export async function POST(request: Request) {
     })
 
     const { text, handoff } = await generateReply({ config, systemPrompt, messages })
-    return NextResponse.json({ reply: text, handoff })
+
+    // Mirror the live auto-reply path: on the FIRST bot reply of a
+    // conversation the configured greeting is prepended (auto-reply
+    // checks ai_reply_count === 0; here "no prior assistant turn in the
+    // transcript" is the stateless equivalent).
+    const isFirstReply = !messages.some((m) => m.role === 'assistant')
+    const greeting = config.greetingMessage?.trim()
+    const reply =
+      greeting && isFirstReply && !handoff ? `${greeting}\n\n${text}` : text
+
+    return NextResponse.json({ reply, handoff })
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(
