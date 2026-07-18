@@ -3,10 +3,14 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import type { ComponentType } from "react"
+import useSWR from "swr"
 import {
+  Bell,
   Bot,
   CalendarDays,
+  ChevronDown,
   ChevronsUpDown,
+  Command,
   GitBranch,
   GitFork,
   Inbox,
@@ -15,8 +19,11 @@ import {
   Megaphone,
   MessageSquareText,
   Moon,
+  Plus,
+  Search,
   Settings,
   Sun,
+  UserPlus,
   Users,
   Workflow,
 } from "lucide-react"
@@ -44,6 +51,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/hooks/use-auth"
@@ -74,6 +82,30 @@ const roleLabels: Record<AccountRole, string> = {
   agent: "Agent",
   viewer: "Viewer",
 }
+
+const pageTitles: Record<string, string> = {
+  dashboard: "Dashboard",
+  inbox: "Shared inbox",
+  contacts: "Contacts",
+  pipelines: "Pipelines",
+  bookings: "Bookings",
+  broadcasts: "Broadcasts",
+  automations: "Automations",
+  flows: "Flows",
+  agents: "AI agents",
+  notifications: "Notifications",
+  settings: "Settings",
+}
+
+type NotificationItem = {
+  id: string
+  title: string
+  body: string | null
+  read_at: string | null
+  conversation_id: string | null
+}
+
+type NotificationsResponse = { data: NotificationItem[] }
 
 function initialsOf(name: string | null | undefined, email: string | null | undefined): string {
   const source = name?.trim() || email?.trim() || ""
@@ -110,6 +142,146 @@ function BrandHeader() {
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
+  )
+}
+
+function WorkspaceActions() {
+  const pathname = usePathname()
+  const router = useRouter()
+  const { account } = useAuth()
+  const { isMobile, setOpenMobile } = useSidebar()
+  const { data: notificationsData } = useSWR<NotificationsResponse>("/api/v1/notifications", {
+    refreshInterval: 60_000,
+  })
+
+  const segment = pathname.split("/").filter(Boolean)[0] ?? "dashboard"
+  const title = pageTitles[segment] ?? "Workspace"
+  const notifications = notificationsData?.data ?? []
+  const unreadCount = notifications.filter((notification) => !notification.read_at).length
+  const recentNotifications = notifications.slice(0, 5)
+  const unreadBadge = unreadCount > 0 ? (unreadCount > 99 ? "99+" : String(unreadCount)) : undefined
+  const dropdownSide = isMobile ? "bottom" : "right"
+
+  const navigate = (href: string) => {
+    router.push(href)
+    if (isMobile) setOpenMobile(false)
+  }
+
+  return (
+    <SidebarGroup className="pt-0">
+      <SidebarGroupLabel>{account?.name ?? "Workspace"}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton tooltip={`${account?.name ?? "Workspace"} / ${title}`} aria-label={`Current page: ${title}`}>
+              <LayoutDashboard aria-hidden="true" />
+              <span className="min-w-0">
+                <span className="block truncate text-xs text-muted-foreground">{account?.name ?? "Workspace"}</span>
+                <span className="block truncate font-medium text-sidebar-foreground">{title}</span>
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton tooltip="Search workspace" aria-label="Search workspace">
+              <Search aria-hidden="true" />
+              <span>Search workspace</span>
+              <span className="ml-auto flex items-center gap-1 rounded border border-sidebar-border px-1.5 py-0.5 text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+                <Command aria-hidden="true" />K
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <SidebarMenuButton tooltip="Create" aria-label="Create new item">
+                    <Plus aria-hidden="true" />
+                    <span>Create</span>
+                    <ChevronDown className="ml-auto" aria-hidden="true" />
+                  </SidebarMenuButton>
+                }
+              />
+              <DropdownMenuContent side={dropdownSide} align="start" className="w-48">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Create new</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => navigate(routes.app.contacts)}>
+                    <UserPlus /> Contact
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate(routes.app.pipelines)}>
+                    <Plus /> Deal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate(routes.app.bookings)}>
+                    <CalendarDays /> Booking
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <SidebarMenuButton
+                    tooltip={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+                    aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+                  >
+                    <Bell aria-hidden="true" />
+                    <span>Notifications</span>
+                  </SidebarMenuButton>
+                }
+              />
+              {unreadBadge && <SidebarMenuBadge>{unreadBadge}</SidebarMenuBadge>}
+              <DropdownMenuContent side={dropdownSide} align="start" className="w-72">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>
+                    Notifications{unreadCount > 0 ? ` (${unreadCount} unread)` : ""}
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  {recentNotifications.length === 0 && (
+                    <DropdownMenuItem disabled>You&apos;re all caught up</DropdownMenuItem>
+                  )}
+                  {recentNotifications.map((notification) => (
+                    <DropdownMenuItem
+                      key={notification.id}
+                      onClick={() =>
+                        navigate(
+                          notification.conversation_id
+                            ? `${routes.app.inbox}?conversation=${notification.conversation_id}`
+                            : routes.app.inbox
+                        )
+                      }
+                    >
+                      <span className="min-w-0">
+                        <span
+                          className={
+                            notification.read_at
+                              ? "block truncate text-muted-foreground"
+                              : "block truncate font-medium"
+                          }
+                        >
+                          {notification.title}
+                        </span>
+                        {notification.body && (
+                          <span className="block truncate text-xs text-muted-foreground">{notification.body}</span>
+                        )}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => navigate(routes.app.notifications)}>
+                    View all notifications
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   )
 }
 
@@ -256,9 +428,15 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <BrandHeader />
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+            <BrandHeader />
+          </div>
+          <SidebarTrigger className="shrink-0" aria-label="Toggle sidebar" />
+        </div>
       </SidebarHeader>
       <SidebarContent>
+        <WorkspaceActions />
         <NavGroups />
       </SidebarContent>
       <SidebarFooter>
