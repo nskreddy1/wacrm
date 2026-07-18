@@ -142,12 +142,19 @@ export async function dispatchInboundToAiReply(
       ? await retrieveKnowledge(db, accountId, config, latestUserMessage(messages))
       : []
 
+    // Will the configured greeting be prepended to this reply? Decided
+    // up-front so the model can be told not to greet again (the actual
+    // prepend below re-checks the same condition).
+    const willGreet =
+      Boolean(config.greetingMessage?.trim()) && (conv.ai_reply_count ?? 0) === 0
+
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
       tone: config.tone,
       language: config.language,
+      greetingSent: willGreet,
     })
 
     const { text, handoff, usage, sentiment, escalationReason } =
@@ -276,8 +283,7 @@ export async function dispatchInboundToAiReply(
     // `ai_reply_count` was 0 when we read it and the claim above just
     // took slot #1, so this condition can only be true once per thread.
     const greeting = config.greetingMessage?.trim()
-    const outbound =
-      greeting && (conv.ai_reply_count ?? 0) === 0 ? `${greeting}\n\n${text}` : text
+    const outbound = greeting && willGreet ? `${greeting}\n\n${text}` : text
 
     // Channel-agnostic send: the orchestrator resolves the conversation's
     // channel connection (Meta / Twilio / legacy config) and persists the
