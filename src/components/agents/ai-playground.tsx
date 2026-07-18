@@ -127,8 +127,15 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
         <div className="flex items-center gap-2">
           {bots.length > 0 && (
             <Select
+              items={Object.fromEntries(
+                bots.map((b) => [
+                  b.id,
+                  `${b.emoji ? `${b.emoji} ` : ''}${b.name}${b.is_active ? ' (active)' : ''}`,
+                ])
+              )}
               value={botId ?? ''}
               onValueChange={(v) => {
+                if (!v) return;
                 setBotId(v);
                 // A different bot = a different persona; a stale
                 // transcript would misattribute its replies.
