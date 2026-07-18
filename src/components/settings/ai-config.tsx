@@ -15,7 +15,6 @@ import { canEditSettings } from '@/lib/auth/roles';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
   Card,
@@ -56,15 +55,7 @@ const PROVIDER_LABEL = Object.fromEntries(
   AI_PROVIDER_OPTIONS.map(({ value, label }) => [value, label])
 ) as Record<AiProvider, string>;
 
-export function AiConfig({
-  hidePersona = false,
-}: {
-  /** Hide the persona/system-prompt textarea — persona editing lives on
-   *  the Bots tab now; this keeps the field out of the Connection view
-   *  while old deployments and the settings page keep it. The stored
-   *  prompt is left untouched (buildBody omits it when hidden). */
-  hidePersona?: boolean;
-} = {}) {
+export function AiConfig() {
   const { accountId, accountRole, profileLoading } = useAuth();
   const canEdit = accountRole ? canEditSettings(accountRole) : false;
   const t = useTranslations('Settings.aiConfig');
@@ -86,7 +77,6 @@ export function AiConfig({
   const [embeddingsKey, setEmbeddingsKey] = useState('');
   const [embeddingsKeyEdited, setEmbeddingsKeyEdited] = useState(false);
   const [hasStoredEmbeddingsKey, setHasStoredEmbeddingsKey] = useState(false);
-  const [systemPrompt, setSystemPrompt] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
   const [maxPerConversation, setMaxPerConversation] = useState(3);
@@ -119,7 +109,6 @@ export function AiConfig({
         setProvider(data.provider);
         setModel(data.model);
         setBaseUrl(data.base_url ?? '');
-        setSystemPrompt(data.system_prompt ?? '');
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
         setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
@@ -181,9 +170,7 @@ export function AiConfig({
     base_url: baseUrlPayload(),
     api_key: keyPayload(),
     embeddings_api_key: embeddingsKeyPayload(),
-    // When the persona field is hidden the user can't have edited it —
-    // omit it so the server leaves the stored prompt untouched.
-    system_prompt: hidePersona ? undefined : systemPrompt.trim() || null,
+
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
@@ -261,7 +248,6 @@ export function AiConfig({
         setKeyEdited(false);
         setIsActive(false);
         setAutoReplyEnabled(false);
-        setSystemPrompt('');
         setHandoffAgentId('');
       } else {
         const data = await res.json();
@@ -506,18 +492,6 @@ export function AiConfig({
             <CardDescription>{t('behaviourDesc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="ai-prompt">{t('businessContext')}</Label>
-              <Textarea
-                id="ai-prompt"
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                placeholder={t('promptPlaceholder')}
-                rows={5}
-                disabled={disabled}
-              />
-            </div>
-
             <div className="border-border flex items-center justify-between gap-4 rounded-md border p-3">
               <div>
                 <p className="text-foreground text-sm font-medium">
