@@ -157,7 +157,7 @@ async function main() {
       .insert({
         account_id: accountId,
         user_id: user.id,
-        topic: 'setup_bot',
+        topic: 'setup_help',
         message:
           'Seeded test request: please help us configure a booking bot for our salon. We want it to answer pricing questions and collect appointment requests.',
         contact_info: EMAIL,

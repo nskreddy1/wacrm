@@ -12,12 +12,21 @@
 // API simply returns 403 for everyone.
 // ============================================================
 
+// TEMPORARY (dev only): hardcoded test operator so the multi-bot /
+// AI-requests feature can be exercised end-to-end before the real
+// super-admin phase ships. Never applied in production builds.
+// TODO: remove once the feature is verified and SUPER_ADMIN_EMAILS
+// is configured for real operators.
+const DEV_TEST_OPERATORS =
+  process.env.NODE_ENV !== 'production' ? ['ai-tester@wacrm.test'] : []
+
 /** Parse the allowlist from env: comma-separated, trimmed, lowercased. */
 function allowlist(): string[] {
-  return (process.env.SUPER_ADMIN_EMAILS ?? '')
+  const fromEnv = (process.env.SUPER_ADMIN_EMAILS ?? '')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter((e) => e.length > 0)
+  return [...fromEnv, ...DEV_TEST_OPERATORS]
 }
 
 /**
