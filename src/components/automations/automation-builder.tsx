@@ -39,6 +39,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import { AutomationFlowCanvas } from "@/components/automations/automation-flow-canvas"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -625,13 +629,53 @@ function SendTemplateFields({
 // Main builder component
 // ------------------------------------------------------------
 
+function findStepSelection(
+  steps: BuilderStep[],
+  cidToFind: string,
+  parentPath: StepPath = [],
+  scope: ParentScope = { kind: "root" },
+): { step: BuilderStep; path: StepPath } | null {
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index]
+    const segment =
+      scope.kind === "root"
+        ? ({ kind: "root", index } as const)
+        : ({
+            kind: "branch",
+            parentCid: scope.parentCid,
+            branch: scope.branch,
+            index,
+          } as const)
+    const path: StepPath = [...parentPath, segment]
+    if (step.cid === cidToFind) return { step, path }
+    if (step.branches) {
+      const yes = findStepSelection(
+        step.branches.yes,
+        cidToFind,
+        path,
+        { kind: "branch", parentCid: step.cid, branch: "yes" },
+      )
+      if (yes) return yes
+      const no = findStepSelection(
+        step.branches.no,
+        cidToFind,
+        path,
+        { kind: "branch", parentCid: step.cid, branch: "no" },
+      )
+      if (no) return no
+    }
+  }
+  return null
+}
+
 export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
   const router = useRouter()
   const t = useTranslations("Automations.builder")
   const isEditing = !!initial.id
   const [state, setState] = useState<BuilderInitial>(initial)
   const [saving, setSaving] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>("trigger")
+  const selectedStep = expandedId ? findStepSelection(state.steps, expandedId) : null
 
   function patchTop<K extends keyof BuilderInitial>(key: K, value: BuilderInitial[K]) {
     setState((s) => ({ ...s, [key]: value }))
@@ -656,10 +700,6 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
 
   function deleteStepAt(path: StepPath) {
     setState((s) => ({ ...s, steps: removeAt(s.steps, path) }))
-  }
-
-  function moveStepAt(path: StepPath, direction: -1 | 1) {
-    setState((s) => ({ ...s, steps: moveAt(s.steps, path, direction) }))
   }
 
   async function save() {
@@ -712,73 +752,132 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:flex-nowrap sm:gap-3 sm:px-4">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push("/automations")}
-          aria-label={t("backToAutomations")}
-        >
-          <ArrowLeft aria-hidden="true" />
-        </Button>
-        <div className="min-w-0 flex-1">
-          <label htmlFor="automation-name" className="sr-only">
-            Automation name
-          </label>
-          <input
-            id="automation-name"
-            value={state.name}
-            onChange={(e) => patchTop("name", e.target.value)}
-            placeholder={t("untitled")}
-            className="w-full truncate rounded-md bg-transparent px-2 py-1 text-sm font-semibold text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none sm:text-base"
-          />
-          <p className="hidden px-2 text-xs text-muted-foreground sm:block">
-            {state.steps.length === 0 ? "Trigger only" : `${state.steps.length} top-level steps`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1">
-          <span className="hidden text-xs font-medium text-muted-foreground sm:inline">
+    <ResourcesProvider>
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:flex-nowrap sm:gap-3 sm:px-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push("/automations")}
+            aria-label={t("backToAutomations")}
+          >
+            <ArrowLeft aria-hidden="true" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <label htmlFor="automation-name" className="sr-only">
+              Automation name
+            </label>
+            <input
+              id="automation-name"
+              value={state.name}
+              onChange={(e) => patchTop("name", e.target.value)}
+              placeholder={t("untitled")}
+              className="w-full truncate rounded-md bg-transparent px-2 py-1 text-sm font-semibold text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none sm:text-base"
+            />
+            <p className="hidden px-2 text-xs text-muted-foreground sm:block">
+              {state.steps.length === 0 ? "Trigger only" : `${state.steps.length} top-level steps`}
+            </p>
+          </div>
+          <Badge variant={state.is_active ? "default" : "secondary"}>
             {state.is_active ? t("active") : "Draft"}
-          </span>
-          <Switch
-            checked={state.is_active}
-            onCheckedChange={(v) => patchTop("is_active", !!v)}
-            aria-label={t("activeAria")}
-          />
-        </div>
-        <Button onClick={save} disabled={saving}>
-          {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
-          {isEditing ? t("save") : t("saveDraft")}
-        </Button>
-      </header>
+          </Badge>
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1">
+            <span className="sr-only">{state.is_active ? t("active") : "Draft"}</span>
+            <Switch
+              checked={state.is_active}
+              onCheckedChange={(v) => patchTop("is_active", !!v)}
+              aria-label={t("activeAria")}
+            />
+          </div>
+          <Button onClick={save} disabled={saving}>
+            {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
+            {isEditing ? t("save") : t("saveDraft")}
+          </Button>
+        </header>
 
-      <div className="relative min-h-0 flex-1 overflow-auto bg-muted/30">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] [background-size:20px_20px]" />
-        <div className="relative mx-auto flex min-h-full max-w-3xl flex-col items-center px-4 py-6 sm:px-8 sm:py-8">
-          <ResourcesProvider>
-            <TriggerCard
-              type={state.trigger_type}
-              config={state.trigger_config}
-              onTypeChange={(tVal) => patchTop("trigger_type", tVal)}
-              onConfigChange={(c) => patchTop("trigger_config", c)}
-              t={t}
-            />
-            <StepList
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <main className="relative min-w-0 flex-1" aria-label="Automation workflow canvas">
+            <AutomationFlowCanvas
               steps={state.steps}
-              parentPath={[]}
-              expandedId={expandedId}
-              setExpandedId={setExpandedId}
-              updateStep={updateStep}
-              addStepAt={addStepAt}
-              deleteStepAt={deleteStepAt}
-              moveStepAt={moveStepAt}
+              triggerType={state.trigger_type}
+              selectedId={expandedId ?? ""}
+              onSelect={setExpandedId}
+              onAdd={addStepAt}
+              onDeleteSelected={() => {
+                if (!selectedStep) return
+                deleteStepAt(selectedStep.path)
+                setExpandedId(null)
+              }}
+              labelForStep={(type) => t(`steps.${STEP_META[type].label}`)}
+              labelForTrigger={(type) => t(`triggers.${type}.label`)}
+              summaryForStep={previewFor}
             />
-          </ResourcesProvider>
+          </main>
+
+          {expandedId ? (
+            <aside className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-border bg-card shadow-xl md:relative md:z-auto md:w-[380px] md:shrink-0 md:shadow-none" aria-label="Workflow inspector">
+              <div className="flex items-start justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">Inspector</p>
+                  <h2 className="mt-1 truncate text-base font-semibold text-foreground">
+                    {expandedId === "trigger"
+                      ? t(`triggers.${state.trigger_type}.label`)
+                      : selectedStep
+                        ? t(`steps.${STEP_META[selectedStep.step.step_type].label}`)
+                        : "Workflow step"}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Configure this node without leaving the canvas.</p>
+                </div>
+                <Button type="button" variant="ghost" size="icon-sm" onClick={() => setExpandedId(null)} aria-label="Close inspector">
+                  <ChevronDown className="-rotate-90" />
+                </Button>
+              </div>
+              <Separator />
+              <ScrollArea className="min-h-0 flex-1">
+                <div className="flex flex-col gap-5 p-4">
+                  {expandedId === "trigger" ? (
+                    <TriggerCard
+                      type={state.trigger_type}
+                      config={state.trigger_config}
+                      onTypeChange={(tVal) => patchTop("trigger_type", tVal)}
+                      onConfigChange={(c) => patchTop("trigger_config", c)}
+                      t={t}
+                      defaultOpen
+                    />
+                  ) : selectedStep ? (
+                    <>
+                      <div className="rounded-lg border border-border bg-muted/40 p-3">
+                        <p className="text-xs font-medium text-foreground">{previewFor(selectedStep.step) || "Ready to configure"}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Changes are included the next time you save.</p>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <StepEditor
+                          step={selectedStep.step}
+                          onChange={(next) => updateStep(selectedStep.path, () => next)}
+                        />
+                      </div>
+                      <Separator />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          deleteStepAt(selectedStep.path)
+                          setExpandedId(null)
+                        }}
+                      >
+                        <Trash2 data-icon="inline-start" />
+                        Delete step
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              </ScrollArea>
+            </aside>
+          ) : null}
         </div>
       </div>
-    </div>
+    </ResourcesProvider>
   )
 }
 
@@ -792,14 +891,16 @@ function TriggerCard({
   onTypeChange,
   onConfigChange,
   t,
+  defaultOpen = false,
 }: {
   type: AutomationTriggerType
   config: Record<string, unknown>
   onTypeChange: (t: AutomationTriggerType) => void
   onConfigChange: (c: Record<string, unknown>) => void
   t: ReturnType<typeof useTranslations>
+  defaultOpen?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   return (
     // Card width: full on mobile, fixed 320px on sm+. The canvas wrapper
     // (max-w-2xl + px-4) keeps this tidy on tablet/desktop.
@@ -1017,11 +1118,11 @@ function InteractiveReplyConfig({
 // Step list + card + connectors
 // ------------------------------------------------------------
 
-type ParentScope =
+export type ParentScope =
   | { kind: "root" }
   | { kind: "branch"; parentCid: string; branch: "yes" | "no" }
 
-type StepPath = (
+export type StepPath = (
   | { kind: "root"; index: number }
   | { kind: "branch"; parentCid: string; branch: "yes" | "no"; index: number }
 )[]
