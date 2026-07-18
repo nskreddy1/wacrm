@@ -53,8 +53,14 @@ export async function POST(request: Request) {
       )
     }
 
+    // Optional bot to impersonate — lets the Playground test ANY bot,
+    // not just the active one. Absent/null = active bot (or bot-less).
+    const botId =
+      typeof body?.botId === 'string' && body.botId.trim() ? body.botId.trim() : null
+
     const config = await loadAiConfig(supabase, accountId, {
       requireActive: false,
+      botId,
     }).catch((err) => {
       console.error('[ai/playground] loadAiConfig error:', err)
       throw new AiError('Stored API key could not be decrypted.', {
@@ -72,16 +78,18 @@ export async function POST(request: Request) {
       )
     }
 
-    const knowledge = await retrieveKnowledge(
-      supabase,
-      accountId,
-      config,
-      latestUserMessage(messages),
-    )
+    // Mirror the live auto-reply path: honor the bot's KB toggle and
+    // persona directives so the Playground shows exactly what a real
+    // customer would get from this bot.
+    const knowledge = config.useKnowledgeBase
+      ? await retrieveKnowledge(supabase, accountId, config, latestUserMessage(messages))
+      : []
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      tone: config.tone,
+      language: config.language,
     })
 
     const { text, handoff } = await generateReply({ config, systemPrompt, messages })
