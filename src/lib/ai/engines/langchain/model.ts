@@ -29,6 +29,8 @@ import {
  */
 export function resolveChatModel(config: AiConfig): BaseChatModel {
   const { provider, apiKey, model } = config
+  // Bot persona temperature; undefined = omit (provider default).
+  const temperature = config.temperature ?? undefined
   switch (provider) {
     case 'openai':
       return new ChatOpenAI({
@@ -36,6 +38,7 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         model,
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
+        ...(temperature !== undefined ? { temperature } : {}),
       })
     case 'anthropic':
       return new ChatAnthropic({
@@ -43,6 +46,10 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         model,
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
+        // Anthropic caps temperature at 1.0 (OpenAI-style configs go to 2).
+        ...(temperature !== undefined
+          ? { temperature: Math.min(Math.max(temperature, 0), 1) }
+          : {}),
       })
     case 'gemini':
       return new ChatGoogleGenerativeAI({
@@ -50,6 +57,7 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         model,
         maxRetries: 0,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
+        ...(temperature !== undefined ? { temperature } : {}),
       })
     case 'ollama': {
       // Self-hosted Ollama — OpenAI-compatible /v1 endpoint, no real
@@ -60,6 +68,7 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
         configuration: { baseURL: resolveOllamaBaseUrl(config.baseUrl) },
+        ...(temperature !== undefined ? { temperature } : {}),
       })
     }
     case 'custom': {
@@ -77,6 +86,7 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
         configuration: { baseURL: baseUrl },
+        ...(temperature !== undefined ? { temperature } : {}),
       })
     }
     default: {
@@ -94,6 +104,7 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
         configuration: { baseURL: baseUrl },
+        ...(temperature !== undefined ? { temperature } : {}),
       })
     }
   }

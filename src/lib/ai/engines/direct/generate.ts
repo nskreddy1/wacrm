@@ -44,6 +44,7 @@ export async function generateReplyDirect(
     systemPrompt,
     messages,
     timeoutMs,
+    temperature: config.temperature ?? null,
   }
 
   switch (config.provider) {

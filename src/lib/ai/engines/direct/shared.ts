@@ -11,6 +11,8 @@ export interface ProviderArgs {
   systemPrompt: string
   messages: ChatMessage[]
   timeoutMs: number
+  /** Sampling temperature; null/undefined = omit (provider default). */
+  temperature?: number | null
 }
 
 /** Raw text + usage a provider adapter returns before handoff parsing. */

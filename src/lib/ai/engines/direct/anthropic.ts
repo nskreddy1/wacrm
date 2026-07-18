@@ -41,7 +41,10 @@ function normalizeForAnthropic(messages: ChatMessage[]): ChatMessage[] {
  * in the shared dispatch layer).
  */
 export async function generateAnthropic(args: ProviderArgs): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args
+  const { apiKey, model, systemPrompt, messages, timeoutMs, temperature } = args
+  // Anthropic caps temperature at 1.0 (OpenAI-style configs go to 2).
+  const anthropicTemp =
+    temperature != null ? Math.min(Math.max(temperature, 0), 1) : null
 
   let res: Response
   try {
@@ -57,6 +60,8 @@ export async function generateAnthropic(args: ProviderArgs): Promise<ProviderRes
         system: systemPrompt,
         max_tokens: MAX_OUTPUT_TOKENS,
         messages: normalizeForAnthropic(messages),
+        // Omit when unset — the provider's own default applies.
+        ...(anthropicTemp != null ? { temperature: anthropicTemp } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
     })

@@ -69,7 +69,9 @@ export async function dispatchInboundToAiReply(
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
-      .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
+      .select(
+        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_away_message_sent',
+      )
       .eq('id', conversationId)
       .maybeSingle()
     if (convErr || !conv) return
@@ -78,6 +80,40 @@ export async function dispatchInboundToAiReply(
     // Cheap early-out; the authoritative cap check is the atomic claim
     // below (this read can race a concurrent inbound).
     if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return
+
+    // Working-hours gate (bot persona). Outside the bot's schedule:
+    // 'silent' → say nothing; 'away_message' → send the configured away
+    // message ONCE per conversation, then stay quiet. The flag flip is
+    // an atomic claim (WHERE NOT ai_away_message_sent) so two racing
+    // inbounds can't both send it.
+    if (!isWithinWorkingHours(config.workingHours)) {
+      if (
+        config.outsideHoursBehavior === 'away_message' &&
+        config.awayMessage?.trim() &&
+        !conv.ai_away_message_sent
+      ) {
+        const { data: claimedRows, error: awayErr } = await db
+          .from('conversations')
+          .update({ ai_away_message_sent: true })
+          .eq('id', conversationId)
+          .eq('ai_away_message_sent', false)
+          .select('id')
+        if (awayErr) {
+          console.error('[ai auto-reply] away-message claim failed:', awayErr)
+          return
+        }
+        if (!claimedRows || claimedRows.length === 0) return // lost the race
+        await sendChannelMessage({
+          accountId,
+          conversationId,
+          contactId,
+          payload: { kind: 'text', text: config.awayMessage.trim() },
+          senderType: 'bot',
+          aiGenerated: false,
+        })
+      }
+      return
+    }
 
     const messages = await buildConversationContext(db, conversationId)
     if (messages.length === 0) return

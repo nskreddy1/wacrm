@@ -34,7 +34,7 @@ interface GeminiResponse {
  * it can't leak into logs.
  */
 export async function generateGemini(args: ProviderArgs): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args
+  const { apiKey, model, systemPrompt, messages, timeoutMs, temperature } = args
 
   let res: Response
   try {
@@ -50,7 +50,11 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content }],
         })),
-        generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+        generationConfig: {
+          maxOutputTokens: MAX_OUTPUT_TOKENS,
+          // Omit when unset — the provider's own default applies.
+          ...(temperature != null ? { temperature } : {}),
+        },
       }),
       signal: AbortSignal.timeout(timeoutMs),
     })

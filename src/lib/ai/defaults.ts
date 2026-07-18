@@ -1,4 +1,19 @@
-import type { AiProvider } from './types'
+import type { AiProvider, BotTone } from './types'
+
+/** One-line style directive per persona tone, appended to the system
+ *  prompt when a bot specifies one. */
+const TONE_DIRECTIVE: Record<BotTone, string> = {
+  professional:
+    'Maintain a professional, courteous tone — clear, respectful, and businesslike.',
+  friendly:
+    'Maintain a friendly, warm tone — approachable and helpful, like a great front-desk person.',
+  casual:
+    'Maintain a casual, relaxed tone — conversational and easygoing, while staying helpful.',
+  formal:
+    'Maintain a formal, polished tone — precise wording, full sentences, no slang.',
+  playful:
+    'Maintain a playful, upbeat tone — light and cheerful, while staying respectful and on-topic.',
+}
 
 // ============================================================
 // Tunables + prompt scaffold for the AI reply assistant.
@@ -119,8 +134,13 @@ export function buildSystemPrompt(args: {
   mode: 'draft' | 'auto_reply'
   /** Knowledge-base excerpts retrieved for the current question. */
   knowledge?: string[]
+  /** Bot persona tone; appends a short style directive when set. */
+  tone?: BotTone | null
+  /** Reply language; 'auto'/null keeps the default mirror-the-customer
+   *  guideline, anything else appends an explicit language directive. */
+  language?: string | null
 }): string {
-  const { userPrompt, mode, knowledge } = args
+  const { userPrompt, mode, knowledge, tone, language } = args
   const parts: string[] = [
     'You are a customer-messaging assistant for a business that uses a WhatsApp CRM. ' +
       'You are shown the recent WhatsApp conversation between the business (assistant) and a customer (user). ' +
@@ -140,6 +160,17 @@ export function buildSystemPrompt(args: {
       `After your reply (or after ${HANDOFF_SENTINEL}), end your output with exactly one final line in this exact format and nothing after it:\n` +
         `${META_SENTINEL}{"sentiment":"angry|frustrated|neutral|happy","escalate":true|false,"reason":"human_requested|angry_customer|out_of_scope|needs_account_data|purchase_ready|none"}\n` +
         'Pick the single sentiment that best matches the customer\'s latest messages. Set "escalate" to true whenever a human should take over (same conditions as the handoff rule, plus a customer ready to buy who needs a person, or a request needing their account data). When "escalate" is false, use "reason":"none". This metadata line is machine-read and stripped before sending — the customer never sees it.',
+    )
+  }
+
+  // Persona directives — short and last-wins so they steer style
+  // without disturbing the fixed guardrails above.
+  if (tone && TONE_DIRECTIVE[tone]) {
+    parts.push(TONE_DIRECTIVE[tone])
+  }
+  if (language && language.trim() && language.trim().toLowerCase() !== 'auto') {
+    parts.push(
+      `Reply in ${language.trim()} unless the customer clearly writes in another language — in that case, mirror the customer's language.`,
     )
   }
 

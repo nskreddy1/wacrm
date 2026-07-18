@@ -45,10 +45,81 @@ export function isAiProvider(value: unknown): value is AiProvider {
   return typeof value === 'string' && AI_PROVIDERS.includes(value as AiProvider)
 }
 
+/** Persona tone options a bot can be configured with. */
+export type BotTone =
+  | 'professional'
+  | 'friendly'
+  | 'casual'
+  | 'formal'
+  | 'playful'
+
+/** What the bot does when a message arrives outside working hours. */
+export type OutsideHoursBehavior = 'silent' | 'away_message'
+
+/** Per-day working window in the bot's timezone; null = closed. */
+export interface WorkingHoursDay {
+  /** "HH:MM" 24h */
+  start: string
+  /** "HH:MM" 24h */
+  end: string
+}
+
+/**
+ * A bot's weekly schedule. Null on the bot means "always on". Days are
+ * keyed mon..sun; a missing/null day means closed that day.
+ */
+export interface WorkingHours {
+  /** IANA timezone, e.g. "Asia/Kolkata". */
+  timezone: string
+  days: Partial<
+    Record<
+      'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun',
+      WorkingHoursDay | null
+    >
+  >
+}
+
+/**
+ * One persona bot (`ai_bots` row), camelCase. Credentials stay on the
+ * account (`ai_configs`); a bot is the persona/behavior layer merged
+ * on top of them by `loadAiConfig`.
+ */
+export interface AiBot {
+  id: string
+  accountId: string
+  name: string
+  description: string | null
+  emoji: string | null
+  systemPrompt: string
+  tone: BotTone
+  /** 'auto' = mirror the customer's language; else a language name. */
+  language: string
+  greetingMessage: string | null
+  temperature: number | null
+  modelOverride: string | null
+  autoReplyMaxPerConversation: number | null
+  handoffAgentId: string | null
+  workingHours: WorkingHours | null
+  outsideHoursBehavior: OutsideHoursBehavior
+  awayMessage: string | null
+  useKnowledgeBase: boolean
+  isActive: boolean
+  templateKey: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 /**
  * Account AI setup, decrypted and ready to use. Produced by
  * `loadAiConfig` — `apiKey` is the plaintext BYO provider key
  * (stored AES-256-GCM-encrypted at rest).
+ *
+ * When the account has an active bot (or the caller passes `botId`),
+ * the bot's persona is merged in: `systemPrompt` becomes the bot's
+ * prompt, `model`/cap/handoff take the bot's overrides, and the
+ * bot-only fields (`temperature`, `greetingMessage`, `workingHours`,
+ * `useKnowledgeBase`, …) are populated. With no bot they carry
+ * behavior-neutral defaults so callers can read them unconditionally.
  */
 export interface AiConfig {
   provider: AiProvider
@@ -74,6 +145,26 @@ export interface AiConfig {
    *  shared `process.env.GEMINI_API_KEY` fallback. Logged to
    *  `ai_usage_log.key_source` so shared-key spend is auditable. */
   keySource: 'account' | 'env'
+
+  // ---- Bot persona layer (merged from the active/requested ai_bots
+  // ---- row; behavior-neutral defaults when there is no bot).
+  /** Active/requested bot id, or null when running bot-less. */
+  botId: string | null
+  botName: string | null
+  /** Persona tone directive; null = no directive (bot-less). */
+  tone: BotTone | null
+  /** Reply language; 'auto'/null = mirror the customer's language. */
+  language: string | null
+  /** Sampling temperature override; null = provider default (omit). */
+  temperature: number | null
+  /** Prepended to the bot's first auto-reply in a conversation. */
+  greetingMessage: string | null
+  /** Weekly schedule; null = always on. */
+  workingHours: WorkingHours | null
+  outsideHoursBehavior: OutsideHoursBehavior
+  awayMessage: string | null
+  /** When false, skip knowledge-base retrieval entirely. */
+  useKnowledgeBase: boolean
 }
 
 /** A single conversation turn in the shape both providers accept. */

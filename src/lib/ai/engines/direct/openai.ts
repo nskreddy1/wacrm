@@ -40,7 +40,7 @@ export async function generateOpenAi(
   args: ProviderArgs,
   opts: OpenAiCompatOptions = {},
 ): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args
+  const { apiKey, model, systemPrompt, messages, timeoutMs, temperature } = args
   const baseUrl = (opts.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '')
   const label = opts.providerLabel ?? 'OpenAI'
   const isOpenAiProper = baseUrl === OPENAI_BASE_URL
@@ -65,6 +65,8 @@ export async function generateOpenAi(
         ...(isOpenAiProper
           ? { max_completion_tokens: MAX_OUTPUT_TOKENS }
           : { max_tokens: MAX_OUTPUT_TOKENS }),
+        // Omit when unset — the provider's own default applies.
+        ...(temperature != null ? { temperature } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
     })
