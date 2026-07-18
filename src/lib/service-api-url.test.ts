@@ -26,4 +26,16 @@ describe("resolveServiceApiUrl", () => {
   it("rejects invalid ports", () => {
     expect(() => resolveServiceApiUrl({ API_PORT: "70000" })).toThrow("Invalid API_PORT")
   })
+
+  it("rejects non-HTTP service URLs", () => {
+    expect(() => resolveServiceApiUrl({ EXPRESS_API_URL: "file:///tmp/socket" })).toThrow(
+      "must use http or https",
+    )
+  })
+
+  it("rejects credentials embedded in the service URL", () => {
+    expect(() =>
+      resolveServiceApiUrl({ EXPRESS_API_URL: "https://user:secret@api.internal.example" }),
+    ).toThrow("must not contain credentials")
+  })
 })

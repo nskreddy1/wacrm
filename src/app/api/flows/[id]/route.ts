@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
+import { validateFlowForActivation } from '@/lib/flows/validate'
 
 /**
  * GET   /api/flows/[id]  — fetch one flow with its nodes.
@@ -93,11 +94,11 @@ export async function PUT(
 ) {
   const { id } = await context.params
 
-  // Writes require at least `agent` — the RLS flows_update policy demands
-  // it, but this route mutates via the service-role client which bypasses
-  // RLS, so the role must be enforced here (a viewer passes ownership).
+  // Writes require at least `agent`. Retain the account id because the
+  // atomic RPC uses the service role and must independently scope itself.
+  let accountId: string
   try {
-    await requireRole('agent')
+    accountId = (await requireRole('agent')).accountId
   } catch (err) {
     return toErrorResponse(err)
   }
@@ -117,57 +118,61 @@ export async function PUT(
   }
 
   const admin = supabaseAdmin()
-
-  // Update the flow row first — the body may not include `nodes` (a
-  // header-only save for editing the trigger config without touching
-  // the graph). Skip node replacement in that case.
-  const flowPatch: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
+  const [{ data: existingFlow }, { data: existingNodes }] = await Promise.all([
+    admin
+      .from('flows')
+      .select('name, status, trigger_type, trigger_config, entry_node_id')
+      .eq('id', id)
+      .eq('account_id', accountId)
+      .maybeSingle(),
+    admin.from('flow_nodes').select('node_key, node_type, config').eq('flow_id', id),
+  ])
+  if (!existingFlow) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
+
+  const flowPatch: Record<string, unknown> = {}
   if (body.name !== undefined) flowPatch.name = body.name.trim()
-  if (body.description !== undefined)
-    flowPatch.description = body.description
+  if (body.description !== undefined) flowPatch.description = body.description
   if (body.trigger_type !== undefined) flowPatch.trigger_type = body.trigger_type
-  if (body.trigger_config !== undefined)
-    flowPatch.trigger_config = body.trigger_config
-  if (body.entry_node_id !== undefined)
-    flowPatch.entry_node_id = body.entry_node_id
-  if (body.fallback_policy !== undefined)
-    flowPatch.fallback_policy = body.fallback_policy
+  if (body.trigger_config !== undefined) flowPatch.trigger_config = body.trigger_config
+  if (body.entry_node_id !== undefined) flowPatch.entry_node_id = body.entry_node_id
+  if (body.fallback_policy !== undefined) flowPatch.fallback_policy = body.fallback_policy
 
-  const { error: updErr } = await admin
-    .from('flows')
-    .update(flowPatch)
-    .eq('id', id)
-  if (updErr) {
-    return NextResponse.json({ error: updErr.message }, { status: 500 })
+  // Active flows must remain executable after every edit. Drafts remain
+  // intentionally permissive so incomplete work can still be saved.
+  if (existingFlow.status === 'active') {
+    const effectiveFlow = {
+      name: (body.name ?? existingFlow.name) as string,
+      trigger_type: (body.trigger_type ?? existingFlow.trigger_type) as PutBody['trigger_type'] & string,
+      trigger_config: (body.trigger_config ?? existingFlow.trigger_config) as Record<string, unknown>,
+      entry_node_id: body.entry_node_id !== undefined ? body.entry_node_id : existingFlow.entry_node_id,
+    }
+    const effectiveNodes = body.nodes ?? existingNodes ?? []
+    const issues = validateFlowForActivation(effectiveFlow, effectiveNodes)
+    if (issues.some((issue) => issue.severity === 'error')) {
+      return NextResponse.json(
+        { error: 'Cannot keep an active flow with invalid configuration', issues },
+        { status: 422 },
+      )
+    }
   }
 
-  if (body.nodes !== undefined) {
-    // Delete-then-insert. Not transactional but the runner handles
-    // mid-edit reads safely (a node_not_found ends the run cleanly).
-    const { error: delErr } = await admin
-      .from('flow_nodes')
-      .delete()
-      .eq('flow_id', id)
-    if (delErr) {
-      return NextResponse.json({ error: delErr.message }, { status: 500 })
-    }
-    if (body.nodes.length > 0) {
-      const { error: insErr } = await admin.from('flow_nodes').insert(
-        body.nodes.map((n) => ({
-          flow_id: id,
-          node_key: n.node_key,
-          node_type: n.node_type,
-          config: n.config,
-          position_x: n.position_x ?? 0,
-          position_y: n.position_y ?? 0,
-        })),
-      )
-      if (insErr) {
-        return NextResponse.json({ error: insErr.message }, { status: 500 })
-      }
-    }
+  const normalizedNodes = body.nodes?.map((node) => ({
+    node_key: node.node_key,
+    node_type: node.node_type,
+    config: node.config,
+    position_x: node.position_x ?? 0,
+    position_y: node.position_y ?? 0,
+  }))
+  const { error: saveError } = await admin.rpc('save_flow_graph_atomic', {
+    p_flow_id: id,
+    p_account_id: accountId,
+    p_patch: flowPatch,
+    p_nodes: normalizedNodes ?? null,
+  })
+  if (saveError) {
+    return NextResponse.json({ error: saveError.message }, { status: 500 })
   }
 
   // Re-fetch and return the new state — the editor uses the response

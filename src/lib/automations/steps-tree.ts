@@ -35,29 +35,40 @@ const uid = () =>
 
 export async function replaceSteps(
   automationId: string,
+  accountId: string,
   input: BuilderStepInput[],
 ): Promise<string | null> {
-  const admin = supabaseAdmin()
-  const { error: delErr } = await admin
-    .from('automation_steps')
-    .delete()
-    .eq('automation_id', automationId)
-  if (delErr) return delErr.message
-  return insertSteps(automationId, input)
+  const rows = flattenSteps(automationId, input)
+  const { error } = await supabaseAdmin().rpc('replace_automation_steps_atomic', {
+    p_automation_id: automationId,
+    p_account_id: accountId,
+    p_steps: rows,
+  })
+  return error?.message ?? null
 }
 
 export async function insertSteps(
   automationId: string,
   input: BuilderStepInput[],
 ): Promise<string | null> {
-  if (!input || input.length === 0) return null
+  const rows = flattenSteps(automationId, input)
+  if (rows.length === 0) return null
+  const { error } = await supabaseAdmin().from('automation_steps').insert(rows)
+  return error?.message ?? null
+}
+
+function flattenSteps(
+  automationId: string,
+  input: BuilderStepInput[],
+): InsertRow[] {
+  if (!input || input.length === 0) return []
 
   const looksFlat = input.some(
     (s) => s.branch !== undefined || s.parent_index !== undefined,
   )
   const tree = looksFlat ? seedsToTree(input) : input
-
   const rows: InsertRow[] = []
+
   function walk(
     steps: BuilderStepInput[],
     parentId: string | null,
@@ -80,11 +91,9 @@ export async function insertSteps(
       }
     })
   }
-  walk(tree, null, null)
 
-  if (rows.length === 0) return null
-  const { error } = await supabaseAdmin().from('automation_steps').insert(rows)
-  return error?.message ?? null
+  walk(tree, null, null)
+  return rows
 }
 
 function seedsToTree(seeds: BuilderStepInput[]): BuilderStepInput[] {
