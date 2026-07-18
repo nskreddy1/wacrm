@@ -281,7 +281,38 @@ export default function FlowsPage() {
         </GatedButton>
       </header>
 
-      {flows.length === 0 ? (
+      {!isEmpty && (
+        <div
+          role="tablist"
+          aria-label={t("filterAll")}
+          className="flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"
+        >
+          {(
+            [
+              ["all", t("filterAll")],
+              ["flows", t("filterFlows")],
+              ["rules", t("filterRules")],
+            ] as [UnifiedFilter, string][]
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              role="tab"
+              aria-selected={filter === value}
+              onClick={() => setFilter(value)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                filter === value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isEmpty ? (
         <EmptyState
           onCreate={() => setCreateOpen(true)}
           canCreate={canCreate}
@@ -289,15 +320,28 @@ export default function FlowsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {flows.map((flow) => (
-            <FlowCard
-              key={flow.id}
-              flow={flow}
-              onEdit={() => router.push(`/flows/${flow.id}`)}
-              onDelete={() => handleDelete(flow)}
-              t={t}
-            />
-          ))}
+          {items.map((item) =>
+            item.kind === "flow" ? (
+              <FlowCard
+                key={`flow-${item.flow.id}`}
+                flow={item.flow}
+                onEdit={() => router.push(`/flows/${item.flow.id}`)}
+                onDelete={() => handleDelete(item.flow)}
+                t={t}
+              />
+            ) : (
+              <AutomationRuleCard
+                key={`auto-${item.automation.id}`}
+                automation={item.automation}
+                onToggle={(next) => toggleRule(item.automation, next)}
+                onEdit={() => router.push(`/automations/${item.automation.id}/edit`)}
+                onLogs={() => router.push(`/automations/${item.automation.id}/logs`)}
+                onDuplicate={() => duplicateRule(item.automation)}
+                onDelete={() => setPendingRuleDelete(item.automation)}
+                t={t}
+              />
+            ),
+          )}
         </div>
       )}
 
@@ -362,6 +406,19 @@ export default function FlowsPage() {
             />
           </div>
 
+          <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
+            <p className="text-xs text-muted-foreground">{t("startClassic")}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/automations/new")}
+              disabled={creating}
+            >
+              <Zap className="h-4 w-4" />
+              {t("createClassic")}
+            </Button>
+          </div>
+
           <DialogFooter>
             <Button
               variant="ghost"
@@ -373,6 +430,34 @@ export default function FlowsPage() {
             <Button onClick={handleCreate} disabled={!newName.trim() || creating}>
               {creating && <Loader2 className="h-4 w-4 animate-spin" />}
               {t("createBlank")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pendingRuleDelete} onOpenChange={(v) => !v && setPendingRuleDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("deleteRuleTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("deleteRuleDesc", { name: pendingRuleDelete?.name ?? "" })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setPendingRuleDelete(null)}
+              disabled={deletingRule}
+            >
+              {t("cancel")}
+            </Button>
+            <Button variant="destructive" onClick={confirmRuleDelete} disabled={deletingRule}>
+              {deletingRule ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              {t("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
