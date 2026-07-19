@@ -1,23 +1,35 @@
 import "server-only"
 
 import type { AccountContext } from "@/lib/auth/account"
-import type { ContactPreferences, ContactValue, ContactWorkspaceData, WorkspaceContact } from "./types"
+import type { ContactField, ContactPreferences, ContactValue, ContactWorkspaceData, FieldType, WorkspaceContact } from "./types"
 
-export const coreContactFields = [
-  { id: "name", label: "Name", type: "text" as const, required: true, width: 220 },
-  { id: "phone", label: "Phone", type: "phone" as const, width: 180 },
-  { id: "email", label: "Email", type: "email" as const, width: 220 },
-  { id: "company", label: "Company", type: "text" as const, width: 180 },
+const CONTACT_SELECT = "id, account_id, name, phone, email, company, created_at, updated_at"
+
+export const coreContactFields: ContactField[] = [
+  { id: "name", label: "Name", type: "text", required: true, width: 220 },
+  { id: "phone", label: "Phone", type: "phone", width: 180 },
+  { id: "email", label: "Email", type: "email", width: 220 },
+  { id: "company", label: "Company", type: "text", width: 180 },
 ]
 
-const defaultPreferences: ContactPreferences = {
-  visible: coreContactFields.map((field) => field.id),
-  order: coreContactFields.map((field) => field.id),
-  frozen: ["name"],
-  widths: {},
+function mapField(row: Record<string, unknown>): ContactField {
+  const rawOptions = row.field_options
+  const options = Array.isArray(rawOptions)
+    ? rawOptions.map(String)
+    : rawOptions && typeof rawOptions === "object" && Array.isArray((rawOptions as { options?: unknown[] }).options)
+      ? (rawOptions as { options: unknown[] }).options.map(String)
+      : undefined
+  return {
+    id: String(row.id),
+    label: String(row.field_name),
+    type: String(row.field_type ?? "text") as FieldType,
+    options,
+    width: 180,
+    custom: true,
+  }
 }
 
-function mapContact(row: Record<string, unknown>): WorkspaceContact {
+function mapContact(row: Record<string, unknown>, customValues: Record<string, ContactValue> = {}): WorkspaceContact {
   return {
     id: String(row.id),
     accountId: String(row.account_id),
@@ -28,6 +40,7 @@ function mapContact(row: Record<string, unknown>): WorkspaceContact {
       phone: String(row.phone ?? ""),
       email: String(row.email ?? ""),
       company: String(row.company ?? ""),
+      ...customValues,
     },
   }
 }
@@ -37,24 +50,94 @@ function contactColumns(values: Partial<Record<string, ContactValue>>) {
   return Object.fromEntries(allowed.filter((key) => values[key] !== undefined).map((key) => [key, values[key]]))
 }
 
-export async function getSupabaseContactWorkspace(ctx: AccountContext): Promise<ContactWorkspaceData> {
-  const { data, error } = await ctx.supabase.from("contacts").select("id, account_id, name, phone, email, company, created_at, updated_at").eq("account_id", ctx.accountId).order("created_at", { ascending: false })
+async function saveCustomValues(ctx: AccountContext, contactId: string, values: Partial<Record<string, ContactValue>>) {
+  const { data: fields, error: fieldsError } = await ctx.supabase.from("custom_fields").select("id").eq("account_id", ctx.accountId)
+  if (fieldsError) throw new Error(fieldsError.message)
+  const allowed = new Set((fields ?? []).map((field) => String(field.id)))
+  const entries = Object.entries(values).filter(([id]) => allowed.has(id))
+  if (!entries.length) return
+  const rows = entries.map(([custom_field_id, value]) => ({ contact_id: contactId, custom_field_id, value: Array.isArray(value) ? value.join(", ") : String(value ?? "") }))
+  const { error } = await ctx.supabase.from("contact_custom_values").upsert(rows, { onConflict: "contact_id,custom_field_id" })
   if (error) throw new Error(error.message)
-  return { contacts: (data ?? []).map((row) => mapContact(row)), fields: coreContactFields, preferences: defaultPreferences }
+}
+
+export async function getSupabaseContactWorkspace(ctx: AccountContext): Promise<ContactWorkspaceData> {
+  const [contactsResult, fieldsResult, valuesResult] = await Promise.all([
+    ctx.supabase.from("contacts").select(CONTACT_SELECT).eq("account_id", ctx.accountId).order("created_at", { ascending: false }),
+    ctx.supabase.from("custom_fields").select("id, field_name, field_type, field_options").eq("account_id", ctx.accountId).order("created_at"),
+    ctx.supabase.from("contact_custom_values").select("contact_id, custom_field_id, value"),
+  ])
+  if (contactsResult.error) throw new Error(contactsResult.error.message)
+  if (fieldsResult.error) throw new Error(fieldsResult.error.message)
+  if (valuesResult.error) throw new Error(valuesResult.error.message)
+
+  const valuesByContact = new Map<string, Record<string, ContactValue>>()
+  for (const row of valuesResult.data ?? []) {
+    const current = valuesByContact.get(String(row.contact_id)) ?? {}
+    current[String(row.custom_field_id)] = String(row.value ?? "")
+    valuesByContact.set(String(row.contact_id), current)
+  }
+  const fields = [...coreContactFields, ...(fieldsResult.data ?? []).map((row) => mapField(row))]
+  const preferences: ContactPreferences = {
+    visible: fields.map((field) => field.id),
+    order: fields.map((field) => field.id),
+    frozen: ["name"],
+    widths: {},
+  }
+  return {
+    contacts: (contactsResult.data ?? []).map((row) => mapContact(row, valuesByContact.get(String(row.id)))),
+    fields,
+    preferences,
+  }
 }
 
 export async function createSupabaseContact(ctx: AccountContext, values: Record<string, ContactValue>) {
   const fields = contactColumns(values)
   if (!fields.name || (!fields.phone && !fields.email)) throw new Error("Name and either phone or email are required")
-  const { data, error } = await ctx.supabase.from("contacts").insert({ ...fields, account_id: ctx.accountId, user_id: ctx.userId }).select("id, account_id, name, phone, email, company, created_at, updated_at").single()
+  const { data, error } = await ctx.supabase.from("contacts").insert({ ...fields, account_id: ctx.accountId, user_id: ctx.userId }).select(CONTACT_SELECT).single()
   if (error) throw new Error(error.code === "23505" ? "A contact with these details already exists" : error.message)
-  return mapContact(data)
+  await saveCustomValues(ctx, String(data.id), values)
+  return mapContact(data, values)
 }
 
 export async function updateSupabaseContact(ctx: AccountContext, id: string, values: Partial<Record<string, ContactValue>>) {
-  const { data, error } = await ctx.supabase.from("contacts").update(contactColumns(values)).eq("account_id", ctx.accountId).eq("id", id).select("id, account_id, name, phone, email, company, created_at, updated_at").single()
+  const columns = contactColumns(values)
+  let row: Record<string, unknown>
+  if (Object.keys(columns).length) {
+    const { data, error } = await ctx.supabase.from("contacts").update(columns).eq("account_id", ctx.accountId).eq("id", id).select(CONTACT_SELECT).single()
+    if (error) throw new Error(error.message)
+    row = data
+  } else {
+    const { data, error } = await ctx.supabase.from("contacts").select(CONTACT_SELECT).eq("account_id", ctx.accountId).eq("id", id).single()
+    if (error) throw new Error(error.message)
+    row = data
+  }
+  await saveCustomValues(ctx, id, values)
+  return mapContact(row, values as Record<string, ContactValue>)
+}
+
+export async function createSupabaseContactField(ctx: AccountContext, field: { label: string; type: FieldType; options?: string[] }) {
+  const label = field.label.trim()
+  if (!label) throw new Error("Field label is required")
+  const { data, error } = await ctx.supabase.from("custom_fields").insert({ account_id: ctx.accountId, user_id: ctx.userId, field_name: label, field_type: field.type, field_options: field.options?.length ? { options: field.options } : null }).select("id, field_name, field_type, field_options").single()
   if (error) throw new Error(error.message)
-  return mapContact(data)
+  return mapField(data)
+}
+
+export async function updateSupabaseContactField(ctx: AccountContext, id: string, field: { label?: string; type?: FieldType; options?: string[] }) {
+  const update: Record<string, unknown> = {}
+  if (field.label !== undefined) update.field_name = field.label.trim()
+  if (field.type !== undefined) update.field_type = field.type
+  if (field.options !== undefined) update.field_options = field.options.length ? { options: field.options } : null
+  const { data, error } = await ctx.supabase.from("custom_fields").update(update).eq("account_id", ctx.accountId).eq("id", id).select("id, field_name, field_type, field_options").single()
+  if (error) throw new Error(error.message)
+  return mapField(data)
+}
+
+export async function deleteSupabaseContactFields(ctx: AccountContext, ids: string[]) {
+  const { error, count } = await ctx.supabase.from("custom_fields").delete({ count: "exact" }).eq("account_id", ctx.accountId).in("id", ids)
+  if (error) throw new Error(error.message)
+  return count ?? 0
 }
 
 export async function deleteSupabaseContacts(ctx: AccountContext, ids: string[]) {

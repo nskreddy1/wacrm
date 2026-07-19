@@ -18,6 +18,7 @@ export type ContactField = {
   readOnly?: boolean
   options?: string[]
   width: number
+  custom?: boolean
 }
 
 export type ContactValue = string | number | boolean | string[]

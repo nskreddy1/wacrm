@@ -3,9 +3,12 @@ import { NextResponse } from "next/server"
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
 import {
   createSupabaseContact,
+  createSupabaseContactField,
+  deleteSupabaseContactFields,
   deleteSupabaseContacts,
   getSupabaseContactWorkspace,
   updateSupabaseContact,
+  updateSupabaseContactField,
 } from "@/lib/data/contacts/supabase-repository"
 import type { ContactPreferences, ContactValue, FieldType } from "@/lib/data/contacts/types"
 import { getDataSource } from "@/lib/data/runtime"
@@ -44,7 +47,10 @@ export async function POST(request: Request) {
       values?: Record<string, ContactValue>
       field?: { label: string; type: FieldType; options?: string[]; width?: number }
     }
-    if (body.kind === "field") return failure(new Error("Custom contact fields are not available yet"), 501)
+    if (body.kind === "field") {
+      if (!body.field) throw new Error("Field details are required")
+      return response(await createSupabaseContactField(await getCurrentAccount(), body.field), 201)
+    }
     if (!body.values) throw new Error("Contact values are required")
     return response(await createSupabaseContact(await getCurrentAccount(), body.values), 201)
   } catch (error) {
@@ -60,8 +66,13 @@ export async function PATCH(request: Request) {
       id?: string
       values?: Partial<Record<string, ContactValue>>
       preferences?: Partial<ContactPreferences>
+      field?: { label?: string; type?: FieldType; options?: string[] }
     }
     if (body.kind === "preferences") return response(body.preferences ?? {})
+    if (body.kind === "field") {
+      if (!body.id || !body.field) throw new Error("Field id and details are required")
+      return response(await updateSupabaseContactField(await getCurrentAccount(), body.id, body.field))
+    }
     if (!body.id || !body.values) throw new Error("Contact id and values are required")
     return response(await updateSupabaseContact(await getCurrentAccount(), body.id, body.values))
   } catch (error) {
@@ -72,9 +83,11 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   try {
     getDataSource()
-    const body = (await request.json()) as { ids?: string[] }
-    if (!Array.isArray(body.ids)) throw new Error("Contact ids are required")
-    return response({ deleted: await deleteSupabaseContacts(await getCurrentAccount(), body.ids) })
+    const body = (await request.json()) as { kind?: string; ids?: string[] }
+    if (!Array.isArray(body.ids)) throw new Error("Record ids are required")
+    const context = await getCurrentAccount()
+    if (body.kind === "field") return response({ deleted: await deleteSupabaseContactFields(context, body.ids) })
+    return response({ deleted: await deleteSupabaseContacts(context, body.ids) })
   } catch (error) {
     return failure(error)
   }
