@@ -5,11 +5,11 @@ import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit
 import { channelAdmin } from '@/lib/channels/admin-client'
 import { createChannelAdapter } from '@/lib/channels/adapters'
 import { encryptProviderCredentials, type ProviderCredentials } from '@/lib/channels/credentials'
-import { getProviderCapabilities, isProviderCompatible, PROVIDER_LABEL } from '@/lib/channels/provider-registry'
+import { getProviderCapabilities, isProviderCompatible, PROVIDER_CHANNELS, PROVIDER_LABEL } from '@/lib/channels/provider-registry'
 import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
 
 const providers = ['meta', 'twilio', 'google', 'microsoft', 'resend', 'smtp'] as const
-const channels = ['whatsapp', 'email'] as const
+const channels = ['whatsapp', 'sms', 'email'] as const
 const safeColumns = 'id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,last_connected_at,last_synced_at,last_error,created_at,updated_at'
 
 const saveSchema = z.object({
@@ -44,7 +44,8 @@ function credentialsFor(provider: ChannelProvider, input?: Record<string, string
 
 function enrich(connection: Record<string, unknown>) {
   const provider = connection.provider as ChannelProvider
-  return { ...connection, credentialsConfigured: true, capabilities: getProviderCapabilities(provider), providerLabel: PROVIDER_LABEL[provider] }
+  const channel = connection.channel as ChannelKind
+  return { ...connection, credentialsConfigured: true, capabilities: getProviderCapabilities(provider, channel), providerLabel: PROVIDER_LABEL[provider] }
 }
 
 export async function GET() {
@@ -52,7 +53,18 @@ export async function GET() {
     const { accountId } = await requireRole('viewer')
     const { data, error } = await channelAdmin().from('channel_connections').select(safeColumns).eq('account_id', accountId).order('channel').order('created_at')
     if (error) throw error
-    return NextResponse.json({ connections: (data ?? []).map(enrich), providers: providers.map((provider) => ({ provider, channel: provider === 'meta' || provider === 'twilio' ? 'whatsapp' : 'email', label: PROVIDER_LABEL[provider], capabilities: getProviderCapabilities(provider), available: Boolean(createChannelAdapter(provider)) })) })
+    // One offering per provider+channel pair — multi-channel providers
+    // (Twilio: WhatsApp + SMS) appear once per channel they serve.
+    const offerings = providers.flatMap((provider) =>
+      PROVIDER_CHANNELS[provider].map((channel) => ({
+        provider,
+        channel,
+        label: PROVIDER_LABEL[provider],
+        capabilities: getProviderCapabilities(provider, channel),
+        available: Boolean(createChannelAdapter(provider, channel)),
+      })),
+    )
+    return NextResponse.json({ connections: (data ?? []).map(enrich), providers: offerings })
   } catch (error) {
     return toErrorResponse(error)
   }
@@ -73,7 +85,7 @@ export async function POST(request: Request) {
       if (!parsed.success) return NextResponse.json({ error: 'Invalid connection test' }, { status: 400 })
       const { data, error } = await channelAdmin().from('channel_connections').select('*').eq('id', parsed.data.id).eq('account_id', accountId).single()
       if (error || !data) return NextResponse.json({ error: 'Channel connection not found' }, { status: 404 })
-      const adapter = createChannelAdapter(data.provider as ChannelProvider)
+      const adapter = createChannelAdapter(data.provider as ChannelProvider, data.channel as ChannelKind)
       if (!adapter) return NextResponse.json({ error: `${PROVIDER_LABEL[data.provider as ChannelProvider]} setup is not available yet` }, { status: 409 })
       const health = await adapter.checkHealth(data as ChannelConnection)
       if (!health.ok) {
@@ -90,7 +102,7 @@ export async function POST(request: Request) {
     if (!parsed.success) return NextResponse.json({ error: 'Invalid channel configuration', details: parsed.error.flatten() }, { status: 400 })
     const { channel, provider } = parsed.data
     if (!isProviderCompatible(channel as ChannelKind, provider as ChannelProvider)) return NextResponse.json({ error: `${provider} is not compatible with ${channel}` }, { status: 400 })
-    if (!createChannelAdapter(provider as ChannelProvider)) return NextResponse.json({ error: `${PROVIDER_LABEL[provider as ChannelProvider]} setup is not available in this release` }, { status: 409 })
+    if (!createChannelAdapter(provider as ChannelProvider, channel as ChannelKind)) return NextResponse.json({ error: `${PROVIDER_LABEL[provider as ChannelProvider]} setup is not available in this release` }, { status: 409 })
 
     const suppliedCredentials = credentialsFor(provider as ChannelProvider, parsed.data.credentials)
     let existing: Record<string, unknown> | null = null

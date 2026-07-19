@@ -54,8 +54,14 @@ function canonicalWebhookUrl(request: Request): string {
 export async function POST(request: Request) {
   const rawBody = await request.text()
   const params = new URLSearchParams(rawBody)
-  const to = params.get('To')?.replace(/^whatsapp:/, '')
-  const from = params.get('From')?.replace(/^whatsapp:/, '')
+  // Twilio address format is the channel discriminator: WhatsApp
+  // traffic arrives as `whatsapp:+1555...`, plain SMS as `+1555...`.
+  // The same webhook URL serves both, so detect before stripping.
+  const rawTo = params.get('To') ?? ''
+  const rawFrom = params.get('From') ?? ''
+  const channel = rawTo.startsWith('whatsapp:') || rawFrom.startsWith('whatsapp:') ? 'whatsapp' : 'sms'
+  const to = rawTo ? rawTo.replace(/^whatsapp:/, '') : undefined
+  const from = rawFrom ? rawFrom.replace(/^whatsapp:/, '') : undefined
   const messageSid = params.get('MessageSid')
   if (!messageSid) return NextResponse.json({ error: 'Invalid Twilio payload' }, { status: 400 })
 
@@ -71,8 +77,11 @@ export async function POST(request: Request) {
   if (!connectionIdentity) return NextResponse.json({ error: 'Invalid Twilio payload' }, { status: 400 })
 
   const db = supabaseAdmin()
+  // Channel-scoped lookup: the same Twilio number can hold separate
+  // WhatsApp and SMS connections without cross-routing messages.
   const { data: connection } = await db.from('channel_connections').select('*')
-    .eq('provider', 'twilio').eq('external_identity', connectionIdentity).eq('is_enabled', true).maybeSingle()
+    .eq('provider', 'twilio').eq('channel', channel)
+    .eq('external_identity', connectionIdentity).eq('is_enabled', true).maybeSingle()
   if (!connection) return NextResponse.json({ error: 'Unknown destination' }, { status: 404 })
 
   const credentials = decryptProviderCredentials(connection)
