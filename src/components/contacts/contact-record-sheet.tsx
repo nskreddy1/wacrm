@@ -49,7 +49,8 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
       next.phone = "Add a phone number or email address."
       next.email = "Add an email address or phone number."
     }
-    if (!validInternationalPhone(String(values.phone ?? ""))) next.phone = "Choose a country and enter a valid phone number."
+    const phone = String(values.phone ?? "").trim()
+    if (phone && !validInternationalPhone(phone)) next.phone = "Choose a country and enter a valid phone number."
     const email = String(values.email ?? "").trim()
     if (email && !/^\S+@\S+\.\S+$/.test(email)) next.email = "Enter a valid email address."
     setErrors(next)
@@ -92,7 +93,7 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
         <SheetHeader className="shrink-0 border-b px-5 py-5 text-left sm:px-6">
           <div className="flex items-start gap-4 pr-8">
             <Avatar className="size-12 border shadow-xs"><AvatarFallback className="bg-primary text-primary-foreground">{initials(name)}</AvatarFallback></Avatar>
-            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><SheetTitle className="truncate text-xl">{mode === "create" ? "Create contact" : name}</SheetTitle><Badge variant="secondary" className="gap-1"><Sparkles className="size-3" /> Contact record</Badge></div><SheetDescription>{mode === "view" ? "Complete customer profile and workspace details" : "Add identity, communication, and custom business data"}</SheetDescription></div>
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><SheetTitle className="truncate text-xl">{mode === "create" ? "Create contact" : name}</SheetTitle><Badge variant="secondary" className="gap-1"><Sparkles className="size-3" /> Contact record</Badge></div><SheetDescription>{mode === "view" ? "Contact details and workspace data" : "Start with a name and either a phone number or email. Add business data only when needed."}</SheetDescription></div>
             {mode === "view" && <Button variant="outline" size="sm" onClick={() => setMode("edit")}><Pencil data-icon="inline-start" /> Edit</Button>}
           </div>
         </SheetHeader>
@@ -106,7 +107,7 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
                 <Separator />
                 <section className="flex flex-col gap-4"><div><h3 className="flex items-center gap-2 font-semibold"><Mail className="size-4 text-primary" /> Communication</h3><p className="text-sm text-muted-foreground">Use an international number or a verified email.</p></div>{readonly ? <>{renderField(fields.find((field) => field.id === "phone")!)}{renderField(fields.find((field) => field.id === "email")!)}</> : <div className="grid gap-4"><label className="flex flex-col gap-2"><span className="text-sm font-medium">Phone number</span><InternationalPhoneInput value={String(values.phone ?? "")} onChange={(value) => setValue("phone", value)} invalid={Boolean(errors.phone)} />{errors.phone ? <span className="text-xs text-destructive">{errors.phone}</span> : <span className="text-xs text-muted-foreground">Search any country flag and dial code.</span>}</label><label className="flex flex-col gap-2"><span className="text-sm font-medium">Email address</span><div className="relative"><Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="email" value={String(values.email ?? "")} onChange={(event) => setValue("email", event.target.value)} className="h-11 pl-9" aria-invalid={Boolean(errors.email)} placeholder="name@company.com" /></div>{errors.email && <span className="text-xs text-destructive">{errors.email}</span>}</label></div>}</section>
               </TabsContent>
-              <TabsContent value="custom" className="m-0 flex flex-col gap-4 p-5 sm:p-6"><div><h3 className="font-semibold">Custom business data</h3><p className="text-sm text-muted-foreground">Fields managed from the Contacts toolbar appear here.</p></div>{customFields.length ? <div className="grid gap-4 sm:grid-cols-2">{customFields.map(renderField)}</div> : <div className="rounded-xl border border-dashed p-8 text-center"><Sparkles className="mx-auto size-5 text-muted-foreground" /><p className="mt-3 text-sm font-medium">No custom fields yet</p><p className="mt-1 text-sm text-muted-foreground">Close this sheet and choose Fields in the toolbar.</p></div>}</TabsContent>
+              <TabsContent value="custom" className="m-0 flex flex-col gap-4 p-5 sm:p-6"><div><h3 className="font-semibold">Custom business data</h3><p className="text-sm text-muted-foreground">Optional fields configured from More actions appear here.</p></div>{customFields.length ? <div className="grid gap-4 sm:grid-cols-2">{customFields.map(renderField)}</div> : <div className="rounded-xl border border-dashed p-8 text-center"><Sparkles className="mx-auto size-5 text-muted-foreground" /><p className="mt-3 text-sm font-medium">No custom fields yet</p><p className="mt-1 text-sm text-muted-foreground">Close this sheet and choose More actions, then Manage custom fields.</p></div>}</TabsContent>
             </ScrollArea>
           </Tabs>
 

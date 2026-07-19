@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ContactField, FieldType } from "@/lib/data/contacts/types"
+import { validateFieldDefinition } from "@/lib/data/contacts/validation"
 
 type Store = { data: { fields: ContactField[] } }
 const fieldTypes: FieldType[] = ["text", "number", "date", "email", "phone", "url", "single_select", "multi_select", "checkbox", "currency"]
@@ -45,12 +46,20 @@ export function CustomFieldsManager({ open, onOpenChange }: { open: boolean; onO
   const [options, setOptions] = useState("")
   const [editing, setEditing] = useState<ContactField | null>(null)
   const [busy, setBusy] = useState(false)
+  const [formError, setFormError] = useState("")
+  const parsedOptions = options.split(",").map((item) => item.trim()).filter(Boolean)
 
   async function save() {
-    if (!label.trim()) return
+    let field: ReturnType<typeof validateFieldDefinition>
+    try {
+      field = validateFieldDefinition({ label, type, options: parsedOptions }, data?.data.fields ?? [], editing?.id)
+      setFormError("")
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Check the field details")
+      return
+    }
     setBusy(true)
     try {
-      const field = { label: label.trim(), type, options: options.split(",").map((item) => item.trim()).filter(Boolean) }
       await request(editing ? "PATCH" : "POST", editing ? { kind: "field", id: editing.id, field } : { kind: "field", field })
       toast.success(editing ? "Custom field updated" : "Custom field created")
       setLabel(""); setType("text"); setOptions(""); setEditing(null)
@@ -74,7 +83,7 @@ export function CustomFieldsManager({ open, onOpenChange }: { open: boolean; onO
       <DialogContent className="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="border-b px-6 py-5"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg border bg-primary text-primary-foreground"><Database className="size-5" /></div><div><DialogTitle>Custom contact fields</DialogTitle><DialogDescription>Create typed fields used in contact sheets, tables, filters, and imports.</DialogDescription></div></div></DialogHeader>
         <ScrollArea className="min-h-0 flex-1"><div className="grid gap-6 p-6 md:grid-cols-[1fr_1.25fr]">
-          <section className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4"><div><h3 className="flex items-center gap-2 font-semibold"><Sparkles className="size-4 text-primary" /> {editing ? "Edit field" : "New field"}</h3><p className="text-xs text-muted-foreground">Choose a label and data type.</p></div><label className="flex flex-col gap-2 text-sm font-medium">Field label<Input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="e.g. Customer tier" /></label><label className="flex flex-col gap-2 text-sm font-medium">Field type<Select value={type} onValueChange={(value) => setType(value as FieldType)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{fieldTypes.map((item) => <SelectItem key={item} value={item}>{item.replace("_", " ")}</SelectItem>)}</SelectGroup></SelectContent></Select></label>{(type === "single_select" || type === "multi_select") && <label className="flex flex-col gap-2 text-sm font-medium">Options<Input value={options} onChange={(event) => setOptions(event.target.value)} placeholder="Lead, Qualified, Customer" /><span className="text-xs font-normal text-muted-foreground">Separate choices with commas.</span></label>}<div className="flex gap-2"><Button onClick={save} disabled={busy || !label.trim()}>{busy ? <Loader2 className="animate-spin" /> : editing ? <Pencil /> : <Plus />}{editing ? "Save field" : "Add field"}</Button>{editing && <Button variant="ghost" onClick={() => { setEditing(null); setLabel(""); setType("text"); setOptions("") }}>Cancel</Button>}</div></section>
+          <section className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4"><div><h3 className="flex items-center gap-2 font-semibold"><Sparkles className="size-4 text-primary" /> {editing ? "Edit field" : "New field"}</h3><p className="text-xs text-muted-foreground">Labels must be unique across standard and custom fields.</p></div><label className="flex flex-col gap-2 text-sm font-medium">Field label<Input value={label} maxLength={80} aria-invalid={Boolean(formError)} onChange={(event) => { setLabel(event.target.value); setFormError("") }} placeholder="e.g. Customer tier" /><span className="text-xs font-normal text-muted-foreground">{label.length}/80 characters</span></label><label className="flex flex-col gap-2 text-sm font-medium">Field type<Select value={type} onValueChange={(value) => { setType(value as FieldType); setFormError("") }}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{fieldTypes.map((item) => <SelectItem key={item} value={item}>{item.replace("_", " ")}</SelectItem>)}</SelectGroup></SelectContent></Select></label>{(type === "single_select" || type === "multi_select") && <label className="flex flex-col gap-2 text-sm font-medium">Options<Input value={options} aria-invalid={Boolean(formError)} onChange={(event) => { setOptions(event.target.value); setFormError("") }} placeholder="Lead, Qualified, Customer" /><span className="text-xs font-normal text-muted-foreground">Comma-separated, case-insensitively unique, up to 100 options. {parsedOptions.length}/100 used.</span></label>}{formError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</p>}<div className="flex gap-2"><Button onClick={save} disabled={busy || !label.trim()}>{busy ? <Loader2 className="animate-spin" /> : editing ? <Pencil /> : <Plus />}{editing ? "Save field" : "Add field"}</Button>{editing && <Button variant="ghost" onClick={() => { setEditing(null); setLabel(""); setType("text"); setOptions(""); setFormError("") }}>Cancel</Button>}</div></section>
           <section className="flex min-w-0 flex-col gap-3"><div className="flex items-center justify-between"><div><h3 className="font-semibold">Workspace fields</h3><p className="text-xs text-muted-foreground">{fields.length} custom fields</p></div></div>{!data ? <div className="flex justify-center py-12"><Loader2 className="animate-spin text-muted-foreground" /></div> : fields.length === 0 ? <div className="rounded-xl border border-dashed p-8 text-center"><Sparkles className="mx-auto size-5 text-muted-foreground" /><p className="mt-3 text-sm font-medium">No custom fields</p><p className="mt-1 text-xs text-muted-foreground">Create your first field to extend every contact record.</p></div> : <div className="flex flex-col gap-2">{fields.map((field) => <div key={field.id} className="flex items-center gap-3 rounded-lg border bg-card p-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{field.label}</p><Badge variant="secondary" className="mt-1">{field.type.replace("_", " ")}</Badge></div><Button variant="ghost" size="icon-sm" onClick={() => startEdit(field)} aria-label={`Edit ${field.label}`}><Pencil /></Button><Button variant="ghost" size="icon-sm" onClick={() => remove(field)} aria-label={`Delete ${field.label}`}><Trash2 /></Button></div>)}</div>}</section>
         </div></ScrollArea>
         <DialogFooter className="border-t px-6 py-4"><Button variant="outline" onClick={() => onOpenChange(false)}>Done</Button></DialogFooter>

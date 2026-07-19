@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowDownUp, ChevronDown, ChevronUp, GripVertical, MoreHorizontal, Plus, X } from "lucide-react"
+import { ChevronDown, ChevronUp, GripVertical, MoreHorizontal, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -63,9 +63,11 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
     setDraftOrder((current) => current.map((pipeline) => pipeline.id === id ? { ...pipeline, name: nextName } : pipeline))
   }
 
+  const trimmedName = name.trim()
+  const duplicateName = pipelines.some((pipeline) => pipeline.name.toLowerCase() === trimmedName.toLowerCase())
+
   function createPipeline() {
-    const trimmedName = name.trim()
-    if (!trimmedName) return
+    if (!trimmedName || duplicateName) return
     onCreate(trimmedName)
     setName("")
     setCreateOpen(false)
@@ -79,10 +81,9 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
           <GripVertical className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="truncate">{pipeline.name}</span>
         </button>)}
-        <Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-r" onClick={() => setCreateOpen(true)} aria-label="Create sub-pipeline"><Plus /></Button>
       </div>
       <Popover open={rearrangeOpen} onOpenChange={(open) => { if (open) setDraftOrder(pipelines); setRearrangeOpen(open) }}>
-        <PopoverTrigger render={<Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-l" aria-label="Rearrange sub-pipelines" />}><ArrowDownUp /></PopoverTrigger>
+        <PopoverTrigger render={<span className="hidden" />} />
         <PopoverContent side="top" align="end" sideOffset={0} className="w-84 gap-0 overflow-hidden rounded-sm p-0">
           <PopoverHeader className="flex-row items-center justify-between border-b px-4 py-3">
             <PopoverTitle className="text-base font-semibold">Rearrange Sub-Pipelines</PopoverTitle>
@@ -99,8 +100,8 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
     <Dialog open={createOpen} onOpenChange={setCreateOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Create sub-pipeline</DialogTitle><DialogDescription>Add another board to this pipeline workspace. It starts empty and uses the same stages.</DialogDescription></DialogHeader>
-        <div className="flex flex-col gap-2"><Label htmlFor="sub-pipeline-name">Board name</Label><Input id="sub-pipeline-name" value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.nativeEvent.isComposing || event.keyCode === 229) return; if (event.key === "Enter") createPipeline() }} placeholder="Enterprise renewals" autoFocus /></div>
-        <DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button><Button onClick={createPipeline} disabled={!name.trim()}>Create board</Button></DialogFooter>
+        <div className="flex flex-col gap-2"><Label htmlFor="sub-pipeline-name">Board name</Label><Input id="sub-pipeline-name" value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.nativeEvent.isComposing || event.keyCode === 229) return; if (event.key === "Enter") createPipeline() }} placeholder="Enterprise renewals" aria-invalid={duplicateName} aria-describedby={duplicateName ? "sub-pipeline-error" : undefined} autoFocus />{duplicateName && <p id="sub-pipeline-error" className="text-sm text-destructive">A board with this name already exists.</p>}</div>
+        <DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button><Button onClick={createPipeline} disabled={!trimmedName || duplicateName}>Create board</Button></DialogFooter>
       </DialogContent>
     </Dialog>
 

@@ -56,6 +56,8 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --shadow-pipeline-card: 0 1px 2px color-mix(in oklch, var(--foreground) 7%, transparent), 0 8px 20px color-mix(in oklch, var(--foreground) 4%, transparent);
+  --ease-pipeline: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ============================================================
