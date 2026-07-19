@@ -43,7 +43,22 @@ export function validateFieldDefinition(
   return { label, type, options: SELECT_TYPES.has(type) ? options : [] }
 }
 
-export function validateContactValue(field: ContactField, value: ContactValue): ContactValue {
+export function validateContactIdentity(values: Partial<Record<string, ContactValue>>) {
+  const name = String(values.name ?? "").trim().replace(/\s+/g, " ")
+  const phone = String(values.phone ?? "").trim()
+  const email = String(values.email ?? "").trim().toLocaleLowerCase()
+  const company = String(values.company ?? "").trim().replace(/\s+/g, " ")
+  if (!name) throw new Error("Contact name is required")
+  if (name.length > 120) throw new Error("Contact name must be 120 characters or fewer")
+  if (!phone && !email) throw new Error("Add a phone number or email address")
+  if (email && !/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email address")
+  if (email.length > 254) throw new Error("Email address is too long")
+  if (phone.length > 32) throw new Error("Phone number is too long")
+  if (company.length > 160) throw new Error("Company must be 160 characters or fewer")
+  return { name, phone, email, company }
+}
+
+export function validateContactValue(field: ContactField, value: ContactValue | null | undefined): ContactValue {
   if (value === "" || value === null || value === undefined) return ""
   if (field.type === "number" || field.type === "currency") {
     const number = typeof value === "number" ? value : Number(value)
