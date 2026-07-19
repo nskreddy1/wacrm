@@ -14,30 +14,23 @@ const VARIANTS: {
   fg: string;
 }[] = [
   {
-    id: "emerald",
-    name: "Variant 1 — Emerald",
-    note: "Deep emerald mark with a mint synapse node. Continuity with the current product green.",
-    bg: "#ffffff",
-    fg: "#0f172a",
-  },
-  {
-    id: "navy",
-    name: "Variant 2 — Navy + Teal",
-    note: "Enterprise navy with an electric teal node. Differentiates from WhatsApp green.",
+    id: "primary",
+    name: "Variant 1 — Primary (theme accent)",
+    note: "Mark colored by the active theme's --primary token. Follows the global accent (indigo by default) automatically.",
     bg: "#ffffff",
     fg: "#0f172a",
   },
   {
     id: "mono",
-    name: "Variant 3 — Monochrome",
-    note: "Single-ink charcoal. Timeless, premium, works anywhere.",
+    name: "Variant 2 — Monochrome",
+    note: "Single-ink, inherits surrounding text color. Timeless, premium, works anywhere.",
     bg: "#ffffff",
     fg: "#0f172a",
   },
   {
     id: "inverse",
-    name: "Variant 4 — Inverse (dark)",
-    note: "White mark with mint node for dark surfaces, app headers, and dark mode.",
+    name: "Variant 3 — Inverse (dark)",
+    note: "Solid white mark for dark surfaces, the auth brand panel, and dark mode.",
     bg: "#0b1220",
     fg: "#ffffff",
   },
@@ -51,7 +44,7 @@ export default function BrandPage() {
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-10">
         <header className="flex flex-col gap-2">
-          <p className="text-xs font-semibold uppercase tracking-widest text-emerald-700">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
             Brand preview
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-balance">
