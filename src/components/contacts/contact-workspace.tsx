@@ -114,7 +114,7 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
   if (isLoading || !store) return <div className="p-6"><FeatureLoading label="Loading enterprise contacts" /></div>
 
   return (
-    <div className="flex min-h-full flex-col bg-background">
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
       <div className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2">
         <Button variant={countRules(filters) ? "secondary" : "outline"} size="sm" onClick={() => setFilterOpen(true)}><Filter data-icon="inline-start" /> Filter{countRules(filters) > 0 && <Badge variant="secondary">{countRules(filters)}</Badge>}</Button>
         <Select defaultValue="all"><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All contacts</SelectItem><SelectItem value="customers">Customers</SelectItem><SelectItem value="leads">Open leads</SelectItem></SelectGroup></SelectContent></Select>
