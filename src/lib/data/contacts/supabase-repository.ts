@@ -2,6 +2,7 @@ import "server-only"
 
 import type { AccountContext } from "@/lib/auth/account"
 import type { ContactField, ContactPreferences, ContactValue, ContactWorkspaceData, FieldType, WorkspaceContact } from "./types"
+import { validateContactValue, validateFieldDefinition } from "./validation"
 
 const CONTACT_SELECT = "id, account_id, name, phone, email, company, created_at, updated_at"
 
@@ -51,12 +52,18 @@ function contactColumns(values: Partial<Record<string, ContactValue>>) {
 }
 
 async function saveCustomValues(ctx: AccountContext, contactId: string, values: Partial<Record<string, ContactValue>>) {
-  const { data: fields, error: fieldsError } = await ctx.supabase.from("custom_fields").select("id").eq("account_id", ctx.accountId)
+  const { data: fieldRows, error: fieldsError } = await ctx.supabase.from("custom_fields").select("id, field_name, field_type, field_options").eq("account_id", ctx.accountId)
   if (fieldsError) throw new Error(fieldsError.message)
-  const allowed = new Set((fields ?? []).map((field) => String(field.id)))
-  const entries = Object.entries(values).filter(([id]) => allowed.has(id))
+  const fields = new Map((fieldRows ?? []).map((row) => {
+    const field = mapField(row)
+    return [field.id, field]
+  }))
+  const entries = Object.entries(values).filter(([id]) => fields.has(id))
   if (!entries.length) return
-  const rows = entries.map(([custom_field_id, value]) => ({ contact_id: contactId, custom_field_id, value: Array.isArray(value) ? value.join(", ") : String(value ?? "") }))
+  const rows = entries.map(([custom_field_id, value]) => {
+    const validated = validateContactValue(fields.get(custom_field_id)!, value)
+    return { contact_id: contactId, custom_field_id, value: Array.isArray(validated) ? validated.join(", ") : String(validated ?? "") }
+  })
   const { error } = await ctx.supabase.from("contact_custom_values").upsert(rows, { onConflict: "contact_id,custom_field_id" })
   if (error) throw new Error(error.message)
 }
@@ -117,20 +124,23 @@ export async function updateSupabaseContact(ctx: AccountContext, id: string, val
 }
 
 export async function createSupabaseContactField(ctx: AccountContext, field: { label: string; type: FieldType; options?: string[] }) {
-  const label = field.label.trim()
-  if (!label) throw new Error("Field label is required")
-  const { data, error } = await ctx.supabase.from("custom_fields").insert({ account_id: ctx.accountId, user_id: ctx.userId, field_name: label, field_type: field.type, field_options: field.options?.length ? { options: field.options } : null }).select("id, field_name, field_type, field_options").single()
-  if (error) throw new Error(error.message)
+  const { data: rows, error: fieldsError } = await ctx.supabase.from("custom_fields").select("id, field_name, field_type, field_options").eq("account_id", ctx.accountId)
+  if (fieldsError) throw new Error(fieldsError.message)
+  const validated = validateFieldDefinition(field, [...coreContactFields, ...(rows ?? []).map(mapField)])
+  const { data, error } = await ctx.supabase.from("custom_fields").insert({ account_id: ctx.accountId, user_id: ctx.userId, field_name: validated.label, field_type: validated.type, field_options: validated.options.length ? { options: validated.options } : null }).select("id, field_name, field_type, field_options").single()
+  if (error) throw new Error(error.code === "23505" ? `A field named “${validated.label}” already exists` : error.message)
   return mapField(data)
 }
 
 export async function updateSupabaseContactField(ctx: AccountContext, id: string, field: { label?: string; type?: FieldType; options?: string[] }) {
-  const update: Record<string, unknown> = {}
-  if (field.label !== undefined) update.field_name = field.label.trim()
-  if (field.type !== undefined) update.field_type = field.type
-  if (field.options !== undefined) update.field_options = field.options.length ? { options: field.options } : null
-  const { data, error } = await ctx.supabase.from("custom_fields").update(update).eq("account_id", ctx.accountId).eq("id", id).select("id, field_name, field_type, field_options").single()
-  if (error) throw new Error(error.message)
+  const { data: rows, error: fieldsError } = await ctx.supabase.from("custom_fields").select("id, field_name, field_type, field_options").eq("account_id", ctx.accountId)
+  if (fieldsError) throw new Error(fieldsError.message)
+  const existing = (rows ?? []).map(mapField)
+  const current = existing.find((item) => item.id === id)
+  if (!current) throw new Error("Custom field not found")
+  const validated = validateFieldDefinition({ label: field.label ?? current.label, type: field.type ?? current.type, options: field.options ?? current.options }, [...coreContactFields, ...existing], id)
+  const { data, error } = await ctx.supabase.from("custom_fields").update({ field_name: validated.label, field_type: validated.type, field_options: validated.options.length ? { options: validated.options } : null }).eq("account_id", ctx.accountId).eq("id", id).select("id, field_name, field_type, field_options").single()
+  if (error) throw new Error(error.code === "23505" ? `A field named “${validated.label}” already exists` : error.message)
   return mapField(data)
 }
 
