@@ -67,7 +67,12 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     useState<Conversation | null>(null);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(
+  /**
+   * Whether this workspace's channel has an enabled connection
+   * (WhatsApp: whatsapp_config or a channel_connections row; SMS: a
+   * Twilio SMS channel_connections row). `null` = check in flight.
+   */
+  const [channelConnected, setChannelConnected] = useState<boolean | null>(
     null
   );
   /**
@@ -195,7 +200,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     }
   }, []);
 
-  // Check WhatsApp connection status on mount
+  // Check this channel's connection status on mount.
   useEffect(() => {
     const checkConnection = async () => {
       const supabase = createClient();
@@ -206,56 +211,59 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
 
       if (!user) return;
 
-      // whatsapp_config is one-row-per-account post-multi-user, so
-      // the previous `.eq('user_id', user.id)` would miss the row
-      // for any teammate who didn't personally save the config —
-      // the "WhatsApp not connected" banner would show in the
-      // shared inbox even though the admin had it configured.
-      // Resolve account_id via the profile and query by that.
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("account_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const accountId = profile?.account_id as string | undefined;
-      if (!accountId) {
-        setWhatsappConnected(false);
-        return;
+      if (channel === "whatsapp") {
+        // whatsapp_config is one-row-per-account post-multi-user, so
+        // the previous `.eq('user_id', user.id)` would miss the row
+        // for any teammate who didn't personally save the config —
+        // the "WhatsApp not connected" banner would show in the
+        // shared inbox even though the admin had it configured.
+        // Resolve account_id via the profile and query by that.
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("account_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        const accountId = profile?.account_id as string | undefined;
+        if (!accountId) {
+          setChannelConnected(false);
+          return;
+        }
+
+        const { data } = await supabase
+          .from("whatsapp_config")
+          .select("status")
+          .eq("account_id", accountId)
+          .maybeSingle();
+
+        if (data?.status === "connected") {
+          setChannelConnected(true);
+          return;
+        }
       }
 
-      const { data } = await supabase
-        .from("whatsapp_config")
-        .select("status")
-        .eq("account_id", accountId)
-        .maybeSingle();
-
-      if (data?.status === "connected") {
-        setWhatsappConnected(true);
-        return;
-      }
-
-      // Fall back to provider-neutral channel connections (e.g. Twilio),
-      // which live in channel_connections rather than whatsapp_config.
+      // Provider-neutral channel connections (Twilio WhatsApp/SMS,
+      // future providers) live in channel_connections. This is the
+      // only source for SMS and the fallback for WhatsApp.
       try {
         const res = await fetch("/api/settings/channels");
         if (res.ok) {
           const payload: { connections?: Array<{ channel: string; is_enabled: boolean }> } =
             await res.json();
-          const hasWhatsApp = (payload.connections ?? []).some(
-            (c) => c.channel === "whatsapp" && c.is_enabled
+          const hasChannel = (payload.connections ?? []).some(
+            (c) => c.channel === channel && c.is_enabled
           );
-          setWhatsappConnected(hasWhatsApp);
+          setChannelConnected(hasChannel);
           return;
         }
       } catch {
         // Non-fatal: keep the banner if the check fails.
       }
 
-      setWhatsappConnected(false);
+      setChannelConnected(false);
     };
 
     checkConnection();
-  }, []);
+  }, [channel]);
 
   // Handle realtime message events
   const handleMessageEvent = useCallback(
@@ -528,9 +536,9 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
       // Reflect the selection in the URL so a refresh lands the user
       // back in the same thread, and so copy-paste links work. Use
       // replace() to avoid polluting browser history with every click.
-      router.replace(`/inbox?c=${conv.id}`, { scroll: false });
+      router.replace(`${basePath}?c=${conv.id}`, { scroll: false });
     },
-    [activeConversation?.id, router]
+    [activeConversation?.id, router, basePath]
   );
 
   // Mobile "back" — deselect the conversation so the list pane comes
@@ -543,8 +551,8 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     // Clearing the ref lets the deep-link auto-selector fire again if
     // the user later visits /inbox?c=<same-id> — desirable UX.
     autoSelectedForDeepLinkRef.current = null;
-    router.replace("/inbox", { scroll: false });
-  }, [router]);
+    router.replace(basePath, { scroll: false });
+  }, [router, basePath]);
 
 
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
@@ -608,13 +616,13 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* WhatsApp connection banner — in the flex column, not absolute,
+      {/* Channel connection banner — in the flex column, not absolute,
           so it pushes the panels down instead of overlapping them. */}
-      {whatsappConnected === false && (
+      {channelConnected === false && (
         <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
           <WifiOff className="h-4 w-4 text-amber-400" />
           <p className="text-xs text-amber-400">
-            {t("whatsappNotConnected")}
+            {channel === "sms" ? t("smsNotConnected") : t("whatsappNotConnected")}
           </p>
         </div>
       )}
@@ -635,6 +643,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
             conversations={conversations}
             onConversationsLoaded={handleConversationsLoaded}
             resyncToken={resyncToken}
+            channel={channel}
           />
         </div>
 
