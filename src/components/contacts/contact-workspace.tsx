@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { toast } from "sonner"
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, Filter, Grid2X2, List, MoreHorizontal, Plus, RefreshCw, Search, SheetIcon, SlidersHorizontal, Sparkles, Trash2, Upload, X } from "lucide-react"
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, Filter, Grid2X2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Search, SheetIcon, SlidersHorizontal, Trash2, Upload, UserPlus, Users, X } from "lucide-react"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import { CustomFieldsManager } from "@/components/contacts/custom-fields-manager
 import { ImportModal } from "@/components/contacts/import-modal"
 import { FeatureLoading, FeatureState } from "@/components/ui/feature-state"
 import { countRules, emptyFilterGroup, flattenRules, matchesFilter, summarizeRule, type FilterGroup } from "@/lib/data/contacts/filters"
+import { downloadCsv } from "@/lib/download-csv"
 
 type Store = { contacts: WorkspaceContact[]; fields: ContactField[]; preferences: { visible: string[]; order: string[]; frozen: string[]; widths: Record<string, number> } }
 type View = ContactViewMode
@@ -61,6 +63,8 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
   const [filterOpen, setFilterOpen] = useState(false)
   const [filters, setFilters] = useState<FilterGroup>(() => emptyFilterGroup())
   const [visibleFieldIds, setVisibleFieldIds] = useState<string[]>([])
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (store && visibleFieldIds.length === 0) setVisibleFieldIds(store.preferences.visible)
@@ -83,6 +87,11 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const rows = filtered.slice(page * pageSize, page * pageSize + pageSize)
   const allSelected = rows.length > 0 && rows.every((contact) => selected.has(contact.id))
+  const hasRefinements = Boolean(query.trim()) || countRules(filters) > 0
+
+  useEffect(() => {
+    if (page >= totalPages) setPage(totalPages - 1)
+  }, [page, totalPages])
 
   function toggleSelected(id: string) { setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next }) }
   function cycleSort(field: string) { setSort((current) => !current || current.field !== field ? { field, direction: "asc" } : current.direction === "asc" ? { field, direction: "desc" } : null) }
@@ -98,7 +107,25 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
     finally { setSaving(null); setEditing(null) }
   }
 
-  async function deleteSelected() { await api("DELETE", { ids: [...selected] }); setSelected(new Set()); await mutate(); toast.success("Contacts deleted") }
+  async function deleteSelected() {
+    setDeleting(true)
+    try {
+      await api("DELETE", { ids: [...selected] })
+      const deletedCount = selected.size
+      setSelected(new Set())
+      setConfirmBulkDelete(false)
+      await mutate()
+      toast.success(`${deletedCount} ${deletedCount === 1 ? "contact" : "contacts"} deleted`)
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : "Unable to delete contacts")
+    } finally {
+      setDeleting(false)
+    }
+  }
+  function exportCurrentResults() {
+    const exported = downloadCsv("contacts-current-results.csv", [visibleFields.map((field) => field.label), ...filtered.map((contact) => visibleFields.map((field) => valueText(contact.values[field.id])))])
+    if (exported) toast.success(`Exported ${filtered.length} ${filtered.length === 1 ? "contact" : "contacts"}`)
+  }
   async function setVisible(fieldId: string, checked: boolean) {
     const previous = visibleFieldIds
     const visible = checked ? Array.from(new Set([...visibleFieldIds, fieldId])) : visibleFieldIds.filter((id) => id !== fieldId)
@@ -120,15 +147,16 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <div className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2">
+        <div className="relative min-w-56 flex-1 sm:max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} placeholder="Search contacts" aria-label="Search contacts" className="pl-8 pr-8" />
+          {query && <Button variant="ghost" size="icon-xs" className="absolute right-1.5 top-1/2 -translate-y-1/2" onClick={() => { setQuery(""); setPage(0) }} aria-label="Clear contact search"><X /></Button>}
+        </div>
         <Button variant={countRules(filters) ? "secondary" : "outline"} size="sm" onClick={() => setFilterOpen(true)}><Filter data-icon="inline-start" /> Filter{countRules(filters) > 0 && <Badge variant="secondary">{countRules(filters)}</Badge>}</Button>
-        <Select defaultValue="all"><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All contacts</SelectItem><SelectItem value="customers">Customers</SelectItem><SelectItem value="leads">Open leads</SelectItem></SelectGroup></SelectContent></Select>
-        <div className="relative min-w-48 flex-1 sm:max-w-sm"><Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} placeholder="Search all fields" className="pl-8" /></div>
-        <Tabs value={view} onValueChange={(value) => router.replace(contactsPath(undefined, { mode: value as View, view: savedViewId }))}><TabsList><TabsTrigger value="list" aria-label="List view"><List /></TabsTrigger><TabsTrigger value="sheet" aria-label="Sheet view"><SheetIcon /></TabsTrigger><TabsTrigger value="cards" aria-label="Cards view"><Grid2X2 /></TabsTrigger></TabsList></Tabs>
-        <Popover><PopoverTrigger render={<Button variant="outline" size="icon-sm" aria-label="Displayed columns" />}><Columns3 /></PopoverTrigger><PopoverContent align="end" className="w-80 p-0"><div className="flex items-center justify-between p-3"><div><p className="font-medium">Displayed columns</p><p className="text-xs text-muted-foreground">{visibleFields.length} of {orderedFields.length} visible</p></div><Button variant="ghost" size="sm" onClick={showAllFields}>Show all</Button></div><Separator /><ScrollArea className="h-72"><div className="flex flex-col gap-1 p-2">{orderedFields.map((field) => <label key={field.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"><Checkbox checked={visibleFieldIds.includes(field.id)} disabled={field.id === "name"} onCheckedChange={(checked) => setVisible(field.id, Boolean(checked))} /><span className="flex-1 text-sm">{field.label}</span><Badge variant="secondary">{field.type.replace("_", " ")}</Badge></label>)}</div></ScrollArea></PopoverContent></Popover>
-        <Button size="sm" className="shadow-xs" onClick={() => setContactSheet({ mode: "create" })}><Plus data-icon="inline-start" /> Contact</Button>
-        <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}><Upload data-icon="inline-start" /> Import</Button>
-        <Button variant="outline" size="sm" onClick={() => setFieldsManagerOpen(true)}><Sparkles data-icon="inline-start" /> Fields</Button>
-        <DropdownMenu><DropdownMenuTrigger render={<Button variant="outline" size="icon-sm" aria-label="More contact actions" />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={() => setImportOpen(true)}><Upload /> Import CSV</DropdownMenuItem><DropdownMenuItem onClick={() => { const csv = [visibleFields.map((f) => f.label), ...filtered.map((c) => visibleFields.map((f) => valueText(c.values[f.id])))].map((r) => r.join(",")).join("\n"); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "contacts.csv"; a.click() }}><Download /> Export CSV</DropdownMenuItem></DropdownMenuGroup><DropdownMenuSeparator /><DropdownMenuItem onClick={() => setFieldsManagerOpen(true)}><SlidersHorizontal /> Manage fields</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+        <Tabs value={view} onValueChange={(value) => router.replace(contactsPath(undefined, { mode: value as View, view: savedViewId }))}><TabsList aria-label="Contact view"><TabsTrigger value="list" aria-label="List view" title="List view"><List /></TabsTrigger><TabsTrigger value="sheet" aria-label="Editable sheet view" title="Editable sheet view"><SheetIcon /></TabsTrigger><TabsTrigger value="cards" aria-label="Card view" title="Card view"><Grid2X2 /></TabsTrigger></TabsList></Tabs>
+        <Popover><PopoverTrigger render={<Button variant="outline" size="sm" aria-label="Choose displayed columns" />}><Columns3 data-icon="inline-start" /> <span className="hidden md:inline">Columns</span></PopoverTrigger><PopoverContent align="end" className="w-80 p-0"><div className="flex items-center justify-between p-3"><div><p className="font-medium">Displayed columns</p><p className="text-xs text-muted-foreground">Personal display preference · {visibleFields.length} of {orderedFields.length}</p></div><Button variant="ghost" size="sm" disabled={visibleFields.length === orderedFields.length} onClick={showAllFields}>Show all</Button></div><Separator /><ScrollArea className="h-72"><div className="flex flex-col gap-1 p-2">{orderedFields.map((field) => <label key={field.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"><Checkbox checked={visibleFieldIds.includes(field.id)} disabled={field.id === "name"} onCheckedChange={(checked) => setVisible(field.id, Boolean(checked))} /><span className="flex-1 text-sm">{field.label}</span><Badge variant="secondary">{field.type.replace("_", " ")}</Badge></label>)}</div></ScrollArea><Separator /><p className="p-3 text-xs text-muted-foreground">Name is required and always displayed. Manage the field schema from More actions.</p></PopoverContent></Popover>
+        <DropdownMenu><DropdownMenuTrigger render={<Button variant="outline" size="icon-sm" aria-label="More contact actions" />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-64"><DropdownMenuGroup><p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Data</p><DropdownMenuItem onClick={() => setImportOpen(true)}><Upload /> Import CSV</DropdownMenuItem><DropdownMenuItem disabled={filtered.length === 0 || visibleFields.length === 0} onClick={exportCurrentResults}><Download /> Export current results<span className="ml-auto text-xs text-muted-foreground">{filtered.length}</span></DropdownMenuItem></DropdownMenuGroup><DropdownMenuSeparator /><DropdownMenuGroup><p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Workspace setup</p><DropdownMenuItem onClick={() => setFieldsManagerOpen(true)}><SlidersHorizontal /> Manage custom fields</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
+        <Button size="sm" className="ml-auto shadow-xs sm:ml-0" onClick={() => setContactSheet({ mode: "create" })}><UserPlus data-icon="inline-start" /> Create contact</Button>
       </div>
 
       {countRules(filters) > 0 && <div className="flex flex-wrap items-center gap-2 border-b bg-muted/40 px-3 py-2"><span className="text-xs font-medium text-muted-foreground">Active filters</span>{flattenRules(filters).map((rule) => <Badge key={rule.id} variant="outline" className="gap-1 bg-background">{summarizeRule(rule, store.fields)}</Badge>)}<Button variant="ghost" size="sm" onClick={() => setFilterOpen(true)}>Edit</Button><Button variant="ghost" size="sm" onClick={() => { setFilters(emptyFilterGroup()); setPage(0) }}>Clear all</Button></div>}
