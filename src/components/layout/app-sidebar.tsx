@@ -95,19 +95,19 @@ function BrandHeader() {
       <SidebarMenuItem>
         <SidebarMenuButton
           size="lg"
-          render={<Link href={routes.app.dashboard} aria-label="Axon dashboard" />}
+          render={<Link href={routes.app.dashboard} aria-label="Workspace dashboard" />}
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground">
             <AxonMark size={26} variant="mono" aria-hidden="true" />
           </span>
           <span className="grid flex-1 text-left leading-tight">
-            <span className="truncate text-sm font-semibold">Axon</span>
+            {/* The workspace name IS the brand line — editable from
+                Settings -> Team members and used globally. No duplicate
+                subtitle underneath. */}
             {loading && !account ? (
-              <span className="mt-0.5 h-2.5 w-20 animate-pulse rounded bg-sidebar-accent" aria-hidden="true" />
+              <span className="h-3.5 w-24 animate-pulse rounded bg-sidebar-accent" aria-hidden="true" />
             ) : (
-              // Friendly workspace label — never a raw email, even when
-              // accounts.name still holds the signup-default address.
-              <span className="truncate text-xs text-muted-foreground">
+              <span className="truncate text-sm font-semibold">
                 {workspaceDisplayName(account?.name)}
               </span>
             )}
@@ -209,13 +209,18 @@ function FooterMenu() {
             <ChevronsUpDown className="ml-auto size-4" aria-hidden="true" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side={isMobile ? "bottom" : "right"} align="end" className="w-56">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>
-                {displayName}
-                {displayEmail && <span className="block font-normal text-muted-foreground">{displayEmail}</span>}
-              </DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
+            {/* The chip already shows name + role, so the menu only adds
+                the one thing not visible on the rail: the signed-in email. */}
+            {displayEmail && (
+              <>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal text-muted-foreground">
+                    {displayEmail}
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={() => {
