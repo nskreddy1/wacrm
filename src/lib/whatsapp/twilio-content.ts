@@ -48,10 +48,43 @@ export async function listTwilioContent(credentials: TwilioCredentials): Promise
 
 export async function getTwilioApproval(credentials: TwilioCredentials, sid: string): Promise<TwilioApproval | null> {
   try {
-    return await request<TwilioApproval>(credentials, `${CONTENT_BASE}/Content/${encodeURIComponent(sid)}/ApprovalRequests/whatsapp`)
+    // Per Twilio Content API docs: status is fetched from
+    // GET /v1/Content/{sid}/ApprovalRequests and arrives nested in a
+    // `whatsapp` object ({ whatsapp: { status, rejection_reason, … } }).
+    // The `/ApprovalRequests/whatsapp` path is POST-only (submission).
+    const result = await request<{ whatsapp?: TwilioApproval }>(
+      credentials,
+      `${CONTENT_BASE}/Content/${encodeURIComponent(sid)}/ApprovalRequests`,
+    )
+    return result.whatsapp ?? null
   } catch {
     return null
   }
+}
+
+export interface TwilioContentWithApproval extends TwilioContentItem {
+  approval_requests?: TwilioApproval & { content_type?: string }
+}
+
+/**
+ * Bulk list of contents WITH approval statuses in one call
+ * (GET /v2/ContentAndApprovals) — used by the sync route so it does
+ * one paginated request instead of one ApprovalRequests fetch per
+ * template.
+ */
+export async function listTwilioContentAndApprovals(
+  credentials: TwilioCredentials,
+): Promise<TwilioContentWithApproval[]> {
+  const items: TwilioContentWithApproval[] = []
+  let url: string | null = `https://content.twilio.com/v2/ContentAndApprovals?PageSize=100`
+  while (url) {
+    const page: { contents?: TwilioContentWithApproval[]; meta?: { next_page_url?: string | null } } =
+      await request(credentials, url)
+    items.push(...(page.contents ?? []))
+    const next: string | null | undefined = page.meta?.next_page_url
+    url = next ? (next.startsWith('http') ? next : `https://content.twilio.com${next}`) : null
+  }
+  return items
 }
 
 export async function createTwilioContent(credentials: TwilioCredentials, input: {
