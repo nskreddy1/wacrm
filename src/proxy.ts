@@ -5,6 +5,7 @@ import { authRouteSet, routes } from "@/lib/routing/routes"
 
 const PUBLIC_PREFIXES = [
   "/auth/",
+  "/brand",
   "/join/",
   "/api/service/",
   "/api/webhooks/",
