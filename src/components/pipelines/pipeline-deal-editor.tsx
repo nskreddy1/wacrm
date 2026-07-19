@@ -1,8 +1,9 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { ArrowRight, Building2, CalendarDays, CircleDollarSign, Contact, UserRound } from "lucide-react"
+import { ArrowRight, Building2, CalendarDays, ChevronDown, CircleDollarSign, Contact, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -48,6 +49,7 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
   const [draft, setDraft] = useState(() => draftFrom(deal, snapshot, defaultStageId))
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(Boolean(deal && (deal.priority !== "normal" || deal.probability !== 20 || deal.status !== "open" || deal.nextStep || deal.activity)))
   const titleRef = useRef<HTMLInputElement>(null)
   const stageName = snapshot.stages.find((stage) => stage.id === draft.stageId)?.name ?? "No stage"
   const isCreate = !deal
@@ -75,9 +77,12 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
       return
     }
     setSubmitting(true)
-    const result = await onSave(parsed.data)
-    if (!result.ok) {
-      setError(result.error)
+    try {
+      const result = await onSave(parsed.data)
+      if (!result.ok) setError(result.error)
+    } catch {
+      setError("The deal could not be saved. Please try again.")
+    } finally {
       setSubmitting(false)
     }
   }
@@ -167,6 +172,22 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
                   </Field>
                 </FieldGroup>
               </section>
+
+              <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="border-t pt-6">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg p-2 text-left transition-[background-color,transform] duration-150 ease-out hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none">
+                  <span><span className="block text-sm font-semibold">Sales details</span><span className="block text-sm text-muted-foreground">{draft.priority} priority · {draft.probability}% probability · {draft.status}</span></span>
+                  <ChevronDown className={advancedOpen ? "rotate-180 transition-transform duration-200" : "transition-transform duration-200"} aria-hidden="true" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="overflow-hidden data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 transition-[height,opacity] duration-200 ease-out motion-reduce:transition-none">
+                  <FieldGroup className="grid gap-4 pt-4 sm:grid-cols-2">
+                    <Field><FieldLabel htmlFor="deal-priority">Priority</FieldLabel><Select items={{ low: "Low", normal: "Normal", high: "High", hot: "Hot" }} value={draft.priority} onValueChange={(value) => value && update("priority", value as DealInput["priority"])}><SelectTrigger id="deal-priority" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{(["low", "normal", "high", "hot"] as const).map((value) => <SelectItem key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
+                    <Field><FieldLabel htmlFor="deal-status">Status</FieldLabel><Select items={{ open: "Open", won: "Won", lost: "Lost" }} value={draft.status} onValueChange={(value) => value && update("status", value as DealInput["status"])}><SelectTrigger id="deal-status" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{(["open", "won", "lost"] as const).map((value) => <SelectItem key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
+                    <Field className="sm:col-span-2"><FieldLabel htmlFor="deal-probability">Win probability</FieldLabel><div className="flex items-center gap-3"><Input id="deal-probability" type="range" min="0" max="100" step="5" value={draft.probability} onChange={(event) => update("probability", Number(event.target.value))} className="px-0" /><span className="w-12 text-right text-sm font-semibold tabular-nums">{draft.probability}%</span></div></Field>
+                    <Field><FieldLabel htmlFor="deal-next-step">Next step</FieldLabel><Input id="deal-next-step" value={draft.nextStep ?? ""} onChange={(event) => update("nextStep", event.target.value || null)} placeholder="Schedule technical review" /></Field>
+                    <Field><FieldLabel htmlFor="deal-activity">Latest activity</FieldLabel><Input id="deal-activity" value={draft.activity ?? ""} onChange={(event) => update("activity", event.target.value || null)} placeholder="Discovery call completed" /></Field>
+                  </FieldGroup>
+                </CollapsibleContent>
+              </Collapsible>
 
               <section className="flex flex-col gap-4 border-t pt-6" aria-labelledby="deal-context-heading">
                 <div>
