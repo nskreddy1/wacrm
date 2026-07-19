@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -11,7 +11,7 @@ import { Step2SelectAudience } from '@/components/broadcasts/step2-select-audien
 import { Step3Personalize } from '@/components/broadcasts/step3-personalize';
 import { Step4ScheduleSend } from '@/components/broadcasts/step4-schedule-send';
 import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
-import { Check } from 'lucide-react';
+import { Check, MessageCircle, MessageSquare } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 const steps = [
@@ -21,6 +21,9 @@ const steps = [
   { label: 'send', key: 'send' },
 ] as const;
 
+/** Channels a broadcast can target. */
+type BroadcastChannel = 'whatsapp' | 'sms';
+
 export default function NewBroadcastPage() {
   const router = useRouter();
   const t = useTranslations('Broadcasts.new');
@@ -29,6 +32,65 @@ export default function NewBroadcastPage() {
 
   const [currentStep, setCurrentStep] = useState(0);
   const [template, setTemplate] = useState<MessageTemplate | null>(null);
+
+  // Which channels the account can broadcast on. WhatsApp counts as
+  // enabled via either the legacy whatsapp_config or a channel
+  // connection; SMS requires a Twilio SMS channel connection.
+  // `null` = discovery in flight (selector renders skeleton).
+  const [enabledChannels, setEnabledChannels] = useState<BroadcastChannel[] | null>(null);
+  const [channel, setChannel] = useState<BroadcastChannel>('whatsapp');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const found = new Set<BroadcastChannel>();
+      try {
+        const res = await fetch('/api/settings/channels');
+        if (res.ok) {
+          const payload: { connections?: Array<{ channel: string; is_enabled: boolean }> } =
+            await res.json();
+          for (const c of payload.connections ?? []) {
+            if (c.is_enabled && (c.channel === 'whatsapp' || c.channel === 'sms')) {
+              found.add(c.channel);
+            }
+          }
+        }
+      } catch {
+        // Non-fatal — fall through to the whatsapp_config check.
+      }
+      if (!found.has('whatsapp')) {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from('whatsapp_config')
+          .select('status')
+          .maybeSingle();
+        if (data?.status === 'connected') found.add('whatsapp');
+      }
+      if (cancelled) return;
+      const channels: BroadcastChannel[] = (['whatsapp', 'sms'] as const).filter((c) =>
+        found.has(c),
+      );
+      setEnabledChannels(channels);
+      // Preselect the only enabled channel; keep whatsapp default when
+      // both (or neither) are available.
+      if (channels.length === 1) setChannel(channels[0]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Switching channels invalidates the template pick (templates are
+   * channel-specific) but keeps audience/name — those are
+   * channel-agnostic and losing them would be hostile mid-flow.
+   */
+  function handleChannelChange(next: BroadcastChannel) {
+    if (next === channel) return;
+    setChannel(next);
+    setTemplate(null);
+    setCurrentStep(0);
+  }
   const [audience, setAudience] = useState<{
     type: 'all' | 'tags' | 'custom_field' | 'csv';
     tagIds?: string[];
@@ -53,6 +115,7 @@ export default function NewBroadcastPage() {
       const broadcastId = await createAndSendBroadcast({
         name,
         template,
+        channel,
         audience: {
           type: audience.type,
           tagIds: audience.tagIds,
@@ -105,6 +168,7 @@ export default function NewBroadcastPage() {
       user_id: user.id,
       account_id: accountId,
       name: name.trim(),
+      channel,
       template_name: template.name,
       template_language: template.language ?? 'en_US',
       template_variables: variables,
@@ -138,6 +202,47 @@ export default function NewBroadcastPage() {
           {t('subtitle')}
         </p>
       </div>
+
+      {/* Channel selector — only channels with an enabled connection
+          are offered. Hidden entirely while discovery is in flight. */}
+      {enabledChannels === null ? (
+        <div className="h-11 w-64 animate-pulse rounded-lg border border-border bg-card" aria-hidden="true" />
+      ) : enabledChannels.length === 0 ? (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm text-amber-400">
+            No messaging channel is connected. Connect WhatsApp or a Twilio SMS number in
+            Settings &rarr; Channels before creating a broadcast.
+          </p>
+        </div>
+      ) : (
+        <div
+          role="radiogroup"
+          aria-label="Broadcast channel"
+          className="inline-flex rounded-lg border border-border bg-card p-1"
+        >
+          {enabledChannels.map((c) => {
+            const isSelected = channel === c;
+            const Icon = c === 'whatsapp' ? MessageCircle : MessageSquare;
+            return (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => handleChannelChange(c)}
+                className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                  isSelected
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {c === 'whatsapp' ? 'WhatsApp' : 'SMS'}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Step Indicator */}
       <div className="flex items-center justify-between">
@@ -190,6 +295,7 @@ export default function NewBroadcastPage() {
         >
           {currentStep === 0 && (
             <Step1ChooseTemplate
+              channel={channel}
               selectedTemplate={template}
               onSelect={setTemplate}
               onNext={() => setCurrentStep(1)}
