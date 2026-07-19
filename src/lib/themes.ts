@@ -14,6 +14,7 @@
  */
 
 export const THEME_IDS = [
+  "indigo",
   "violet",
   "emerald",
   "cobalt",
@@ -23,9 +24,11 @@ export const THEME_IDS = [
 
 export type ThemeId = (typeof THEME_IDS)[number];
 
-export const DEFAULT_THEME: ThemeId = "emerald";
+export const DEFAULT_THEME: ThemeId = "indigo";
 
-export const STORAGE_KEY = "wacrm.theme";
+// Rebrand note: key rotated from "wacrm.theme" so existing visitors
+// pick up the new Axon indigo default instead of a stale saved accent.
+export const STORAGE_KEY = "axon.theme";
 
 /**
  * MODE — the light/dark dimension, orthogonal to the accent theme.
@@ -45,7 +48,7 @@ export type Mode = (typeof MODES)[number];
 
 export const DEFAULT_MODE: Mode = "light";
 
-export const MODE_STORAGE_KEY = "wacrm.mode";
+export const MODE_STORAGE_KEY = "axon.mode";
 
 export function isMode(value: unknown): value is Mode {
   return (
@@ -67,6 +70,12 @@ export interface ThemeMeta {
 }
 
 export const THEMES: ReadonlyArray<ThemeMeta> = [
+  {
+    id: "indigo",
+    name: "Indigo",
+    tagline: "The default — premium, focused, enterprise-grade.",
+    swatch: "oklch(0.5 0.24 277)",
+  },
   {
     id: "violet",
     name: "Violet",

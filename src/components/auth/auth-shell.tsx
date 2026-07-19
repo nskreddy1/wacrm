@@ -8,9 +8,10 @@ type AuthShellProps = {
 };
 
 /**
- * Shared split layout for all auth pages: emerald brand panel on the left
- * (concentric rings + headline), form column on the right. Matches the
- * final login design so every auth page feels like one product.
+ * Shared split layout for all auth pages: fixed premium-indigo brand
+ * panel on the left (greeting + arcs), form column on the right.
+ * The panel color is intentionally decoupled from the in-app accent
+ * theme — see `.auth-panel` in globals.css.
  */
 export function AuthShell({
   children,
@@ -28,14 +29,14 @@ export function AuthShell({
       {/* Brand panel */}
       <section
         aria-label="About Axon"
-        className="relative hidden overflow-hidden bg-primary text-primary-foreground lg:flex lg:flex-col"
+        className="auth-panel relative hidden overflow-hidden lg:flex lg:flex-col"
       >
-        {/* Concentric ring decoration — depth without noise */}
+        {/* Concentric arc decoration — depth without noise */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0">
           {[420, 620, 820, 1020].map((size, index) => (
             <div
               key={size}
-              className="absolute rounded-full border border-primary-foreground/10"
+              className="auth-panel-ring absolute rounded-full"
               style={{
                 width: size,
                 height: size,
@@ -48,27 +49,21 @@ export function AuthShell({
         </div>
 
         <div className="auth-stagger relative flex flex-1 flex-col justify-between gap-10 p-12 xl:p-16">
-          <div style={{ "--stagger-index": 0 } as React.CSSProperties}>
-            <span className="flex size-12 items-center justify-center rounded-xl bg-primary-foreground/15">
-              <AxonMark size={28} variant="mono" aria-hidden="true" />
-            </span>
-          </div>
-
           <div
-            className="flex flex-col gap-6"
-            style={{ "--stagger-index": 1 } as React.CSSProperties}
+            className="flex flex-col gap-6 pt-16"
+            style={{ "--stagger-index": 0 } as React.CSSProperties}
           >
             <h2 className="max-w-xl text-balance text-5xl font-semibold leading-[1.05] tracking-tight xl:text-6xl">
               {promoTitle}
             </h2>
-            <p className="max-w-md text-pretty text-lg leading-relaxed text-primary-foreground/85">
+            <p className="max-w-md text-pretty text-lg leading-relaxed opacity-85">
               {promoDescription}
             </p>
           </div>
 
           <p
-            className="text-sm text-primary-foreground/70"
-            style={{ "--stagger-index": 2 } as React.CSSProperties}
+            className="text-sm opacity-70"
+            style={{ "--stagger-index": 1 } as React.CSSProperties}
           >
             &copy; {new Date().getFullYear()} Axon. All rights reserved.
           </p>
@@ -80,18 +75,12 @@ export function AuthShell({
         <header className="flex items-center justify-between gap-4">
           <Link
             href="/"
-            className="flex w-fit items-center gap-2.5 font-semibold tracking-tight text-foreground"
+            className="flex w-fit items-center gap-2.5 text-lg font-bold tracking-tight text-foreground"
             aria-label="Axon home"
           >
             <AxonMark size={26} variant="mono" className="text-foreground" />
             Axon
           </Link>
-          <a
-            href="mailto:support@axon.app"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Contact support
-          </a>
         </header>
 
         <div className="flex flex-1 items-center py-12">

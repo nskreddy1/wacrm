@@ -161,6 +161,20 @@ html[data-theme="violet"] {
   --sidebar-ring: oklch(0.526 0.247 293);
 }
 
+html[data-theme="indigo"] {
+  --primary: oklch(0.5 0.24 277);
+  --primary-foreground: oklch(0.985 0 0);
+  --primary-hover: oklch(0.58 0.22 277);
+  --primary-soft: oklch(0.5 0.24 277 / 0.12);
+  --primary-soft-2: oklch(0.5 0.24 277 / 0.22);
+  --ring: oklch(0.5 0.24 277);
+  --chart-1: oklch(0.5 0.24 277);
+  --chart-2: oklch(0.62 0.18 260);
+  --sidebar-primary: oklch(0.5 0.24 277);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.5 0.24 277);
+}
+
 html[data-theme="emerald"] {
   --primary: oklch(0.62 0.16 162);
   --primary-foreground: oklch(0.16 0.02 162);
@@ -242,6 +256,29 @@ html[data-theme="rose"] {
 
 :root {
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* ============================================================
+ * AUTH BRAND PANEL
+ *
+ * Fixed premium royal-indigo surface for the auth split layout.
+ * Deliberately NOT tied to the accent theme so the sign-in
+ * experience always reads as the brand, regardless of the
+ * accent a user picked inside the app.
+ * ============================================================ */
+.auth-panel {
+  background:
+    radial-gradient(
+      120% 100% at 85% -10%,
+      oklch(0.58 0.22 272 / 0.55) 0%,
+      transparent 55%
+    ),
+    linear-gradient(168deg, oklch(0.47 0.25 278) 0%, oklch(0.33 0.21 288) 100%);
+  color: oklch(0.985 0 0);
+}
+
+.auth-panel-ring {
+  border: 1px solid color-mix(in oklch, currentColor 14%, transparent);
 }
 
 @keyframes auth-rise {
