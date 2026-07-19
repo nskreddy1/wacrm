@@ -30,16 +30,29 @@ export function friendlyNameFromEmail(value: string | null | undefined): string 
 }
 
 /**
+ * Title-case each word: "ram kumar" -> "Ram Kumar". Preserves
+ * interior capitalization ("McDonald" stays "McDonald").
+ */
+export function titleCaseName(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/**
  * Preferred person label: full name when present, otherwise a
  * friendly name derived from the email — never the raw address.
+ * Always title-cased so "ram" renders as "Ram".
  */
 export function personDisplayName(
   fullName: string | null | undefined,
   email: string | null | undefined,
 ): string {
   const name = fullName?.trim();
-  if (name) return name;
-  const friendly = friendlyNameFromEmail(email);
+  if (name && !looksLikeEmail(name)) return titleCaseName(name);
+  const friendly = friendlyNameFromEmail(name || email);
   return friendly || "Account";
 }
 

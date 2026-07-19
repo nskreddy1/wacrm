@@ -13,6 +13,8 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
+  PanelLeftClose,
+  Pencil,
   Settings,
   Users,
   Workflow,
@@ -118,6 +120,40 @@ function BrandHeader() {
   )
 }
 
+/**
+ * Always-visible expand/collapse control. Lives in the header so it
+ * is one click away in both states: a labeled row when expanded, an
+ * icon with an animated "Expand sidebar" tooltip when collapsed.
+ * The drag rail and Cmd/Ctrl+B shortcut keep working alongside it.
+ */
+function CollapseToggle() {
+  const { toggleSidebar, state, isMobile } = useSidebar()
+  const collapsed = state === "collapsed" && !isMobile
+  const label = collapsed ? "Expand sidebar" : "Collapse sidebar"
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          tooltip={label}
+          onClick={toggleSidebar}
+          aria-label={label}
+          className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
+        >
+          <PanelLeftClose
+            aria-hidden="true"
+            className={cn(
+              "transition-transform duration-200",
+              collapsed && "rotate-180",
+            )}
+          />
+          <span>Collapse</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
+}
+
 function NavGroups({ initialRole }: { initialRole: AccountRole | null }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -139,7 +175,7 @@ function NavGroups({ initialRole }: { initialRole: AccountRole | null }) {
                 return (
                   <SidebarMenuItem key={item.key}>
                     <SidebarMenuButton
-                      tooltip={item.label}
+                      tooltip={`Go to ${item.label}`}
                       isActive={isActive(pathname, item.href)}
                       render={
                         <Link
@@ -172,7 +208,13 @@ function FooterMenu() {
   const router = useRouter()
   const { mode, setMode } = useTheme()
   const { signOut, profile, accountRole } = useAuth()
-  const { isMobile, setOpenMobile } = useSidebar()
+  const { isMobile, setOpenMobile, state } = useSidebar()
+
+  // In icon-collapsed mode the rail shows only the avatar, so the
+  // dropdown must carry the full identity (name + role + email).
+  // When expanded (or on mobile's sheet) the chip already shows
+  // name + role, so repeating them in the menu would be duplication.
+  const isCollapsed = state === "collapsed" && !isMobile
 
   // Friendly member name (e.g. "Admin"), never the raw email — the
   // email lives in the dropdown so identity isn't duplicated on the rail.
@@ -209,13 +251,17 @@ function FooterMenu() {
             <ChevronsUpDown className="ml-auto size-4" aria-hidden="true" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side={isMobile ? "bottom" : "right"} align="end" className="w-56">
-            {/* The chip already shows name + role, so the menu only adds
-                the one thing not visible on the rail: the signed-in email. */}
-            {displayEmail && (
+            {isCollapsed && (
               <>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel className="font-normal text-muted-foreground">
-                    {displayEmail}
+                  <DropdownMenuLabel>
+                    {displayName}
+                    {roleLabel && (
+                      <span className="block text-xs font-normal text-muted-foreground">{roleLabel}</span>
+                    )}
+                    {displayEmail && (
+                      <span className="block font-normal text-muted-foreground">{displayEmail}</span>
+                    )}
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
@@ -230,6 +276,19 @@ function FooterMenu() {
               >
                 <Settings /> Settings
               </DropdownMenuItem>
+              {/* Deep link into the Workspace name card so renaming is
+                  one click from anywhere — the form itself stays in
+                  Settings as the single source of truth. */}
+              {(accountRole === "owner" || accountRole === "admin") && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    router.push(`${routes.app.settings}?tab=members`)
+                    if (isMobile) setOpenMobile(false)
+                  }}
+                >
+                  <Pencil /> Edit workspace name
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -269,6 +328,7 @@ export function AppSidebar({ initialRole = null }: { initialRole?: AccountRole |
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <BrandHeader />
+        <CollapseToggle />
       </SidebarHeader>
       <SidebarContent>
         <NavGroups initialRole={initialRole} />
