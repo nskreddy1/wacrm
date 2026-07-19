@@ -285,61 +285,6 @@ html[data-theme="rose"] {
   animation: auth-shake 280ms var(--ease-out-strong);
 }
 
-/* ------------------------------------------------------------
- * Ambient login (variant A): scattered cards around the canvas.
- *   - .login-card-in: one-time scaled entrance (never from scale(0))
- *   - .login-card-float: slow idle drift layered on a child element
- *     so entrance + loop transforms never fight each other.
- * ------------------------------------------------------------ */
-
-@keyframes login-card-in {
-  from {
-    opacity: 0;
-    transform: scale(0.94) translateY(8px) rotate(var(--card-tilt, 0deg));
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0) rotate(var(--card-tilt, 0deg));
-  }
-}
-
-.login-card-in {
-  opacity: 0;
-  transform: rotate(var(--card-tilt, 0deg));
-  animation: login-card-in 550ms var(--ease-out-strong) forwards;
-  animation-delay: calc(120ms + var(--card-index, 0) * 45ms);
-}
-
-@keyframes login-card-float {
-  from {
-    transform: translateY(-3px);
-  }
-  to {
-    transform: translateY(3px);
-  }
-}
-
-.login-card-float {
-  animation: login-card-float 5.5s ease-in-out infinite alternate;
-  animation-delay: calc(var(--card-index, 0) * -900ms);
-}
-
-/* Crossfade when switching between design variants. */
-@keyframes login-variant-in {
-  from {
-    opacity: 0;
-    transform: scale(0.995);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.login-variant-in {
-  animation: login-variant-in 240ms var(--ease-out-strong);
-}
-
 @media (prefers-reduced-motion: reduce) {
   @keyframes auth-rise {
     from {
@@ -355,25 +300,6 @@ html[data-theme="rose"] {
     animation-duration: 200ms;
   }
   .auth-shake {
-    animation: none;
-  }
-  @keyframes login-card-in {
-    from {
-      opacity: 0;
-      transform: rotate(var(--card-tilt, 0deg));
-    }
-    to {
-      opacity: 1;
-      transform: rotate(var(--card-tilt, 0deg));
-    }
-  }
-  .login-card-in {
-    animation-duration: 200ms;
-  }
-  .login-card-float {
-    animation: none;
-  }
-  .login-variant-in {
     animation: none;
   }
 }
