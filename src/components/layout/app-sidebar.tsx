@@ -48,6 +48,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useNavigation } from "@/hooks/use-navigation"
 import { useTheme } from "@/hooks/use-theme"
 import { useTotalUnread } from "@/hooks/use-total-unread"
+import { personDisplayName, workspaceDisplayName } from "@/lib/display-name"
 import { routes } from "@/lib/routing/routes"
 import { cn } from "@/lib/utils"
 import type { NavIconName } from "@/lib/navigation/config"
@@ -75,8 +76,9 @@ const roleLabels: Record<AccountRole, string> = {
 }
 
 function initialsOf(name: string | null | undefined, email: string | null | undefined): string {
-  const source = name?.trim() || email?.trim() || ""
-  if (!source) return "?"
+  // Derive initials from the friendly display name, never a raw email.
+  const source = personDisplayName(name, email)
+  if (!source || source === "Account") return "?"
   const parts = source.split(/\s+/).filter(Boolean)
   if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
   return source.slice(0, 2).toUpperCase()
@@ -103,7 +105,11 @@ function BrandHeader() {
             {loading && !account ? (
               <span className="mt-0.5 h-2.5 w-20 animate-pulse rounded bg-sidebar-accent" aria-hidden="true" />
             ) : (
-              <span className="truncate text-xs text-muted-foreground">{account?.name ?? "Workspace"}</span>
+              // Friendly workspace label — never a raw email, even when
+              // accounts.name still holds the signup-default address.
+              <span className="truncate text-xs text-muted-foreground">
+                {workspaceDisplayName(account?.name)}
+              </span>
             )}
           </span>
         </SidebarMenuButton>
@@ -168,7 +174,9 @@ function FooterMenu() {
   const { signOut, profile, accountRole } = useAuth()
   const { isMobile, setOpenMobile } = useSidebar()
 
-  const displayName = profile?.full_name?.trim() || profile?.email || "Account"
+  // Friendly member name (e.g. "Admin"), never the raw email — the
+  // email lives in the dropdown so identity isn't duplicated on the rail.
+  const displayName = personDisplayName(profile?.full_name, profile?.email)
   const displayEmail = profile?.email ?? ""
   const initials = initialsOf(profile?.full_name, profile?.email)
   const roleLabel = accountRole ? roleLabels[accountRole] : ""
@@ -201,13 +209,13 @@ function FooterMenu() {
             <ChevronsUpDown className="ml-auto size-4" aria-hidden="true" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side={isMobile ? "bottom" : "right"} align="end" className="w-56">
-            {/* <DropdownMenuGroup>
+            <DropdownMenuGroup>
               <DropdownMenuLabel>
                 {displayName}
                 {displayEmail && <span className="block font-normal text-muted-foreground">{displayEmail}</span>}
               </DropdownMenuLabel>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator /> */}
+            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={() => {
