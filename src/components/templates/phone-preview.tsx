@@ -14,6 +14,7 @@ import { ExternalLink, Phone, Reply } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   withSampleValues,
+  type CustomTemplateVariable,
   type SmsDraft,
   type TemplateChannel,
   type WhatsAppDraft,
@@ -26,6 +27,11 @@ interface PhonePreviewProps {
   channel: TemplateChannel
   whatsapp: WhatsAppDraft
   sms: SmsDraft
+  /**
+   * Account-defined variables so the preview can substitute custom
+   * {{tokens}} with their sample values, same as the built-ins.
+   */
+  customVariables?: CustomTemplateVariable[]
 }
 
 function BubbleButtons({ draft }: { draft: WhatsAppDraft }) {
