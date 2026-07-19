@@ -52,13 +52,24 @@ export class TwilioWhatsAppAdapter implements ChannelAdapter {
   async send(message: OutboundChannelMessage): Promise<ChannelSendResult> {
     const credentials = decryptProviderCredentials(message.connection)
     if (credentials.provider !== 'twilio') throw new Error('Twilio credentials required')
-    const from = message.connection.external_identity
-    if (!from) throw new Error('Twilio sender number is not configured')
 
-    const body = new URLSearchParams({
-      From: twilioAddress(from),
-      To: twilioAddress(message.recipient.identity),
-    })
+    // Messaging Service support (parity with the SMS adapter): when a
+    // MG… SID is configured on this connection, let Twilio pick the
+    // sender from the service's pool — WhatsApp senders are a supported
+    // pool type (docs: /docs/messaging/services, "sender pool"). The
+    // dedicated From number remains the default path.
+    const messagingServiceSid = credentials.value.messagingServiceSid?.trim()
+    const from = message.connection.external_identity
+    if (!messagingServiceSid && !from) {
+      throw new Error('Twilio sender number or Messaging Service SID is not configured')
+    }
+
+    const body = new URLSearchParams({ To: twilioAddress(message.recipient.identity) })
+    if (messagingServiceSid) {
+      body.set('MessagingServiceSid', messagingServiceSid)
+    } else if (from) {
+      body.set('From', twilioAddress(from))
+    }
 
     // Typed payload (preferred) → provider params. Falls back to the flat
     // legacy fields so pre-orchestrator callers keep working unchanged.
