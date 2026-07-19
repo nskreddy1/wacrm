@@ -46,6 +46,13 @@ interface BroadcastPayload {
    * falls back to the template's stored URL only when this is empty.
    */
   headerMediaUrl?: string;
+  /**
+   * Messaging channel for this campaign. WhatsApp fans out through
+   * /api/whatsapp/broadcast (Meta template sends); SMS renders each
+   * recipient's body client-side and fans out through
+   * /api/sms/broadcast (Twilio). Defaults to 'whatsapp'.
+   */
+  channel?: 'whatsapp' | 'sms';
 }
 
 interface UseBroadcastSendingReturn {
@@ -73,6 +80,8 @@ interface BroadcastApiResult {
   phone: string;
   status: 'sent' | 'failed';
   whatsapp_message_id?: string;
+  /** Provider message id from the SMS broadcast API (Twilio SM…). */
+  message_id?: string;
   error?: string;
 }
 
@@ -114,6 +123,37 @@ export function resolveVariables(
 
     // custom_field
     return customValues?.get(v.value) ?? '';
+  });
+}
+
+/**
+ * Renders an SMS template body for one contact. SMS has no carrier
+ * template engine — every `{{key}}` placeholder in the saved body is
+ * substituted locally using the same mapping rules as WhatsApp
+ * variables (static / contact field / custom field). Unknown
+ * placeholders are left intact so the omission is visible in QA
+ * rather than silently blanked.
+ */
+export function renderSmsBody(
+  bodyText: string,
+  variables: Record<string, VariableMapping>,
+  contact: Contact,
+  customValues?: Map<string, string>,
+): string {
+  return bodyText.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, key: string) => {
+    const mapping = variables[key];
+    if (!mapping) return match;
+    if (mapping.type === 'static') return mapping.value;
+    if (mapping.type === 'field') {
+      const fieldMap: Record<string, string | undefined> = {
+        name: contact.name,
+        phone: contact.phone,
+        email: contact.email,
+        company: contact.company,
+      };
+      return fieldMap[mapping.value] ?? '';
+    }
+    return customValues?.get(mapping.value) ?? '';
   });
 }
 
@@ -359,6 +399,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           user_id: user.id,
           account_id: accountId,
           name: payload.name,
+          channel: payload.channel ?? 'whatsapp',
           template_name: payload.template.name,
           template_language: payload.template.language ?? 'en_US',
           template_variables: payload.variables,
@@ -454,35 +495,60 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       const messageParams =
         isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
 
+      const channel = payload.channel ?? 'whatsapp';
+
       for (let i = 0; i < recipients.length; i += SEND_BATCH_SIZE) {
         const batch = recipients.slice(i, i + SEND_BATCH_SIZE);
 
-        const apiRecipients = batch
-          .filter((r) => r.contact?.phone)
-          .map((r) => ({
-            phone: r.contact!.phone as string,
-            params: r.contact
-              ? resolveVariables(
-                  payload.variables,
-                  r.contact,
-                  customValueIndex.get(r.contact.id),
-                )
-              : [],
-            ...(messageParams ? { messageParams } : {}),
-          }));
+        // Per-channel request shape: WhatsApp sends template name +
+        // per-recipient params (Meta renders); SMS sends fully rendered
+        // bodies (we render). Both APIs return the same results shape.
+        const apiRecipients =
+          channel === 'sms'
+            ? batch
+                .filter((r) => r.contact?.phone)
+                .map((r) => ({
+                  phone: r.contact!.phone as string,
+                  body: renderSmsBody(
+                    payload.template.body_text ?? '',
+                    payload.variables,
+                    r.contact!,
+                    customValueIndex.get(r.contact!.id),
+                  ),
+                }))
+            : batch
+                .filter((r) => r.contact?.phone)
+                .map((r) => ({
+                  phone: r.contact!.phone as string,
+                  params: r.contact
+                    ? resolveVariables(
+                        payload.variables,
+                        r.contact,
+                        customValueIndex.get(r.contact.id),
+                      )
+                    : [],
+                  ...(messageParams ? { messageParams } : {}),
+                }));
 
         if (apiRecipients.length === 0) continue;
 
         try {
-          const res = await fetch('/api/whatsapp/broadcast', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              recipients: apiRecipients,
-              template_name: payload.template.name,
-              template_language: payload.template.language ?? 'en_US',
-            }),
-          });
+          const res = await fetch(
+            channel === 'sms' ? '/api/sms/broadcast' : '/api/whatsapp/broadcast',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(
+                channel === 'sms'
+                  ? { recipients: apiRecipients }
+                  : {
+                      recipients: apiRecipients,
+                      template_name: payload.template.name,
+                      template_language: payload.template.language ?? 'en_US',
+                    },
+              ),
+            },
+          );
 
           const data = await res.json();
 
@@ -517,7 +583,11 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                 .update({
                   status: 'sent',
                   sent_at: new Date().toISOString(),
-                  whatsapp_message_id: result.whatsapp_message_id ?? null,
+                  // Column predates omnichannel — it stores whichever
+                  // provider message id the channel returned (Meta
+                  // wamid… or Twilio SM…) for webhook status matching.
+                  whatsapp_message_id:
+                    result.whatsapp_message_id ?? result.message_id ?? null,
                   error_message: null,
                 })
                 .eq('id', recipient.id);
