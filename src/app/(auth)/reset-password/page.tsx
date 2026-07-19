@@ -58,13 +58,13 @@ export default function ResetPasswordPage() {
             {error && <FieldError>{error}</FieldError>}
             <Field>
               <FieldLabel htmlFor="password">New password</FieldLabel>
-              <Input id="password" type="password" autoComplete="new-password" placeholder="At least 8 characters" required minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} aria-invalid={Boolean(error)} />
+              <Input id="password" type="password" autoComplete="new-password" placeholder="At least 8 characters" required minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} aria-invalid={Boolean(error)} variant="underline" size="lg" />
             </Field>
             <Field>
               <FieldLabel htmlFor="confirmation">Confirm password</FieldLabel>
-              <Input id="confirmation" type="password" autoComplete="new-password" placeholder="Repeat your password" required minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} aria-invalid={Boolean(error)} />
+              <Input id="confirmation" type="password" autoComplete="new-password" placeholder="Repeat your password" required minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} aria-invalid={Boolean(error)} variant="underline" size="lg" />
             </Field>
-            <Button type="submit" disabled={loading} className="w-full">{loading ? "Updating password..." : "Update password"}</Button>
+            <Button type="submit" disabled={loading} size="xl" className="w-full">{loading ? "Updating password..." : "Update password"}</Button>
           </FieldGroup>
         </form>
     </div>

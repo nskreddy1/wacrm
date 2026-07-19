@@ -83,7 +83,7 @@ export function GoogleAuthButton({ inviteToken, label = "Continue with Google" }
 
   return (
     <div className="flex flex-col gap-2">
-      <Button type="button" variant="outline" className="w-full" onClick={handleGoogle} disabled={loading}>
+      <Button type="button" variant="outline" size="xl" className="w-full" onClick={handleGoogle} disabled={loading}>
         {loading ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         ) : (

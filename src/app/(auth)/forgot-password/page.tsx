@@ -66,9 +66,9 @@ export default function ForgotPasswordPage() {
               {error && <FieldError>{error}</FieldError>}
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input id="email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(error)} />
+                <Input id="email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(error)} variant="underline" size="lg" />
               </Field>
-              <Button type="submit" disabled={loading} className="w-full">{loading ? "Sending link..." : "Send reset link"}</Button>
+              <Button type="submit" disabled={loading} size="xl" className="w-full">{loading ? "Sending link..." : "Send reset link"}</Button>
             </FieldGroup>
           </form>
 
