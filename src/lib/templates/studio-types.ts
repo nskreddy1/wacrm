@@ -1,10 +1,11 @@
 // ============================================================
-// Template Studio — shared types + hardcoded sample data.
+// Template Studio — shared types + client-side helpers.
 //
-// The studio is UI-only for now (no persistence). These shapes
-// deliberately mirror what WhatsApp Cloud API template payloads
-// and SMS provider payloads will need, so wiring real
-// integrations later is a mapping exercise, not a rewrite.
+// Backed by `message_templates` via /api/templates (persistence)
+// and the provider routes (/api/whatsapp/templates/submit for
+// Meta, /api/whatsapp/templates/twilio for Twilio) for carrier
+// submission. Mapping between these UI shapes and DB rows lives
+// in hooks/use-studio-templates.ts.
 // ============================================================
 
 export type TemplateChannel = "whatsapp" | "sms"
@@ -12,6 +13,9 @@ export type TemplateChannel = "whatsapp" | "sms"
 export type TemplateStatus = "approved" | "pending" | "draft" | "rejected"
 
 export type TemplateCategory = "marketing" | "utility" | "authentication"
+
+/** Which provider a WhatsApp template submits through. */
+export type TemplateProvider = "meta" | "twilio" | "none"
 
 export type HeaderKind = "none" | "text" | "image"
 
@@ -39,9 +43,14 @@ export interface StudioTemplate {
   category: TemplateCategory
   language: string
   status: TemplateStatus
+  provider: TemplateProvider
   updatedAt: string
   whatsapp: WhatsAppDraft
   sms: SmsDraft
+  /** Provider rejection / submission error, surfaced in the editor. */
+  errorMessage?: string | null
+  /** True for rows that only exist locally (never saved). */
+  isNew?: boolean
 }
 
 /** Variables members can drop into any template body. */
@@ -110,101 +119,6 @@ export function analyzeSms(text: string): SmsMeta {
     perSegment: per,
   }
 }
-
-// ------------------------------------------------------------
-// Hardcoded starter templates
-// ------------------------------------------------------------
-
-export const SAMPLE_TEMPLATES: StudioTemplate[] = [
-  {
-    id: "tpl-order-update",
-    name: "Order shipped",
-    channel: "whatsapp",
-    category: "utility",
-    language: "en_US",
-    status: "approved",
-    updatedAt: "2026-07-15",
-    whatsapp: {
-      headerKind: "text",
-      headerText: "Your order is on the way",
-      body:
-        "Hi {{first_name}}, great news — order {{order_id}} has shipped and will arrive within 2 business days.\n\nTrack it anytime using the button below.",
-      footer: "Reply STOP to opt out",
-      buttons: [
-        { id: "b1", kind: "url", label: "Track order", url: "https://axon.app/track" },
-        { id: "b2", kind: "quick_reply", label: "Need help" },
-      ],
-    },
-    sms: {
-      body:
-        "Hi {{first_name}}, your order {{order_id}} has shipped! Track: https://axon.app/track — {{company}}",
-    },
-  },
-  {
-    id: "tpl-booking-reminder",
-    name: "Booking reminder",
-    channel: "whatsapp",
-    category: "utility",
-    language: "en_US",
-    status: "pending",
-    updatedAt: "2026-07-17",
-    whatsapp: {
-      headerKind: "none",
-      headerText: "",
-      body:
-        "Hello {{first_name}}, this is a reminder about your appointment at {{booking_time}} with {{agent_name}}.\n\nSee you soon!",
-      footer: "",
-      buttons: [
-        { id: "b1", kind: "quick_reply", label: "Confirm" },
-        { id: "b2", kind: "quick_reply", label: "Reschedule" },
-      ],
-    },
-    sms: {
-      body:
-        "Reminder: your appointment is at {{booking_time}} with {{agent_name}}. Reply C to confirm or R to reschedule.",
-    },
-  },
-  {
-    id: "tpl-otp",
-    name: "Login code",
-    channel: "sms",
-    category: "authentication",
-    language: "en_US",
-    status: "approved",
-    updatedAt: "2026-07-10",
-    whatsapp: {
-      headerKind: "none",
-      headerText: "",
-      body: "{{otp}} is your {{company}} verification code. It expires in 10 minutes.",
-      footer: "",
-      buttons: [],
-    },
-    sms: {
-      body: "{{otp}} is your {{company}} verification code. It expires in 10 minutes.",
-    },
-  },
-  {
-    id: "tpl-summer-promo",
-    name: "Summer sale blast",
-    channel: "sms",
-    category: "marketing",
-    language: "en_US",
-    status: "draft",
-    updatedAt: "2026-07-18",
-    whatsapp: {
-      headerKind: "image",
-      headerText: "",
-      body:
-        "Hey {{first_name}}! Our summer sale is live — up to 40% off everything at {{company}}. Ends Sunday.",
-      footer: "Reply STOP to opt out",
-      buttons: [{ id: "b1", kind: "url", label: "Shop now", url: "https://axon.app/sale" }],
-    },
-    sms: {
-      body:
-        "{{company}} Summer Sale! Up to 40% off everything, ends Sunday. Shop: https://axon.app/sale Txt STOP to opt out",
-    },
-  },
-]
 
 export const STATUS_META: Record<TemplateStatus, { label: string; className: string }> = {
   approved: { label: "Approved", className: "bg-primary/15 text-primary" },
