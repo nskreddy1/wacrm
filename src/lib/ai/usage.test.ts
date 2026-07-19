@@ -29,6 +29,9 @@ describe('logAiUsage', () => {
       prompt_tokens: 30,
       completion_tokens: 6,
       total_tokens: 36,
+      // Defaults to the account's own BYO key when the caller doesn't
+      // specify which key paid for the request.
+      key_source: 'account',
     })
   })
 
