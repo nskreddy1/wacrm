@@ -9,5 +9,5 @@ import type { ReactNode } from "react";
  * not re-render.
  */
 export default function DashboardTemplate({ children }: { children: ReactNode }) {
-  return <div className="page-enter">{children}</div>;
+  return <div className="page-enter flex min-h-0 flex-1 flex-col">{children}</div>;
 }
