@@ -25,6 +25,14 @@ interface SmsBroadcastResult {
 }
 
 /**
+ * Twilio error 21610: "Attempt to send to unsubscribed recipient" —
+ * the number previously texted STOP. When we see it, the contact's
+ * opt-out flag is stale (e.g. they replied STOP before this feature
+ * shipped), so we backfill it to keep future sends clean.
+ */
+const TWILIO_OPT_OUT_ERROR = '21610'
+
+/**
  * SMS broadcast fan-out.
  *
  * Counterpart of /api/whatsapp/broadcast for the SMS channel. Accepts
@@ -105,6 +113,20 @@ export async function POST(request: Request) {
     }
     const connection = connectionRow as ChannelConnection
 
+    // Opt-out compliance (Twilio error 21610): skip contacts that
+    // texted STOP before wasting a send Twilio would block anyway.
+    // Contacts store digits-only phones, matching sanitizePhoneForMeta.
+    const sanitizedPhones = recipients
+      .map((r) => sanitizePhoneForMeta(r.phone))
+      .filter((p) => isValidE164(p))
+    const { data: optedOutRows } = await supabase
+      .from('contacts')
+      .select('phone')
+      .eq('account_id', accountId)
+      .eq('sms_opted_out', true)
+      .in('phone', sanitizedPhones)
+    const optedOutPhones = new Set((optedOutRows ?? []).map((row) => row.phone as string))
+
     const adapter = new TwilioSmsAdapter()
     const results: SmsBroadcastResult[] = []
     let sentCount = 0
@@ -117,6 +139,16 @@ export async function POST(request: Request) {
           phone: recipient.phone,
           status: 'failed',
           error: 'Invalid phone number format',
+        })
+        failedCount++
+        continue
+      }
+
+      if (optedOutPhones.has(sanitized)) {
+        results.push({
+          phone: recipient.phone,
+          status: 'failed',
+          error: 'Recipient opted out of SMS (replied STOP)',
         })
         failedCount++
         continue
@@ -146,6 +178,15 @@ export async function POST(request: Request) {
         const message =
           error instanceof Error ? error.message : 'Unknown error'
         console.error(`Failed to send SMS broadcast to ${recipient.phone}:`, message)
+        // Backfill stale opt-out state when Twilio rejects with 21610
+        // so the next campaign skips this number up front.
+        if (message.includes(TWILIO_OPT_OUT_ERROR)) {
+          await supabase
+            .from('contacts')
+            .update({ sms_opted_out: true, sms_opted_out_at: new Date().toISOString() })
+            .eq('account_id', accountId)
+            .eq('phone', sanitized)
+        }
         results.push({ phone: recipient.phone, status: 'failed', error: message })
         failedCount++
       }
