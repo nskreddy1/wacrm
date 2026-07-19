@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { UsersRound } from "lucide-react";
+import { Eye, EyeOff, Loader2, ShieldCheck, UsersRound } from "lucide-react";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -23,6 +23,7 @@ function LoginPageInner() {
   const inviteToken = searchParams.get("invite");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -73,47 +74,115 @@ function LoginPageInner() {
       promoTitle="Welcome back to your customer command center"
       promoDescription="Pick up every conversation, deal, and follow-up exactly where your team left it."
     >
-      <div className="flex flex-col gap-7">
-        <div className="flex flex-col gap-2">
+      <div className="auth-stagger flex flex-col gap-8">
+        <div
+          className="flex flex-col gap-2.5"
+          style={{ "--stagger-index": 0 } as React.CSSProperties}
+        >
           {inviteToken && (
-            <p className="flex items-center gap-2 text-sm font-medium text-primary">
-              <UsersRound aria-hidden="true" /> Team invitation
+            <p className="flex w-fit items-center gap-1.5 rounded-full border border-primary/30 bg-primary-soft px-3 py-1 text-xs font-medium text-primary">
+              <UsersRound className="size-3.5" aria-hidden="true" />
+              Team invitation
             </p>
           )}
-          <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            {inviteToken ? "Sign in to join your team" : "Welcome back"}
+          <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">
+            {inviteToken ? "Sign in to join your team" : "Sign in to WACRM"}
           </h1>
-          <p className="text-pretty leading-relaxed text-muted-foreground">
-            Sign in to manage customer conversations and keep your pipeline moving.
+          <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+            Enter your work email to access conversations, pipelines, and follow-ups.
           </p>
         </div>
 
-        <form onSubmit={handleLogin}>
+        <form
+          onSubmit={handleLogin}
+          style={{ "--stagger-index": 1 } as React.CSSProperties}
+        >
           <FieldGroup>
-            {error && <FieldError>{error}</FieldError>}
+            {error && (
+              <div className="auth-shake" role="alert">
+                <FieldError>{error}</FieldError>
+              </div>
+            )}
             <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input id="email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(error)} />
+              <FieldLabel htmlFor="email">Work email</FieldLabel>
+              <Input
+                id="email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                aria-invalid={Boolean(error)}
+              />
             </Field>
             <Field>
               <div className="flex items-center justify-between gap-4">
                 <FieldLabel htmlFor="password">Password</FieldLabel>
-                <Link href="/forgot-password" className="text-sm font-medium text-primary hover:underline">Forgot password?</Link>
+                <Link
+                  href="/forgot-password"
+                  className="text-sm font-medium text-primary transition-colors hover:text-primary-hover"
+                >
+                  Forgot password?
+                </Link>
               </div>
-              <Input id="password" type="password" autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(event) => setPassword(event.target.value)} required aria-invalid={Boolean(error)} />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  aria-invalid={Boolean(error)}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="size-4" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
             </Field>
-            <Button type="submit" disabled={loading} className="w-full">
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full transition-transform duration-150 ease-out active:scale-[0.98]"
+            >
+              {loading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </FieldGroup>
         </form>
 
-        <p className="text-sm text-muted-foreground">
-          New to WACRM?{" "}
-          <Link href={inviteToken ? `/signup?invite=${encodeURIComponent(inviteToken)}` : "/signup"} className="font-medium text-primary hover:underline">
-            Create an account
-          </Link>
-        </p>
+        <div
+          className="flex flex-col gap-5"
+          style={{ "--stagger-index": 2 } as React.CSSProperties}
+        >
+          <p className="text-sm text-muted-foreground">
+            New to WACRM?{" "}
+            <Link
+              href={inviteToken ? `/signup?invite=${encodeURIComponent(inviteToken)}` : "/signup"}
+              className="font-medium text-primary transition-colors hover:text-primary-hover"
+            >
+              Create an account
+            </Link>
+          </p>
+          <p className="flex items-center gap-2 border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
+            <ShieldCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
+            Your session is protected with encrypted authentication and role-based access.
+          </p>
+        </div>
       </div>
     </AuthShell>
   );

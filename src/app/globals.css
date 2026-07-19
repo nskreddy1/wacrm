@@ -228,3 +228,78 @@ html[data-theme="rose"] {
     @apply font-sans;
   }
 }
+
+/* ============================================================
+ * AUTH PAGE MOTION
+ *
+ * One-time entrance choreography for the (auth) route group.
+ * Rules of the system:
+ *   - transform + opacity only (GPU-composited)
+ *   - strong custom ease-out (built-ins are too weak)
+ *   - short stagger (60ms) capped well under 600ms total
+ *   - reduced motion keeps the fade, drops the movement
+ * ============================================================ */
+
+:root {
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-stagger > * {
+  opacity: 0;
+  animation: auth-rise 500ms var(--ease-out-strong) forwards;
+  animation-delay: calc(var(--stagger-index, 0) * 60ms);
+}
+
+/* Error feedback: a short, decisive shake. Runs once on mount. */
+@keyframes auth-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+.auth-shake {
+  animation: auth-shake 280ms var(--ease-out-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes auth-rise {
+    from {
+      opacity: 0;
+      transform: none;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .auth-stagger > * {
+    animation-duration: 200ms;
+  }
+  .auth-shake {
+    animation: none;
+  }
+}
