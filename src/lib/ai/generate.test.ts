@@ -9,10 +9,19 @@ import { AiError, type AiConfig } from './types'
 const { resolveChatModelMock } = vi.hoisted(() => ({
   resolveChatModelMock: vi.fn(),
 }))
-vi.mock('./model', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./model')>()
+vi.mock('./engines/langchain/model', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./engines/langchain/model')>()
   return { ...actual, resolveChatModel: resolveChatModelMock }
 })
+
+// Pin the engine to LangChain: these tests exercise the LangChain
+// path via the mocked chat-model factory. Without this, the flag
+// defaults to 'direct' and the direct engine performs real fetches.
+vi.mock('./engine-flag', () => ({
+  getAiEngine: async () => 'langchain' as const,
+  resetEngineCache: () => {},
+  DEFAULT_AI_ENGINE: 'langchain' as const,
+}))
 
 function config(overrides: Partial<AiConfig> = {}): AiConfig {
   return {
