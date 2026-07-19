@@ -22,6 +22,21 @@ async function request(method: string, body: unknown) {
   return payload.data
 }
 
+export function CustomFieldsPanel() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-card text-primary"><Database className="size-5" /></div>
+        <div><p className="text-sm font-semibold">Contact field catalogue</p><p className="text-xs text-muted-foreground">Create, edit, and remove account-wide contact fields.</p></div>
+      </div>
+      <Button variant="outline" onClick={() => setOpen(true)}><Sparkles data-icon="inline-start" /> Manage fields</Button>
+      <CustomFieldsManager open={open} onOpenChange={setOpen} />
+    </div>
+  )
+}
+
 export function CustomFieldsManager({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { data, mutate } = useSWR<Store>(open ? "/api/v1/workspace/contacts?fields=1" : null)
   const fields = data?.data.fields.filter((field) => field.custom) ?? []
