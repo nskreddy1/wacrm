@@ -67,6 +67,7 @@ import { RequireRole } from '@/components/auth/require-role';
 import { useAuth } from '@/hooks/use-auth';
 import { usePresence } from '@/hooks/use-presence';
 import type { AccountRole } from '@/lib/auth/roles';
+import { personDisplayName } from '@/lib/display-name';
 import { presenceLabel, summarize } from '@/lib/presence';
 import {
   PRESENCE_DOT_CLASS,
@@ -74,6 +75,7 @@ import {
 } from '@/components/presence/presence-dot';
 import { InviteMemberDialog } from './invite-member-dialog';
 import { SettingsPanelHead } from './settings-panel-head';
+import { WorkspaceNameCard } from './workspace-name-card';
 import { ROLE_META } from './role-meta';
 
 interface Member {
@@ -295,6 +297,10 @@ export function MembersTab() {
         }
       />
 
+      {/* Workspace identity — rename lives with the team because the
+          name is what every member sees in their sidebar. */}
+      <WorkspaceNameCard />
+
       {/* Live presence summary across the roster. Updates without a
           full refresh as heartbeats and the local re-derive tick land. */}
       {members.length > 0 &&
@@ -383,7 +389,10 @@ export function MembersTab() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-sm font-medium text-foreground">
-                          {member.full_name || t('unnamed')}
+                          {/* Friendly name derived from email when no
+                              full name is set — never "Unnamed" next
+                              to a perfectly good address. */}
+                          {personDisplayName(member.full_name, member.email)}
                         </span>
                         {isSelf && (
                           <Badge className="bg-muted text-muted-foreground border-border text-[10px] uppercase tracking-wide">

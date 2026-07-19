@@ -77,6 +77,7 @@ function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
     autoReplyMaxPerConversation: 3,
     handoffAgentId: null,
     embeddingsApiKey: null,
+    keySource: 'account',
     ...overrides,
   }
 }
@@ -196,14 +197,18 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 describe('dispatchInboundToAiReply — handoff', () => {
   it('disables auto-reply, writes a summary, and does not send on handoff', async () => {
     h.generateReply.mockResolvedValue({ text: '', handoff: true })
+    // Round-robin finds no eligible agent (empty account).
+    h.state.claim = null as unknown as boolean
     await dispatchInboundToAiReply(ARGS)
     expect(h.sendChannelMessage).not.toHaveBeenCalled()
-    expect(h.state.rpcCalls).toHaveLength(0)
+    // No handoff target configured → one round-robin RPC attempt.
+    expect(h.state.rpcCalls).toHaveLength(1)
+    expect(h.state.rpcCalls[0]?.name).toBe('claim_round_robin_agent')
     expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
     expect(h.state.updatePayload?.ai_handoff_summary).toContain(
       'AI agent handed off',
     )
-    // No handoff target configured → conversation left unassigned.
+    // Round-robin came back empty → conversation left unassigned.
     expect(h.state.updatePayload).not.toHaveProperty('assigned_agent_id')
   })
 

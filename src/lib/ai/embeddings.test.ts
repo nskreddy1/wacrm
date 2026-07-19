@@ -14,6 +14,15 @@ const { EmbeddingsCtor, embedDocumentsMock } = vi.hoisted(() => {
 })
 vi.mock('@langchain/openai', () => ({ OpenAIEmbeddings: EmbeddingsCtor }))
 
+// Pin the engine to LangChain: these tests mock the LangChain
+// embeddings client. Without this, the platform flag defaults to
+// 'direct' and embedTextsDirect performs real HTTP fetches.
+vi.mock('./engine-flag', () => ({
+  getAiEngine: async () => 'langchain' as const,
+  resetEngineCache: () => {},
+  DEFAULT_AI_ENGINE: 'langchain' as const,
+}))
+
 beforeEach(() => {
   EmbeddingsCtor.mockClear()
   embedDocumentsMock.mockReset()
