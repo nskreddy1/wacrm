@@ -27,7 +27,7 @@ const fetcher = async (url: string) => {
 }
 
 const defaults = {
-  displayName: '', externalIdentity: '', host: '', port: '587', username: '', password: '', apiKey: '', accountSid: '', authToken: '', recipient: '',
+  displayName: '', externalIdentity: '', host: '', port: '587', username: '', password: '', apiKey: '', accountSid: '', authToken: '', messagingServiceSid: '', recipient: '',
 }
 
 export function ChannelConnections() {

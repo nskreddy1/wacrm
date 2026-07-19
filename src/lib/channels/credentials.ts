@@ -4,6 +4,14 @@ import type { ChannelConnection } from '@/types'
 export interface TwilioCredentials {
   accountSid: string
   authToken: string
+  /**
+   * Optional Twilio Messaging Service SID (MG…). When set, SMS sends
+   * use MessagingServiceSid instead of a bare From number, which
+   * enables Twilio-managed sender pooling, Sticky Sender, Advanced
+   * Opt-Out, and geomatch (docs: /docs/messaging/services). The
+   * connection's external_identity remains the fallback From sender.
+   */
+  messagingServiceSid?: string
 }
 
 export interface GoogleCredentials {
