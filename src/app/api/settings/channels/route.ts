@@ -159,6 +159,14 @@ export async function POST(request: Request) {
       )
     }
     if (error instanceof Error && /required|configuration|Port 587/.test(error.message)) return NextResponse.json({ error: error.message }, { status: 400 })
+    // Postgres unique violation (23505): same sender identity already
+    // connected for this channel+provider — a 409, not an opaque 500.
+    if (typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === '23505') {
+      return NextResponse.json(
+        { error: 'A connection with this sender number/email already exists for this channel. Edit the existing connection instead of adding a duplicate.' },
+        { status: 409 },
+      )
+    }
     return toErrorResponse(error)
   }
 }
