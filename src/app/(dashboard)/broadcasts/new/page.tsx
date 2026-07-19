@@ -128,7 +128,7 @@ export default function NewBroadcastPage() {
   const stepContent = [
     <Step1ChooseTemplate key="template" channel={channel} selectedTemplate={template} onSelect={setTemplate} onNext={() => setCurrentStep(1)} onBack={() => router.push('/broadcasts')} />,
     <Step2SelectAudience key="audience" audience={audience} onUpdate={setAudience} onNext={() => setCurrentStep(2)} onBack={() => setCurrentStep(0)} />,
-    template ? <Step3Personalize key="personalize" template={template} variables={variables} onUpdate={setVariables} headerMediaUrl={headerMediaUrl} onHeaderMediaUrlChange={setHeaderMediaUrl} onNext={() => setCurrentStep(3)} onBack={() => setCurrentStep(1)} /> : null,
+    template ? <Step3Personalize key="personalize" channel={channel} template={template} variables={variables} onUpdate={setVariables} headerMediaUrl={headerMediaUrl} onHeaderMediaUrlChange={setHeaderMediaUrl} onNext={() => setCurrentStep(3)} onBack={() => setCurrentStep(1)} /> : null,
     template ? <Step4ScheduleSend key="send" name={name} onNameChange={setName} template={template} audience={audience} onSend={handleSend} onSaveDraft={handleSaveDraft} onBack={() => setCurrentStep(2)} isProcessing={isProcessing} progress={progress} /> : null,
   ];
 

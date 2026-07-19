@@ -23,6 +23,7 @@ interface VariableMapping {
 }
 
 interface Step3Props {
+  channel?: 'whatsapp' | 'sms';
   template: MessageTemplate;
   variables: Record<string, VariableMapping>;
   onUpdate: (variables: Record<string, VariableMapping>) => void;
@@ -68,6 +69,7 @@ const SAMPLE_CONTACT: Contact = {
 };
 
 export function Step3Personalize({
+  channel = 'whatsapp',
   template,
   variables,
   onUpdate,
@@ -129,10 +131,13 @@ export function Step3Personalize({
   }, []);
 
   const placeholders = useMemo(() => {
-    const matches = template.body_text.match(/\{\{(\d+)\}\}/g);
+    const pattern = channel === 'sms'
+      ? /\{\{\s*[\w.]+\s*\}\}/g
+      : /\{\{\s*\d+\s*\}\}/g;
+    const matches = template.body_text.match(pattern);
     if (!matches) return [];
     return [...new Set(matches)].sort();
-  }, [template.body_text]);
+  }, [channel, template.body_text]);
 
   // Templates with an IMAGE/VIDEO/DOCUMENT header need a media URL at
   // send time — Meta requires the media component on every delivery and
@@ -170,7 +175,7 @@ export function Step3Personalize({
   const unmappedKeys = useMemo(() => {
     const missing: string[] = [];
     for (const placeholder of placeholders) {
-      const key = placeholder.replace(/^\{\{|\}\}$/g, '');
+      const key = placeholder.replace(/^\{\{\s*|\s*\}\}$/g, '');
       const mapping = variables[key];
       if (!mapping || !mapping.value?.trim()) {
         missing.push(placeholder);
@@ -199,7 +204,7 @@ export function Step3Personalize({
 
     let text = template.body_text;
     for (const placeholder of placeholders) {
-      const key = placeholder.replace(/^\{\{|\}\}$/g, '');
+      const key = placeholder.replace(/^\{\{\s*|\s*\}\}$/g, '');
       const mapping = variables[key];
       let replacement = placeholder;
 
@@ -285,15 +290,16 @@ export function Step3Personalize({
       )}
 
       {placeholders.length === 0 && !mediaHeaderType ? (
-        <div className="rounded-xl border border-border bg-card/50 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            {t('personalize.noPreview')}
+        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
+          <p className="text-sm font-medium text-foreground">No variables to map</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            This {channel === 'sms' ? 'SMS' : 'WhatsApp'} template is ready as written. Review the complete message below.
           </p>
         </div>
       ) : placeholders.length === 0 ? null : (
         <div className="space-y-4">
           {placeholders.map((placeholder) => {
-            const key = placeholder.replace(/^\{\{|\}\}$/g, '');
+            const key = placeholder.replace(/^\{\{\s*|\s*\}\}$/g, '');
             const mapping = variables[key] ?? { type: 'static', value: '' };
 
             return (
@@ -400,24 +406,31 @@ export function Step3Personalize({
         </div>
       )}
 
-      {/* Live Preview — rendered as a WhatsApp-style bubble so the user
-          sees approximately what the recipient will see. */}
       <div className="rounded-xl border border-border bg-card/50 p-4">
         <div className="mb-3 flex items-center gap-2">
-          <Eye className="h-4 w-4 text-primary" />
-          <p className="text-sm font-medium text-foreground">{t('personalize.preview')}</p>
+          <Eye className="size-4 text-primary" />
+          <p className="text-sm font-medium text-foreground">{channel === 'sms' ? 'SMS preview' : t('personalize.preview')}</p>
           <span className="text-xs text-muted-foreground">({previewLabel})</span>
-          {loadingPreview && (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-          )}
+          {loadingPreview ? <Loader2 className="size-3.5 animate-spin text-primary" /> : null}
         </div>
-        <div className="rounded-lg bg-[#0e1a12] p-3">
-          <div className="ml-auto max-w-[85%] rounded-lg bg-primary/30 px-3 py-2 shadow-sm">
-            <p className="whitespace-pre-wrap text-sm text-primary">
-              {previewText}
-            </p>
+        {channel === 'sms' ? (
+          <div className="mx-auto max-w-md rounded-2xl border border-border bg-muted/30 p-3">
+            <div className="mb-3 flex items-center justify-between border-b border-border pb-3">
+              <div><p className="text-xs font-medium text-foreground">Business message</p><p className="text-[11px] text-muted-foreground">SMS · {previewLabel}</p></div>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Preview</span>
+            </div>
+            <div className="mr-auto max-w-[88%] rounded-2xl rounded-bl-md border border-border bg-background px-3 py-2.5 shadow-sm">
+              <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{previewText}</p>
+            </div>
+            <p className="mt-2 px-1 text-[10px] text-muted-foreground">{previewText.length} characters · {Math.max(1, Math.ceil(previewText.length / 160))} SMS segment{Math.ceil(previewText.length / 160) === 1 ? '' : 's'}</p>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-lg bg-muted/50 p-3">
+            <div className="ml-auto max-w-[85%] rounded-lg bg-primary/10 px-3 py-2 shadow-sm">
+              <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{previewText}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {unmappedKeys.length > 0 && (
