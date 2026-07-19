@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,18 +83,12 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
             onChange={(event) => setEmail(event.target.value)}
             required
             aria-invalid={Boolean(error)}
+            variant="underline"
+            size="lg"
           />
         </Field>
         <Field>
-          <div className="flex items-center justify-between gap-4">
-            <FieldLabel htmlFor="password">Password</FieldLabel>
-            <Link
-              href="/forgot-password"
-              className="text-sm font-medium text-primary transition-colors hover:text-primary-hover"
-            >
-              Forgot password?
-            </Link>
-          </div>
+          <FieldLabel htmlFor="password">Password</FieldLabel>
           <div className="relative">
             <Input
               id="password"
@@ -106,6 +99,8 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
               onChange={(event) => setPassword(event.target.value)}
               required
               aria-invalid={Boolean(error)}
+              variant="underline"
+              size="lg"
               className="pr-10"
             />
             <button
@@ -123,11 +118,7 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
             </button>
           </div>
         </Field>
-        <Button
-          type="submit"
-          disabled={loading}
-          className="w-full transition-transform duration-150 ease-out active:scale-[0.98]"
-        >
+        <Button type="submit" disabled={loading} size="xl" className="w-full">
           {loading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
           {loading ? "Signing in..." : submitLabel}
         </Button>

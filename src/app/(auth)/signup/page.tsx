@@ -155,6 +155,8 @@ function SignupPageInner() {
                         onChange={(event) => setFullName(event.target.value)}
                         required
                         aria-invalid={Boolean(error)}
+                        variant="underline"
+                        size="lg"
                       />
                     </Field>
 
@@ -171,6 +173,8 @@ function SignupPageInner() {
                         onChange={(event) => setEmail(event.target.value)}
                         required
                         aria-invalid={Boolean(error)}
+                        variant="underline"
+                        size="lg"
                       />
                     </Field>
 
@@ -188,6 +192,8 @@ function SignupPageInner() {
                           minLength={6}
                           required
                           aria-invalid={Boolean(error)}
+                          variant="underline"
+                          size="lg"
                         />
                       </Field>
 
@@ -204,6 +210,8 @@ function SignupPageInner() {
                           minLength={6}
                           required
                           aria-invalid={Boolean(error)}
+                          variant="underline"
+                          size="lg"
                         />
                       </Field>
                     </div>
@@ -215,7 +223,7 @@ function SignupPageInner() {
                       </FieldLabel>
                     </Field>
 
-                    <Button type="submit" disabled={loading} className="w-full">
+                    <Button type="submit" disabled={loading} size="xl" className="w-full">
                       {loading ? "Creating account..." : "Create account"}
                     </Button>
                   </form>

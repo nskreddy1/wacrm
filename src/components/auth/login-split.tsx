@@ -4,7 +4,6 @@ import Link from "next/link";
 import { UsersRound } from "lucide-react";
 import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { LoginForm } from "@/components/auth/login-form";
-import { FieldSeparator } from "@/components/ui/field";
 
 type LoginSplitProps = {
   inviteToken: string | null;
@@ -41,12 +40,22 @@ export function LoginSplit({ inviteToken }: LoginSplitProps) {
         </div>
 
         <div
-          className="flex flex-col gap-5"
+          className="flex flex-col gap-4"
           style={{ "--stagger-index": 1 } as React.CSSProperties}
         >
-          <GoogleAuthButton inviteToken={inviteToken} label="Sign in with Google" />
-          <FieldSeparator>or continue with email</FieldSeparator>
+          {/* Order mirrors the reference design: primary sign-in first,
+              Google directly under it, forgot-password link last. */}
           <LoginForm inviteToken={inviteToken} submitLabel="Sign in now" />
+          <GoogleAuthButton inviteToken={inviteToken} label="Sign in with Google" />
+          <p className="pt-2 text-center text-sm text-muted-foreground">
+            Forgot password?{" "}
+            <Link
+              href="/forgot-password"
+              className="font-semibold text-foreground underline underline-offset-4 transition-colors hover:text-primary"
+            >
+              Click here
+            </Link>
+          </p>
         </div>
     </div>
   );
