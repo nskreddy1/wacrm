@@ -34,6 +34,13 @@ interface ConversationListProps {
    * or the tab was throttled. Optional so existing callers keep working.
    */
   resyncToken?: number;
+  /**
+   * Messaging channel this list serves. Scopes the conversations fetch
+   * so the WhatsApp inbox and the SMS inbox stay fully separate.
+   * Optional for backward compatibility — defaults to 'whatsapp',
+   * which also matches legacy rows saved before the channel column.
+   */
+  channel?: "whatsapp" | "sms";
 }
 
 const STATUS_COLORS: Record<ConversationStatus, string> = {
@@ -52,6 +59,7 @@ export function ConversationList({
   conversations,
   onConversationsLoaded,
   resyncToken = 0,
+  channel = "whatsapp",
 }: ConversationListProps) {
   const t = useTranslations("Inbox.conversationList");
   
@@ -95,10 +103,17 @@ export function ConversationList({
     let cancelled = false;
 
     (async () => {
-      const { data, error } = await supabase
+      // Channel scoping: WhatsApp additionally matches NULL for rows
+      // created before the channel column existed (migration 038).
+      let query = supabase
         .from("conversations")
         .select(CONVERSATION_SELECT)
         .order("last_message_at", { ascending: false });
+      query =
+        channel === "whatsapp"
+          ? query.or("channel.eq.whatsapp,channel.is.null")
+          : query.eq("channel", channel);
+      const { data, error } = await query;
 
       if (cancelled) return;
 
@@ -124,7 +139,7 @@ export function ConversationList({
     // `resyncToken` is included so the parent can force a refetch when
     // the realtime channel reconnects or the tab regains focus — catches
     // up on any events sent while the WS was disconnected or throttled.
-  }, [resyncToken]);
+  }, [resyncToken, channel]);
 
   // Tag definitions for the filter picker — loaded once so labels/colours
   // stay stable regardless of which conversations happen to be loaded.
