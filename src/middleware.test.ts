@@ -55,14 +55,24 @@ const ROTATED = {
   options: { path: "/", httpOnly: true },
 };
 
+/**
+ * The proxy fast-path skips getUser() entirely when the request has no
+ * `sb-*-auth-token` cookie (anonymous visitors cost zero network).
+ * These tests exercise the *session* path, so every request must carry
+ * an existing auth cookie — exactly like a real browser with a session.
+ */
+function requestWithSession(url: string) {
+  return new NextRequest(url, {
+    headers: { cookie: "sb-test-auth-token=existing-token" },
+  });
+}
+
 describe("middleware — refreshed auth cookies survive redirects", () => {
   it("carries the rotated token when redirecting a signed-in user off /login", async () => {
     mockUser = { id: "user-1" };
     refreshedCookies = [ROTATED];
 
-    const res = await middleware(
-      new NextRequest("https://app.test/login"),
-    );
+    const res = await middleware(requestWithSession("https://app.test/login"));
 
     // Redirect to /dashboard…
     expect(res.status).toBe(307);
@@ -79,9 +89,7 @@ describe("middleware — refreshed auth cookies survive redirects", () => {
     // clearing a dead session); those must not be dropped on the redirect.
     refreshedCookies = [{ ...ROTATED, value: "cleared" }];
 
-    const res = await middleware(
-      new NextRequest("https://app.test/dashboard"),
-    );
+    const res = await middleware(requestWithSession("https://app.test/dashboard"));
 
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe("https://app.test/login");
@@ -93,9 +101,7 @@ describe("middleware — refreshed auth cookies survive redirects", () => {
     mockUser = { id: "user-1" };
     refreshedCookies = [ROTATED];
 
-    const res = await middleware(
-      new NextRequest("https://app.test/login?invite=abc123"),
-    );
+    const res = await middleware(requestWithSession("https://app.test/login?invite=abc123"));
 
     expect(res.headers.get("location")).toContain("/join/abc123");
     expect(res.cookies.get(ROTATED.name)?.value).toBe(ROTATED.value);
@@ -105,12 +111,34 @@ describe("middleware — refreshed auth cookies survive redirects", () => {
     mockUser = { id: "user-1" };
     refreshedCookies = [ROTATED];
 
-    const res = await middleware(
-      new NextRequest("https://app.test/dashboard"),
-    );
+    const res = await middleware(requestWithSession("https://app.test/dashboard"));
 
     // No redirect — the normal NextResponse.next() already carries cookies.
     expect(res.headers.get("location")).toBeNull();
     expect(res.cookies.get(ROTATED.name)?.value).toBe(ROTATED.value);
+  });
+
+  it("redirects an anonymous visitor (no auth cookie) to /login without calling Supabase", async () => {
+    mockUser = { id: "should-not-be-consulted" };
+    refreshedCookies = [ROTATED];
+
+    const res = await middleware(new NextRequest("https://app.test/dashboard"));
+
+    // Fast path: no sb-* cookie -> no getUser() network round trip.
+    // The redirect happens purely from cookie inspection, so the mock's
+    // rotated cookie must NOT appear on the response.
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://app.test/login");
+    expect(res.cookies.get(ROTATED.name)).toBeUndefined();
+  });
+
+  it("lets an anonymous visitor pass through public pages without calling Supabase", async () => {
+    mockUser = null;
+    refreshedCookies = [];
+
+    const res = await middleware(new NextRequest("https://app.test/login"));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
   });
 });
