@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ArrowLeft, CheckCheck, ChevronDown, Download, Eye, Filter, Loader2, MessageCircle, Send, Trash2, Users, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCheck, ChevronDown, Download, Eye, Filter, Loader2, MessageCircle, MessageSquare, Send, Trash2, Users, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBroadcastStatus, getRecipientStatus } from '@/lib/broadcast-status';
 import { PageContainer } from '@/components/layout/page-container';
@@ -96,16 +96,24 @@ export default function BroadcastDetailPage() {
   if (error || !broadcast) return <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-6 text-center"><XCircle className="size-8 text-destructive" /><div><h1 className="font-medium text-foreground">Broadcast unavailable</h1><p className="mt-1 text-sm text-muted-foreground">{error ?? 'This broadcast could not be found.'}</p></div><Button variant="outline" onClick={() => router.push('/broadcasts')}>Back to broadcasts</Button></div>;
 
   const status = getBroadcastStatus(broadcast.status);
+  const isSms = (broadcast.channel ?? 'whatsapp') === 'sms';
   const deliveredRate = percent(broadcast.delivered_count, broadcast.total_recipients);
-  const readRate = percent(broadcast.read_count, broadcast.total_recipients);
-  const replyRate = percent(broadcast.replied_count, broadcast.total_recipients);
-  const metrics = [
-    { label: 'Recipients', value: broadcast.total_recipients, rate: 100, icon: Users },
-    { label: 'Sent', value: broadcast.sent_count, rate: percent(broadcast.sent_count, broadcast.total_recipients), icon: Send },
-    { label: 'Delivered', value: broadcast.delivered_count, rate: deliveredRate, icon: CheckCheck },
-    { label: 'Read', value: broadcast.read_count, rate: readRate, icon: Eye },
-    { label: 'Replied', value: broadcast.replied_count, rate: replyRate, icon: MessageCircle },
-  ];
+  const readRate = percent(broadcast.read_count, broadcast.delivered_count);
+  const replyRate = percent(broadcast.replied_count, broadcast.delivered_count);
+  const metrics = isSms
+    ? [
+        { label: 'Recipients', value: broadcast.total_recipients, rate: 100, icon: Users },
+        { label: 'Sent to carrier', value: broadcast.sent_count, rate: percent(broadcast.sent_count, broadcast.total_recipients), icon: Send },
+        { label: 'Carrier delivered', value: broadcast.delivered_count, rate: deliveredRate, icon: CheckCheck },
+        { label: 'Failed', value: broadcast.failed_count, rate: percent(broadcast.failed_count, broadcast.total_recipients), icon: XCircle },
+      ]
+    : [
+        { label: 'Recipients', value: broadcast.total_recipients, rate: 100, icon: Users },
+        { label: 'Sent', value: broadcast.sent_count, rate: percent(broadcast.sent_count, broadcast.total_recipients), icon: Send },
+        { label: 'Delivered', value: broadcast.delivered_count, rate: deliveredRate, icon: CheckCheck },
+        { label: 'Read', value: broadcast.read_count, rate: readRate, icon: Eye },
+        { label: 'Replied', value: broadcast.replied_count, rate: replyRate, icon: MessageCircle },
+      ];
 
   return (
     <PageContainer className="gap-8">
@@ -124,11 +132,12 @@ export default function BroadcastDetailPage() {
 
       <section className="grid overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-[1.15fr_0.85fr]">
         <div className="flex flex-col gap-6 border-b border-border p-5 sm:p-7 lg:border-b-0 lg:border-r">
-          <div><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Campaign outcome</p><div className="mt-3 flex items-end gap-3"><span className="text-5xl font-semibold tabular-nums tracking-tight text-foreground">{deliveredRate}%</span><span className="pb-1 text-sm text-muted-foreground">delivery rate</span></div></div>
+          <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{isSms ? 'SMS carrier outcome' : 'WhatsApp engagement'}</p><div className="mt-3 flex items-end gap-3"><span className="text-5xl font-semibold tabular-nums tracking-tight text-foreground">{deliveredRate}%</span><span className="pb-1 text-sm text-muted-foreground">delivered</span></div></div><div className={isSms ? 'flex size-11 items-center justify-center rounded-full border border-border bg-background text-muted-foreground' : 'flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary'}>{isSms ? <MessageSquare className="size-5" /> : <CheckCheck className="size-5" />}</div></div>
           <div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${deliveredRate}%` }} /></div>
-          <p className="max-w-xl text-sm leading-6 text-muted-foreground">{broadcast.delivered_count.toLocaleString()} of {broadcast.total_recipients.toLocaleString()} recipients received this message. {broadcast.failed_count ? `${broadcast.failed_count.toLocaleString()} deliveries need attention.` : 'No delivery failures were recorded.'}</p>
+          <p className="max-w-xl text-sm leading-6 text-muted-foreground">{broadcast.delivered_count.toLocaleString()} of {broadcast.total_recipients.toLocaleString()} recipients {isSms ? 'were confirmed delivered by the carrier.' : 'received this WhatsApp message.'} {broadcast.failed_count ? `${broadcast.failed_count.toLocaleString()} deliveries need attention.` : 'No delivery failures were recorded.'}</p>
+          {!isSms && <div className="flex flex-wrap gap-2"><Badge variant="secondary">{readRate}% read after delivery</Badge><Badge variant="secondary">{replyRate}% replied after delivery</Badge></div>}
         </div>
-        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-2">
+        <div className={isSms ? 'grid grid-cols-3 gap-px bg-border' : 'grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-2'}>
           {metrics.slice(1).map((metric) => <div key={metric.label} className="bg-card p-5"><div className="flex items-center justify-between"><metric.icon className="size-4 text-muted-foreground" /><span className="text-xs tabular-nums text-muted-foreground">{metric.rate}%</span></div><p className="mt-5 text-2xl font-semibold tabular-nums text-foreground">{metric.value.toLocaleString()}</p><p className="text-xs text-muted-foreground">{metric.label}</p></div>)}
         </div>
       </section>

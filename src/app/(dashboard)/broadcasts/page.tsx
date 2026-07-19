@@ -211,18 +211,44 @@ export default function BroadcastsPage() {
             {filteredBroadcasts.map((broadcast) => {
               const status = getBroadcastStatus(broadcast.status);
               const deliveryRate = percent(broadcast.delivered_count, broadcast.total_recipients);
-              const ChannelIcon = (broadcast.channel ?? 'whatsapp') === 'sms' ? MessageSquare : MessageCircle;
+              const readRate = percent(broadcast.read_count, broadcast.delivered_count);
+              const replyRate = percent(broadcast.replied_count, broadcast.delivered_count);
+              const isSms = (broadcast.channel ?? 'whatsapp') === 'sms';
+
+              if (isSms) {
+                return (
+                  <button key={broadcast.id} type="button" onClick={() => router.push(`/broadcasts/${broadcast.id}`)} className="group flex w-full flex-col gap-4 p-4 text-left transition-colors duration-150 hover:bg-muted/50 sm:flex-row sm:items-center sm:p-5">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground"><MessageSquare className="size-4" /></div>
+                      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-medium text-foreground">{broadcast.name}</h3><Badge variant="outline" className="text-[10px] uppercase tracking-wider">SMS</Badge></div><p className="mt-1 truncate text-xs text-muted-foreground">{broadcast.template_name} · {new Date(broadcast.created_at).toLocaleDateString()}</p></div>
+                    </div>
+                    <div className="flex w-full items-center gap-5 rounded-lg border border-border bg-background px-4 py-3 sm:w-80">
+                      <div className="min-w-16"><p className="text-xs text-muted-foreground">Sent</p><p className="mt-0.5 font-medium tabular-nums text-foreground">{broadcast.sent_count.toLocaleString()}</p></div>
+                      <div className="min-w-0 flex-1"><div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Carrier delivery</span><span className="font-medium tabular-nums text-foreground">{deliveryRate}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${deliveryRate}%` }} /></div></div>
+                      {broadcast.failed_count > 0 ? (
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Failed</p>
+                          <p className="mt-0.5 font-medium tabular-nums text-destructive">{broadcast.failed_count}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center justify-between gap-3 sm:w-36 sm:justify-end">
+                      <Badge variant="secondary">{tStatus(status.label)}</Badge>
+                      <ArrowRight className="size-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5" />
+                    </div>
+                  </button>
+                );
+              }
+
               return (
-                <button key={broadcast.id} type="button" onClick={() => router.push(`/broadcasts/${broadcast.id}`)} className="group flex w-full flex-col gap-4 p-4 text-left transition-colors duration-150 hover:bg-muted/50 sm:flex-row sm:items-center sm:p-5">
-                  <div className="flex min-w-0 flex-1 items-start gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground"><ChannelIcon className="size-5" /></div>
-                    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-medium text-foreground">{broadcast.name}</h3><Badge variant="outline" className="text-[10px] uppercase">{broadcast.channel ?? 'whatsapp'}</Badge></div><p className="mt-1 truncate text-xs text-muted-foreground">{broadcast.template_name} · {new Date(broadcast.created_at).toLocaleDateString()}</p></div>
+                <button key={broadcast.id} type="button" onClick={() => router.push(`/broadcasts/${broadcast.id}`)} className="group flex w-full flex-col gap-4 p-4 text-left transition-colors duration-150 hover:bg-muted/50 sm:p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex min-w-0 items-start gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><MessageCircle className="size-5" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-medium text-foreground">{broadcast.name}</h3><Badge variant="outline" className="text-[10px] uppercase tracking-wider">WhatsApp</Badge><Badge variant="secondary">{tStatus(status.label)}</Badge></div><p className="mt-1 truncate text-xs text-muted-foreground">{broadcast.template_name} · {new Date(broadcast.created_at).toLocaleDateString()}</p></div></div>
+                    <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5" />
                   </div>
-                  <div className="grid grid-cols-2 gap-5 sm:w-64">
-                    <div><p className="text-xs text-muted-foreground">Recipients</p><p className="mt-1 text-sm font-medium tabular-nums text-foreground">{broadcast.total_recipients.toLocaleString()}</p></div>
-                    <div><div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Delivered</span><span className="tabular-nums text-foreground">{deliveryRate}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${deliveryRate}%` }} /></div></div>
+                  <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+                    {[{ label: 'Recipients', value: broadcast.total_recipients, rate: 100 }, { label: 'Delivered', value: broadcast.delivered_count, rate: deliveryRate }, { label: 'Read', value: broadcast.read_count, rate: readRate }, { label: 'Replied', value: broadcast.replied_count, rate: replyRate }].map((metric) => <div key={metric.label} className="bg-background px-4 py-3"><div className="flex items-center justify-between gap-3"><span className="text-xs text-muted-foreground">{metric.label}</span>{metric.label !== 'Recipients' && <span className="text-[10px] tabular-nums text-muted-foreground">{metric.rate}%</span>}</div><p className="mt-1 text-lg font-semibold tabular-nums text-foreground">{metric.value.toLocaleString()}</p></div>)}
                   </div>
-                  <div className="flex items-center justify-between gap-3 sm:w-40 sm:justify-end"><Badge variant="secondary">{tStatus(status.label)}</Badge><ArrowRight className="size-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5" /></div>
                 </button>
               );
             })}
