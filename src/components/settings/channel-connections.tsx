@@ -44,17 +44,32 @@ export function ChannelConnections() {
   async function request(body: unknown, method = 'POST') {
     const response = await fetch('/api/settings/channels', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const payload = await response.json()
-    if (!response.ok) throw new Error(payload.error ?? 'Channel operation failed')
+    if (!response.ok) {
+      // Surface the first field-level validation issue (Zod flatten())
+      // instead of the generic top-level error when available.
+      const fieldErrors = payload.details?.fieldErrors as Record<string, string[]> | undefined
+      const firstField = fieldErrors ? Object.entries(fieldErrors).find(([, messages]) => messages.length > 0) : undefined
+      const detail = firstField ? `${firstField[0]}: ${firstField[1][0]}` : undefined
+      throw new Error(detail ?? payload.error ?? 'Channel operation failed')
+    }
     await mutate()
     return payload
   }
 
   async function save() {
+    // Client-side validation mirroring the API's saveSchema, so users
+    // get a specific message instead of "Invalid channel configuration".
+    const identityLabel = channel === 'email' ? 'sender email' : channel === 'sms' ? 'SMS number' : 'WhatsApp number'
+    if (!form.displayName.trim()) { toast.error('Connection name is required.'); return }
+    if (!form.externalIdentity.trim()) { toast.error(`The ${identityLabel} is required.`); return }
+    if (provider === 'twilio' && (!form.accountSid.trim() || !form.authToken.trim())) { toast.error('Twilio Account SID and Auth token are required.'); return }
+    if (provider === 'smtp' && (!form.host.trim() || !form.username.trim() || !form.password.trim())) { toast.error('SMTP host, username, and password are required.'); return }
+    if (provider === 'resend' && !form.apiKey.trim()) { toast.error('Resend API key is required.'); return }
     setBusy('save')
     try {
       const configuration = provider === 'smtp' ? { host: form.host, port: Number(form.port), secure: Number(form.port) === 465, requireTls: Number(form.port) === 587 } : {}
       const credentials = provider === 'smtp' ? { username: form.username, password: form.password } : provider === 'resend' ? { apiKey: form.apiKey } : provider === 'twilio' ? { accountSid: form.accountSid, authToken: form.authToken, ...(form.messagingServiceSid.trim() ? { messagingServiceSid: form.messagingServiceSid.trim() } : {}) } : undefined
-      await request({ action: 'save', channel, provider, displayName: form.displayName, externalIdentity: form.externalIdentity, configuration, credentials })
+      await request({ action: 'save', channel, provider, displayName: form.displayName.trim(), externalIdentity: form.externalIdentity.trim(), configuration, credentials })
       setForm(defaults)
       toast.success('Provider credentials saved securely. Test the connection before enabling it.')
     } catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not save provider') } finally { setBusy(null) }
