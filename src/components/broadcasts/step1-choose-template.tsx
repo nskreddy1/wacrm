@@ -14,42 +14,68 @@ const categoryColors: Record<string, string> = {
 };
 
 interface Step1Props {
+  /**
+   * Broadcast channel picked in the wizard header. Templates are
+   * channel-specific (WhatsApp templates go through Meta review, SMS
+   * templates are plain text), so the list is scoped to this value.
+   * Optional for backward compatibility — defaults to 'whatsapp'.
+   */
+  channel?: 'whatsapp' | 'sms';
   selectedTemplate: MessageTemplate | null;
   onSelect: (template: MessageTemplate) => void;
   onNext: () => void;
   onBack: () => void;
 }
 
-export function Step1ChooseTemplate({ selectedTemplate, onSelect, onNext, onBack }: Step1Props) {
+export function Step1ChooseTemplate({
+  channel = 'whatsapp',
+  selectedTemplate,
+  onSelect,
+  onNext,
+  onBack,
+}: Step1Props) {
   const t = useTranslations('Broadcasts.wizard');
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     async function fetchTemplates() {
+      setLoading(true);
       try {
         const supabase = createClient();
-        // Only APPROVED templates can be sent via Meta — anything else
-        // would 400 at broadcast time. Hide them rather than letting
-        // the user pick a template that will fail.
-        const { data, error: fetchError } = await supabase
+        // Only APPROVED templates can be sent — WhatsApp drafts would
+        // 400 at Meta, and SMS templates are marked APPROVED on save.
+        // WhatsApp additionally matches NULL-channel rows saved before
+        // the channel column existed (migration 047).
+        let query = supabase
           .from('message_templates')
           .select('*')
           .eq('status', 'APPROVED')
           .order('created_at', { ascending: false });
+        query =
+          channel === 'whatsapp'
+            ? query.or('channel.eq.whatsapp,channel.is.null')
+            : query.eq('channel', channel);
+        const { data, error: fetchError } = await query;
 
         if (fetchError) throw fetchError;
-        setTemplates(data ?? []);
+        if (!cancelled) setTemplates(data ?? []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('chooseTemplate.errorLoad'));
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : t('chooseTemplate.errorLoad'));
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     fetchTemplates();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [channel]);
 
   if (loading) {
     return (
