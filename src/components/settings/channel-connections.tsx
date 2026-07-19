@@ -36,8 +36,15 @@ export function ChannelConnections() {
   const [provider, setProvider] = useState<ChannelProvider>('smtp')
   const [form, setForm] = useState(defaults)
   const [busy, setBusy] = useState<string | null>(null)
+  const [reuseFromId, setReuseFromId] = useState<string | null>(null)
   const connections = useMemo(() => data?.connections.filter((item) => item.channel === channel) ?? [], [data, channel])
   const providers = data?.providers.filter((item) => item.channel === channel) ?? []
+  // An existing Twilio connection on ANOTHER channel whose credentials
+  // can be reused (one Twilio account often serves WhatsApp + SMS).
+  const reusableTwilio = useMemo(
+    () => (provider === 'twilio' ? data?.connections.find((item) => item.provider === 'twilio' && item.channel !== channel) ?? null : null),
+    [data, provider, channel],
+  )
 
   function update(name: keyof typeof defaults, value: string) { setForm((current) => ({ ...current, [name]: value })) }
 
@@ -62,15 +69,17 @@ export function ChannelConnections() {
     const identityLabel = channel === 'email' ? 'sender email' : channel === 'sms' ? 'SMS number' : 'WhatsApp number'
     if (!form.displayName.trim()) { toast.error('Connection name is required.'); return }
     if (!form.externalIdentity.trim()) { toast.error(`The ${identityLabel} is required.`); return }
-    if (provider === 'twilio' && (!form.accountSid.trim() || !form.authToken.trim())) { toast.error('Twilio Account SID and Auth token are required.'); return }
+    if (provider === 'twilio' && !reuseFromId && (!form.accountSid.trim() || !form.authToken.trim())) { toast.error('Twilio Account SID and Auth token are required.'); return }
     if (provider === 'smtp' && (!form.host.trim() || !form.username.trim() || !form.password.trim())) { toast.error('SMTP host, username, and password are required.'); return }
     if (provider === 'resend' && !form.apiKey.trim()) { toast.error('Resend API key is required.'); return }
     setBusy('save')
     try {
       const configuration = provider === 'smtp' ? { host: form.host, port: Number(form.port), secure: Number(form.port) === 465, requireTls: Number(form.port) === 587 } : {}
-      const credentials = provider === 'smtp' ? { username: form.username, password: form.password } : provider === 'resend' ? { apiKey: form.apiKey } : provider === 'twilio' ? { accountSid: form.accountSid, authToken: form.authToken, ...(form.messagingServiceSid.trim() ? { messagingServiceSid: form.messagingServiceSid.trim() } : {}) } : undefined
-      await request({ action: 'save', channel, provider, displayName: form.displayName.trim(), externalIdentity: form.externalIdentity.trim(), configuration, credentials })
+      const reusing = provider === 'twilio' && Boolean(reuseFromId)
+      const credentials = reusing ? undefined : provider === 'smtp' ? { username: form.username, password: form.password } : provider === 'resend' ? { apiKey: form.apiKey } : provider === 'twilio' ? { accountSid: form.accountSid, authToken: form.authToken, ...(form.messagingServiceSid.trim() ? { messagingServiceSid: form.messagingServiceSid.trim() } : {}) } : undefined
+      await request({ action: 'save', channel, provider, displayName: form.displayName.trim(), externalIdentity: form.externalIdentity.trim(), configuration, credentials, ...(reusing ? { reuseCredentialsFromId: reuseFromId } : {}) })
       setForm(defaults)
+      setReuseFromId(null)
       toast.success('Provider credentials saved securely. Test the connection before enabling it.')
     } catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not save provider') } finally { setBusy(null) }
   }
@@ -100,7 +109,7 @@ export function ChannelConnections() {
       {/* Reset the draft form when switching channel tabs — each tab is
           an independent connection draft, so values typed for WhatsApp
           must not leak into the SMS form. */}
-      <Tabs value={channel} onValueChange={(value) => { const next = value as ChannelKind; setChannel(next); setProvider(next === 'email' ? 'smtp' : 'twilio'); setForm(defaults) }}>
+      <Tabs value={channel} onValueChange={(value) => { const next = value as ChannelKind; setChannel(next); setProvider(next === 'email' ? 'smtp' : 'twilio'); setForm(defaults); setReuseFromId(null) }}>
         <TabsList>
           <TabsTrigger value="email"><Mail />Email</TabsTrigger>
           <TabsTrigger value="whatsapp"><MessageCircle />WhatsApp</TabsTrigger>
@@ -141,7 +150,16 @@ export function ChannelConnections() {
                     </div>
                     {provider === 'smtp' ? <div className="grid gap-4 md:grid-cols-2"><div className="flex flex-col gap-2"><Label htmlFor="smtp-host">SMTP host</Label><Input id="smtp-host" value={form.host} onChange={(event) => update('host', event.target.value)} placeholder="smtp.example.com" /></div><div className="flex flex-col gap-2"><Label htmlFor="smtp-port">Port</Label><Input id="smtp-port" inputMode="numeric" value={form.port} onChange={(event) => update('port', event.target.value)} /></div><div className="flex flex-col gap-2"><Label htmlFor="smtp-user">Username</Label><Input id="smtp-user" autoComplete="username" value={form.username} onChange={(event) => update('username', event.target.value)} /></div><div className="flex flex-col gap-2"><Label htmlFor="smtp-pass">Password</Label><Input id="smtp-pass" type="password" autoComplete="new-password" value={form.password} onChange={(event) => update('password', event.target.value)} /></div></div> : null}
                     {provider === 'resend' ? <div className="flex flex-col gap-2"><Label htmlFor="resend-key">API key</Label><Input id="resend-key" type="password" value={form.apiKey} onChange={(event) => update('apiKey', event.target.value)} /></div> : null}
-                    {provider === 'twilio' ? <div className="grid gap-4 md:grid-cols-2"><div className="flex flex-col gap-2"><Label htmlFor="twilio-sid">Account SID</Label><Input id="twilio-sid" value={form.accountSid} onChange={(event) => update('accountSid', event.target.value)} /></div><div className="flex flex-col gap-2"><Label htmlFor="twilio-token">Auth token</Label><Input id="twilio-token" type="password" value={form.authToken} onChange={(event) => update('authToken', event.target.value)} /></div>{tab !== 'email' ? <div className="flex flex-col gap-2 md:col-span-2"><Label htmlFor="twilio-messaging-service">Messaging Service SID <span className="font-normal text-muted-foreground">(optional, recommended)</span></Label><Input id="twilio-messaging-service" value={form.messagingServiceSid} onChange={(event) => update('messagingServiceSid', event.target.value)} placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" /><p className="text-xs text-muted-foreground">{tab === 'sms' ? 'When set, sends use Twilio\u2019s Messaging Service for sender pooling, Sticky Sender, and carrier-managed STOP handling (Advanced Opt-Out). Leave blank to send from the number above.' : 'When set, sends route through the Messaging Service\u2019s sender pool — add your WhatsApp sender to the pool in the Twilio Console. Leave blank to send from the number above.'}</p></div> : null}</div> : null}
+                    {provider === 'twilio' && reusableTwilio ? (
+                      <div className="flex items-start gap-3 rounded-md border p-4">
+                        <Switch id="twilio-reuse" checked={reuseFromId !== null} onCheckedChange={(checked) => setReuseFromId(checked ? reusableTwilio.id : null)} />
+                        <div className="flex flex-col gap-1">
+                          <Label htmlFor="twilio-reuse">Reuse credentials from &ldquo;{reusableTwilio.display_name}&rdquo; ({reusableTwilio.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'})</Label>
+                          <p className="text-xs text-muted-foreground">Same Twilio account, no retyping — the stored Account SID, Auth token, and Messaging Service SID are copied server-side. Secrets never reach this browser.</p>
+                        </div>
+                      </div>
+                    ) : null}
+                    {provider === 'twilio' && !reuseFromId ? <div className="grid gap-4 md:grid-cols-2"><div className="flex flex-col gap-2"><Label htmlFor="twilio-sid">Account SID</Label><Input id="twilio-sid" value={form.accountSid} onChange={(event) => update('accountSid', event.target.value)} /></div><div className="flex flex-col gap-2"><Label htmlFor="twilio-token">Auth token</Label><Input id="twilio-token" type="password" value={form.authToken} onChange={(event) => update('authToken', event.target.value)} /></div>{tab !== 'email' ? <div className="flex flex-col gap-2 md:col-span-2"><Label htmlFor="twilio-messaging-service">Messaging Service SID <span className="font-normal text-muted-foreground">(optional, recommended)</span></Label><Input id="twilio-messaging-service" value={form.messagingServiceSid} onChange={(event) => update('messagingServiceSid', event.target.value)} placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" /><p className="text-xs text-muted-foreground">{tab === 'sms' ? 'When set, sends use Twilio\u2019s Messaging Service for sender pooling, Sticky Sender, and carrier-managed STOP handling (Advanced Opt-Out). Leave blank to send from the number above.' : 'When set, sends route through the Messaging Service\u2019s sender pool — add your WhatsApp sender to the pool in the Twilio Console. Leave blank to send from the number above.'}</p></div> : null}</div> : null}
                   </>
                 )}
               </CardContent>

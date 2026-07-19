@@ -21,6 +21,13 @@ const saveSchema = z.object({
   externalIdentity: z.string().trim().min(1).max(320),
   configuration: z.record(z.string(), z.unknown()).default({}),
   credentials: z.record(z.string(), z.string()).optional(),
+  /**
+   * Reuse the encrypted credentials of an existing connection (same
+   * account, same provider) instead of retyping them — e.g. one Twilio
+   * account serving both WhatsApp and SMS. The encrypted blob is
+   * copied server-side; secrets never round-trip to the browser.
+   */
+  reuseCredentialsFromId: z.string().uuid().optional(),
 })
 const testSchema = z.object({ action: z.literal('test'), id: z.string().uuid(), recipient: z.string().email().optional() })
 const patchSchema = z.object({ id: z.string().uuid(), isEnabled: z.boolean().optional(), isPrimary: z.boolean().optional() })
@@ -126,7 +133,22 @@ export async function POST(request: Request) {
       if (!existing) return NextResponse.json({ error: 'Channel connection not found' }, { status: 404 })
       if (existing.provider !== provider && !suppliedCredentials) return NextResponse.json({ error: 'New credentials are required when switching providers' }, { status: 400 })
     }
-    const credentialsEncrypted = suppliedCredentials ? encryptProviderCredentials(suppliedCredentials) : existing?.credentials_encrypted
+    // Credential precedence: freshly supplied > reused from a sibling
+    // connection > kept from the row being edited.
+    let reusedCredentials: string | undefined
+    if (!suppliedCredentials && parsed.data.reuseCredentialsFromId) {
+      const source = await channelAdmin()
+        .from('channel_connections')
+        .select('provider,credentials_encrypted')
+        .eq('id', parsed.data.reuseCredentialsFromId)
+        .eq('account_id', accountId)
+        .maybeSingle()
+      if (source.error) throw source.error
+      if (!source.data) return NextResponse.json({ error: 'The connection to reuse credentials from was not found' }, { status: 404 })
+      if (source.data.provider !== provider) return NextResponse.json({ error: 'Credentials can only be reused between connections of the same provider' }, { status: 400 })
+      reusedCredentials = source.data.credentials_encrypted as string
+    }
+    const credentialsEncrypted = suppliedCredentials ? encryptProviderCredentials(suppliedCredentials) : (reusedCredentials ?? existing?.credentials_encrypted)
     if (!credentialsEncrypted) return NextResponse.json({ error: 'Provider credentials are required' }, { status: 400 })
 
     const values = {
@@ -159,6 +181,14 @@ export async function POST(request: Request) {
       )
     }
     if (error instanceof Error && /required|configuration|Port 587/.test(error.message)) return NextResponse.json({ error: error.message }, { status: 400 })
+    // Postgres unique violation (23505): same sender identity already
+    // connected for this channel+provider — a 409, not an opaque 500.
+    if (typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === '23505') {
+      return NextResponse.json(
+        { error: 'A connection with this sender number/email already exists for this channel. Edit the existing connection instead of adding a duplicate.' },
+        { status: 409 },
+      )
+    }
     return toErrorResponse(error)
   }
 }

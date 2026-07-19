@@ -296,6 +296,41 @@ export function useStudioTemplates() {
     return `Synced from Twilio — ${updated} updated, ${inserted} imported.`
   }
 
+  /**
+   * Import/refresh WhatsApp templates from every connected provider.
+   * Tries Twilio (Content API) and Meta (WABA message_templates) in
+   * turn; "not configured" responses are skipped, not fatal, so one
+   * button works for any setup. Throws only when no provider at all
+   * is connected or a connected provider genuinely fails.
+   */
+  async function importTemplates(): Promise<string> {
+    const parts: string[] = []
+    const skips: string[] = []
+    // Twilio Content API sync
+    try {
+      const json = await postJson("/api/whatsapp/templates/twilio", { action: "sync" })
+      parts.push(`Twilio: ${(json.updated as number) ?? 0} updated, ${(json.inserted as number) ?? 0} imported`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/not connected|not configured/i.test(msg)) skips.push("Twilio")
+      else throw new Error(`Twilio sync failed: ${msg}`)
+    }
+    // Meta WABA sync
+    try {
+      const json = await postJson("/api/whatsapp/templates/sync", {})
+      parts.push(`Meta: ${(json.updated as number) ?? 0} updated, ${(json.inserted as number) ?? 0} imported`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/not configured|not connected|Connect your WhatsApp/i.test(msg)) skips.push("Meta")
+      else throw new Error(`Meta sync failed: ${msg}`)
+    }
+    await mutate()
+    if (parts.length === 0) {
+      throw new Error("No WhatsApp provider is connected. Connect Twilio or Meta WhatsApp in Settings → Channels first.")
+    }
+    return `Templates synced — ${parts.join(" · ")}`
+  }
+
   /** Delete locally and (for Meta-linked rows) on the provider. */
   async function remove(id: string): Promise<void> {
     const res = await fetch(`/api/whatsapp/templates/${id}`, { method: "DELETE" })
@@ -313,6 +348,7 @@ export function useStudioTemplates() {
     save,
     submit,
     syncStatuses,
+    importTemplates,
     remove,
     refresh: mutate,
   }

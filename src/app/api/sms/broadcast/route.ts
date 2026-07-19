@@ -92,21 +92,23 @@ export async function POST(request: Request) {
       )
     }
 
-    // Resolve the account's SMS sender — a Twilio SMS channel connection.
-    const { data: connectionRow } = await supabase
+    // Resolve the account's SMS sender — a Twilio SMS channel
+    // connection. Fetch without the enabled filter first so we can
+    // tell the user exactly what is wrong (missing vs disabled).
+    const { data: connectionRows } = await supabase
       .from('channel_connections')
       .select('*')
       .eq('account_id', accountId)
       .eq('channel', 'sms')
-      .eq('is_enabled', true)
       .order('is_primary', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    const connectionRow = (connectionRows ?? []).find((row) => row.is_enabled)
     if (!connectionRow) {
+      const hasDisabled = (connectionRows ?? []).length > 0
       return NextResponse.json(
         {
-          error:
-            'SMS is not connected. Add a Twilio SMS number in Settings → Channels first.',
+          error: hasDisabled
+            ? 'Your SMS connection is saved but not enabled. In Settings → Channels → SMS, run "Test connection" and switch it on, then retry this broadcast.'
+            : 'SMS is not connected. Add a Twilio SMS number in Settings → Channels first.',
         },
         { status: 400 },
       )
