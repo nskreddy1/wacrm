@@ -63,6 +63,14 @@ function issue(level: ComplianceLevel, code: string, message: string): Complianc
   return { level, code, message }
 }
 
+/** Any studio variable: named ({{first_name}}) or numbered ({{1}}). */
+const VARIABLE_RE = /\{\{\s*[\w.]+\s*\}\}/
+const ADJACENT_VARIABLES_RE = /\}\}\s*\{\{/
+
+function countEmoji(text: string): number {
+  return (text.match(/\p{Extended_Pictographic}/gu) ?? []).length
+}
+
 export function checkWhatsAppCompliance(input: {
   category: "marketing" | "utility" | "authentication"
   body: string
@@ -72,6 +80,50 @@ export function checkWhatsAppCompliance(input: {
   const { category, body, footer } = input
   const text = `${body}\n${footer}`
   const issues: ComplianceIssue[] = []
+
+  // --- Structural rules (Meta review + Twilio Content API both
+  // reject on these; caught here so members never hit a rejection) ---
+  const trimmedBody = body.trim()
+  if (VARIABLE_RE.test(trimmedBody)) {
+    const startsWithVar = /^\{\{\s*[\w.]+\s*\}\}/.test(trimmedBody)
+    const endsWithVar = /\{\{\s*[\w.]+\s*\}\}$/.test(trimmedBody)
+    if (startsWithVar || endsWithVar) {
+      issues.push(
+        issue(
+          "error",
+          "wa-variable-at-edge",
+          "The body cannot start or end with a variable — Meta and Twilio both reject templates whose text begins or ends with a placeholder. Add surrounding text.",
+        ),
+      )
+    }
+    if (ADJACENT_VARIABLES_RE.test(trimmedBody)) {
+      issues.push(
+        issue(
+          "error",
+          "wa-adjacent-variables",
+          "Two variables cannot sit next to each other (e.g. {{a}}{{b}}) — separate them with words so reviewers have context.",
+        ),
+      )
+    }
+  }
+  if (countEmoji(text) > 10) {
+    issues.push(
+      issue(
+        "warning",
+        "wa-excessive-emoji",
+        "More than 10 emojis — Meta's automated review flags emoji-heavy templates as spam.",
+      ),
+    )
+  }
+  if (/\n{4,}/.test(body)) {
+    issues.push(
+      issue(
+        "warning",
+        "wa-excessive-linebreaks",
+        "Excessive consecutive line breaks — a known Meta rejection reason. Tighten the spacing.",
+      ),
+    )
+  }
 
   if (category === "marketing") {
     if (!OPT_OUT_RE.test(text)) {
@@ -223,7 +275,18 @@ export function checkCompliance(input: {
   const failed = issues.map((i) => i.code)
   const ALL_CODES =
     input.channel === "whatsapp"
-      ? ["wa-marketing-missing-optout", "wa-utility-promo-language", "wa-auth-contains-url", "wa-auth-contains-emoji", "wa-auth-promo-language", "wa-restricted-content"]
+      ? [
+          "wa-variable-at-edge",
+          "wa-adjacent-variables",
+          "wa-excessive-emoji",
+          "wa-excessive-linebreaks",
+          "wa-marketing-missing-optout",
+          "wa-utility-promo-language",
+          "wa-auth-contains-url",
+          "wa-auth-contains-emoji",
+          "wa-auth-promo-language",
+          "wa-restricted-content",
+        ]
       : ["sms-marketing-missing-stop", "sms-marketing-missing-sender", "sms-otp-contains-url", "sms-public-shortener", "sms-shaft-content"]
 
   return {

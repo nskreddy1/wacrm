@@ -124,47 +124,29 @@ export async function POST(request: Request) {
       )
     }
 
-    const row =
-      input.channel === 'whatsapp'
-        ? {
-            account_id: accountId,
-            user_id: userId,
-            channel: 'whatsapp' as const,
-            provider: input.provider,
-            name: input.name,
-            category: input.category,
-            language: input.language,
-            header_type: input.header_type ?? null,
-            header_content: input.header_content ?? null,
-            body_text: input.body_text,
-            footer_text: input.footer_text ?? null,
-            buttons: input.buttons?.length ? input.buttons : null,
-            sample_values: input.sample_values ?? null,
-            // Drafts only — submission (which sets PENDING/APPROVED)
-            // goes through the provider routes.
-            status: 'DRAFT',
-            compliance: compliance.audit,
-            submission_error: null,
-          }
-        : {
-            account_id: accountId,
-            user_id: userId,
-            channel: 'sms' as const,
-            provider: 'none',
-            name: input.name,
-            category: input.category,
-            language: input.language,
-            header_type: null,
-            header_content: null,
-            body_text: input.body_text,
-            footer_text: null,
-            buttons: null,
-            sample_values: input.sample_values ?? null,
-            // SMS has no carrier review — a compliant save is live.
-            status: 'APPROVED',
-            compliance: compliance.audit,
-            submission_error: null,
-          }
+    // Single object shape (not a per-channel union) so Supabase's
+    // typed insert accepts it. WhatsApp saves as DRAFT (submission
+    // happens via the provider routes); SMS has no carrier review,
+    // so a compliant save is immediately APPROVED/live.
+    const isWhatsApp = input.channel === 'whatsapp'
+    const row = {
+      account_id: accountId,
+      user_id: userId,
+      channel: input.channel,
+      provider: isWhatsApp ? input.provider : 'none',
+      name: input.name,
+      category: input.category,
+      language: input.language,
+      header_type: isWhatsApp ? (input.header_type ?? null) : null,
+      header_content: isWhatsApp ? (input.header_content ?? null) : null,
+      body_text: input.body_text,
+      footer_text: isWhatsApp ? (input.footer_text ?? null) : null,
+      buttons: isWhatsApp && input.buttons?.length ? input.buttons : null,
+      sample_values: input.sample_values ?? null,
+      status: isWhatsApp ? 'DRAFT' : 'APPROVED',
+      compliance: compliance.audit,
+      submission_error: null,
+    }
 
     if (input.id) {
       const { data, error } = await supabase
