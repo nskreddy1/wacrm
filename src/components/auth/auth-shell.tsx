@@ -84,7 +84,9 @@ export function AuthShell({
         </header>
 
         <div className="flex flex-1 items-center py-12">
-          <div className="auth-stagger w-full max-w-md">{children}</div>
+          {/* Entrance animation is owned by (auth)/template.tsx so it
+              re-runs on every navigation between auth pages. */}
+          <div className="w-full max-w-md">{children}</div>
         </div>
 
         <footer className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">

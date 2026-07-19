@@ -298,6 +298,16 @@ html[data-theme="rose"] {
   animation-delay: calc(var(--stagger-index, 0) * 60ms);
 }
 
+/*
+ * Cross-page form transition. Applied by (auth)/template.tsx, which
+ * Next.js remounts on each navigation between auth routes — so the
+ * form column rises in softly while the brand panel (in layout.tsx)
+ * stays still. Also reused for in-page state swaps (success screens).
+ */
+.auth-rise-block {
+  animation: auth-rise 400ms var(--ease-out-strong) both;
+}
+
 /* Error feedback: a short, decisive shake. Runs once on mount. */
 @keyframes auth-shake {
   0%,
@@ -334,6 +344,11 @@ html[data-theme="rose"] {
     }
   }
   .auth-stagger > * {
+    animation-duration: 200ms;
+  }
+  /* Gentler, not zero: a quick cross-fade with no vertical travel
+     (auth-rise is redefined above without the translate). */
+  .auth-rise-block {
     animation-duration: 200ms;
   }
   .auth-shake {

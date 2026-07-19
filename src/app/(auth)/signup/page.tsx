@@ -100,9 +100,9 @@ function SignupPageInner() {
   };
 
   return (
-    <AuthShell>
+    <>
       {success ? (
-              <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
+              <div className="auth-rise-block flex w-full max-w-md flex-col items-center gap-6 text-center">
                 <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <CheckCircle2 aria-hidden="true" />
                 </span>

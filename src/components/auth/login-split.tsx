@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { UsersRound } from "lucide-react";
-import { AuthShell } from "@/components/auth/auth-shell";
 import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { LoginForm } from "@/components/auth/login-form";
 import { FieldSeparator } from "@/components/ui/field";
@@ -13,8 +12,7 @@ type LoginSplitProps = {
 
 export function LoginSplit({ inviteToken }: LoginSplitProps) {
   return (
-    <AuthShell>
-      <div className="flex w-full flex-col gap-8">
+    <div className="flex w-full flex-col gap-8">
         <div
           className="flex flex-col gap-3"
           style={{ "--stagger-index": 0 } as React.CSSProperties}
@@ -50,7 +48,6 @@ export function LoginSplit({ inviteToken }: LoginSplitProps) {
           <FieldSeparator>or continue with email</FieldSeparator>
           <LoginForm inviteToken={inviteToken} submitLabel="Sign in now" />
         </div>
-      </div>
-    </AuthShell>
+    </div>
   );
 }
