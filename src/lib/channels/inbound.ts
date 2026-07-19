@@ -21,6 +21,12 @@ interface ConnectionRow {
   account_id: string
   created_by_user_id: string | null
   external_identity: string | null
+  /**
+   * Channel this connection serves ('whatsapp' | 'sms' | 'email').
+   * Optional for backward compatibility — absent means 'whatsapp',
+   * the only channel that existed before SMS support.
+   */
+  channel?: string | null
 }
 
 export type PersistInboundChannelMessageResult =
@@ -38,6 +44,9 @@ export async function persistInboundChannelMessage(
   connection: ConnectionRow,
   message: InboundChannelMessage,
 ): Promise<PersistInboundChannelMessageResult> {
+  // Phone-based channels share identity + threading logic; the
+  // channel tag keeps SMS and WhatsApp conversations separate.
+  const channel = connection.channel === 'sms' ? 'sms' : 'whatsapp'
   const normalizedFrom = normalizePhone(message.from.replace(/^whatsapp:/, ''))
   const eventId = `${connection.id}:${message.externalMessageId}`
   const { data: event, error: eventError } = await db
@@ -68,7 +77,7 @@ export async function persistInboundChannelMessage(
       .from('contact_identities')
       .select('contact_id')
       .eq('account_id', connection.account_id)
-      .eq('channel', 'whatsapp')
+      .eq('channel', channel)
       .eq('normalized_identity', normalizedFrom)
       .maybeSingle()
 
@@ -96,7 +105,7 @@ export async function persistInboundChannelMessage(
       const { error: identityError } = await db.from('contact_identities').upsert({
         account_id: connection.account_id,
         contact_id: contactId,
-        channel: 'whatsapp',
+        channel,
         identity: message.from,
         normalized_identity: normalizedFrom,
         is_primary: true,
@@ -117,7 +126,7 @@ export async function persistInboundChannelMessage(
         account_id: connection.account_id,
         user_id: ownerId,
         contact_id: contactId,
-        channel: 'whatsapp',
+        channel,
         channel_connection_id: connection.id,
         external_thread_id: threadId,
       }).select('id, unread_count').single()
