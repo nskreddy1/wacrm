@@ -112,10 +112,10 @@ function BrandHeader() {
   )
 }
 
-function NavGroups() {
+function NavGroups({ initialRole }: { initialRole: AccountRole | null }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { groups } = useNavigation()
+  const { groups } = useNavigation(initialRole)
   const { isMobile, setOpenMobile } = useSidebar()
   const unreadCount = useTotalUnread()
   const unreadBadge = unreadCount > 0 ? (unreadCount > 99 ? "99+" : String(unreadCount)) : undefined
@@ -251,14 +251,14 @@ function FooterMenu() {
   )
 }
 
-export function AppSidebar() {
+export function AppSidebar({ initialRole = null }: { initialRole?: AccountRole | null }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <BrandHeader />
       </SidebarHeader>
       <SidebarContent>
-        <NavGroups />
+        <NavGroups initialRole={initialRole} />
       </SidebarContent>
       <SidebarFooter>
         <FooterMenu />
