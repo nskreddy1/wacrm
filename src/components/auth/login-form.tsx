@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -20,7 +19,6 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,10 +53,17 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
         }
       }
 
-      router.push(inviteToken ? `/join/${encodeURIComponent(inviteToken)}` : "/dashboard");
+      const destination = inviteToken
+        ? `/join/${encodeURIComponent(inviteToken)}`
+        : "/dashboard";
+
+      // Authentication is a server boundary: use a document navigation so
+      // Next.js proxy receives the freshly-written Supabase session cookie on
+      // the very next request. A client router transition can reuse the auth
+      // route tree/cache and appear stuck while the protected route resolves.
+      window.location.assign(destination);
     } catch {
       setError("Something went wrong while signing in. Try again.");
-    } finally {
       setLoading(false);
     }
   }

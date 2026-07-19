@@ -5,26 +5,38 @@ import type { CSSProperties } from "react";
  *
  * Concept: an abstract "A" formed by a rising signal path with a
  * node (synapse) at the apex — the axon transmitting a message.
- * Built from 3 geometric elements so it stays legible at 16px.
+ * Built from 2 geometric elements so it stays legible at 16px.
+ *
+ * THEMING: no hardcoded brand hex values. Every variant resolves
+ * from the global design tokens in globals.css, so the mark follows
+ * the active `data-theme` (indigo by default) everywhere it appears
+ * — sidebar, auth pages, favicons rendered from DOM, brand page.
+ *
+ *   - "primary"  (default): accent-colored mark — uses var(--primary)
+ *   - "mono":    inherits surrounding text color (currentColor)
+ *   - "inverse": solid white for dark/brand surfaces (auth panel)
  * ------------------------------------------------------------------ */
 
-export type AxonVariant = "emerald" | "navy" | "mono" | "inverse";
+export type AxonVariant = "primary" | "mono" | "inverse";
 
 const PALETTES: Record<
   AxonVariant,
   { mark: string; node: string; text: string }
 > = {
-  emerald: { mark: "#047857", node: "#34d399", text: "#0f172a" },
-  navy: { mark: "#1e3a5f", node: "#2dd4bf", text: "#0f172a" },
+  primary: {
+    mark: "var(--primary)",
+    node: "var(--primary)",
+    text: "var(--foreground)",
+  },
   // `currentColor` lets the mono mark inherit its color from the
   // surrounding text — it adapts to light/dark themes for free.
   mono: { mark: "currentColor", node: "currentColor", text: "currentColor" },
-  inverse: { mark: "#ffffff", node: "#34d399", text: "#ffffff" },
+  inverse: { mark: "#ffffff", node: "#ffffff", text: "#ffffff" },
 };
 
 export function AxonMark({
   size = 32,
-  variant = "emerald",
+  variant = "primary",
   className,
   style,
 }: {
@@ -62,7 +74,7 @@ export function AxonMark({
 
 export function AxonLogo({
   size = 32,
-  variant = "emerald",
+  variant = "primary",
   className,
 }: {
   size?: number;
