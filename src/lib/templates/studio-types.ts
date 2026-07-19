@@ -53,14 +53,23 @@ export interface StudioTemplate {
   isNew?: boolean
 }
 
-/** Variables members can drop into any template body. */
+/**
+ * Variables members can drop into any template body.
+ *
+ * `label` is the human name shown in the chip; `sample` is ONLY used
+ * to fill the live phone preview so members see realistic output —
+ * at send time each token is mapped to real contact data in the
+ * broadcast wizard's personalize step.
+ */
 export const TEMPLATE_VARIABLES = [
-  { token: "{{first_name}}", sample: "Priya" },
-  { token: "{{company}}", sample: "Axon" },
-  { token: "{{order_id}}", sample: "#48291" },
-  { token: "{{booking_time}}", sample: "3:30 PM, Jul 22" },
-  { token: "{{agent_name}}", sample: "Ram" },
-  { token: "{{otp}}", sample: "482913" },
+  { token: "{{first_name}}", label: "First name", sample: "Priya" },
+  { token: "{{last_name}}", label: "Last name", sample: "Sharma" },
+  { token: "{{name}}", label: "Full name", sample: "Priya Sharma" },
+  { token: "{{company}}", label: "Company / school", sample: "Sunrise Public School" },
+  { token: "{{order_id}}", label: "Order ID", sample: "#48291" },
+  { token: "{{booking_time}}", label: "Booking time", sample: "3:30 PM, Jul 22" },
+  { token: "{{agent_name}}", label: "Agent name", sample: "Ram" },
+  { token: "{{otp}}", label: "One-time code", sample: "482913" },
 ] as const
 
 /** Substitute {{tokens}} with sample values for the live preview. */
