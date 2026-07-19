@@ -14,10 +14,10 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Relay CRM",
-    template: "%s — Relay CRM",
+    default: "Axon",
+    template: "%s — Axon",
   },
-  description: "Enterprise WhatsApp CRM for conversations, contacts, pipelines, campaigns, and bookings.",
+  description: "Enterprise CRM for WhatsApp, SMS, and email — conversations, contacts, pipelines, campaigns, and bookings.",
   robots: {
     index: false,
     follow: false,

@@ -27,12 +27,12 @@ const TRUST_ITEMS = [
 ] as const;
 
 export function AuthBrandPanel({
-  title = "Every WhatsApp conversation, deal, and follow-up in one system of record",
-  description = "WACRM gives your team a shared inbox, pipelines, and automations — so nothing falls through the cracks.",
+  title = "Every conversation, deal, and follow-up in one system of record",
+  description = "Axon gives your team a shared inbox across WhatsApp, SMS, and email — with pipelines and automations so nothing falls through the cracks.",
 }: AuthBrandPanelProps) {
   return (
     <aside
-      aria-label="About WACRM"
+      aria-label="About Axon"
       className="relative hidden overflow-hidden rounded-2xl border border-border bg-card lg:flex lg:flex-col"
     >
       {/* Subtle blueprint grid — depth without noise */}
@@ -54,7 +54,7 @@ export function AuthBrandPanel({
       <div className="relative flex flex-1 flex-col justify-between gap-8 p-8 xl:p-12">
         <div className="flex flex-col gap-4">
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            WACRM — Customer Workspace
+            Axon — Customer Workspace
           </p>
           <h2 className="max-w-md text-balance text-2xl font-semibold leading-tight tracking-tight text-foreground xl:text-3xl">
             {title}

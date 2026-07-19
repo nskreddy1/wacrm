@@ -1,12 +1,9 @@
 import { ImageResponse } from "next/og";
 
-// Replaces the default Next.js favicon with the brand mark — Hostinger
-// violet rounded square + white chat-square glyph — matching the
-// sidebar logo in `src/components/layout/app-sidebar.tsx`. Next.js renders
-// this at build time and auto-injects <link rel="icon"> into <head>.
-//
-// This route takes precedence over src/app/favicon.ico, which is the
-// Next.js default and can stay on disk harmlessly (or be removed).
+// Axon favicon — monochrome geometric "A" signal mark on a dark
+// rounded square, matching `src/components/brand/axon-logo.tsx`.
+// Next.js renders this at build time and auto-injects
+// <link rel="icon"> into <head>.
 
 export const runtime = "edge";
 export const size = { width: 32, height: 32 };
@@ -22,21 +19,20 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#7c3aed", // primary (Hostinger-aligned purple)
-          borderRadius: 6,
+          background: "#111827", // monochrome charcoal
+          borderRadius: 7,
         }}
       >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#ffffff"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
+          <path
+            d="M6 40 L20 12 a4.5 4.5 0 0 1 8 0 L42 40"
+            stroke="#ffffff"
+            strokeWidth="7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path d="M15.5 31 H32.5" stroke="#ffffff" strokeWidth="7" strokeLinecap="round" />
+          <circle cx="24" cy="11" r="5" fill="#ffffff" />
         </svg>
       </div>
     ),

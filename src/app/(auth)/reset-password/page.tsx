@@ -55,7 +55,7 @@ export default function ResetPasswordPage() {
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-primary">Secure account update</p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Create a new password</h1>
-          <p className="text-pretty leading-relaxed text-muted-foreground">Use at least eight characters and make it unique to your WACRM account.</p>
+          <p className="text-pretty leading-relaxed text-muted-foreground">Use at least eight characters and make it unique to your Axon account.</p>
         </div>
 
         <form onSubmit={submit}>

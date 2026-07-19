@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, UsersRound } from "lucide-react";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -111,7 +112,7 @@ function SignupPageInner() {
                   </h1>
                   <p className="text-pretty leading-relaxed text-muted-foreground">
                     We sent a confirmation link to <strong className="font-medium text-foreground">{email}</strong>.
-                    Verify your email to finish creating your WACRM account.
+                    Verify your email to finish creating your Axon account.
                   </p>
                 </div>
                 <Button variant="outline" className="w-full" render={<Link href={loginHref} />}>
@@ -136,10 +137,7 @@ function SignupPageInner() {
                 </div>
 
                 <FieldGroup>
-                  <Button type="button" variant="outline" className="w-full" aria-disabled="true">
-                    <span data-icon="inline-start" className="font-semibold" aria-hidden="true">G</span>
-                    Continue with Google
-                  </Button>
+                  <GoogleAuthButton inviteToken={inviteToken} label="Continue with Google" />
 
                   <FieldSeparator>or</FieldSeparator>
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { MessageSquareText } from "lucide-react";
 import { AuthBrandPanel } from "@/components/auth/auth-brand-panel";
+import { AxonMark } from "@/components/brand/axon-logo";
 
 type AuthShellProps = {
   children: React.ReactNode;
@@ -18,15 +18,13 @@ export function AuthShell({ children, promoTitle, promoDescription }: AuthShellP
             <Link
               href="/"
               className="flex w-fit items-center gap-2.5 font-semibold tracking-tight text-foreground"
-              aria-label="WACRM home"
+              aria-label="Axon home"
             >
-              <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <MessageSquareText className="size-4" aria-hidden="true" />
-              </span>
-              WACRM
+              <AxonMark size={26} variant="mono" className="text-foreground" />
+              Axon
             </Link>
             <a
-              href="mailto:support@wacrm.app"
+              href="mailto:support@axon.app"
               className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               Contact support
@@ -38,7 +36,7 @@ export function AuthShell({ children, promoTitle, promoDescription }: AuthShellP
           </div>
 
           <footer className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-            <p>&copy; {new Date().getFullYear()} WACRM. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} Axon. All rights reserved.</p>
             <div className="flex items-center gap-4">
               <Link href="/" className="transition-colors hover:text-foreground">
                 Privacy

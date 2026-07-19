@@ -11,9 +11,13 @@ const callbackDestinations = {
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code")
   const purpose = request.nextUrl.searchParams.get("purpose")
-  const destination = purpose && purpose in callbackDestinations
-    ? callbackDestinations[purpose as keyof typeof callbackDestinations]
-    : routes.app.dashboard
+  const next = request.nextUrl.searchParams.get("next")
+  // Only allow same-origin relative paths to prevent open redirects.
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null
+  const destination = safeNext
+    ?? (purpose && purpose in callbackDestinations
+      ? callbackDestinations[purpose as keyof typeof callbackDestinations]
+      : routes.app.dashboard)
 
   if (code) {
     const supabase = await createClient()
