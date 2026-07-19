@@ -34,9 +34,10 @@ function dealRow(input: DealInput, accountId: string, userId: string) {
   }
 }
 
-export async function saveDealAction(raw: unknown): Promise<ActionResult<PipelineDeal>> {
+export async function saveDealAction(raw: unknown, subPipelineId?: string): Promise<ActionResult<PipelineDeal>> {
   try {
     const input = dealInputSchema.parse(raw)
+    if (subPipelineId) uuidSchema.parse(subPipelineId)
     const { supabase, accountId, userId } = await requireRole("agent")
     await verifyPipeline(accountId, input.pipelineId, supabase)
     await verifyStage(input.pipelineId, input.stageId, supabase)
@@ -46,6 +47,15 @@ export async function saveDealAction(raw: unknown): Promise<ActionResult<Pipelin
       : supabase.from("deals").insert(row)
     const { data, error } = await query.select("*, contact:contacts(id,name,company,email,phone), assignee:profiles!deals_assigned_to_fkey(id,user_id,full_name,email,avatar_url,account_role)").single()
     if (error) throw new Error(error.message)
+    if (!input.id && subPipelineId) {
+      const { data: subPipeline } = await supabase.from("sub_pipelines").select("id").eq("id", subPipelineId).eq("account_id", accountId).eq("pipeline_id", input.pipelineId).maybeSingle()
+      if (!subPipeline) throw new Error("Board not found")
+      const { error: membershipError } = await supabase.from("sub_pipeline_deals").insert({ account_id: accountId, sub_pipeline_id: subPipelineId, deal_id: data.id, position: input.position })
+      if (membershipError) {
+        await supabase.from("deals").delete().eq("id", data.id).eq("account_id", accountId)
+        throw new Error(membershipError.message)
+      }
+    }
     revalidatePath(pipelinePath(accountId, input.pipelineId, "board"))
     return { ok: true, data: mapDeal(data as Record<string, unknown>) }
   } catch (error) { return fail(error) }

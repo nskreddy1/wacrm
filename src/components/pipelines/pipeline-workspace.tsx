@@ -124,10 +124,22 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
     setSelected(new Set()); toast.success(`${ids.length} deal${ids.length === 1 ? "" : "s"} deleted`)
   }
   async function saveDeal(input: Parameters<typeof saveDealAction>[0]) {
-    const result = await saveDealAction(input)
+    const isNew = !(input && typeof input === "object" && "id" in input && input.id)
+    const realSubPipelineId = isNew && activeSubPipelineId !== snapshot.pipeline.id ? activeSubPipelineId : undefined
+    const result = await saveDealAction(input, realSubPipelineId)
     if (!result.ok) return result
-    await mutate({ ...snapshot, deals: snapshot.deals.some((deal) => deal.id === result.data.id) ? snapshot.deals.map((deal) => deal.id === result.data.id ? result.data : deal) : [result.data, ...snapshot.deals] }, { revalidate: false })
-    setEditing(null); toast.success("Deal saved"); return result
+    await mutate((current) => {
+      const source = current ?? snapshot
+      const exists = source.deals.some((deal) => deal.id === result.data.id)
+      return {
+        ...source,
+        deals: exists ? source.deals.map((deal) => deal.id === result.data.id ? result.data : deal) : [result.data, ...source.deals],
+        subPipelines: realSubPipelineId
+          ? source.subPipelines.map((pipeline) => pipeline.id === realSubPipelineId && !pipeline.dealIds.includes(result.data.id) ? { ...pipeline, dealIds: [result.data.id, ...pipeline.dealIds] } : pipeline)
+          : source.subPipelines,
+      }
+    }, { revalidate: false })
+    setEditing(null); toast.success(isNew ? "Deal created" : "Deal saved"); return result
   }
   async function createSubPipeline(name: string) {
     const result = await createSubPipelineAction({ pipelineId: snapshot.pipeline.id, name, position: snapshot.subPipelines.length })
