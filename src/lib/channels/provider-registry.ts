@@ -3,13 +3,18 @@ import type { ChannelAdapter, ChannelCapabilities } from './contracts'
 
 const adapters = new Map<string, ChannelAdapter>()
 
-export const PROVIDER_CHANNEL: Record<ChannelProvider, ChannelKind> = {
-  meta: 'whatsapp',
-  twilio: 'whatsapp',
-  google: 'email',
-  microsoft: 'email',
-  resend: 'email',
-  smtp: 'email',
+/**
+ * Channels each provider can serve. A provider may power more than
+ * one channel (Twilio does WhatsApp and SMS); the first entry is the
+ * provider's primary channel, used when no channel is specified.
+ */
+export const PROVIDER_CHANNELS: Record<ChannelProvider, ChannelKind[]> = {
+  meta: ['whatsapp'],
+  twilio: ['whatsapp', 'sms'],
+  google: ['email'],
+  microsoft: ['email'],
+  resend: ['email'],
+  smtp: ['email'],
 }
 
 export const PROVIDER_LABEL: Record<ChannelProvider, string> = {
@@ -34,7 +39,7 @@ function key(channel: ChannelKind, provider: ChannelProvider) {
 }
 
 export function isProviderCompatible(channel: ChannelKind, provider: ChannelProvider): boolean {
-  return PROVIDER_CHANNEL[provider] === channel
+  return PROVIDER_CHANNELS[provider].includes(channel)
 }
 
 export function registerChannelAdapter(adapter: ChannelAdapter): void {
@@ -44,7 +49,7 @@ export function registerChannelAdapter(adapter: ChannelAdapter): void {
   const adapterKey = key(adapter.channel, adapter.provider)
   const existing = adapters.get(adapterKey)
   if (existing && existing !== adapter) {
-    throw new Error(`A channel adapter is already registered for ${adapter.provider}`)
+    throw new Error(`A channel adapter is already registered for ${adapter.provider} on ${adapter.channel}`)
   }
   adapters.set(adapterKey, adapter)
 }
@@ -54,16 +59,23 @@ export function getChannelAdapter(channel: ChannelKind, provider: ChannelProvide
     throw new Error(`${provider} is not compatible with ${channel}`)
   }
   const adapter = adapters.get(key(channel, provider))
-  if (!adapter) throw new Error(`No channel adapter is registered for ${provider}`)
+  if (!adapter) throw new Error(`No channel adapter is registered for ${provider} on ${channel}`)
   return adapter
 }
 
-export function hasChannelAdapter(provider: ChannelProvider): boolean {
-  return adapters.has(key(PROVIDER_CHANNEL[provider], provider))
+/** Whether an adapter is registered for the provider (any channel, or a specific one). */
+export function hasChannelAdapter(provider: ChannelProvider, channel?: ChannelKind): boolean {
+  const channels = channel ? [channel] : PROVIDER_CHANNELS[provider]
+  return channels.some((c) => adapters.has(key(c, provider)))
 }
 
-export function getProviderCapabilities(provider: ChannelProvider): ChannelCapabilities {
-  return adapters.get(key(PROVIDER_CHANNEL[provider], provider))?.capabilities ?? unavailableCapabilities
+/**
+ * Capabilities for a provider on a channel. Defaults to the
+ * provider's primary channel to preserve existing call sites.
+ */
+export function getProviderCapabilities(provider: ChannelProvider, channel?: ChannelKind): ChannelCapabilities {
+  const resolved = channel ?? PROVIDER_CHANNELS[provider][0]
+  return adapters.get(key(resolved, provider))?.capabilities ?? unavailableCapabilities
 }
 
 export function clearChannelAdaptersForTests(): void {

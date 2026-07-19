@@ -153,32 +153,35 @@ async function sendViaConnection(
   connection: ChannelConnection,
   contact: { id: string; phone: string },
 ): Promise<SendChannelMessageResult> {
-  const adapter = createChannelAdapter(connection.provider)
+  const adapter = createChannelAdapter(connection.provider, connection.channel)
   const adapterSend = adapter?.send?.bind(adapter)
   if (!adapterSend) {
     throw new Error(`No adapter available for provider "${connection.provider}"`)
   }
   // Strict mode: refuse to silently degrade rich payloads on providers
   // without native support (message text matters — callers map it to 400).
-  // Twilio DOES support templates natively via the Content API — a
-  // template payload carrying a `contentSid` (HX…) passes through.
+  // Twilio WhatsApp DOES support templates natively via the Content API —
+  // a template payload carrying a `contentSid` (HX…) passes through.
+  // SMS never supports rich kinds: approved SMS templates are rendered
+  // to plain text before they reach the orchestrator.
   const twilioNativeTemplate =
     connection.provider === 'twilio' &&
+    connection.channel === 'whatsapp' &&
     args.payload.kind === 'template' &&
     !!args.payload.contentSid
   if (
     args.strictProviderSupport &&
-    connection.provider !== 'meta' &&
+    !(connection.provider === 'meta' && connection.channel === 'whatsapp') &&
     !twilioNativeTemplate &&
     (args.payload.kind === 'template' || args.payload.kind === 'interactive')
   ) {
     throw new Error(
-      `${args.payload.kind} messages are not supported on the ${connection.provider} provider yet — send a text message instead.`,
+      `${args.payload.kind} messages are not supported on the ${connection.channel} ${connection.provider} channel — send a text message instead.`,
     )
   }
   const sanitized = sanitizePhoneForMeta(contact.phone)
   const identity =
-    connection.channel === 'whatsapp'
+    connection.channel === 'whatsapp' || connection.channel === 'sms'
       ? connection.provider === 'meta'
         ? sanitized
         : `+${sanitized}`
@@ -216,10 +219,10 @@ export async function sendChannelMessage(
 > {
   const db = channelAdmin()
 
-  // 1. Conversation → contact + pinned connection.
+  // 1. Conversation → contact + channel + pinned connection.
   const { data: conversation, error: convErr } = await db
     .from('conversations')
-    .select('id, contact_id, channel_connection_id')
+    .select('id, contact_id, channel, channel_connection_id')
     .eq('id', args.conversationId)
     .eq('account_id', args.accountId)
     .maybeSingle()
@@ -246,12 +249,15 @@ export async function sendChannelMessage(
       .maybeSingle()
     connection = (data as ChannelConnection | null) ?? null
   }
+  // Fallback connection lookup honors the conversation's channel so
+  // an SMS thread never sends through WhatsApp (and vice versa).
+  const conversationChannel = (conversation.channel as ChannelConnection['channel']) ?? 'whatsapp'
   if (!connection) {
     const { data } = await db
       .from('channel_connections')
       .select('*')
       .eq('account_id', args.accountId)
-      .eq('channel', 'whatsapp')
+      .eq('channel', conversationChannel)
       .eq('is_enabled', true)
       .order('is_primary', { ascending: false })
       .limit(1)
@@ -259,7 +265,13 @@ export async function sendChannelMessage(
     connection = (data as ChannelConnection | null) ?? null
   }
 
-  // 3. Send.
+  // 3. Send. The legacy Meta-config path only applies to WhatsApp —
+  // SMS conversations require a Twilio SMS channel connection.
+  if (!connection && conversationChannel !== 'whatsapp') {
+    throw new Error(
+      `No enabled ${conversationChannel} channel connection — connect one in Settings before sending.`,
+    )
+  }
   const result = connection
     ? await sendViaConnection(args, connection, contact as { id: string; phone: string })
     : await sendViaLegacyMetaConfig(args, contact as { id: string; phone: string })

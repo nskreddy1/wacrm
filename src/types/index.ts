@@ -222,7 +222,7 @@ export interface Notification {
   created_at: string;
 }
 
-export type ChannelKind = 'whatsapp' | 'email';
+export type ChannelKind = 'whatsapp' | 'sms' | 'email';
 export type ChannelProvider =
   | 'meta'
   | 'twilio'
