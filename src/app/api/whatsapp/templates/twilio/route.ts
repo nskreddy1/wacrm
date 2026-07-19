@@ -5,8 +5,7 @@ import { channelAdmin } from '@/lib/channels/admin-client'
 import { decryptProviderCredentials } from '@/lib/channels/credentials'
 import {
   createTwilioContent,
-  getTwilioApproval,
-  listTwilioContent,
+  listTwilioContentAndApprovals,
   normalizeTwilioContent,
   submitTwilioApproval,
 } from '@/lib/whatsapp/twilio-content'
@@ -48,12 +47,15 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}))
 
     if (body.action === 'sync') {
-      const contents = await listTwilioContent(credentials)
+      // v2 ContentAndApprovals returns approval status inline — one
+      // paginated call instead of one ApprovalRequests fetch per
+      // template (docs: /docs/content/content-api-resources).
+      const contents = await listTwilioContentAndApprovals(credentials)
       let inserted = 0
       let updated = 0
       for (const content of contents) {
         const normalized = normalizeTwilioContent(content)
-        const approval = await getTwilioApproval(credentials, content.sid)
+        const approval = content.approval_requests ?? null
         const row = {
           account_id: accountId,
           user_id: userId,
