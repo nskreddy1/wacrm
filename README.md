@@ -165,6 +165,9 @@ Key pages:
 - [Getting started](https://wacrm.tech/docs/getting-started)
 - [Supabase setup](https://wacrm.tech/docs/supabase-setup)
 - [WhatsApp setup](https://wacrm.tech/docs/whatsapp-setup)
+- [Twilio setup — WhatsApp, SMS & broadcasts](./docs/twilio-setup.md)
+  (in-repo: Console webhooks, Messaging Service, templates, opt-out
+  compliance)
 - [Environment variables](https://wacrm.tech/docs/environment-variables)
 - [Deploy on Hostinger](https://wacrm.tech/docs/deployment-hostinger)
 - [Architecture](https://wacrm.tech/docs/architecture)
