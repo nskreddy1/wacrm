@@ -21,7 +21,7 @@ function DashboardShellInner({
     <SidebarProvider className="h-dvh overflow-hidden overscroll-none">
       <AppSidebar initialRole={initialRole} />
       <SidebarInset className="flex min-w-0 flex-col overflow-hidden">
-        <main className="min-h-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
+        <main className="flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )
