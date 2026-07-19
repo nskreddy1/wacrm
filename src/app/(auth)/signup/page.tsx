@@ -132,7 +132,7 @@ function SignupPageInner() {
                   <p className="text-pretty leading-relaxed text-muted-foreground">
                     {inviteToken
                       ? "Verify your email, then accept your invitation to join the team."
-                      : "Start organizing every WhatsApp relationship in one place."}
+                      : "Start organizing every customer conversation — WhatsApp, SMS, and email — in one place."}
                   </p>
                 </div>
 

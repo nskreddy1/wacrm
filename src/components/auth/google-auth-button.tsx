@@ -51,10 +51,20 @@ export function GoogleAuthButton({ inviteToken, label = "Continue with Google" }
           )}`
         : callbackBase;
 
-      const { error: oauthError } = await createClient().auth.signInWithOAuth({
+      // Google blocks OAuth inside iframes ("This content is blocked").
+      // When embedded (e.g. the v0 preview), get the URL without redirecting
+      // and open it in a new top-level tab instead.
+      const embedded = window.self !== window.top;
+      const { data, error: oauthError } = await createClient().auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo },
+        options: { redirectTo, skipBrowserRedirect: embedded },
       });
+
+      if (!oauthError && embedded && data?.url) {
+        window.open(data.url, "_blank", "noopener,noreferrer");
+        setLoading(false);
+        return;
+      }
 
       if (oauthError) {
         setError(
