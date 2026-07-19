@@ -4,6 +4,7 @@ import Link from "next/link"
 import useSWR from "swr"
 import { ArrowUpRight, CalendarPlus, ChevronRight, Circle, GitBranch, MessageSquareText, Plus, Send, Users } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
+import { personDisplayName, workspaceDisplayName } from "@/lib/display-name"
 import type { DashboardData } from "@/lib/data/dashboard/types"
 
 type DashboardResponse = { data: DashboardData; meta: { source: "mock" | "supabase" } }
@@ -20,8 +21,10 @@ export function DashboardWorkspace() {
   const dashboardData = data?.data
   const icons = [MessageSquareText, Users, GitBranch, Send]
 
-  const firstName = profile?.full_name?.trim().split(/\s+/)[0] || "there"
-  const workspaceName = account?.name ?? "your workspace"
+  // Friendly names — never raw emails, even when profile/account rows
+  // still hold signup-default values (e.g. name = email address).
+  const firstName = personDisplayName(profile?.full_name, profile?.email).split(/\s+/)[0] || "there"
+  const workspaceName = workspaceDisplayName(account?.name)
   const today = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date())
   const greeting = greetingForHour(new Date().getHours())
 
@@ -45,7 +48,7 @@ export function DashboardWorkspace() {
 
     <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
       <article className="rounded-xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border p-4"><h3 className="text-sm font-semibold">Recent activity</h3><button className="text-xs font-semibold text-primary">View all</button></div><div className="divide-y divide-border">{dashboardData.activity.map(item => <div key={item.title} className="flex items-center gap-3 p-4"><div className="size-2 rounded-full bg-primary" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{item.title}</p><p className="text-xs text-muted-foreground">{item.type} · {item.time}</p></div><ChevronRight className="size-4 text-muted-foreground" /></div>)}</div></article>
-      <article className="rounded-xl bg-[#073b4c] p-5 text-[#f7fbfa] shadow-sm"><p className="text-xs font-semibold uppercase tracking-widest text-[#22c983]">Quick actions</p><h3 className="mt-2 text-lg font-semibold">Keep work moving</h3><div className="mt-5 grid gap-2"><Link href="/broadcasts/new" className="flex items-center gap-3 rounded-lg bg-[#f7fbfa]/8 p-3 text-sm font-medium hover:bg-[#f7fbfa]/12"><Send className="size-4 text-[#22c983]" /> Create broadcast <ArrowUpRight className="ml-auto size-4" /></Link><Link href="/bookings" className="flex items-center gap-3 rounded-lg bg-[#f7fbfa]/8 p-3 text-sm font-medium hover:bg-[#f7fbfa]/12"><CalendarPlus className="size-4 text-[#22c983]" /> Manage bookings <ArrowUpRight className="ml-auto size-4" /></Link></div></article>
+      <article className="rounded-xl bg-primary p-5 text-primary-foreground shadow-sm"><p className="text-xs font-semibold uppercase tracking-widest text-primary-foreground/70">Quick actions</p><h3 className="mt-2 text-lg font-semibold">Keep work moving</h3><div className="mt-5 grid gap-2"><Link href="/broadcasts/new" className="flex items-center gap-3 rounded-lg bg-primary-foreground/10 p-3 text-sm font-medium hover:bg-primary-foreground/15"><Send className="size-4" /> Create broadcast <ArrowUpRight className="ml-auto size-4" /></Link><Link href="/bookings" className="flex items-center gap-3 rounded-lg bg-primary-foreground/10 p-3 text-sm font-medium hover:bg-primary-foreground/15"><CalendarPlus className="size-4" /> Manage bookings <ArrowUpRight className="ml-auto size-4" /></Link></div></article>
     </section>
   </div>
 }
