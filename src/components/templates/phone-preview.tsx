@@ -53,9 +53,15 @@ function BubbleButtons({ draft }: { draft: WhatsAppDraft }) {
   )
 }
 
-function WhatsAppThread({ draft }: { draft: WhatsAppDraft }) {
-  const body = withSampleValues(draft.body)
-  const header = withSampleValues(draft.headerText)
+function WhatsAppThread({
+  draft,
+  customVariables,
+}: {
+  draft: WhatsAppDraft
+  customVariables?: CustomTemplateVariable[]
+}) {
+  const body = withSampleValues(draft.body, customVariables)
+  const header = withSampleValues(draft.headerText, customVariables)
   return (
     <div
       className="flex h-full flex-col bg-[#0b141a]"
@@ -108,8 +114,16 @@ function WhatsAppThread({ draft }: { draft: WhatsAppDraft }) {
   )
 }
 
-function SmsThread({ draft, device }: { draft: SmsDraft; device: DeviceKind }) {
-  const body = withSampleValues(draft.body)
+function SmsThread({
+  draft,
+  device,
+  customVariables,
+}: {
+  draft: SmsDraft
+  device: DeviceKind
+  customVariables?: CustomTemplateVariable[]
+}) {
+  const body = withSampleValues(draft.body, customVariables)
   const isIphone = device === "iphone"
   return (
     <div className={cn("flex h-full flex-col", isIphone ? "bg-black" : "bg-[#121212]")}>
@@ -151,7 +165,7 @@ function SmsThread({ draft, device }: { draft: SmsDraft; device: DeviceKind }) {
   )
 }
 
-export function PhonePreview({ device, channel, whatsapp, sms }: PhonePreviewProps) {
+export function PhonePreview({ device, channel, whatsapp, sms, customVariables }: PhonePreviewProps) {
   const isIphone = device === "iphone"
   return (
     <div
@@ -175,9 +189,9 @@ export function PhonePreview({ device, channel, whatsapp, sms }: PhonePreviewPro
 
       <div className="h-[calc(100%-2.25rem)] overflow-hidden">
         {channel === "whatsapp" ? (
-          <WhatsAppThread draft={whatsapp} />
+          <WhatsAppThread draft={whatsapp} customVariables={customVariables} />
         ) : (
-          <SmsThread draft={sms} device={device} />
+          <SmsThread draft={sms} device={device} customVariables={customVariables} />
         )}
       </div>
 

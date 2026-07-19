@@ -669,6 +669,10 @@ function SmsEditor({
 // ------------------------------------------------------------
 
 export function TemplateStudio() {
+  // Account variable library — SWR-cached, shared with VariableChips
+  // (same key, so this adds no extra fetch). The preview needs it to
+  // substitute custom {{tokens}} with their sample values.
+  const { variables: customVariables } = useTemplateVariables()
   const { templates: serverTemplates, isLoading, loadError, save, submit, remove } = useStudioTemplates()
 
   // Unsaved work: brand-new templates + local edits of server rows.
@@ -970,7 +974,13 @@ export function TemplateStudio() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <PhonePreview device={device} channel={active.channel} whatsapp={active.whatsapp} sms={active.sms} />
+        <PhonePreview
+          device={device}
+          channel={active.channel}
+          whatsapp={active.whatsapp}
+          sms={active.sms}
+          customVariables={customVariables}
+        />
         <p className="text-center text-[11px] leading-snug text-muted-foreground">
           Live preview with sample data — variables like{" "}
           <span className="font-mono text-primary">{"{{first_name}}"}</span> are filled automatically.
