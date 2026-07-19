@@ -22,6 +22,7 @@ export type NavIconName =
   | "git-fork"
   | "bot"
   | "layout-dashboard"
+  | "layout-template"
   | "settings"
 
 export interface NavItemConfig {
@@ -59,6 +60,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     label: "Automate",
     items: [
       { key: "broadcasts", href: "/broadcasts", label: "Broadcasts", shortLabel: "Campaigns", icon: "megaphone", minRole: "agent" },
+      { key: "templates", href: "/templates", label: "Templates", shortLabel: "Templates", icon: "layout-template", minRole: "agent" },
       { key: "automations", href: "/automations", label: "Automations", shortLabel: "Rules", icon: "workflow", minRole: "agent" },
       { key: "flows", href: "/flows", label: "Flows", shortLabel: "Flows", icon: "git-fork", minRole: "agent" },
       { key: "agents", href: "/agents", label: "AI agents", shortLabel: "Agents", icon: "bot", minRole: "agent" },
