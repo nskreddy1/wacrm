@@ -82,7 +82,10 @@ export function ChannelConnections() {
         <AlertTitle>Provider-neutral and secret-safe</AlertTitle>
         <AlertDescription>Credentials are encrypted at rest and never returned to this browser. Switching providers requires deliberate setup and a successful health check.</AlertDescription>
       </Alert>
-      <Tabs value={channel} onValueChange={(value) => { const next = value as ChannelKind; setChannel(next); setProvider(next === 'email' ? 'smtp' : 'twilio') }}>
+      {/* Reset the draft form when switching channel tabs — each tab is
+          an independent connection draft, so values typed for WhatsApp
+          must not leak into the SMS form. */}
+      <Tabs value={channel} onValueChange={(value) => { const next = value as ChannelKind; setChannel(next); setProvider(next === 'email' ? 'smtp' : 'twilio'); setForm(defaults) }}>
         <TabsList>
           <TabsTrigger value="email"><Mail />Email</TabsTrigger>
           <TabsTrigger value="whatsapp"><MessageCircle />WhatsApp</TabsTrigger>
