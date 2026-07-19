@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@/lib/supabase/server'
+import { channelAdmin } from '@/lib/channels/admin-client'
 import { TwilioSmsAdapter } from '@/lib/channels/adapters/twilio-sms'
 import { isValidE164, sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils'
 import {
@@ -93,14 +94,18 @@ export async function POST(request: Request) {
     }
 
     // Resolve the account's SMS sender — a Twilio SMS channel
-    // connection. Fetch without the enabled filter first so we can
-    // tell the user exactly what is wrong (missing vs disabled).
-    const { data: connectionRows } = await supabase
+    // connection. This MUST use the service-role client: browser/user
+    // clients are intentionally denied the credentials_encrypted
+    // column (secret-safe by design, see migration 038), so a
+    // user-scoped select('*') is rejected by Postgres. Membership was
+    // already verified above via the caller's profile → accountId.
+    const { data: connectionRows, error: connectionError } = await channelAdmin()
       .from('channel_connections')
       .select('*')
       .eq('account_id', accountId)
       .eq('channel', 'sms')
       .order('is_primary', { ascending: false })
+    if (connectionError) throw connectionError
     const connectionRow = (connectionRows ?? []).find((row) => row.is_enabled)
     if (!connectionRow) {
       const hasDisabled = (connectionRows ?? []).length > 0
