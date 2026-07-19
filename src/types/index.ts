@@ -162,6 +162,12 @@ export interface Conversation {
   user_id: string;
   contact_id: string;
   status: ConversationStatus;
+  /**
+   * Messaging channel this thread lives on (migration 038/048).
+   * Optional because pre-omnichannel rows and older fetch paths may
+   * not carry it; absent means 'whatsapp', the original channel.
+   */
+  channel?: 'whatsapp' | 'sms' | 'email';
   assigned_agent_id?: string;
   last_message_text?: string;
   last_message_at?: string;
