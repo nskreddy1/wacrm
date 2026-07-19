@@ -246,6 +246,38 @@ html[data-theme="rose"] {
   }
 }
 
+.pipeline-deal-card {
+  transition: transform 180ms var(--ease-pipeline), box-shadow 180ms var(--ease-pipeline), border-color 180ms var(--ease-pipeline), opacity 140ms ease-out;
+  animation: pipeline-card-enter 240ms var(--ease-pipeline) both;
+}
+
+.pipeline-deal-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-pipeline-card);
+}
+
+.pipeline-deal-card:active {
+  transform: scale(0.99);
+}
+
+@keyframes pipeline-card-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-deal-card {
+    animation: none;
+    transition: opacity 120ms ease-out, border-color 120ms ease-out;
+  }
+  .pipeline-deal-card:hover,
+  .pipeline-deal-card:active { transform: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-slot="sheet-footer"] { backdrop-filter: none; background: var(--background); }
+}
+
 /* ============================================================
  * AUTH PAGE MOTION
  *
