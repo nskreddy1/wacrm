@@ -15,6 +15,7 @@ import { hasMinRole } from "@/lib/auth/roles"
 export type NavIconName =
   | "git-branch"
   | "inbox"
+  | "message-square"
   | "users"
   | "calendar-days"
   | "megaphone"
@@ -51,6 +52,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     items: [
       { key: "pipelines", href: "/pipelines", label: "Pipelines", icon: "git-branch" },
       { key: "inbox", href: "/inbox", label: "Inbox", icon: "inbox", counter: "inbox-unread" },
+      { key: "sms-inbox", href: "/inbox/sms", label: "SMS Inbox", shortLabel: "SMS", icon: "message-square" },
       { key: "contacts", href: "/contacts", label: "Contacts", icon: "users" },
       { key: "bookings", href: "/bookings", label: "Bookings", icon: "calendar-days" },
     ],
