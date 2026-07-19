@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
-import { CheckCircle2, Loader2, Mail, MessageCircle, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Loader2, Mail, MessageCircle, ShieldCheck, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -76,7 +76,7 @@ export function ChannelConnections() {
 
   return (
     <section>
-      <SettingsPanelHead title="Channels" description="Connect email and WhatsApp providers without changing how conversations work. Each provider is configured, tested, and enabled independently." />
+      <SettingsPanelHead title="Channels" description="Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — a school can run SMS-only broadcasts without ever connecting WhatsApp. Providers are configured, tested, and enabled per channel, so future providers slot in beside the existing ones." />
       <Alert className="mb-5">
         <ShieldCheck />
         <AlertTitle>Provider-neutral and secret-safe</AlertTitle>
@@ -86,8 +86,9 @@ export function ChannelConnections() {
         <TabsList>
           <TabsTrigger value="email"><Mail />Email</TabsTrigger>
           <TabsTrigger value="whatsapp"><MessageCircle />WhatsApp</TabsTrigger>
+          <TabsTrigger value="sms"><Smartphone />SMS</TabsTrigger>
         </TabsList>
-        {(['email', 'whatsapp'] as const).map((tab) => (
+        {(['email', 'whatsapp', 'sms'] as const).map((tab) => (
           <TabsContent key={tab} value={tab} className="flex flex-col gap-5 pt-4">
             {isLoading ? <Card><CardContent className="flex items-center justify-center py-12"><Loader2 className="animate-spin" /><span className="sr-only">Loading connections</span></CardContent></Card> : null}
             {error ? <Alert variant="destructive"><AlertTitle>Connections unavailable</AlertTitle><AlertDescription>{error.message}</AlertDescription></Alert> : null}
@@ -111,14 +112,14 @@ export function ChannelConnections() {
               </Card>
             ))}
             <Card>
-              <CardHeader><CardTitle>Add {tab === 'email' ? 'email' : 'WhatsApp'} provider</CardTitle><CardDescription>Save credentials first. The provider stays disabled until its connection test succeeds.</CardDescription></CardHeader>
+              <CardHeader><CardTitle>Add {tab === 'email' ? 'email' : tab === 'sms' ? 'SMS' : 'WhatsApp'} provider</CardTitle><CardDescription>Save credentials first. The provider stays disabled until its connection test succeeds.{tab === 'sms' ? ' SMS is billed per segment by your provider — check regional pricing (e.g. Twilio rates in India) before large sends.' : ''}</CardDescription></CardHeader>
               <CardContent className="flex flex-col gap-5">
                 <div className="flex flex-col gap-2"><Label htmlFor={`${tab}-provider`}>Provider</Label><Select value={provider} onValueChange={(value) => setProvider(value as ChannelProvider)}><SelectTrigger id={`${tab}-provider`}><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{providers.map((item) => <SelectItem key={item.provider} value={item.provider}>{item.label}{item.available ? '' : ' — coming later'}</SelectItem>)}</SelectGroup></SelectContent></Select></div>
                 {!providers.find((item) => item.provider === provider)?.available ? <Alert><AlertTitle>Not available in this slice</AlertTitle><AlertDescription>This provider remains selectable in the architecture, but setup is disabled until its real authentication flow is implemented and tested.</AlertDescription></Alert> : (
                   <>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="flex flex-col gap-2"><Label htmlFor="connection-name">Connection name</Label><Input id="connection-name" value={form.displayName} onChange={(event) => update('displayName', event.target.value)} placeholder="Support inbox" /></div>
-                      <div className="flex flex-col gap-2"><Label htmlFor="sender-identity">{tab === 'email' ? 'Sender email' : 'WhatsApp number'}</Label><Input id="sender-identity" type={tab === 'email' ? 'email' : 'tel'} value={form.externalIdentity} onChange={(event) => update('externalIdentity', event.target.value)} placeholder={tab === 'email' ? 'support@example.com' : '+15551234567'} /></div>
+                      <div className="flex flex-col gap-2"><Label htmlFor="sender-identity">{tab === 'email' ? 'Sender email' : tab === 'sms' ? 'SMS number' : 'WhatsApp number'}</Label><Input id="sender-identity" type={tab === 'email' ? 'email' : 'tel'} value={form.externalIdentity} onChange={(event) => update('externalIdentity', event.target.value)} placeholder={tab === 'email' ? 'support@example.com' : '+15551234567'} /></div>
                     </div>
                     {provider === 'smtp' ? <div className="grid gap-4 md:grid-cols-2"><div className="flex flex-col gap-2"><Label htmlFor="smtp-host">SMTP host</Label><Input id="smtp-host" value={form.host} onChange={(event) => update('host', event.target.value)} placeholder="smtp.example.com" /></div><div className="flex flex-col gap-2"><Label htmlFor="smtp-port">Port</Label><Input id="smtp-port" inputMode="numeric" value={form.port} onChange={(event) => update('port', event.target.value)} /></div><div className="flex flex-col gap-2"><Label htmlFor="smtp-user">Username</Label><Input id="smtp-user" autoComplete="username" value={form.username} onChange={(event) => update('username', event.target.value)} /></div><div className="flex flex-col gap-2"><Label htmlFor="smtp-pass">Password</Label><Input id="smtp-pass" type="password" autoComplete="new-password" value={form.password} onChange={(event) => update('password', event.target.value)} /></div></div> : null}
                     {provider === 'resend' ? <div className="flex flex-col gap-2"><Label htmlFor="resend-key">API key</Label><Input id="resend-key" type="password" value={form.apiKey} onChange={(event) => update('apiKey', event.target.value)} /></div> : null}
