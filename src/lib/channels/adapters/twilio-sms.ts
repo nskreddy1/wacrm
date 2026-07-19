@@ -47,13 +47,23 @@ export class TwilioSmsAdapter implements ChannelAdapter {
   async send(message: OutboundChannelMessage): Promise<ChannelSendResult> {
     const credentials = decryptProviderCredentials(message.connection)
     if (credentials.provider !== 'twilio') throw new Error('Twilio credentials required')
-    const from = message.connection.external_identity
-    if (!from) throw new Error('Twilio SMS sender number is not configured')
 
-    const body = new URLSearchParams({
-      From: from,
-      To: message.recipient.identity,
-    })
+    // Prefer a Messaging Service (MG…) when configured: Twilio then
+    // handles sender selection, Sticky Sender, Advanced Opt-Out, and
+    // queue pacing (docs: /docs/messaging/services). Otherwise fall
+    // back to the connection's dedicated From number.
+    const messagingServiceSid = credentials.value.messagingServiceSid?.trim()
+    const from = message.connection.external_identity
+    if (!messagingServiceSid && !from) {
+      throw new Error('Twilio SMS sender number or Messaging Service SID is not configured')
+    }
+
+    const body = new URLSearchParams({ To: message.recipient.identity })
+    if (messagingServiceSid) {
+      body.set('MessagingServiceSid', messagingServiceSid)
+    } else if (from) {
+      body.set('From', from)
+    }
 
     const payload = message.payload
     switch (payload?.kind) {

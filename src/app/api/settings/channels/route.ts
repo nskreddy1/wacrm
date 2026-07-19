@@ -37,7 +37,20 @@ function credentialsFor(provider: ChannelProvider, input?: Record<string, string
   }
   if (provider === 'twilio') {
     if (!input.accountSid || !input.authToken) throw new Error('Twilio Account SID and Auth Token are required')
-    return { provider, value: { accountSid: input.accountSid, authToken: input.authToken } }
+    // Optional Messaging Service SID (MG…) — enables Twilio-managed
+    // sender pooling, Sticky Sender, and Advanced Opt-Out for SMS.
+    const messagingServiceSid = input.messagingServiceSid?.trim()
+    if (messagingServiceSid && !/^MG[0-9a-fA-F]{32}$/.test(messagingServiceSid)) {
+      throw new Error('Messaging Service SID must look like MG… (34 characters)')
+    }
+    return {
+      provider,
+      value: {
+        accountSid: input.accountSid,
+        authToken: input.authToken,
+        ...(messagingServiceSid ? { messagingServiceSid } : {}),
+      },
+    }
   }
   return null
 }
