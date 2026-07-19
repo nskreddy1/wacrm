@@ -31,22 +31,28 @@ export function AuthShell({
         aria-label="About Axon"
         className="auth-panel relative hidden overflow-hidden lg:flex lg:flex-col"
       >
-        {/* Concentric arc decoration — depth without noise */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          {[420, 620, 820, 1020].map((size, index) => (
-            <div
-              key={size}
-              className="auth-panel-ring absolute rounded-full"
-              style={{
-                width: size,
-                height: size,
-                right: -size / 3,
-                top: -size / 4,
-                opacity: 1 - index * 0.18,
-              }}
+        {/* Sweeping arc decoration (SaleSkip-style): faint nested arcs
+            fanning diagonally across the panel. Pure SVG strokes so it
+            scales with the panel and costs nothing to render. */}
+        <svg
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox="0 0 800 1000"
+          preserveAspectRatio="xMidYMid slice"
+          fill="none"
+        >
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <circle
+              key={i}
+              cx={-80 + i * 30}
+              cy={-140 - i * 40}
+              r={520 + i * 130}
+              stroke="currentColor"
+              strokeWidth="1"
+              opacity={0.14 - i * 0.015}
             />
           ))}
-        </div>
+        </svg>
 
         <div className="auth-stagger relative flex flex-1 flex-col justify-between gap-10 p-12 xl:p-16">
           <div
