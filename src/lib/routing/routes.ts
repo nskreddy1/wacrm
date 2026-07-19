@@ -38,7 +38,11 @@ export const routes = {
     invite: (token: string) => `/join/${segment(token)}`,
   },
   api: {
-    service: (path: string) => `/api/service/${path.replace(/^\/+/, "")}`,
+    // Same-origin Next.js Route Handlers are the production API boundary.
+    // Express (server/) is legacy/local-only: the old `/api/service/...`
+    // proxy hop was removed so requests go browser -> Next.js -> Supabase
+    // with no extra network hop. `account` maps to `/api/account`, etc.
+    service: (path: string) => `/api/${path.replace(/^\/+/, "")}`,
   },
 } as const
 

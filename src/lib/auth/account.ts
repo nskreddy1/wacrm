@@ -25,6 +25,8 @@
 //   }
 // ============================================================
 
+import { cache } from "react";
+
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -102,8 +104,15 @@ export interface AccountContext {
  *
  * Use `requireRole(min)` instead when the route also needs a
  * minimum-role check — it's a thin wrapper over this.
+ *
+ * PERF: wrapped in React `cache()` so the auth waterfall
+ * (getUser network round trip -> profiles lookup -> accounts
+ * lookup) runs AT MOST ONCE per request, no matter how many
+ * route handlers, server components, or helpers call it during
+ * the same render. The cache is request-scoped — never shared
+ * across users or requests — so this is safe for auth data.
  */
-export async function getCurrentAccount(): Promise<AccountContext> {
+export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
   const supabase = await createClient();
 
   const {
@@ -170,7 +179,7 @@ export async function getCurrentAccount(): Promise<AccountContext> {
     role: data.account_role,
     account: { id: account.id, name: account.name },
   };
-}
+});
 
 /**
  * Resolve the caller's account context and enforce a minimum role.

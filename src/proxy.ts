@@ -7,7 +7,6 @@ const PUBLIC_PREFIXES = [
   "/auth/",
   "/brand",
   "/join/",
-  "/api/service/",
   "/api/webhooks/",
   "/api/v1/",
   // Provider webhooks authenticate via request signatures inside the route handlers.
