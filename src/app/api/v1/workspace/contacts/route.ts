@@ -20,10 +20,17 @@ function failure(error: unknown, status = 400) {
   return NextResponse.json({ error: { code: "request_failed", message: error instanceof Error ? error.message : "Request failed" } }, { status })
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     getDataSource()
-    return response(await getSupabaseContactWorkspace(await getCurrentAccount()))
+    const contactId = new URL(request.url).searchParams.get("id")
+    const workspace = await getSupabaseContactWorkspace(await getCurrentAccount())
+    if (contactId) {
+      const contact = workspace.contacts.find((item) => item.id === contactId)
+      if (!contact) return failure(new Error("Contact not found"), 404)
+      return response(contact)
+    }
+    return response(workspace)
   } catch (error) {
     return toErrorResponse(error)
   }
