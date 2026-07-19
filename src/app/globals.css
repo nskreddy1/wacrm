@@ -308,6 +308,27 @@ html[data-theme="rose"] {
   animation: auth-rise 400ms var(--ease-out-strong) both;
 }
 
+/*
+ * App-wide page transition, applied by (dashboard)/template.tsx.
+ * Dashboard navigation is high-frequency (tens of times a day), so
+ * this is deliberately near-imperceptible: a fast fade with 6px of
+ * travel. Anything slower would make the whole app feel sluggish.
+ */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: page-enter 180ms var(--ease-out-strong) both;
+}
+
 /* Error feedback: a short, decisive shake. Runs once on mount. */
 @keyframes auth-shake {
   0%,
@@ -350,6 +371,16 @@ html[data-theme="rose"] {
      (auth-rise is redefined above without the translate). */
   .auth-rise-block {
     animation-duration: 200ms;
+  }
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: none;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
   .auth-shake {
     animation: none;
