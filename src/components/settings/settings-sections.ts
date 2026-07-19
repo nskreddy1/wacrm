@@ -1,6 +1,5 @@
 import {
   Coins,
-  FileText,
   KeyRound,
   LayoutGrid,
   Palette,
@@ -27,7 +26,6 @@ export const SETTINGS_SECTIONS = [
   'security',
   'appearance',
   'channels',
-  'templates',
   'quick-replies',
   'fields',
   'deals',
@@ -53,7 +51,6 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   security: { id: 'security', label: 'Login & security', icon: Shield, group: 'account' },
   appearance: { id: 'appearance', label: 'Appearance', icon: Palette, group: 'account' },
   channels: { id: 'channels', label: 'Channels', icon: PlugZap, group: 'workspace' },
-  templates: { id: 'templates', label: 'Templates', icon: FileText, group: 'workspace' },
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'workspace' },
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
@@ -80,6 +77,9 @@ function isSection(value: string | null): value is SettingsSection {
 export function resolveSection(raw: string | null): SettingsSection {
   if (raw === 'whatsapp') return 'channels';
   if (raw === 'tags' || raw === 'custom-fields') return 'fields';
+  // Template management moved to the dedicated /templates studio;
+  // legacy deep links land on the Overview which points there.
+  if (raw === 'templates') return DEFAULT_SECTION;
   if (isSection(raw)) return raw;
   return DEFAULT_SECTION;
 }

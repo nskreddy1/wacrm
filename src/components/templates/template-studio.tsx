@@ -47,6 +47,7 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useStudioTemplates } from "@/hooks/use-studio-templates"
+import { checkCompliance } from "@/lib/templates/compliance"
 import { cn } from "@/lib/utils"
 import {
   analyzeSms,
@@ -70,6 +71,13 @@ let idCounter = 0
 function nextId(prefix: string) {
   idCounter += 1
   return `${prefix}-${idCounter}`
+}
+
+/** Studio category → SMS compliance category (mirrors the hook's DB mapping). */
+const SMS_CATEGORY_FOR_CHECK: Record<StudioTemplate["category"], "marketing" | "transactional" | "otp"> = {
+  marketing: "marketing",
+  utility: "transactional",
+  authentication: "otp",
 }
 
 function blankTemplate(): StudioTemplate {
@@ -523,6 +531,29 @@ export function TemplateStudio() {
   const active = templates.find((t) => t.id === activeId) ?? templates[0] ?? null
   const isDirty = active ? active.isNew === true || active.id in edits : false
 
+  // Live compose-time compliance: the same pure checks the API runs
+  // at save, so members see Meta/Twilio/TCPA problems while typing —
+  // not after a rejected submission.
+  const complianceIssues = useMemo(() => {
+    if (!active) return []
+    if (active.channel === "whatsapp") {
+      if (!active.whatsapp.body.trim()) return []
+      return checkCompliance({
+        channel: "whatsapp",
+        category: active.category,
+        body: active.whatsapp.body,
+        footer: active.whatsapp.footer,
+        hasButtons: active.whatsapp.buttons.length > 0,
+      }).issues
+    }
+    if (!active.sms.body.trim()) return []
+    return checkCompliance({
+      channel: "sms",
+      category: SMS_CATEGORY_FOR_CHECK[active.category],
+      body: active.sms.body,
+    }).issues
+  }, [active])
+
   const patchActive = (patch: Partial<StudioTemplate>) => {
     if (!active) return
     const next = { ...active, ...patch }
@@ -657,7 +688,7 @@ export function TemplateStudio() {
           </div>
           <div>
             <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Language</Label>
-            <Select value={active.language} onValueChange={(v) => patchActive({ language: v })}>
+            <Select value={active.language} onValueChange={(v) => v && patchActive({ language: v })}>
               <SelectTrigger className="mt-1.5 w-32">
                 <SelectValue />
               </SelectTrigger>
@@ -702,6 +733,24 @@ export function TemplateStudio() {
           <p className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
             {active.errorMessage}
           </p>
+        )}
+        {complianceIssues.length > 0 && (
+          <div className="mb-3 flex flex-col gap-1.5" role="status" aria-label="Compliance checks">
+            {complianceIssues.map((ci) => (
+              <p
+                key={ci.code}
+                className={cn(
+                  "rounded-lg px-3 py-2 text-xs leading-relaxed",
+                  ci.level === "error"
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                )}
+              >
+                <span className="font-semibold">{ci.level === "error" ? "Blocks saving: " : "Review: "}</span>
+                {ci.message}
+              </p>
+            ))}
+          </div>
         )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
