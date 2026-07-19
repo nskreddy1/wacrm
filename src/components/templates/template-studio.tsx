@@ -29,6 +29,7 @@ import {
   Smartphone,
   Trash2,
   Type,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -47,6 +48,7 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useStudioTemplates } from "@/hooks/use-studio-templates"
+import { normalizeVariableKey, useTemplateVariables } from "@/hooks/use-template-variables"
 import { checkCompliance } from "@/lib/templates/compliance"
 import { cn } from "@/lib/utils"
 import {
@@ -173,8 +175,42 @@ function TemplateRail({
 // ------------------------------------------------------------
 
 function VariableChips({ onInsert }: { onInsert: (token: string) => void }) {
+  const { variables: customVariables, createVariable, deleteVariable } = useTemplateVariables()
+  const [isAdding, setIsAdding] = useState(false)
+  const [newLabel, setNewLabel] = useState("")
+  const [newKey, setNewKey] = useState("")
+  const [keyEdited, setKeyEdited] = useState(false)
+  const [newSample, setNewSample] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+
+  function resetForm() {
+    setIsAdding(false)
+    setNewLabel("")
+    setNewKey("")
+    setKeyEdited(false)
+    setNewSample("")
+  }
+
+  async function handleCreate() {
+    const key = normalizeVariableKey(keyEdited ? newKey : newLabel)
+    if (!key) {
+      toast.error("Give the variable a name first")
+      return
+    }
+    setIsSaving(true)
+    const result = await createVariable({ key, label: newLabel.trim() || key, sampleValue: newSample })
+    setIsSaving(false)
+    if (!result.ok) {
+      toast.error(result.error)
+      return
+    }
+    toast.success(`{{${key}}} added to your variable library`)
+    onInsert(`{{${key}}}`)
+    resetForm()
+  }
+
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <div className="flex flex-wrap gap-1.5" aria-label="Insert a variable">
         {TEMPLATE_VARIABLES.map((v) => (
           <button
@@ -190,7 +226,117 @@ function VariableChips({ onInsert }: { onInsert: (token: string) => void }) {
             </span>
           </button>
         ))}
+        {/* Account-defined variables — deletable, teal accent to
+            distinguish from the built-in set. */}
+        {customVariables.map((v) => (
+          <span
+            key={v.id}
+            className="group flex items-center overflow-hidden rounded-md border border-dashed border-teal-600/40 bg-teal-500/5 text-[11px] text-teal-700 dark:text-teal-400"
+          >
+            <button
+              type="button"
+              onClick={() => onInsert(`{{${v.key}}}`)}
+              title={`{{${v.key}}} — previews as "${v.sampleValue || v.label}"`}
+              className="flex items-center gap-1.5 px-2 py-0.5 transition-colors hover:bg-teal-500/10"
+            >
+              <span className="font-medium">{v.label}</span>
+              <span className="font-mono text-[10px] opacity-60 group-hover:opacity-90">
+                {`{{${v.key}}}`}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label={`Delete variable ${v.label}`}
+              onClick={async () => {
+                const result = await deleteVariable(v.id)
+                if (!result.ok) toast.error(result.error)
+              }}
+              className="border-l border-dashed border-teal-600/40 px-1 py-0.5 opacity-50 transition-opacity hover:bg-destructive/10 hover:text-destructive hover:opacity-100"
+            >
+              <X className="size-3" aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+        <button
+          type="button"
+          onClick={() => setIsAdding((v) => !v)}
+          aria-expanded={isAdding}
+          className="flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+        >
+          <Plus className="size-3" aria-hidden="true" /> Add variable
+        </button>
       </div>
+
+      {/* Inline creator — label + key + sample value. The key is
+          auto-derived from the label until the member edits it. */}
+      {isAdding && (
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-2.5">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="new-var-label" className="text-[11px] text-muted-foreground">
+                Name
+              </Label>
+              <Input
+                id="new-var-label"
+                value={newLabel}
+                placeholder="Student name"
+                className="h-8 text-xs"
+                onChange={(e) => {
+                  setNewLabel(e.target.value)
+                  if (!keyEdited) setNewKey(normalizeVariableKey(e.target.value))
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="new-var-key" className="text-[11px] text-muted-foreground">
+                Key
+              </Label>
+              <Input
+                id="new-var-key"
+                value={newKey}
+                placeholder="student_name"
+                className="h-8 font-mono text-xs"
+                onChange={(e) => {
+                  setKeyEdited(true)
+                  setNewKey(normalizeVariableKey(e.target.value))
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="new-var-sample" className="text-[11px] text-muted-foreground">
+                Sample value <span className="opacity-60">(for preview)</span>
+              </Label>
+              <Input
+                id="new-var-sample"
+                value={newSample}
+                placeholder="Aarav Kumar"
+                className="h-8 text-xs"
+                onChange={(e) => setNewSample(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                    e.preventDefault()
+                    handleCreate()
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-mono text-[11px] text-muted-foreground">
+              {newKey ? `Inserts as {{${newKey}}}` : "Key auto-fills from the name"}
+            </p>
+            <div className="flex gap-1.5">
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={resetForm}>
+                Cancel
+              </Button>
+              <Button size="sm" className="h-7 text-xs" disabled={isSaving} onClick={handleCreate}>
+                {isSaving ? "Saving…" : "Save & insert"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         Click to insert. The preview fills variables with sample data — real contact values are
         mapped when you send a broadcast.

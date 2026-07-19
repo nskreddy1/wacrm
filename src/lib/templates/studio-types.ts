@@ -72,9 +72,32 @@ export const TEMPLATE_VARIABLES = [
   { token: "{{otp}}", label: "One-time code", sample: "482913" },
 ] as const
 
-/** Substitute {{tokens}} with sample values for the live preview. */
-export function withSampleValues(text: string): string {
+/**
+ * An account-defined variable from the template_variables table.
+ * Members create these in the studio ("Add variable") so schools and
+ * other tenants can model their own data — e.g. {{student_name}},
+ * {{class}}, {{fee_due_date}} — beyond the built-in set.
+ */
+export interface CustomTemplateVariable {
+  id: string
+  key: string
+  label: string
+  sampleValue: string
+}
+
+/**
+ * Substitute {{tokens}} with sample values for the live preview.
+ * Custom (account-defined) variables win over built-ins on key
+ * collisions so tenants can override the stock samples.
+ */
+export function withSampleValues(
+  text: string,
+  customVariables?: CustomTemplateVariable[],
+): string {
   let out = text
+  for (const v of customVariables ?? []) {
+    out = out.split(`{{${v.key}}}`).join(v.sampleValue || v.label || v.key)
+  }
   for (const v of TEMPLATE_VARIABLES) {
     out = out.split(v.token).join(v.sample)
   }
