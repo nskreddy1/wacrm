@@ -4,14 +4,15 @@
 // TemplateStudio — the template lab.
 //
 // Three panes:
-//   1. Template rail — hardcoded starter templates, channel-tagged.
+//   1. Template rail — templates from /api/templates, channel-tagged.
 //   2. Editor — channel-aware: WhatsApp structured blocks (header /
 //      body / footer / draggable buttons) or SMS with live GSM-7 vs
 //      Unicode segment math.
 //   3. Live preview — iPhone / Android device frames.
 //
-// All state is in-memory (hardcoded lab mode); persistence and the
-// WhatsApp/SMS provider sync come later.
+// Persistence + provider submission (Meta / Twilio) live in
+// hooks/use-studio-templates.ts. Unsaved edits are kept locally
+// and merged over server rows until saved.
 // ============================================================
 
 import { useMemo, useState } from "react"
@@ -20,6 +21,7 @@ import {
   GripVertical,
   Image as ImageIcon,
   Link2,
+  Loader2,
   MessageSquareText,
   Phone,
   Plus,
@@ -28,6 +30,7 @@ import {
   Trash2,
   Type,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -43,11 +46,11 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useStudioTemplates } from "@/hooks/use-studio-templates"
 import { cn } from "@/lib/utils"
 import {
   analyzeSms,
   CATEGORY_LABELS,
-  SAMPLE_TEMPLATES,
   STATUS_META,
   TEMPLATE_VARIABLES,
   type HeaderKind,
@@ -77,9 +80,11 @@ function blankTemplate(): StudioTemplate {
     category: "utility",
     language: "en_US",
     status: "draft",
+    provider: "meta",
     updatedAt: new Date().toISOString().slice(0, 10),
     whatsapp: { headerKind: "none", headerText: "", body: "", footer: "", buttons: [] },
     sms: { body: "" },
+    isNew: true,
   }
 }
 
@@ -90,11 +95,13 @@ function blankTemplate(): StudioTemplate {
 function TemplateRail({
   templates,
   activeId,
+  isLoading,
   onSelect,
   onCreate,
 }: {
   templates: StudioTemplate[]
   activeId: string
+  isLoading: boolean
   onSelect: (id: string) => void
   onCreate: () => void
 }) {
@@ -103,6 +110,18 @@ function TemplateRail({
       <Button onClick={onCreate} className="w-full justify-center gap-2">
         <Plus className="size-4" aria-hidden="true" /> New template
       </Button>
+      {isLoading && templates.length === 0 && (
+        <div className="flex flex-col gap-1.5" aria-label="Loading templates">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-card" />
+          ))}
+        </div>
+      )}
+      {!isLoading && templates.length === 0 && (
+        <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs leading-relaxed text-muted-foreground">
+          No templates yet. Create your first WhatsApp or SMS template to get started.
+        </p>
+      )}
       <div className="flex flex-col gap-1.5 overflow-y-auto">
         {templates.map((tpl) => {
           const meta = STATUS_META[tpl.status]
@@ -486,24 +505,127 @@ function SmsEditor({
 // ------------------------------------------------------------
 
 export function TemplateStudio() {
-  const [templates, setTemplates] = useState<StudioTemplate[]>(SAMPLE_TEMPLATES)
-  const [activeId, setActiveId] = useState(SAMPLE_TEMPLATES[0].id)
+  const { templates: serverTemplates, isLoading, loadError, save, submit, remove } = useStudioTemplates()
+
+  // Unsaved work: brand-new templates + local edits of server rows.
+  // Merged over the SWR list so typing never fights revalidation.
+  const [newDrafts, setNewDrafts] = useState<StudioTemplate[]>([])
+  const [edits, setEdits] = useState<Record<string, StudioTemplate>>({})
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [device, setDevice] = useState<DeviceKind>("iphone")
+  const [busy, setBusy] = useState<"save" | "submit" | "delete" | null>(null)
 
-  const active = templates.find((t) => t.id === activeId) ?? templates[0]
+  const templates = useMemo(
+    () => [...newDrafts, ...serverTemplates.map((t) => edits[t.id] ?? t)],
+    [newDrafts, serverTemplates, edits],
+  )
 
-  const patchActive = (patch: Partial<StudioTemplate>) =>
-    setTemplates((prev) => prev.map((t) => (t.id === active.id ? { ...t, ...patch } : t)))
+  const active = templates.find((t) => t.id === activeId) ?? templates[0] ?? null
+  const isDirty = active ? active.isNew === true || active.id in edits : false
+
+  const patchActive = (patch: Partial<StudioTemplate>) => {
+    if (!active) return
+    const next = { ...active, ...patch }
+    if (active.isNew) {
+      setNewDrafts((prev) => prev.map((t) => (t.id === active.id ? next : t)))
+    } else {
+      setEdits((prev) => ({ ...prev, [active.id]: next }))
+    }
+  }
 
   const createTemplate = () => {
     const tpl = blankTemplate()
-    setTemplates((prev) => [tpl, ...prev])
+    setNewDrafts((prev) => [tpl, ...prev])
     setActiveId(tpl.id)
+  }
+
+  const clearLocal = (id: string) => {
+    setNewDrafts((prev) => prev.filter((t) => t.id !== id))
+    setEdits((prev) => {
+      const { [id]: _, ...rest } = prev
+      return rest
+    })
+  }
+
+  const handleSave = async () => {
+    if (!active) return
+    setBusy("save")
+    try {
+      const savedId = await save(active)
+      clearLocal(active.id)
+      setActiveId(savedId)
+      toast.success(active.channel === "sms" ? "SMS template saved and active." : "Draft saved.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleSubmit = async () => {
+    if (!active) return
+    setBusy("submit")
+    try {
+      await submit(active)
+      clearLocal(active.id)
+      toast.success(
+        active.provider === "twilio"
+          ? "Submitted to Twilio for WhatsApp approval."
+          : "Submitted to Meta for review.",
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Submission failed.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!active) return
+    if (active.isNew) {
+      clearLocal(active.id)
+      setActiveId(null)
+      return
+    }
+    setBusy("delete")
+    try {
+      await remove(active.id)
+      clearLocal(active.id)
+      setActiveId(null)
+      toast.success("Template deleted.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (!active) {
+    return (
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <TemplateRail
+          templates={templates}
+          activeId=""
+          isLoading={isLoading}
+          onSelect={setActiveId}
+          onCreate={createTemplate}
+        />
+        <div className="flex min-h-64 flex-1 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
+          {loadError ?? (isLoading ? "Loading templates…" : "Select a template or create a new one.")}
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <TemplateRail templates={templates} activeId={active.id} onSelect={setActiveId} onCreate={createTemplate} />
+      <TemplateRail
+        templates={templates}
+        activeId={active.id}
+        isLoading={isLoading}
+        onSelect={setActiveId}
+        onCreate={createTemplate}
+      />
 
       {/* Editor pane */}
       <div className="min-w-0 flex-1 rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -574,17 +696,59 @@ export function TemplateStudio() {
           <SmsEditor template={active} onPatch={(p) => patchActive({ sms: { ...active.sms, ...p } })} />
         )}
 
-        {/* Footer actions — inert in lab mode */}
+        {/* Footer actions — persistence + provider submission */}
         <Separator className="my-5" />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            Lab mode — changes live in this session. Provider sync arrives with the integration.
+        {active.errorMessage && (
+          <p className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
+            {active.errorMessage}
           </p>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {active.channel === "whatsapp" && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Provider
+                </Label>
+                <Select
+                  value={active.provider === "twilio" ? "twilio" : "meta"}
+                  onValueChange={(v) => patchActive({ provider: v as StudioTemplate["provider"] })}
+                >
+                  <SelectTrigger className="h-8 w-40" size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="meta">Meta (Cloud API)</SelectItem>
+                    <SelectItem value="twilio">Twilio</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {isDirty && (
+              <span className="text-xs text-amber-600 dark:text-amber-400">Unsaved changes</span>
+            )}
+          </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              Save draft
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDelete}
+              disabled={busy !== null}
+              className="text-destructive hover:text-destructive"
+            >
+              {busy === "delete" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Trash2 className="size-4" aria-hidden="true" />}
+              Delete
             </Button>
-            <Button size="sm">Submit for review</Button>
+            <Button variant="outline" size="sm" onClick={handleSave} disabled={busy !== null}>
+              {busy === "save" && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+              {active.channel === "sms" ? "Save template" : "Save draft"}
+            </Button>
+            {active.channel === "whatsapp" && (
+              <Button size="sm" onClick={handleSubmit} disabled={busy !== null}>
+                {busy === "submit" && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                Submit for review
+              </Button>
+            )}
           </div>
         </div>
       </div>
