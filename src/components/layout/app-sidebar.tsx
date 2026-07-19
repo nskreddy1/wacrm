@@ -13,6 +13,8 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
+  PanelLeftClose,
+  Pencil,
   Settings,
   Users,
   Workflow,
@@ -118,6 +120,40 @@ function BrandHeader() {
   )
 }
 
+/**
+ * Always-visible expand/collapse control. Lives in the header so it
+ * is one click away in both states: a labeled row when expanded, an
+ * icon with an animated "Expand sidebar" tooltip when collapsed.
+ * The drag rail and Cmd/Ctrl+B shortcut keep working alongside it.
+ */
+function CollapseToggle() {
+  const { toggleSidebar, state, isMobile } = useSidebar()
+  const collapsed = state === "collapsed" && !isMobile
+  const label = collapsed ? "Expand sidebar" : "Collapse sidebar"
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          tooltip={label}
+          onClick={toggleSidebar}
+          aria-label={label}
+          className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
+        >
+          <PanelLeftClose
+            aria-hidden="true"
+            className={cn(
+              "transition-transform duration-200",
+              collapsed && "rotate-180",
+            )}
+          />
+          <span>Collapse</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
+}
+
 function NavGroups({ initialRole }: { initialRole: AccountRole | null }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -139,7 +175,7 @@ function NavGroups({ initialRole }: { initialRole: AccountRole | null }) {
                 return (
                   <SidebarMenuItem key={item.key}>
                     <SidebarMenuButton
-                      tooltip={item.label}
+                      tooltip={`Go to ${item.label}`}
                       isActive={isActive(pathname, item.href)}
                       render={
                         <Link
@@ -240,6 +276,19 @@ function FooterMenu() {
               >
                 <Settings /> Settings
               </DropdownMenuItem>
+              {/* Deep link into the Workspace name card so renaming is
+                  one click from anywhere — the form itself stays in
+                  Settings as the single source of truth. */}
+              {(accountRole === "owner" || accountRole === "admin") && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    router.push(`${routes.app.settings}?tab=members`)
+                    if (isMobile) setOpenMobile(false)
+                  }}
+                >
+                  <Pencil /> Edit workspace name
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -279,6 +328,7 @@ export function AppSidebar({ initialRole = null }: { initialRole?: AccountRole |
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <BrandHeader />
+        <CollapseToggle />
       </SidebarHeader>
       <SidebarContent>
         <NavGroups initialRole={initialRole} />
