@@ -172,7 +172,13 @@ function FooterMenu() {
   const router = useRouter()
   const { mode, setMode } = useTheme()
   const { signOut, profile, accountRole } = useAuth()
-  const { isMobile, setOpenMobile } = useSidebar()
+  const { isMobile, setOpenMobile, state } = useSidebar()
+
+  // In icon-collapsed mode the rail shows only the avatar, so the
+  // dropdown must carry the full identity (name + role + email).
+  // When expanded (or on mobile's sheet) the chip already shows
+  // name + role, so repeating them in the menu would be duplication.
+  const isCollapsed = state === "collapsed" && !isMobile
 
   // Friendly member name (e.g. "Admin"), never the raw email — the
   // email lives in the dropdown so identity isn't duplicated on the rail.
@@ -209,13 +215,17 @@ function FooterMenu() {
             <ChevronsUpDown className="ml-auto size-4" aria-hidden="true" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side={isMobile ? "bottom" : "right"} align="end" className="w-56">
-            {/* The chip already shows name + role, so the menu only adds
-                the one thing not visible on the rail: the signed-in email. */}
-            {displayEmail && (
+            {isCollapsed && (
               <>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel className="font-normal text-muted-foreground">
-                    {displayEmail}
+                  <DropdownMenuLabel>
+                    {displayName}
+                    {roleLabel && (
+                      <span className="block text-xs font-normal text-muted-foreground">{roleLabel}</span>
+                    )}
+                    {displayEmail && (
+                      <span className="block font-normal text-muted-foreground">{displayEmail}</span>
+                    )}
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
