@@ -174,17 +174,27 @@ function TemplateRail({
 
 function VariableChips({ onInsert }: { onInsert: (token: string) => void }) {
   return (
-    <div className="flex flex-wrap gap-1.5" aria-label="Insert a variable">
-      {TEMPLATE_VARIABLES.map((v) => (
-        <button
-          key={v.token}
-          type="button"
-          onClick={() => onInsert(v.token)}
-          className="rounded-md border border-dashed border-primary/40 bg-primary/5 px-2 py-0.5 font-mono text-[11px] text-primary transition-colors hover:bg-primary/10"
-        >
-          {v.token}
-        </button>
-      ))}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap gap-1.5" aria-label="Insert a variable">
+        {TEMPLATE_VARIABLES.map((v) => (
+          <button
+            key={v.token}
+            type="button"
+            onClick={() => onInsert(v.token)}
+            title={`${v.token} — previews as "${v.sample}"`}
+            className="group flex items-center gap-1.5 rounded-md border border-dashed border-primary/40 bg-primary/5 px-2 py-0.5 text-[11px] text-primary transition-colors hover:bg-primary/10"
+          >
+            <span className="font-medium">{v.label}</span>
+            <span className="font-mono text-[10px] text-primary/60 group-hover:text-primary/80">
+              {v.token}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        Click to insert. The preview fills variables with sample data — real contact values are
+        mapped when you send a broadcast.
+      </p>
     </div>
   )
 }
