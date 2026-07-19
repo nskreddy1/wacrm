@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react"
 import useSWR from "swr"
-import { ArrowLeft, ArrowRight, Check, Download, FileSpreadsheet, Loader2, Upload, XCircle } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, Download, FileSpreadsheet, Loader2, Plus, Sparkles, Upload, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,14 @@ import type { ContactField, ContactValue } from "@/lib/data/contacts/types"
 import { validInternationalPhone } from "@/components/contacts/international-phone-input"
 
 const IGNORE = "__ignore__"
+const CREATE_PREFIX = "__create__:"
+const aliases: Record<string, string[]> = {
+  name: ["name", "fullname", "contactname", "customername", "person"],
+  phone: ["phone", "mobile", "mobilenumber", "phonenumber", "telephone", "cell", "whatsapp", "whatsappnumber"],
+  email: ["email", "emailaddress", "mail", "workemail"],
+  company: ["company", "companyname", "organization", "organisation", "business", "employer"],
+  tags: ["tags", "tag", "labels", "groups", "segments"],
+}
 type Store = { data: { fields: ContactField[] } }
 type CsvData = { headers: string[]; rows: string[][] }
 type ImportError = { row: number; message: string; source: string[] }
@@ -36,7 +44,12 @@ function autoMap(headers: string[], fields: ContactField[]) {
   const used = new Set<string>()
   return Object.fromEntries(headers.map((header) => {
     const normalized = header.toLowerCase().replace(/[^a-z0-9]/g, "")
-    const match = fields.find((field) => !used.has(field.id) && (field.label.toLowerCase().replace(/[^a-z0-9]/g, "") === normalized || field.id === normalized))
+    const match = fields.find((field) => {
+      if (used.has(field.id)) return false
+      const label = field.label.toLowerCase().replace(/[^a-z0-9]/g, "")
+      const knownNames = aliases[field.id] ?? []
+      return label === normalized || field.id === normalized || knownNames.includes(normalized)
+    })
     if (match) used.add(match.id)
     return [header, match?.id ?? IGNORE]
   }))
@@ -51,6 +64,7 @@ export function ImportModal({ open, onOpenChange, onImported }: { open: boolean;
   const [csv, setCsv] = useState<CsvData>({ headers: [], rows: [] })
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [importing, setImporting] = useState(false)
+  const [preparing, setPreparing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: ImportError[] } | null>(null)
 
@@ -80,6 +94,25 @@ export function ImportModal({ open, onOpenChange, onImported }: { open: boolean;
     const parsed = parseCsv(await file.text())
     if (!parsed.headers.length || !parsed.rows.length) { toast.error("The CSV does not contain any data rows"); return }
     setFileName(file.name); setCsv(parsed); setMapping(autoMap(parsed.headers, fields)); setStep(1); setResult(null)
+  }
+
+  async function prepareReview() {
+    setPreparing(true)
+    try {
+      const next = { ...mapping }
+      for (const header of csv.headers) {
+        const target = next[header]
+        if (!target?.startsWith(CREATE_PREFIX)) continue
+        const type = target.slice(CREATE_PREFIX.length)
+        const response = await fetch("/api/v1/workspace/contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "field", field: { label: header, type } }) })
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error?.message ?? `Unable to create ${header}`)
+        next[header] = payload.data.id
+      }
+      setMapping(next)
+      setStep(2)
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to prepare import fields") }
+    finally { setPreparing(false) }
   }
 
   async function runImport() {
@@ -114,11 +147,11 @@ export function ImportModal({ open, onOpenChange, onImported }: { open: boolean;
         <DialogHeader className="border-b px-6 py-5"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg border bg-primary text-primary-foreground"><FileSpreadsheet className="size-5" /></div><div><DialogTitle>Import contacts from CSV</DialogTitle><DialogDescription>Map any spreadsheet columns to core and custom contact fields.</DialogDescription></div></div><div className="mt-4 flex gap-2">{["Upload", "Map fields", "Validate", "Results"].map((label, index) => <Badge key={label} variant={step === index ? "default" : step > index ? "secondary" : "outline"} className="gap-1">{step > index && <Check className="size-3" />}{index + 1}. {label}</Badge>)}</div></DialogHeader>
         <ScrollArea className="min-h-0 flex-1"><div className="p-6">
           {step === 0 && <button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-64 w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-muted/20 p-8 text-center transition-colors hover:border-primary hover:bg-muted/40"><div className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground"><Upload /></div><div><p className="font-semibold">Choose a CSV file</p><p className="mt-1 text-sm text-muted-foreground">Up to 5 MB. The first row must contain column headers.</p></div><Badge variant="outline">Browse files</Badge><input ref={inputRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => void chooseFile(event.target.files?.[0])} /></button>}
-          {step === 1 && <div className="flex flex-col gap-5"><div className="rounded-lg border bg-muted/20 p-4"><p className="font-medium">{fileName}</p><p className="text-sm text-muted-foreground">{csv.rows.length} rows · {csv.headers.length} source columns</p></div><div className="grid gap-3"><div className="grid grid-cols-[1fr_auto_1fr] gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"><span>CSV column</span><span /><span>Contact field</span></div>{csv.headers.map((header) => <div key={header} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3"><div className="truncate rounded-md border bg-card px-3 py-2 text-sm font-medium">{header}</div><ArrowRight className="size-4 text-muted-foreground" /><Select value={mapping[header] ?? IGNORE} onValueChange={(value) => setMapping((current) => ({ ...current, [header]: value ?? IGNORE }))}><SelectTrigger className={duplicateTargets.has(mapping[header]) ? "border-destructive" : ""}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value={IGNORE}>Ignore column</SelectItem>{fields.map((field) => <SelectItem key={field.id} value={field.id}>{field.label} · {field.type.replace("_", " ")}</SelectItem>)}</SelectGroup></SelectContent></Select></div>)}</div>{duplicateTargets.size > 0 && <p className="text-sm text-destructive">Each contact field can only be mapped once.</p>}{!hasIdentity && <p className="text-sm text-destructive">Map Name and at least one of Phone or Email.</p>}</div>}
-          {step === 2 && <div className="flex flex-col gap-5"><div className="flex flex-wrap gap-3"><Badge variant="secondary">{csv.rows.length} rows</Badge><Badge variant={errors.length ? "destructive" : "secondary"}>{errors.length ? `${errors.length} invalid` : "Ready to import"}</Badge><Badge variant="outline">{mappedTargets.length} mapped fields</Badge></div><div className="overflow-auto rounded-lg border"><table className="min-w-full text-sm"><thead className="bg-muted"><tr><th className="p-3 text-left">Row</th>{csv.headers.filter((header) => mapping[header] !== IGNORE).map((header) => <th key={header} className="p-3 text-left">{fields.find((field) => field.id === mapping[header])?.label}</th>)}<th className="p-3 text-left">Status</th></tr></thead><tbody>{preview.map((row, index) => { const issue = errors.find((error) => error.row === index + 2); return <tr key={index} className="border-t"><td className="p-3">{index + 2}</td>{csv.headers.filter((header) => mapping[header] !== IGNORE).map((header) => <td key={header} className="max-w-48 truncate p-3">{row[csv.headers.indexOf(header)] || "—"}</td>)}<td className="p-3">{issue ? <span className="text-destructive">{issue.message}</span> : <span className="text-muted-foreground">Valid</span>}</td></tr>})}</tbody></table></div>{csv.rows.length > preview.length && <p className="text-xs text-muted-foreground">Showing the first {preview.length} rows. All {csv.rows.length} rows will be validated and imported.</p>}</div>}
+          {step === 1 && <div className="flex flex-col gap-5"><div className="rounded-lg border bg-muted/20 p-4"><p className="font-medium">{fileName}</p><p className="text-sm text-muted-foreground">{csv.rows.length} rows · {csv.headers.length} source columns</p></div><div className="grid gap-3"><div className="grid grid-cols-[1fr_auto_1fr] gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"><span>CSV column</span><span /><span>Contact field</span></div>{csv.headers.map((header) => <div key={header} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3"><div className="truncate rounded-md border bg-card px-3 py-2 text-sm font-medium">{header}</div><ArrowRight className="size-4 text-muted-foreground" /><Select value={mapping[header] ?? IGNORE} onValueChange={(value) => setMapping((current) => ({ ...current, [header]: value ?? IGNORE }))}><SelectTrigger className={duplicateTargets.has(mapping[header]) ? "border-destructive" : ""}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value={IGNORE}>Ignore column</SelectItem>{fields.map((field) => <SelectItem key={field.id} value={field.id}>{field.label} · {field.type.replace("_", " ")}</SelectItem>)}<SelectItem value={`${CREATE_PREFIX}text`}><Plus className="size-3.5" /> Create “{header}” as text</SelectItem><SelectItem value={`${CREATE_PREFIX}number`}><Plus className="size-3.5" /> Create “{header}” as number</SelectItem><SelectItem value={`${CREATE_PREFIX}date`}><Plus className="size-3.5" /> Create “{header}” as date</SelectItem><SelectItem value={`${CREATE_PREFIX}checkbox`}><Plus className="size-3.5" /> Create “{header}” as checkbox</SelectItem></SelectGroup></SelectContent></Select></div>)}</div><div className="flex flex-col gap-2"><div className="flex items-center gap-2"><Sparkles className="size-4 text-primary" /><h3 className="text-sm font-semibold">Live data preview</h3><Badge variant="outline">First {Math.min(preview.length, 8)} rows</Badge></div><div className="overflow-x-auto rounded-lg border"><table className="min-w-max text-sm"><thead className="bg-muted/60"><tr>{csv.headers.map((header) => <th key={header} className="min-w-40 border-r p-3 text-left last:border-r-0"><span className="block font-medium">{header}</span><span className="text-xs font-normal text-muted-foreground">{mapping[header] === IGNORE ? "Ignored" : mapping[header]?.startsWith(CREATE_PREFIX) ? "New custom field" : fields.find((field) => field.id === mapping[header])?.label ?? "Not mapped"}</span></th>)}</tr></thead><tbody>{preview.map((row, rowIndex) => <tr key={rowIndex} className="border-t">{csv.headers.map((header, columnIndex) => <td key={header} className="max-w-64 truncate border-r p-3 last:border-r-0">{row[columnIndex] || "—"}</td>)}</tr>)}</tbody></table></div></div>{duplicateTargets.size > 0 && <p className="text-sm text-destructive">Each contact field can only be mapped once.</p>}{!hasIdentity && <p className="text-sm text-destructive">Map Name and at least one of Phone or Email.</p>}</div>}
+          {step === 2 && <div className="flex flex-col gap-5"><div className="flex flex-wrap gap-3"><Badge variant="secondary">{csv.rows.length} rows</Badge><Badge variant={errors.length ? "destructive" : "secondary"}>{errors.length ? `${errors.length} invalid` : "Ready to import"}</Badge><Badge variant="outline">{mappedTargets.length} mapped fields</Badge></div><div className="overflow-auto rounded-lg border"><table className="min-w-full text-sm"><thead className="bg-muted"><tr><th className="p-3 text-left">Row</th>{csv.headers.filter((header) => mapping[header] !== IGNORE).map((header) => <th key={header} className="p-3 text-left">{fields.find((field) => field.id === mapping[header])?.label ?? header}</th>)}<th className="p-3 text-left">Status</th></tr></thead><tbody>{preview.map((row, index) => { const issue = errors.find((error) => error.row === index + 2); return <tr key={index} className="border-t"><td className="p-3">{index + 2}</td>{csv.headers.filter((header) => mapping[header] !== IGNORE).map((header) => <td key={header} className="max-w-48 truncate p-3">{row[csv.headers.indexOf(header)] || "—"}</td>)}<td className="p-3">{issue ? <span className="text-destructive">{issue.message}</span> : <span className="text-muted-foreground">Valid</span>}</td></tr>})}</tbody></table></div>{csv.rows.length > preview.length && <p className="text-xs text-muted-foreground">Showing the first {preview.length} rows. All {csv.rows.length} rows will be validated and imported.</p>}</div>}
           {step === 3 && result && <div className="flex flex-col items-center gap-5 py-10 text-center"><div className="flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground">{result.errors.length ? <XCircle /> : <Check />}</div><div><h3 className="text-xl font-semibold">Import complete</h3><p className="mt-1 text-sm text-muted-foreground">Your contacts workspace has been refreshed.</p></div><div className="grid w-full max-w-lg grid-cols-3 gap-3"><div className="rounded-lg border p-4"><p className="text-2xl font-semibold">{result.imported}</p><p className="text-xs text-muted-foreground">Imported</p></div><div className="rounded-lg border p-4"><p className="text-2xl font-semibold">{result.skipped}</p><p className="text-xs text-muted-foreground">Duplicates</p></div><div className="rounded-lg border p-4"><p className="text-2xl font-semibold">{result.errors.length}</p><p className="text-xs text-muted-foreground">Failed</p></div></div>{result.errors.length > 0 && <Button variant="outline" onClick={downloadErrors}><Download data-icon="inline-start" /> Download error report</Button>}</div>}
         </div></ScrollArea>
-        <DialogFooter className="border-t px-6 py-4"><Button variant="outline" onClick={() => step > 0 && step < 3 ? setStep((current) => current - 1) : close(false)} disabled={importing}>{step > 0 && step < 3 && <ArrowLeft data-icon="inline-start" />}{step > 0 && step < 3 ? "Back" : "Close"}</Button>{step === 1 && <Button onClick={() => setStep(2)} disabled={!hasIdentity || duplicateTargets.size > 0}>Review data <ArrowRight data-icon="inline-end" /></Button>}{step === 2 && <Button onClick={runImport} disabled={errors.length > 0 || importing}>{importing ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Upload data-icon="inline-start" />}{importing ? `Importing ${progress}%` : `Import ${csv.rows.length} contacts`}</Button>}</DialogFooter>
+        <DialogFooter className="border-t px-6 py-4"><Button variant="outline" onClick={() => step > 0 && step < 3 ? setStep((current) => current - 1) : close(false)} disabled={importing}>{step > 0 && step < 3 && <ArrowLeft data-icon="inline-start" />}{step > 0 && step < 3 ? "Back" : "Close"}</Button>{step === 1 && <Button onClick={() => void prepareReview()} disabled={!hasIdentity || duplicateTargets.size > 0 || preparing}>{preparing ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}{preparing ? "Creating fields…" : "Review data"}{!preparing && <ArrowRight data-icon="inline-end" />}</Button>}{step === 2 && <Button onClick={runImport} disabled={errors.length > 0 || importing}>{importing ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Upload data-icon="inline-start" />}{importing ? `Importing ${progress}%` : `Import ${csv.rows.length} contacts`}</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
   )
