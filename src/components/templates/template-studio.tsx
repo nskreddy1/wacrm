@@ -26,6 +26,7 @@ import {
   Phone,
   Plus,
   Reply,
+  RefreshCw,
   Smartphone,
   Trash2,
   Type,
@@ -673,7 +674,7 @@ export function TemplateStudio() {
   // (same key, so this adds no extra fetch). The preview needs it to
   // substitute custom {{tokens}} with their sample values.
   const { variables: customVariables } = useTemplateVariables()
-  const { templates: serverTemplates, isLoading, loadError, save, submit, remove } = useStudioTemplates()
+  const { templates: serverTemplates, isLoading, loadError, save, submit, syncStatuses, remove } = useStudioTemplates()
 
   // Unsaved work: brand-new templates + local edits of server rows.
   // Merged over the SWR list so typing never fights revalidation.
@@ -681,7 +682,7 @@ export function TemplateStudio() {
   const [edits, setEdits] = useState<Record<string, StudioTemplate>>({})
   const [activeId, setActiveId] = useState<string | null>(null)
   const [device, setDevice] = useState<DeviceKind>("iphone")
-  const [busy, setBusy] = useState<"save" | "submit" | "delete" | null>(null)
+  const [busy, setBusy] = useState<"save" | "submit" | "delete" | "sync" | null>(null)
 
   const templates = useMemo(
     () => [...newDrafts, ...serverTemplates.map((t) => edits[t.id] ?? t)],
@@ -766,6 +767,23 @@ export function TemplateStudio() {
       )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Submission failed.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /**
+   * Pull approval statuses from Twilio (bulk ContentAndApprovals).
+   * Rendered only for Twilio-provider WhatsApp templates — Meta rows
+   * sync via their own /sync route and SMS never needs approval.
+   */
+  const handleSyncStatuses = async () => {
+    setBusy("sync")
+    try {
+      const summary = await syncStatuses()
+      toast.success(summary)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Status sync failed.")
     } finally {
       setBusy(null)
     }
@@ -952,6 +970,16 @@ export function TemplateStudio() {
               {busy === "save" && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
               {active.channel === "sms" ? "Save template" : "Save draft"}
             </Button>
+            {active.channel === "whatsapp" && active.provider === "twilio" && (
+              <Button variant="outline" size="sm" onClick={handleSyncStatuses} disabled={busy !== null}>
+                {busy === "sync" ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                )}
+                Sync statuses
+              </Button>
+            )}
             {active.channel === "whatsapp" && (
               <Button size="sm" onClick={handleSubmit} disabled={busy !== null}>
                 {busy === "submit" && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}

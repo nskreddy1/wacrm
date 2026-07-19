@@ -281,6 +281,21 @@ export function useStudioTemplates() {
     await mutate()
   }
 
+  /**
+   * Pull the latest WhatsApp approval statuses from the provider
+   * (Twilio v2 ContentAndApprovals — one bulk call) so Pending
+   * templates flip to Approved/Rejected without a manual refresh.
+   * Returns a short human summary for the toast.
+   */
+  async function syncStatuses(): Promise<string> {
+    const json = await postJson("/api/whatsapp/templates/twilio", { action: "sync" })
+    await mutate()
+    const inserted = (json.inserted as number) ?? 0
+    const updated = (json.updated as number) ?? 0
+    if (inserted === 0 && updated === 0) return "Statuses are already up to date."
+    return `Synced from Twilio — ${updated} updated, ${inserted} imported.`
+  }
+
   /** Delete locally and (for Meta-linked rows) on the provider. */
   async function remove(id: string): Promise<void> {
     const res = await fetch(`/api/whatsapp/templates/${id}`, { method: "DELETE" })
@@ -297,6 +312,7 @@ export function useStudioTemplates() {
     loadError: error ? "Couldn't load templates. Refresh to retry." : null,
     save,
     submit,
+    syncStatuses,
     remove,
     refresh: mutate,
   }
