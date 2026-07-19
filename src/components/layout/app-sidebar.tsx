@@ -18,6 +18,7 @@ import {
   Workflow,
 } from "lucide-react"
 
+import { AxonMark } from "@/components/brand/axon-logo"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
