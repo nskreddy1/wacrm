@@ -11,6 +11,7 @@ import {
   GitFork,
   Inbox,
   LayoutDashboard,
+  LayoutTemplate,
   LogOut,
   Megaphone,
   PanelLeftClose,
@@ -67,6 +68,7 @@ const navIcons: Record<NavIconName, ComponentType<{ className?: string }>> = {
   "git-fork": GitFork,
   bot: Bot,
   "layout-dashboard": LayoutDashboard,
+  "layout-template": LayoutTemplate,
   settings: Settings,
 }
 
