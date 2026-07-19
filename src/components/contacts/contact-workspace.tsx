@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { toast } from "sonner"
@@ -60,13 +60,18 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
   const [fieldsManagerOpen, setFieldsManagerOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [filters, setFilters] = useState<FilterGroup>(() => emptyFilterGroup())
+  const [visibleFieldIds, setVisibleFieldIds] = useState<string[]>([])
+
+  useEffect(() => {
+    if (store && visibleFieldIds.length === 0) setVisibleFieldIds(store.preferences.visible)
+  }, [store, visibleFieldIds.length])
 
   const orderedFields = useMemo(() => {
     if (!store) return []
     const byId = new Map(store.fields.map((field) => [field.id, field]))
     return store.preferences.order.map((id) => byId.get(id)).filter(Boolean) as ContactField[]
   }, [store])
-  const visibleFields = orderedFields.filter((field) => store?.preferences.visible.includes(field.id))
+  const visibleFields = orderedFields.filter((field) => visibleFieldIds.includes(field.id))
   const filtered = useMemo(() => {
     if (!store) return []
     const term = query.trim().toLowerCase()
@@ -95,16 +100,18 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
 
   async function deleteSelected() { await api("DELETE", { ids: [...selected] }); setSelected(new Set()); await mutate(); toast.success("Contacts deleted") }
   async function setVisible(fieldId: string, checked: boolean) {
-    if (!store) return
-    const visible = checked ? Array.from(new Set([...store.preferences.visible, fieldId])) : store.preferences.visible.filter((id) => id !== fieldId)
-    await mutate({ data: { ...store, preferences: { ...store.preferences, visible } } }, false)
-    await api("PATCH", { kind: "preferences", preferences: { visible } })
+    const previous = visibleFieldIds
+    const visible = checked ? Array.from(new Set([...visibleFieldIds, fieldId])) : visibleFieldIds.filter((id) => id !== fieldId)
+    setVisibleFieldIds(visible)
+    try { await api("PATCH", { kind: "preferences", preferences: { visible } }) }
+    catch (preferenceError) { setVisibleFieldIds(previous); toast.error(preferenceError instanceof Error ? preferenceError.message : "Unable to update displayed columns") }
   }
   async function showAllFields() {
-    if (!store) return
+    const previous = visibleFieldIds
     const visible = orderedFields.map((field) => field.id)
-    await mutate({ data: { ...store, preferences: { ...store.preferences, visible } } }, false)
-    await api("PATCH", { kind: "preferences", preferences: { visible } })
+    setVisibleFieldIds(visible)
+    try { await api("PATCH", { kind: "preferences", preferences: { visible } }) }
+    catch (preferenceError) { setVisibleFieldIds(previous); toast.error(preferenceError instanceof Error ? preferenceError.message : "Unable to show all columns") }
   }
 
   if (error) return <div className="flex min-h-[60vh] items-center justify-center p-6"><FeatureState icon={RefreshCw} title="Contact workspace unavailable" description="We couldn't securely load this account's contacts. No records were changed; retry the request to reconnect." action={{ label: "Retry", onClick: () => void mutate() }} /></div>
@@ -117,7 +124,7 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
         <Select defaultValue="all"><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All contacts</SelectItem><SelectItem value="customers">Customers</SelectItem><SelectItem value="leads">Open leads</SelectItem></SelectGroup></SelectContent></Select>
         <div className="relative min-w-48 flex-1 sm:max-w-sm"><Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} placeholder="Search all fields" className="pl-8" /></div>
         <Tabs value={view} onValueChange={(value) => router.replace(contactsPath(undefined, { mode: value as View, view: savedViewId }))}><TabsList><TabsTrigger value="list" aria-label="List view"><List /></TabsTrigger><TabsTrigger value="sheet" aria-label="Sheet view"><SheetIcon /></TabsTrigger><TabsTrigger value="cards" aria-label="Cards view"><Grid2X2 /></TabsTrigger></TabsList></Tabs>
-        <Popover><PopoverTrigger render={<Button variant="outline" size="icon-sm" aria-label="Displayed columns" />}><Columns3 /></PopoverTrigger><PopoverContent align="end" className="w-80 p-0"><div className="flex items-center justify-between p-3"><div><p className="font-medium">Displayed columns</p><p className="text-xs text-muted-foreground">{visibleFields.length} of {orderedFields.length} visible</p></div><Button variant="ghost" size="sm" onClick={showAllFields}>Show all</Button></div><Separator /><ScrollArea className="h-72"><div className="flex flex-col gap-1 p-2">{orderedFields.map((field) => <label key={field.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"><Checkbox checked={store.preferences.visible.includes(field.id)} disabled={field.id === "name"} onCheckedChange={(checked) => setVisible(field.id, Boolean(checked))} /><span className="flex-1 text-sm">{field.label}</span><Badge variant="secondary">{field.type.replace("_", " ")}</Badge></label>)}</div></ScrollArea><Separator /><div className="p-2"><Button variant="outline" className="w-full" onClick={() => setFieldsManagerOpen(true)}><Plus data-icon="inline-start" /> Create field</Button></div></PopoverContent></Popover>
+        <Popover><PopoverTrigger render={<Button variant="outline" size="icon-sm" aria-label="Displayed columns" />}><Columns3 /></PopoverTrigger><PopoverContent align="end" className="w-80 p-0"><div className="flex items-center justify-between p-3"><div><p className="font-medium">Displayed columns</p><p className="text-xs text-muted-foreground">{visibleFields.length} of {orderedFields.length} visible</p></div><Button variant="ghost" size="sm" onClick={showAllFields}>Show all</Button></div><Separator /><ScrollArea className="h-72"><div className="flex flex-col gap-1 p-2">{orderedFields.map((field) => <label key={field.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"><Checkbox checked={visibleFieldIds.includes(field.id)} disabled={field.id === "name"} onCheckedChange={(checked) => setVisible(field.id, Boolean(checked))} /><span className="flex-1 text-sm">{field.label}</span><Badge variant="secondary">{field.type.replace("_", " ")}</Badge></label>)}</div></ScrollArea></PopoverContent></Popover>
         <Button size="sm" className="shadow-xs" onClick={() => setContactSheet({ mode: "create" })}><Plus data-icon="inline-start" /> Contact</Button>
         <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}><Upload data-icon="inline-start" /> Import</Button>
         <Button variant="outline" size="sm" onClick={() => setFieldsManagerOpen(true)}><Sparkles data-icon="inline-start" /> Fields</Button>
