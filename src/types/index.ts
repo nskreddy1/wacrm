@@ -463,6 +463,12 @@ export interface Broadcast {
   id: string;
   user_id: string;
   name: string;
+  /**
+   * Messaging channel the campaign fans out on (migration 049).
+   * Optional because rows created before the column default to
+   * 'whatsapp' in older fetch paths.
+   */
+  channel?: 'whatsapp' | 'sms';
   template_name: string;
   template_language: string;
   template_variables?: Record<string, unknown>;

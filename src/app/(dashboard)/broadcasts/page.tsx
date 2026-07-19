@@ -240,7 +240,21 @@ export default function BroadcastsPage() {
                     onClick={() => router.push(`/broadcasts/${broadcast.id}`)}
                   >
                     <TableCell className="font-medium text-foreground">
-                      {broadcast.name}
+                      <div className="flex items-center gap-2">
+                        <span>{broadcast.name}</span>
+                        {/* Channel chip — legacy rows without the
+                            column are WhatsApp campaigns. */}
+                        <span
+                          className={cn(
+                            'inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium uppercase tracking-wide',
+                            (broadcast.channel ?? 'whatsapp') === 'sms'
+                              ? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                              : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+                          )}
+                        >
+                          {(broadcast.channel ?? 'whatsapp') === 'sms' ? 'SMS' : 'WhatsApp'}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
                       {broadcast.template_name}
