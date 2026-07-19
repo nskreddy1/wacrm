@@ -8,6 +8,23 @@ import { applyMessageDeliveryStatus, mapTwilioStatus } from '@/lib/orchestration
 
 export const maxDuration = 30
 
+/**
+ * Twilio's default opt-out / opt-in keyword sets (docs: "Twilio
+ * support for opt-out keywords"). Twilio itself blocks further sends
+ * after STOP (error 21610); we mirror the state on the contact so
+ * broadcasts skip these numbers proactively instead of failing.
+ * Matching is case-insensitive on the trimmed whole message.
+ */
+const SMS_OPT_OUT_KEYWORDS = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'])
+const SMS_OPT_IN_KEYWORDS = new Set(['START', 'YES', 'UNSTOP'])
+
+function detectSmsOptEvent(text: string | undefined): 'out' | 'in' | null {
+  const keyword = (text ?? '').trim().toUpperCase()
+  if (SMS_OPT_OUT_KEYWORDS.has(keyword)) return 'out'
+  if (SMS_OPT_IN_KEYWORDS.has(keyword)) return 'in'
+  return null
+}
+
 function validSignature(url: string, params: URLSearchParams, signature: string | null, authToken: string) {
   if (!signature) return false
   const fields = [...params.entries()].sort(([a], [b]) => a.localeCompare(b))
@@ -130,6 +147,28 @@ export async function POST(request: Request) {
     contentType,
     payload: Object.fromEntries(params.entries()),
   })
+
+  // SMS opt-out compliance: mirror STOP/START keywords onto the
+  // contact before orchestration so the state is queryable by the
+  // time any automation or broadcast reads it. WhatsApp has its own
+  // in-platform block mechanism, so this is SMS-only.
+  if (channel === 'sms' && !result.duplicate) {
+    const optEvent = detectSmsOptEvent(inboundText)
+    if (optEvent && result.contactId) {
+      const { error: optError } = await db
+        .from('contacts')
+        .update(
+          optEvent === 'out'
+            ? { sms_opted_out: true, sms_opted_out_at: new Date().toISOString() }
+            : { sms_opted_out: false, sms_opted_out_at: null },
+        )
+        .eq('id', result.contactId)
+        .eq('account_id', connection.account_id)
+      if (optError) {
+        console.error('[twilio-webhook] opt-state update failed:', optError.message)
+      }
+    }
+  }
 
   if (!result.duplicate) {
     after(async () => {
