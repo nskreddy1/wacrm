@@ -13,7 +13,6 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
-  MessageSquareText,
   Settings,
   Users,
   Workflow,
@@ -93,13 +92,13 @@ function BrandHeader() {
       <SidebarMenuItem>
         <SidebarMenuButton
           size="lg"
-          render={<Link href={routes.app.dashboard} aria-label="Relay CRM dashboard" />}
+          render={<Link href={routes.app.dashboard} aria-label="Axon dashboard" />}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <MessageSquareText className="size-4" aria-hidden="true" />
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground">
+            <AxonMark size={26} variant="mono" aria-hidden="true" />
           </span>
           <span className="grid flex-1 text-left leading-tight">
-            <span className="truncate text-sm font-semibold">Relay CRM</span>
+            <span className="truncate text-sm font-semibold">Axon</span>
             {loading && !account ? (
               <span className="mt-0.5 h-2.5 w-20 animate-pulse rounded bg-sidebar-accent" aria-hidden="true" />
             ) : (

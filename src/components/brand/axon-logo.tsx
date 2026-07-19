@@ -16,7 +16,9 @@ const PALETTES: Record<
 > = {
   emerald: { mark: "#047857", node: "#34d399", text: "#0f172a" },
   navy: { mark: "#1e3a5f", node: "#2dd4bf", text: "#0f172a" },
-  mono: { mark: "#111827", node: "#111827", text: "#111827" },
+  // `currentColor` lets the mono mark inherit its color from the
+  // surrounding text — it adapts to light/dark themes for free.
+  mono: { mark: "currentColor", node: "currentColor", text: "currentColor" },
   inverse: { mark: "#ffffff", node: "#34d399", text: "#ffffff" },
 };
 
