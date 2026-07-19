@@ -14,6 +14,7 @@ import {
   LayoutTemplate,
   LogOut,
   Megaphone,
+  MessageSquare,
   PanelLeftClose,
   Pencil,
   Settings,
@@ -61,6 +62,7 @@ import type { AccountRole } from "@/lib/auth/roles"
 const navIcons: Record<NavIconName, ComponentType<{ className?: string }>> = {
   "git-branch": GitBranch,
   inbox: Inbox,
+  "message-square": MessageSquare,
   users: Users,
   "calendar-days": CalendarDays,
   megaphone: Megaphone,
@@ -89,7 +91,11 @@ function initialsOf(name: string | null | undefined, email: string | null | unde
 }
 
 function isActive(pathname: string, href: string) {
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`))
+  // Exact-match-only routes: prefix matching would light them up for
+  // sibling workspaces nested under the same segment (e.g. /inbox
+  // must not appear active while the user is in /inbox/sms).
+  if (href === "/dashboard" || href === "/inbox") return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
 }
 
 function BrandHeader() {

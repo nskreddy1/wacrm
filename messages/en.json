@@ -129,7 +129,8 @@
   },
   "Inbox": {
     "page": {
-      "whatsappNotConnected": "WhatsApp® is not connected. Go to Settings to connect your account."
+      "whatsappNotConnected": "WhatsApp® is not connected. Go to Settings to connect your account.",
+      "smsNotConnected": "SMS is not connected. Go to Settings → Channels to connect a Twilio SMS number."
     },
     "conversationList": {
       "searchPlaceholder": "Search conversations...",
