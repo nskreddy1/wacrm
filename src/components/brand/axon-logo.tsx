@@ -54,13 +54,6 @@ export function AxonMark({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Crossbar as a transmitted pulse */}
-      <path
-        d="M15.5 31 H32.5"
-        stroke={p.mark}
-        strokeWidth={7}
-        strokeLinecap="round"
-      />
       {/* Synapse node at the apex */}
       <circle cx={24} cy={11} r={5} fill={p.node} />
     </svg>

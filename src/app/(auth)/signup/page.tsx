@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, UsersRound } from "lucide-react";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -99,9 +100,9 @@ function SignupPageInner() {
   };
 
   return (
-    <AuthShell>
+    <>
       {success ? (
-              <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
+              <div className="auth-rise-block flex w-full max-w-md flex-col items-center gap-6 text-center">
                 <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <CheckCircle2 aria-hidden="true" />
                 </span>
@@ -111,7 +112,7 @@ function SignupPageInner() {
                   </h1>
                   <p className="text-pretty leading-relaxed text-muted-foreground">
                     We sent a confirmation link to <strong className="font-medium text-foreground">{email}</strong>.
-                    Verify your email to finish creating your WACRM account.
+                    Verify your email to finish creating your Axon account.
                   </p>
                 </div>
                 <Button variant="outline" className="w-full" render={<Link href={loginHref} />}>
@@ -131,15 +132,12 @@ function SignupPageInner() {
                   <p className="text-pretty leading-relaxed text-muted-foreground">
                     {inviteToken
                       ? "Verify your email, then accept your invitation to join the team."
-                      : "Start organizing every WhatsApp relationship in one place."}
+                      : "Start organizing every customer conversation — WhatsApp, SMS, and email — in one place."}
                   </p>
                 </div>
 
                 <FieldGroup>
-                  <Button type="button" variant="outline" className="w-full" aria-disabled="true">
-                    <span data-icon="inline-start" className="font-semibold" aria-hidden="true">G</span>
-                    Continue with Google
-                  </Button>
+                  <GoogleAuthButton inviteToken={inviteToken} label="Continue with Google" />
 
                   <FieldSeparator>or</FieldSeparator>
 

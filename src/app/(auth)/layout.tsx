@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 // Shared metadata for auth pages (login / signup / forgot-password).
 // None of these should be indexed — they'd compete with the marketing
@@ -19,6 +20,11 @@ export const metadata: Metadata = {
   },
 };
 
+// The shell lives in the LAYOUT (not each page) so the indigo brand
+// panel persists across login <-> signup <-> forgot-password
+// navigations. Only the form column (children, remounted via
+// template.tsx) animates — a premium cross-page transition without
+// re-painting the whole screen.
 export default function AuthLayout({ children }: { children: ReactNode }) {
-  return children;
+  return <AuthShell>{children}</AuthShell>;
 }
