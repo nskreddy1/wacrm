@@ -109,17 +109,35 @@ function TemplateRail({
   isLoading,
   onSelect,
   onCreate,
+  onSync,
+  isSyncing,
 }: {
   templates: StudioTemplate[]
   activeId: string
   isLoading: boolean
   onSelect: (id: string) => void
   onCreate: () => void
+  onSync: () => void
+  isSyncing: boolean
 }) {
   return (
     <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-60 xl:w-64">
       <Button onClick={onCreate} className="w-full justify-center gap-2">
         <Plus className="size-4" aria-hidden="true" /> New template
+      </Button>
+      <Button
+        variant="outline"
+        onClick={onSync}
+        disabled={isSyncing}
+        className="w-full justify-center gap-2"
+        title="Import approved WhatsApp templates from Twilio or Meta and refresh statuses"
+      >
+        {isSyncing ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <RefreshCw className="size-4" aria-hidden="true" />
+        )}
+        Sync templates
       </Button>
       {isLoading && templates.length === 0 && (
         <div className="flex flex-col gap-1.5" aria-label="Loading templates">
@@ -674,7 +692,7 @@ export function TemplateStudio() {
   // (same key, so this adds no extra fetch). The preview needs it to
   // substitute custom {{tokens}} with their sample values.
   const { variables: customVariables } = useTemplateVariables()
-  const { templates: serverTemplates, isLoading, loadError, save, submit, syncStatuses, remove } = useStudioTemplates()
+  const { templates: serverTemplates, isLoading, loadError, save, submit, syncStatuses, importTemplates, remove } = useStudioTemplates()
 
   // Unsaved work: brand-new templates + local edits of server rows.
   // Merged over the SWR list so typing never fights revalidation.
@@ -789,6 +807,24 @@ export function TemplateStudio() {
     }
   }
 
+  /**
+   * Rail-level "Sync templates": imports the full WhatsApp template
+   * catalog from every connected provider (Twilio Content API and/or
+   * Meta WABA) and refreshes approval statuses — works even when no
+   * local template exists yet.
+   */
+  const handleImportTemplates = async () => {
+    setBusy("sync")
+    try {
+      const summary = await importTemplates()
+      toast.success(summary)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Template sync failed.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const handleDelete = async () => {
     if (!active) return
     if (active.isNew) {
@@ -818,6 +854,8 @@ export function TemplateStudio() {
           isLoading={isLoading}
           onSelect={setActiveId}
           onCreate={createTemplate}
+          onSync={handleImportTemplates}
+          isSyncing={busy === "sync"}
         />
         <div className="flex min-h-64 flex-1 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
           {loadError ?? (isLoading ? "Loading templates…" : "Select a template or create a new one.")}
@@ -834,6 +872,8 @@ export function TemplateStudio() {
         isLoading={isLoading}
         onSelect={setActiveId}
         onCreate={createTemplate}
+        onSync={handleImportTemplates}
+        isSyncing={busy === "sync"}
       />
 
       {/* Editor pane */}

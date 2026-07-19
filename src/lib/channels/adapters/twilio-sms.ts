@@ -62,7 +62,9 @@ export class TwilioSmsAdapter implements ChannelAdapter {
     if (messagingServiceSid) {
       body.set('MessagingServiceSid', messagingServiceSid)
     } else if (from) {
-      body.set('From', from)
+      // Users often save display-formatted numbers like "(858) 330-6215";
+      // Twilio requires E.164, so normalize before sending (error 21212).
+      body.set('From', `+${from.replace(/\D/g, '')}`)
     }
 
     const payload = message.payload
