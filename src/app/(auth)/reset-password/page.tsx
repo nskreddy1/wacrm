@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -47,11 +46,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <AuthShell
-      promoTitle="Secure your workspace and get back to growing"
-      promoDescription="Choose a strong new password, then return to the conversations and opportunities that matter."
-    >
-      <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-7">
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-primary">Secure account update</p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Create a new password</h1>
@@ -72,7 +67,6 @@ export default function ResetPasswordPage() {
             <Button type="submit" disabled={loading} className="w-full">{loading ? "Updating password..." : "Update password"}</Button>
           </FieldGroup>
         </form>
-      </div>
-    </AuthShell>
+    </div>
   );
 }

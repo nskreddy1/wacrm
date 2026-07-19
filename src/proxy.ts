@@ -39,6 +39,24 @@ export async function proxy(request: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) return response
 
+  const pathname = request.nextUrl.pathname
+
+  // PERF: `supabase.auth.getUser()` is a network round-trip to the
+  // Supabase Auth server on EVERY request — the main reason page
+  // navigation felt slow. If the visitor has no Supabase auth cookie
+  // (`sb-*-auth-token*`), there is no session to validate or refresh:
+  // skip the call entirely. Anonymous users navigating between public
+  // pages (login <-> signup <-> forgot-password) now pass through with
+  // zero network cost; everyone else gets the full validation below.
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some(({ name }) => name.startsWith("sb-") && name.includes("-auth-token"))
+
+  if (!hasAuthCookie) {
+    if (isPublicPath(pathname)) return response
+    return redirectWithCookies(request, routes.auth.login, response)
+  }
+
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll: () => request.cookies.getAll(),
@@ -51,7 +69,6 @@ export async function proxy(request: NextRequest) {
   })
 
   const { data: { user } } = await supabase.auth.getUser()
-  const pathname = request.nextUrl.pathname
 
   if (user && (pathname === routes.home || authRouteSet.has(pathname))) {
     return redirectWithCookies(request, authenticatedDestination(request), response)

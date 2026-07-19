@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
-import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -38,12 +37,9 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <AuthShell
-      promoTitle="A clear path back to every customer conversation"
-      promoDescription="Secure recovery gets you back to your team inbox, pipeline, and follow-ups without losing momentum."
-    >
+    <>
       {success ? (
-        <div className="flex flex-col items-center gap-6 text-center">
+        <div className="auth-rise-block flex flex-col items-center gap-6 text-center">
           <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
             <CheckCircle2 aria-hidden="true" />
           </span>
@@ -81,6 +77,6 @@ export default function ForgotPasswordPage() {
           </Link>
         </div>
       )}
-    </AuthShell>
+    </>
   );
 }
