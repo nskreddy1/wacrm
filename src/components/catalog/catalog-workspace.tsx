@@ -22,7 +22,9 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { formatCurrencyPrecise } from "@/lib/currency"
 import type { CatalogItem } from "@/lib/data/operations/types"
+import { useAuth } from "@/hooks/use-auth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -47,17 +49,12 @@ type CatalogResponse = { data: CatalogItem[] }
 
 const CATALOG_ENDPOINT = "/api/v1/workspace/catalog?includeInactive=true"
 
-function formatPrice(price: number, currency: string) {
-  try {
-    return new Intl.NumberFormat("en", { style: "currency", currency, maximumFractionDigits: 2 }).format(price)
-  } catch {
-    return `${currency} ${price.toFixed(2)}`
-  }
-}
-
 /** Full catalog workspace: KPI strip, filterable item list, create/edit/archive/delete. */
 export function CatalogWorkspace() {
   const { data, isLoading, mutate } = useSWR<CatalogResponse>(CATALOG_ENDPOINT)
+  // One workspace currency (Settings → Deals) renders every price;
+  // per-item currency drift is never shown to the user.
+  const { defaultCurrency } = useAuth()
 
   const [query, setQuery] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
@@ -83,7 +80,6 @@ export function CatalogWorkspace() {
       active: active.length,
       categories: categories.length,
       averagePrice,
-      currency: active[0]?.currency ?? items[0]?.currency ?? "USD",
     }
   }, [items, categories])
 
@@ -143,7 +139,7 @@ export function CatalogWorkspace() {
     { label: "Categories", value: String(stats.categories), Icon: Tags, note: "Distinct groupings" },
     {
       label: "Average price",
-      value: stats.active > 0 ? formatPrice(stats.averagePrice, stats.currency) : "—",
+      value: stats.active > 0 ? formatCurrencyPrecise(stats.averagePrice, defaultCurrency) : "—",
       Icon: CircleDollarSign,
       note: "Across active items",
     },
@@ -277,7 +273,7 @@ export function CatalogWorkspace() {
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <span className="w-24 text-right text-sm font-semibold text-foreground tabular-nums">
-                      {formatPrice(item.price, item.currency)}
+                      {formatCurrencyPrecise(item.price, defaultCurrency)}
                     </span>
                     <span
                       className={cn(

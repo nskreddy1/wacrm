@@ -6,10 +6,12 @@
 // ============================================================
 
 import { useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Info, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
+import { getCurrencySymbol } from "@/lib/currency"
 import type { CatalogItem } from "@/lib/data/operations/types"
+import { useAuth } from "@/hooks/use-auth"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,19 +23,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-
-const CURRENCY_OPTIONS = ["USD", "INR", "EUR", "GBP", "AED", "SGD"] as const
-
-const CURRENCY_ITEMS = Object.fromEntries(CURRENCY_OPTIONS.map((code) => [code, code]))
 
 export function CatalogItemDialog({
   open,
@@ -47,11 +38,14 @@ export function CatalogItemDialog({
   item: CatalogItem | null
   onSaved: () => void
 }) {
+  // Currency is a workspace-level setting (Settings → Deals), not a
+  // per-item choice — every price in the account renders in one currency.
+  const { defaultCurrency } = useAuth()
+
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState("")
   const [price, setPrice] = useState("0")
-  const [currency, setCurrency] = useState("USD")
   const [isActive, setIsActive] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
@@ -64,7 +58,6 @@ export function CatalogItemDialog({
     setDescription(item?.description ?? "")
     setCategory(item?.category ?? "")
     setPrice(item ? String(item.price) : "0")
-    setCurrency(item?.currency ?? "USD")
     setIsActive(item?.isActive ?? true)
   }, [open, item])
 
@@ -81,7 +74,9 @@ export function CatalogItemDialog({
         description: description.trim() || null,
         category: category.trim() || null,
         price: parsedPrice,
-        currency,
+        // Always stamp the workspace currency: edits migrate legacy
+        // rows to the global setting instead of preserving drift.
+        currency: defaultCurrency,
         isActive,
       }
       const res = await fetch("/api/v1/workspace/catalog", {
@@ -164,37 +159,33 @@ export function CatalogItemDialog({
 
           <fieldset className="flex flex-col gap-3">
             <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pricing</legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cat-price">
-                  Price <span className="text-destructive">*</span>
-                </Label>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cat-price">
+                Price ({defaultCurrency}) <span className="text-destructive">*</span>
+              </Label>
+              <div className="relative">
+                <span
+                  className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground"
+                  aria-hidden="true"
+                >
+                  {getCurrencySymbol(defaultCurrency)}
+                </span>
                 <Input
                   id="cat-price"
                   type="number"
                   min="0"
                   step="0.01"
                   inputMode="decimal"
+                  className="pl-8"
                   value={price}
                   onChange={(event) => setPrice(event.target.value)}
                   aria-invalid={!priceValid}
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cat-currency">Currency</Label>
-                <Select items={CURRENCY_ITEMS} value={currency} onValueChange={(value) => value && setCurrency(value)}>
-                  <SelectTrigger id="cat-currency">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CURRENCY_OPTIONS.map((code) => (
-                      <SelectItem key={code} value={code}>
-                        {code}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Info className="size-3.5 shrink-0" aria-hidden="true" />
+                Workspace currency is set in Settings and applies everywhere.
+              </p>
             </div>
           </fieldset>
         </div>
