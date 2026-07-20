@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     default: "Axon",
     template: "%s — Axon",
   },
-  description: "Enterprise CRM for WhatsApp, SMS, and email — conversations, contacts, pipelines, campaigns, and bookings.",
+  description: "Enterprise CRM for WhatsApp, SMS, and email — conversations, contacts, pipelines, campaigns, and appointments.",
   robots: {
     index: false,
     follow: false,

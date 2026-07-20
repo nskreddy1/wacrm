@@ -67,7 +67,7 @@ export const TEMPLATE_VARIABLES = [
   { token: "{{name}}", label: "Full name", sample: "Priya Sharma" },
   { token: "{{company}}", label: "Company / school", sample: "Sunrise Public School" },
   { token: "{{order_id}}", label: "Order ID", sample: "#48291" },
-  { token: "{{booking_time}}", label: "Booking time", sample: "3:30 PM, Jul 22" },
+  { token: "{{appointment_time}}", label: "Appointment time", sample: "3:30 PM, Jul 22" },
   { token: "{{agent_name}}", label: "Agent name", sample: "Ram" },
   { token: "{{otp}}", label: "One-time code", sample: "482913" },
 ] as const
