@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { authRouteSet, routes } from "@/lib/routing/routes"
+import { authCookieOptions } from "@/lib/supabase/cookie-options"
 
 const PUBLIC_PREFIXES = [
   "/auth/",
@@ -57,6 +58,9 @@ export async function proxy(request: NextRequest) {
   }
 
   const supabase = createServerClient(url, key, {
+    // Same attributes as the browser/server clients: refreshed tokens
+    // must survive in embedded preview iframes (third-party context).
+    cookieOptions: authCookieOptions,
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (cookies) => {

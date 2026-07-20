@@ -97,6 +97,11 @@
 
 :root,
 html[data-mode="dark"] {
+  /* Explicit color-scheme so native form controls (input text, carets,
+   * scrollbars) always match the app's own mode — never the embedding
+   * frame's preference. Without this, a dark-preferring iframe renders
+   * UA-dark (white) input text on our light pages. */
+  color-scheme: dark;
   --background: oklch(0.13 0.01 260);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.18 0.01 260);
@@ -129,6 +134,7 @@ html[data-mode="dark"] {
 }
 
 html[data-mode="light"] {
+  color-scheme: light;
   --background: oklch(0.99 0.002 260);
   --foreground: oklch(0.21 0.01 260);
   --card: oklch(1 0 0);
@@ -432,4 +438,34 @@ html[data-theme="rose"] {
   .auth-shake {
     animation: none;
   }
+}
+
+/* ---- Themed scrollbars ----
+ * `.app-scrollbar` gives inner scroll regions (dashboard, right rail,
+ * activity feed, inbox lists) a slim, always-themed scrollbar that
+ * matches light/dark mode instead of the UA default. */
+.app-scrollbar {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: color-mix(in oklch, var(--foreground) 25%, transparent) transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklch, var(--foreground) 22%, transparent);
+  border-radius: 999px;
+  /* Transparent border + content-box clip = slim pill with breathing room */
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklch, var(--foreground) 38%, transparent);
 }

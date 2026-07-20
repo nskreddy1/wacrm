@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
   Briefcase,
@@ -35,6 +36,24 @@ function greetingForHour(hour: number) {
 }
 
 /**
+ * Time-of-day values must be computed after mount: the server clock
+ * (UTC) can disagree with the visitor's local clock, which caused a
+ * hydration mismatch ("Good morning" vs "Good afternoon"). SSR renders
+ * the neutral fallbacks, then the client swaps in local values.
+ */
+function useLocalClock() {
+  const [clock, setClock] = useState<{ greeting: string; today: string } | null>(null)
+  useEffect(() => {
+    const now = new Date()
+    setClock({
+      greeting: greetingForHour(now.getHours()),
+      today: new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(now),
+    })
+  }, [])
+  return clock
+}
+
+/**
  * Live CRM command center.
  *
  * NOTE: currently rendering hardcoded DEMO_OVERVIEW data while the
@@ -47,14 +66,18 @@ export function DashboardWorkspace() {
 
   const firstName = personDisplayName(profile?.full_name, profile?.email).split(/\s+/)[0] || "there"
   const workspaceName = workspaceDisplayName(account?.name)
-  const today = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date())
-  const greeting = greetingForHour(new Date().getHours())
+  const clock = useLocalClock()
+  const greeting = clock?.greeting ?? "Welcome back"
+  const today = clock?.today ?? "Overview"
 
   const { kpis, channels, volume, broadcasts, pipeline, team, contactsGrowth, activity, bookings } = overview
   const money: Intl.NumberFormatOptions = { style: "currency", currency: kpis.pipelineCurrency, maximumFractionDigits: 0 }
 
   return (
-    <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+    // The dashboard shell's <main> is overflow-hidden, so this page owns
+    // its own scroll region — with the themed .app-scrollbar UI.
+    <div className="app-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <Section index={0} className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
@@ -208,12 +231,13 @@ export function DashboardWorkspace() {
         {/* Right rail: sticky on xl, scrolls with the page below */}
         <Section
           index={3}
-          className="flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-2 xl:max-h-[calc(100vh-9rem)] xl:overflow-y-auto xl:overscroll-contain xl:pb-1"
+          className="app-scrollbar flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-0 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:overscroll-contain xl:pb-1"
         >
           <QuickActions />
           <UpcomingBookings bookings={bookings} />
           <ActivityFeed items={activity} />
         </Section>
+      </div>
       </div>
     </div>
   )
