@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { authCookieOptions } from './cookie-options'
 
 export function hasSupabaseConfig() {
   return Boolean(
@@ -24,6 +25,9 @@ export async function createClient() {
     url,
     anonKey,
     {
+      // Keep attributes consistent with the browser client so refreshed
+      // session cookies also survive inside embedded preview iframes.
+      cookieOptions: authCookieOptions,
       cookies: {
         getAll() {
           return cookieStore.getAll()
