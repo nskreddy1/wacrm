@@ -21,7 +21,7 @@ export const routes = {
       if (view !== "board") params.set("view", view)
       return `/pipelines?${params.toString()}`
     },
-    bookings: "/bookings",
+    appointments: "/appointments",
     broadcasts: "/broadcasts",
     templates: "/templates",
     newBroadcast: "/broadcasts/new",
@@ -53,7 +53,7 @@ export const canonicalAppRoutes = [
   routes.app.inbox,
   routes.app.contacts,
   routes.app.pipelines,
-  routes.app.bookings,
+  routes.app.appointments,
   routes.app.broadcasts,
   routes.app.templates,
   routes.app.newBroadcast,

@@ -33,7 +33,7 @@ const titles: Record<string, string> = {
   inbox: "Shared inbox",
   contacts: "Contacts",
   pipelines: "Pipelines",
-  bookings: "Bookings",
+  appointments: "Appointments",
   broadcasts: "Broadcasts",
   automations: "Automations",
   flows: "Flows",
@@ -125,9 +125,9 @@ export function AppHeader() {
                 <Plus />
                 Deal
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push(routes.app.bookings)}>
+              <DropdownMenuItem onClick={() => router.push(routes.app.appointments)}>
                 <Plus />
-                Booking
+                Appointment
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
