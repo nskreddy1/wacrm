@@ -22,6 +22,7 @@ export const routes = {
       return `/pipelines?${params.toString()}`
     },
     appointments: "/appointments",
+    catalog: "/catalog",
     broadcasts: "/broadcasts",
     templates: "/templates",
     newBroadcast: "/broadcasts/new",
@@ -54,6 +55,7 @@ export const canonicalAppRoutes = [
   routes.app.contacts,
   routes.app.pipelines,
   routes.app.appointments,
+  routes.app.catalog,
   routes.app.broadcasts,
   routes.app.templates,
   routes.app.newBroadcast,

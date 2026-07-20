@@ -34,6 +34,7 @@ const titles: Record<string, string> = {
   contacts: "Contacts",
   pipelines: "Pipelines",
   appointments: "Appointments",
+  catalog: "Catalog",
   broadcasts: "Broadcasts",
   automations: "Automations",
   flows: "Flows",
