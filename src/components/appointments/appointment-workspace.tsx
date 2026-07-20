@@ -21,18 +21,10 @@ import {
 import { toast } from "sonner"
 
 import type { Appointment, AppointmentStatus, CatalogItem } from "@/lib/data/operations/types"
+import { AppointmentCreateDialog } from "@/components/appointments/appointment-create-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -40,12 +32,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 type AppointmentsResponse = { data: Appointment[] }
 type CatalogResponse = { data: CatalogItem[] }
-type ContactsResponse = { data: { contacts: Array<{ id: string; values: Record<string, unknown> }> } }
 
 const STATUS_STYLE: Record<AppointmentStatus, string> = {
   scheduled: "border-primary/30 bg-primary/10 text-primary",
@@ -63,193 +53,6 @@ const STATUS_LABEL: Record<AppointmentStatus, string> = {
 
 const timeFormatter = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" })
 const dateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" })
-
-function contactLabel(values: Record<string, unknown>) {
-  const name = typeof values.name === "string" ? values.name.trim() : ""
-  if (name) return name
-  const phone = typeof values.phone === "string" ? values.phone.trim() : ""
-  return phone || "Unnamed contact"
-}
-
-function AppointmentCreateDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onCreated: () => void
-}) {
-  const [title, setTitle] = useState("")
-  const [contactId, setContactId] = useState("")
-  const [catalogItemId, setCatalogItemId] = useState("")
-  const [startsAt, setStartsAt] = useState("")
-  const [endsAt, setEndsAt] = useState("")
-  const [location, setLocation] = useState("")
-  const [notes, setNotes] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-
-  const { data: contactsData } = useSWR<ContactsResponse>(open ? "/api/v1/workspace/contacts" : null)
-  const { data: catalogData } = useSWR<CatalogResponse>(open ? "/api/v1/workspace/catalog" : null)
-
-  const contacts = contactsData?.data.contacts ?? []
-  const services = (catalogData?.data ?? []).filter((item) => item.isActive)
-  const canSubmit = title.trim().length > 0 && contactId && startsAt && !submitting
-
-  function reset() {
-    setTitle("")
-    setContactId("")
-    setCatalogItemId("")
-    setStartsAt("")
-    setEndsAt("")
-    setLocation("")
-    setNotes("")
-  }
-
-  async function handleSubmit() {
-    if (!canSubmit) return
-    setSubmitting(true)
-    try {
-      const res = await fetch("/api/v1/workspace/appointments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          contactId,
-          startsAt: new Date(startsAt).toISOString(),
-          endsAt: endsAt ? new Date(endsAt).toISOString() : null,
-          catalogItemId: catalogItemId || null,
-          location: location.trim() || null,
-          notes: notes.trim() || null,
-        }),
-      })
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null
-        throw new Error(body?.error?.message ?? "Could not create the appointment")
-      }
-      toast.success("Appointment scheduled")
-      onOpenChange(false)
-      reset()
-      onCreated()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create the appointment")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>New appointment</DialogTitle>
-          <DialogDescription>Schedule time with a contact and optionally link a catalog service.</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="apt-title">Title</Label>
-            <Input
-              id="apt-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. Admission counseling"
-              maxLength={200}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="apt-contact">Contact</Label>
-              <Select
-                items={Object.fromEntries(contacts.map((contact) => [contact.id, contactLabel(contact.values)]))}
-                value={contactId}
-                onValueChange={(value) => setContactId(value ?? "")}
-              >
-                <SelectTrigger id="apt-contact">
-                  <SelectValue placeholder="Select a contact" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contacts.map((contact) => (
-                    <SelectItem key={contact.id} value={contact.id}>
-                      {contactLabel(contact.values)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="apt-service">Service (optional)</Label>
-              <Select
-                items={Object.fromEntries(services.map((item) => [item.id, item.name]))}
-                value={catalogItemId}
-                onValueChange={(value) => setCatalogItemId(value ?? "")}
-              >
-                <SelectTrigger id="apt-service">
-                  <SelectValue placeholder="Link a service" />
-                </SelectTrigger>
-                <SelectContent>
-                  {services.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="apt-starts">Starts</Label>
-              <Input
-                id="apt-starts"
-                type="datetime-local"
-                value={startsAt}
-                onChange={(event) => setStartsAt(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="apt-ends">Ends (optional)</Label>
-              <Input
-                id="apt-ends"
-                type="datetime-local"
-                value={endsAt}
-                onChange={(event) => setEndsAt(event.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="apt-location">Location (optional)</Label>
-            <Input
-              id="apt-location"
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-              placeholder="e.g. Main campus"
-              maxLength={200}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="apt-notes">Notes (optional)</Label>
-            <Textarea
-              id="apt-notes"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Anything the team should know beforehand"
-              rows={3}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {submitting && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-            Schedule
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 /** Full appointments workspace: KPI strip, filterable schedule, quick status updates. */
 export function AppointmentWorkspace() {

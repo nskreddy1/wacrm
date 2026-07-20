@@ -1,38 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import useSWR from "swr"
 import { CalendarClock, MapPin, Plus } from "lucide-react"
 
 import type { UpcomingAppointment } from "@/lib/data/dashboard/types"
+import { AppointmentCreateDialog } from "@/components/appointments/appointment-create-dialog"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ChartCard } from "./chart-card"
-
-type ContactsResponse = {
-  data: { contacts: Array<{ id: string; values: Record<string, unknown> }> }
-}
-
-type CatalogResponse = {
-  data: Array<{ id: string; name: string; isActive: boolean }>
-}
 
 const timeFormatter = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" })
 const dateFormatter = new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" })
@@ -47,168 +21,6 @@ function formatWhen(iso: string) {
   return `${day} · ${timeFormatter.format(date)}`
 }
 
-function contactLabel(values: Record<string, unknown>) {
-  const name = typeof values.name === "string" ? values.name.trim() : ""
-  if (name) return name
-  const phone = typeof values.phone === "string" ? values.phone.trim() : ""
-  return phone || "Unnamed contact"
-}
-
-function AppointmentCreateDialog({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState("")
-  const [contactId, setContactId] = useState("")
-  const [catalogItemId, setCatalogItemId] = useState("")
-  const [startsAt, setStartsAt] = useState("")
-  const [location, setLocation] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // Options load lazily — only once the dialog opens.
-  const { data: contactsData } = useSWR<ContactsResponse>(open ? "/api/v1/workspace/contacts" : null)
-  const { data: catalogData } = useSWR<CatalogResponse>(open ? "/api/v1/workspace/catalog" : null)
-
-  const contacts = contactsData?.data.contacts ?? []
-  const catalogItems = (catalogData?.data ?? []).filter((item) => item.isActive)
-  const canSubmit = title.trim().length > 0 && contactId && startsAt && !submitting
-
-  async function handleSubmit() {
-    if (!canSubmit) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      const res = await fetch("/api/v1/workspace/appointments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          contactId,
-          startsAt: new Date(startsAt).toISOString(),
-          catalogItemId: catalogItemId || null,
-          location: location.trim() || null,
-        }),
-      })
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null
-        throw new Error(body?.error?.message ?? "Could not create the appointment")
-      }
-      setOpen(false)
-      setTitle("")
-      setContactId("")
-      setCatalogItemId("")
-      setStartsAt("")
-      setLocation("")
-      onCreated()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create the appointment")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-medium text-primary hover:text-primary" />
-        }
-      >
-        <Plus className="size-3.5" aria-hidden="true" /> New
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>New appointment</DialogTitle>
-          <DialogDescription>Schedule time with a contact. It appears on the dashboard instantly.</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="appointment-title">Title</Label>
-            <Input
-              id="appointment-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. Admission counseling"
-              maxLength={200}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="appointment-contact">Contact</Label>
-            <Select
-              items={Object.fromEntries(contacts.map((contact) => [contact.id, contactLabel(contact.values)]))}
-              value={contactId}
-              onValueChange={(value) => setContactId(value ?? "")}
-            >
-              <SelectTrigger id="appointment-contact">
-                <SelectValue placeholder="Select a contact" />
-              </SelectTrigger>
-              <SelectContent>
-                {contacts.map((contact) => (
-                  <SelectItem key={contact.id} value={contact.id}>
-                    {contactLabel(contact.values)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="appointment-service">Service (optional)</Label>
-            <Select
-              items={Object.fromEntries(catalogItems.map((item) => [item.id, item.name]))}
-              value={catalogItemId}
-              onValueChange={(value) => setCatalogItemId(value ?? "")}
-            >
-              <SelectTrigger id="appointment-service">
-                <SelectValue placeholder="Link a catalog item" />
-              </SelectTrigger>
-              <SelectContent>
-                {catalogItems.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="appointment-starts">Date &amp; time</Label>
-              <Input
-                id="appointment-starts"
-                type="datetime-local"
-                value={startsAt}
-                onChange={(event) => setStartsAt(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="appointment-location">Location (optional)</Label>
-              <Input
-                id="appointment-location"
-                value={location}
-                onChange={(event) => setLocation(event.target.value)}
-                placeholder="e.g. Main campus"
-                maxLength={200}
-              />
-            </div>
-          </div>
-          {error && (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {submitting ? "Scheduling…" : "Schedule"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 /** Next scheduled appointments, soonest first, with inline quick-create. */
 export function UpcomingAppointments({
   appointments,
@@ -217,12 +29,23 @@ export function UpcomingAppointments({
   appointments: UpcomingAppointment[]
   onChanged: () => void
 }) {
+  const [createOpen, setCreateOpen] = useState(false)
+
   return (
     <ChartCard
       title="Upcoming appointments"
       caption="Next scheduled sessions"
       contentClassName="p-0"
-      meta={<AppointmentCreateDialog onCreated={onChanged} />}
+      meta={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs font-medium text-primary hover:text-primary"
+          onClick={() => setCreateOpen(true)}
+        >
+          <Plus className="size-3.5" aria-hidden="true" /> New
+        </Button>
+      }
     >
       {appointments.length === 0 ? (
         <p className="px-4 py-6 text-center text-xs text-muted-foreground">
@@ -256,6 +79,7 @@ export function UpcomingAppointments({
           ))}
         </ul>
       )}
+      <AppointmentCreateDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={onChanged} />
     </ChartCard>
   )
 }
