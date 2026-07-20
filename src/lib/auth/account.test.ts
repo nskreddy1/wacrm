@@ -22,8 +22,15 @@ function makeClient(opts: {
   user: { id: string } | null;
   userErr?: unknown;
   byTable: Record<string, { data: unknown; error: unknown }>;
+  /**
+   * Result for the `get_account_context` RPC. Defaults to PGRST202
+   * ("function not in schema cache") so existing tests exercise the
+   * legacy two-query fallback path.
+   */
+  rpcResult?: { data: unknown; error: unknown };
 }) {
   const calls: BuilderCall[] = [];
+  const rpcCalls: string[] = [];
 
   const from = (table: string) => {
     const call: BuilderCall = { table, eqArgs: [] };
@@ -48,13 +55,22 @@ function makeClient(opts: {
 
   return {
     calls,
+    rpcCalls,
     client: {
       auth: {
-        getUser: () =>
+        // Mirrors real auth-js: getClaims() verifies the JWT locally and
+        // resolves with the token claims (`sub` = user id) or null.
+        getClaims: () =>
           Promise.resolve({
-            data: { user: opts.user },
+            data: opts.user ? { claims: { sub: opts.user.id } } : null,
             error: opts.userErr ?? null,
           }),
+      },
+      rpc: (name: string) => {
+        rpcCalls.push(name);
+        return Promise.resolve(
+          opts.rpcResult ?? { data: null, error: { code: "PGRST202" } },
+        );
       },
       from,
     },
@@ -75,6 +91,37 @@ afterEach(() => {
 });
 
 describe("getCurrentAccount", () => {
+  it("resolves context in one round-trip via the get_account_context RPC", async () => {
+    const { client, calls, rpcCalls } = makeClient({
+      user: { id: "user-1" },
+      byTable: {},
+      rpcResult: {
+        data: [
+          {
+            user_id: "user-1",
+            account_id: "acct-1",
+            account_role: "owner",
+            account_name: "Acme",
+          },
+        ],
+        error: null,
+      },
+    });
+    createClient.mockReturnValue(client);
+
+    const ctx = await getCurrentAccount();
+
+    expect(ctx).toMatchObject({
+      userId: "user-1",
+      accountId: "acct-1",
+      role: "owner",
+      account: { id: "acct-1", name: "Acme" },
+    });
+    // One RPC, zero table round-trips — the perf contract.
+    expect(rpcCalls).toEqual(["get_account_context"]);
+    expect(calls).toEqual([]);
+  });
+
   it("resolves context via a plain accounts lookup, not an embedded join", async () => {
     const { client, calls } = makeClient({
       user: { id: "user-1" },

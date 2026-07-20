@@ -105,28 +105,83 @@ export interface AccountContext {
  * Use `requireRole(min)` instead when the route also needs a
  * minimum-role check — it's a thin wrapper over this.
  *
- * PERF: wrapped in React `cache()` so the auth waterfall
- * (getUser network round trip -> profiles lookup -> accounts
- * lookup) runs AT MOST ONCE per request, no matter how many
- * route handlers, server components, or helpers call it during
- * the same render. The cache is request-scoped — never shared
- * across users or requests — so this is safe for auth data.
+ * PERF: two optimizations keep this to a single network round trip:
+ *
+ *   1. `getClaims()` verifies the caller's JWT locally (signature +
+ *      `exp` expiration against the project's public signing keys)
+ *      instead of `getUser()`'s network call to the Auth server.
+ *      Expired/tampered tokens fail verification -> Unauthorized.
+ *   2. The `get_account_context()` RPC (migration 053) joins
+ *      profiles + accounts in one query — replacing the previous
+ *      two sequential PostgREST round-trips. It is SECURITY
+ *      INVOKER, so profiles/accounts RLS still applies.
+ *
+ * Additionally wrapped in React `cache()` so the whole resolution
+ * runs AT MOST ONCE per request, no matter how many route handlers,
+ * server components, or helpers call it during the same render. The
+ * cache is request-scoped — never shared across users or requests —
+ * so this is safe for auth data.
  */
 export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
-  if (userErr || !user) {
+  const { data: claimsData, error: claimsErr } =
+    await supabase.auth.getClaims();
+  const userId = claimsData?.claims.sub;
+  if (claimsErr || !userId) {
     throw new UnauthorizedError();
   }
 
+  const { data: rows, error } = await supabase.rpc("get_account_context");
+
+  if (error) {
+    // PGRST202: function not in PostgREST's schema cache — occurs when
+    // migration 053 hasn't been applied yet or the cache is stale right
+    // after applying it. Fall back to the legacy two-query path so auth
+    // keeps working during rollout.
+    if (error.code === "PGRST202") {
+      return getCurrentAccountLegacy(supabase, userId);
+    }
+    console.error("[getCurrentAccount] context RPC error:", error);
+    throw new ForbiddenError("Could not load account context");
+  }
+
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row || !row.account_id || !row.account_role) {
+    // Pre-migration profile, or a manual insert that skipped the
+    // signup trigger. The user is authenticated but the app has
+    // no way to scope their queries — treat as forbidden.
+    throw new ForbiddenError("Profile is not linked to an account");
+  }
+  if (!isAccountRole(row.account_role)) {
+    // The DB enum should make this impossible, but a future
+    // migration that broadens the enum without updating TS would
+    // hit this — surface it rather than silently widening.
+    throw new ForbiddenError(`Unknown account role: ${row.account_role}`);
+  }
+
+  return {
+    supabase,
+    userId,
+    accountId: row.account_id,
+    role: row.account_role,
+    account: { id: row.account_id, name: row.account_name },
+  };
+});
+
+/**
+ * Legacy two-query context resolution. Only used as a fallback when
+ * the `get_account_context()` RPC is unavailable (see PGRST202 note
+ * above). Same RLS scoping and error semantics as the RPC path.
+ */
+async function getCurrentAccountLegacy(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<AccountContext> {
   const { data, error } = await supabase
     .from("profiles")
     .select("account_id, account_role")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error) {
@@ -134,28 +189,16 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
     throw new ForbiddenError("Could not load account context");
   }
   if (!data || !data.account_id || !data.account_role) {
-    // Pre-migration profile, or a manual insert that skipped the
-    // signup trigger. The user is authenticated but the app has
-    // no way to scope their queries — treat as forbidden.
     throw new ForbiddenError("Profile is not linked to an account");
   }
   if (!isAccountRole(data.account_role)) {
-    // The DB enum should make this impossible, but a future
-    // migration that broadens the enum without updating TS would
-    // hit this — surface it rather than silently widening.
     throw new ForbiddenError(`Unknown account role: ${data.account_role}`);
   }
 
-  // Load the account with a plain point lookup by id rather than an
-  // embedded FK join (`account:accounts!inner(...)`). The embed forces
-  // PostgREST to resolve the profiles.account_id → accounts.id
-  // relationship from its schema cache; when that cache is stale — a
-  // common Supabase state right after a migration adds the FK, or when
-  // migrations are applied out of band — the embed fails hard with
-  // PGRST200 ("could not find a relationship … in the schema cache")
-  // and takes down the entire account context (issue #294). A lookup by
-  // id needs no relationship inference and is gated by the same accounts
-  // RLS, so it stays robust against cache staleness and older schemas.
+  // Plain point lookup by id rather than an embedded FK join — embeds
+  // depend on PostgREST's relationship schema cache, which can be stale
+  // right after migrations (PGRST200, issue #294). A lookup by id needs
+  // no relationship inference and is gated by the same accounts RLS.
   const { data: account, error: accountErr } = await supabase
     .from("accounts")
     .select("id, name")
@@ -167,19 +210,17 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
     throw new ForbiddenError("Could not load account context");
   }
   if (!account) {
-    // account_id points at no readable account row — orphaned profile
-    // or an RLS gap. Same "can't scope this user" outcome as above.
     throw new ForbiddenError("Profile is not linked to an account");
   }
 
   return {
     supabase,
-    userId: user.id,
+    userId,
     accountId: data.account_id,
     role: data.account_role,
     account: { id: account.id, name: account.name },
   };
-});
+}
 
 /**
  * Resolve the caller's account context and enforce a minimum role.

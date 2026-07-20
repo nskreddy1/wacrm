@@ -9,31 +9,36 @@ export async function GET() {
   try {
     const source = getDataSource()
     const context = await getCurrentAccount()
-    const { data: profile, error: profileError } = await context.supabase
-      .from("profiles")
-      .select("user_id, full_name, email, avatar_url, role, beta_features, account_id, account_role")
-      .eq("user_id", context.userId)
-      .single()
+    // PERF: profile + account fetched in parallel, and the previous
+    // `auth.getUser()` network call is gone — the user id comes from
+    // the (already locally verified) context, and `created_at` comes
+    // from the profile row, which the signup trigger creates at the
+    // same moment as the auth user.
+    const [profileResult, accountResult] = await Promise.all([
+      context.supabase
+        .from("profiles")
+        .select("user_id, full_name, email, avatar_url, role, beta_features, account_id, account_role, created_at")
+        .eq("user_id", context.userId)
+        .single(),
+      context.supabase
+        .from("accounts")
+        .select("id, name, default_currency")
+        .eq("id", context.accountId)
+        .single(),
+    ])
 
+    const { data: profile, error: profileError } = profileResult
     if (profileError) throw profileError
 
-    const { data: account, error: accountError } = await context.supabase
-      .from("accounts")
-      .select("id, name, default_currency")
-      .eq("id", context.accountId)
-      .single()
-
+    const { data: account, error: accountError } = accountResult
     if (accountError) throw accountError
-
-    const { data: authData, error: authError } = await context.supabase.auth.getUser()
-    if (authError || !authData.user) throw authError ?? new Error("Session user is unavailable")
 
     return NextResponse.json({
       data: {
         user: {
-          id: authData.user.id,
-          email: authData.user.email ?? profile.email,
-          created_at: authData.user.created_at,
+          id: context.userId,
+          email: profile.email,
+          created_at: profile.created_at,
         },
         profile: { ...profile, id: profile.user_id },
         account,

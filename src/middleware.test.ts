@@ -24,12 +24,16 @@ vi.mock("@supabase/ssr", () => ({
     },
   ) => ({
     auth: {
-      // Mirrors real auth-js: an expired access token is transparently
-      // refreshed inside getUser(), which rotates the refresh token and
-      // pushes the new cookies through setAll() before resolving.
-      getUser: async () => {
+      // Mirrors real auth-js: getClaims() verifies the JWT locally; when
+      // the access token is expired it is transparently refreshed, which
+      // rotates the refresh token and pushes the new cookies through
+      // setAll() before resolving.
+      getClaims: async () => {
         if (refreshedCookies.length) opts.cookies.setAll(refreshedCookies);
-        return { data: { user: mockUser } };
+        return {
+          data: mockUser ? { claims: { sub: mockUser.id } } : null,
+          error: null,
+        };
       },
     },
   }),
