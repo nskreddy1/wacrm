@@ -35,7 +35,8 @@ export function ContactsGrowth({ data }: ContactsGrowthProps) {
             tickLine={false}
             axisLine={false}
             width={44}
-            domain={["dataMin - 20", "dataMax + 20"]}
+            allowDecimals={false}
+            domain={[(dataMin: number) => Math.max(0, dataMin - 20), (dataMax: number) => Math.max(dataMax + 20, 10)]}
             tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
           />
           <Tooltip

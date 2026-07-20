@@ -54,7 +54,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
       { key: "inbox", href: "/inbox", label: "Inbox", icon: "inbox", counter: "inbox-unread" },
       { key: "sms-inbox", href: "/inbox/sms", label: "SMS Inbox", shortLabel: "SMS", icon: "message-square" },
       { key: "contacts", href: "/contacts", label: "Contacts", icon: "users" },
-      { key: "bookings", href: "/bookings", label: "Bookings", icon: "calendar-days" },
+      { key: "appointments", href: "/appointments", label: "Appointments", shortLabel: "Schedule", icon: "calendar-days" },
     ],
   },
   {
