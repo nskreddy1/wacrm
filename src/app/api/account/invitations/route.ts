@@ -136,6 +136,10 @@ function getBaseUrl(request: Request): string {
 
 const MAX_LABEL_LEN = 80;
 
+// Steady-state cap on live (un-redeemed, non-expired) invite links
+// per account. See the pending-count check in POST below.
+const MAX_PENDING_INVITES = 20;
+
 export async function GET() {
   try {
     const ctx = await requireRole("admin");
