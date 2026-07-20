@@ -21,6 +21,7 @@ import {
   isValidE164,
   sanitizePhoneForMeta,
 } from '@/lib/whatsapp/phone-utils';
+import { isDeliverableUrl } from '@/lib/webhooks/ssrf';
 
 import {
   EXTERNAL_FETCH_CAP,
@@ -171,7 +172,7 @@ async function fetchRestRows(
   maxRows: number
 ): Promise<{ rows: Record<string, unknown>[]; sawMore: boolean }> {
   if (!config.url) throw new ExternalSourceError('REST source has no URL');
-  assertHttpUrl(config.url);
+  await assertPublicHttpUrl(config.url);
 
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (secret && config.authStyle === 'bearer') {
@@ -224,7 +225,7 @@ async function fetchRestRows(
         typeof next === 'string' && next.trim()
           ? new URL(next, nextUrl).toString()
           : null;
-      if (nextUrl) assertHttpUrl(nextUrl);
+      if (nextUrl) await assertPublicHttpUrl(nextUrl);
     } else {
       nextUrl = null;
     }
@@ -234,7 +235,7 @@ async function fetchRestRows(
   return { rows: rows.slice(0, maxRows), sawMore };
 }
 
-function assertHttpUrl(raw: string): void {
+async function assertPublicHttpUrl(raw: string): Promise<void> {
   let url: URL;
   try {
     url = new URL(raw);
@@ -243,6 +244,11 @@ function assertHttpUrl(raw: string): void {
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new ExternalSourceError('Only http(s) URLs are supported');
+  }
+  if (!(await isDeliverableUrl(raw))) {
+    throw new ExternalSourceError(
+      'REST endpoint must be publicly reachable and cannot use a private or loopback address'
+    );
   }
 }
 
@@ -259,6 +265,8 @@ async function fetchJson(
       // Never forward cookies/credentials to external hosts.
       credentials: 'omit',
       cache: 'no-store',
+      // A public URL must not redirect the server into a private network.
+      redirect: 'manual',
     });
     if (!res.ok) {
       throw new ExternalSourceError(
