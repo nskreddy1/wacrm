@@ -23,7 +23,6 @@ import { ContactsGrowth } from "./contacts-growth"
 import { DEMO_OVERVIEW } from "./demo-data"
 import { KpiCard } from "./kpi-card"
 import { PipelineFunnel } from "./pipeline-funnel"
-import { QuickActions } from "./quick-actions"
 import { Section } from "./section"
 import { UpcomingBookings } from "./upcoming-bookings"
 import { TeamPerformance } from "./team-performance"
@@ -228,15 +227,15 @@ export function DashboardWorkspace() {
       </Section>
         </div>
 
-        {/* Right rail: sticky on xl, scrolls with the page below */}
-        <Section
-          index={3}
-          className="app-scrollbar flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-0 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:overscroll-contain xl:pb-1"
-        >
-          <QuickActions />
-          <UpcomingBookings bookings={bookings} />
-          <ActivityFeed items={activity} />
-        </Section>
+        {/* Separate right-side operational panels */}
+        <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-0" aria-label="Dashboard operations">
+          <Section index={3}>
+            <UpcomingBookings bookings={bookings} />
+          </Section>
+          <Section index={4}>
+            <ActivityFeed items={activity} />
+          </Section>
+        </aside>
       </div>
       </div>
     </div>
