@@ -134,9 +134,10 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
       .eq("account_id", ctx.accountId),
     ctx.supabase
       .from("contacts")
-      .select("created_at")
+      .select("id, values, created_at")
       .eq("account_id", ctx.accountId)
-      .gte("created_at", since60d),
+      .gte("created_at", since60d)
+      .order("created_at", { ascending: false }),
     ctx.supabase
       .from("deals")
       .select("id, title, value, currency, status, stage_id, updated_at, closed_at")
@@ -183,7 +184,12 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
   const messages = (messagesRes.data ?? []) as unknown as MessageRow[]
   const broadcasts = (broadcastsRes.data ?? []) as BroadcastRow[]
   const contactsTotal = contactsTotalRes.count ?? 0
-  const contactDates = (contactsRecentRes.data ?? []).map((row) => String(row.created_at))
+  const recentContacts = (contactsRecentRes.data ?? []) as Array<{
+    id: string
+    values: Record<string, unknown> | null
+    created_at: string
+  }>
+  const contactDates = recentContacts.map((row) => String(row.created_at))
 
   // ---- KPIs -------------------------------------------------
   const openConversations = conversations.filter((c) => c.status !== "closed")
@@ -346,11 +352,18 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
   })
 
   // ---- Activity feed ---------------------------------------
-  const activity: ActivityEntry[] = [
+  // Merge the latest events across surfaces, then sort by recency.
+  const contactDisplayName = (values: Record<string, unknown> | null) => {
+    const name = values?.name ?? values?.full_name
+    return typeof name === "string" && name.trim() ? name.trim() : "New contact"
+  }
+
+  const activityCandidates: Array<ActivityEntry & { at: number }> = [
     ...messages.slice(0, 4).map((message) => ({
       id: `msg-${message.id}`,
       title: message.content_text?.slice(0, 90) || "New conversation activity",
       time: relativeTime(message.created_at),
+      at: new Date(message.created_at).getTime(),
       type: "message" as const,
       href: "/inbox",
     })),
@@ -367,6 +380,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
               ? `Deal "${deal.title}" was lost`
               : `Deal "${deal.title}" was updated`,
         time: relativeTime(deal.updated_at),
+        at: new Date(deal.updated_at).getTime(),
         type: "deal" as const,
         href: "/pipeline",
       })),
@@ -374,10 +388,40 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
       id: `bc-${row.id}`,
       title: `Broadcast "${row.name}" ${row.status === "sending" ? "is sending" : `is ${row.status}`}`,
       time: relativeTime(row.created_at),
+      at: new Date(row.created_at).getTime(),
       type: "broadcast" as const,
       href: "/broadcasts",
     })),
-  ].slice(0, 9)
+    ...recentContacts.slice(0, 3).map((row) => ({
+      id: `contact-${row.id}`,
+      title: `Contact "${contactDisplayName(row.values)}" was added`,
+      time: relativeTime(row.created_at),
+      at: new Date(row.created_at).getTime(),
+      type: "contact" as const,
+      href: "/contacts",
+    })),
+    ...appointments.slice(0, 3).map((appointment) => ({
+      id: `apt-${appointment.id}`,
+      title: `Appointment "${appointment.title}" scheduled with ${appointment.contactName ?? "a contact"}`,
+      time: relativeTime(appointment.createdAt),
+      at: new Date(appointment.createdAt).getTime(),
+      type: "appointment" as const,
+      href: "/appointments",
+    })),
+    ...tasks.slice(0, 2).map((task) => ({
+      id: `task-${task.id}`,
+      title: `Task "${task.title}" is open`,
+      time: relativeTime(task.createdAt),
+      at: new Date(task.createdAt).getTime(),
+      type: "task" as const,
+      href: "/dashboard",
+    })),
+  ]
+
+  const activity: ActivityEntry[] = activityCandidates
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 9)
+    .map(({ at: _at, ...entry }) => entry)
 
   // ---- Needs attention -------------------------------------
   const overdueTasks = tasks.filter(

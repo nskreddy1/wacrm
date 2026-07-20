@@ -18,6 +18,7 @@ export type NavIconName =
   | "message-square"
   | "users"
   | "calendar-days"
+  | "package"
   | "megaphone"
   | "workflow"
   | "git-fork"
@@ -55,6 +56,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
       { key: "sms-inbox", href: "/inbox/sms", label: "SMS Inbox", shortLabel: "SMS", icon: "message-square" },
       { key: "contacts", href: "/contacts", label: "Contacts", icon: "users" },
       { key: "appointments", href: "/appointments", label: "Appointments", shortLabel: "Schedule", icon: "calendar-days" },
+      { key: "catalog", href: "/catalog", label: "Catalog", shortLabel: "Catalog", icon: "package" },
     ],
   },
   {
