@@ -108,10 +108,12 @@ function AppointmentCreateDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-medium text-primary hover:text-primary">
-          <Plus className="size-3.5" aria-hidden="true" /> New
-        </Button>
+      <DialogTrigger
+        render={
+          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-medium text-primary hover:text-primary" />
+        }
+      >
+        <Plus className="size-3.5" aria-hidden="true" /> New
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

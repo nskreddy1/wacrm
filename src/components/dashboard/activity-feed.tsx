@@ -5,34 +5,35 @@ import type { ComponentType } from "react"
 import {
   Briefcase,
   CalendarCheck,
+  ListTodo,
   MessageSquare,
   Radio,
   UserPlus,
 } from "lucide-react"
 
-import type { DashboardOverview } from "./demo-data"
+import type { ActivityEntry } from "@/lib/data/dashboard/types"
 import { ChartCard } from "./chart-card"
 import { cn } from "@/lib/utils"
 
-type ActivityItem = DashboardOverview["activity"][number]
-
-const KIND_ICON: Record<ActivityItem["type"], ComponentType<{ className?: string }>> = {
+const KIND_ICON: Record<ActivityEntry["type"], ComponentType<{ className?: string }>> = {
   message: MessageSquare,
   broadcast: Radio,
   deal: Briefcase,
   contact: UserPlus,
-  booking: CalendarCheck,
+  appointment: CalendarCheck,
+  task: ListTodo,
 }
 
-const KIND_BADGE: Record<ActivityItem["type"], string> = {
+const KIND_BADGE: Record<ActivityEntry["type"], string> = {
   message: "bg-[var(--channel-whatsapp)]/10 text-[var(--channel-whatsapp)]",
   broadcast: "bg-[var(--chart-4)]/10 text-[var(--chart-4)]",
   deal: "bg-primary/10 text-primary",
   contact: "bg-[var(--channel-sms)]/10 text-[var(--channel-sms)]",
-  booking: "bg-[var(--chart-5)]/10 text-[var(--chart-5)]",
+  appointment: "bg-[var(--chart-5)]/10 text-[var(--chart-5)]",
+  task: "bg-muted text-muted-foreground",
 }
 
-export function ActivityFeed({ items, className }: { items: ActivityItem[]; className?: string }) {
+export function ActivityFeed({ items, className }: { items: ActivityEntry[]; className?: string }) {
   return (
     <ChartCard
       title="Recent activity"
@@ -42,6 +43,9 @@ export function ActivityFeed({ items, className }: { items: ActivityItem[]; clas
       className={className}
       contentClassName="scrollbar-invisible max-h-80 overflow-y-auto overscroll-contain p-0"
     >
+      {items.length === 0 && (
+        <p className="px-4 py-6 text-center text-xs text-muted-foreground">No recent activity yet.</p>
+      )}
       <ul className="divide-y divide-border">
         {items.map((item) => {
           const Icon = KIND_ICON[item.type]

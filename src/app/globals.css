@@ -63,6 +63,7 @@
    * channels stay recognizable across every accent + mode. */
   --color-channel-whatsapp: var(--channel-whatsapp);
   --color-channel-sms: var(--channel-sms);
+  --color-channel-email: var(--channel-email);
   --color-positive: var(--positive);
 }
 
@@ -130,6 +131,7 @@ html[data-mode="dark"] {
   --sidebar-border: oklch(0.28 0.01 260);
   --channel-whatsapp: oklch(0.72 0.17 160);
   --channel-sms: oklch(0.7 0.14 235);
+  --channel-email: oklch(0.78 0.13 75);
   --positive: oklch(0.72 0.17 160);
 }
 
@@ -163,6 +165,7 @@ html[data-mode="light"] {
   --sidebar-border: oklch(0.922 0.004 260);
   --channel-whatsapp: oklch(0.58 0.15 160);
   --channel-sms: oklch(0.55 0.14 245);
+  --channel-email: oklch(0.62 0.13 70);
   --positive: oklch(0.58 0.15 160);
 }
 
