@@ -133,7 +133,7 @@ function AppointmentCreateDialog({ onCreated }: { onCreated: () => void }) {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="appointment-contact">Contact</Label>
-            <Select value={contactId} onValueChange={setContactId}>
+            <Select value={contactId} onValueChange={(value) => setContactId(value ?? "")}>
               <SelectTrigger id="appointment-contact">
                 <SelectValue placeholder="Select a contact" />
               </SelectTrigger>
@@ -148,7 +148,7 @@ function AppointmentCreateDialog({ onCreated }: { onCreated: () => void }) {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="appointment-service">Service (optional)</Label>
-            <Select value={catalogItemId} onValueChange={setCatalogItemId}>
+            <Select value={catalogItemId} onValueChange={(value) => setCatalogItemId(value ?? "")}>
               <SelectTrigger id="appointment-service">
                 <SelectValue placeholder="Link a catalog item" />
               </SelectTrigger>
