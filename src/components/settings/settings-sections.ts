@@ -1,5 +1,6 @@
 import {
   Coins,
+  Database,
   KeyRound,
   LayoutGrid,
   LifeBuoy,
@@ -32,6 +33,7 @@ export const SETTINGS_SECTIONS = [
   'deals',
   'members',
   'api',
+  'external-sources',
   'support',
 ] as const;
 
@@ -58,6 +60,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
   members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
+  'external-sources': { id: 'external-sources', label: 'External sources', icon: Database, group: 'workspace' },
   support: { id: 'support', label: 'Support', icon: LifeBuoy, group: 'workspace' },
 };
 
