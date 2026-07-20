@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   Pencil,
   Settings,
+  ShieldCheck,
   Users,
   Workflow,
 } from "lucide-react"
@@ -214,6 +215,52 @@ function NavGroups({ initialRole }: { initialRole: AccountRole | null }) {
   )
 }
 
+/**
+ * Platform-operator entry, rendered ONLY for super admins
+ * (profiles.is_super_admin). Kept out of the role-scoped nav config
+ * on purpose: super admin is a platform-level flag orthogonal to
+ * workspace roles, and the UI here is layer 3 only — the /admin
+ * layout's requireSuperAdmin() gate and RLS remain the real checks.
+ */
+function PlatformGroup() {
+  const pathname = usePathname()
+  const router = useRouter()
+  const { isSuperAdmin } = useAuth()
+  const { isMobile, setOpenMobile } = useSidebar()
+
+  if (!isSuperAdmin) return null
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Go to Admin console"
+              isActive={isActive(pathname, "/admin")}
+              render={
+                <Link
+                  href="/admin/workspaces"
+                  prefetch
+                  onMouseEnter={() => router.prefetch("/admin/workspaces")}
+                  onFocus={() => router.prefetch("/admin/workspaces")}
+                  onClick={() => {
+                    if (isMobile) setOpenMobile(false)
+                  }}
+                />
+              }
+            >
+              <ShieldCheck aria-hidden="true" />
+              <span>Admin console</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  )
+}
+
 function FooterMenu() {
   const router = useRouter()
   const { mode, setMode } = useTheme()
@@ -342,6 +389,7 @@ export function AppSidebar({ initialRole = null }: { initialRole?: AccountRole |
       </SidebarHeader>
       <SidebarContent>
         <NavGroups initialRole={initialRole} />
+        <PlatformGroup />
       </SidebarContent>
       <SidebarFooter>
         <FooterMenu />
