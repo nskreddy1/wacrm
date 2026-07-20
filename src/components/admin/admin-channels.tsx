@@ -126,6 +126,7 @@ export function AdminChannels() {
       <div className="flex flex-col gap-2 sm:max-w-sm">
         <Label htmlFor="channel-workspace">Workspace</Label>
         <Select
+          items={Object.fromEntries(workspaces.map((w) => [w.id, w.name]))}
           value={accountId}
           onValueChange={(v) => {
             if (v !== null) setAccountId(v);
