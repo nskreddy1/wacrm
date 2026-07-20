@@ -54,7 +54,10 @@ export function DashboardWorkspace() {
   const money: Intl.NumberFormatOptions = { style: "currency", currency: kpis.pipelineCurrency, maximumFractionDigits: 0 }
 
   return (
-    <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+    // The dashboard shell's <main> is overflow-hidden, so this page owns
+    // its own scroll region — with the themed .app-scrollbar UI.
+    <div className="app-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <Section index={0} className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
@@ -208,12 +211,13 @@ export function DashboardWorkspace() {
         {/* Right rail: sticky on xl, scrolls with the page below */}
         <Section
           index={3}
-          className="flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-2 xl:max-h-[calc(100vh-9rem)] xl:overflow-y-auto xl:overscroll-contain xl:pb-1"
+          className="app-scrollbar flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-0 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:overscroll-contain xl:pb-1"
         >
           <QuickActions />
           <UpcomingBookings bookings={bookings} />
           <ActivityFeed items={activity} />
         </Section>
+      </div>
       </div>
     </div>
   )

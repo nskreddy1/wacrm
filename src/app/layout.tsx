@@ -34,7 +34,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#073b4c",
-  colorScheme: "dark light",
+  // "light dark" (light first) — the app defaults to light mode; the
+  // real scheme is bound to `html[data-mode]` in globals.css, which
+  // overrides this meta so embedded previews can't flip form controls
+  // to the wrong scheme.
+  colorScheme: "light dark",
 };
 
 export default async function RootLayout({
