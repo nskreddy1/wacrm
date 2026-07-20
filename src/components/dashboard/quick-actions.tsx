@@ -1,50 +1,36 @@
 "use client"
 
-import Link from 'next/link'
-import { UserPlus, Briefcase, Radio, Zap } from 'lucide-react'
-import type { ComponentType } from 'react'
+import Link from "next/link"
+import type { ComponentType } from "react"
+import { CalendarPlus, MessageSquarePlus, Send, UserPlus } from "lucide-react"
 
-import { useTranslations } from 'next-intl'
-import { routes } from '@/lib/routing/routes'
-
-// Quick-action shortcuts. Each navigates to the page that owns the
-// relevant "create" flow. We deliberately don't try to auto-open any
-// modal on the target page — that'd require touching those pages,
-// which is out of scope here.
-interface Action {
-  labelKey: string
+const ACTIONS: Array<{
+  label: string
   href: string
   icon: ComponentType<{ className?: string }>
-  tint: string
-}
-
-const ACTIONS: Action[] = [
-  { labelKey: 'newContact', href: routes.app.contacts, icon: UserPlus, tint: 'text-primary' },
-  { labelKey: 'newDeal', href: routes.app.pipelines, icon: Briefcase, tint: 'text-blue-400' },
-  { labelKey: 'newBroadcast', href: routes.app.newBroadcast, icon: Radio, tint: 'text-amber-400' },
-  { labelKey: 'newAutomation', href: routes.app.newAutomation, icon: Zap, tint: 'text-primary' },
+}> = [
+  { label: "New broadcast", href: "/broadcasts/new", icon: Send },
+  { label: "Add contact", href: "/contacts", icon: UserPlus },
+  { label: "Start chat", href: "/inbox", icon: MessageSquarePlus },
+  { label: "New booking", href: "/bookings", icon: CalendarPlus },
 ]
 
+/** Compact 2x2 quick-action launcher for the dashboard right rail. */
 export function QuickActions() {
-  const t = useTranslations('Dashboard.quickActions')
-  
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {ACTIONS.map((a) => {
-        const Icon = a.icon
-        return (
-          <Link
-            key={a.href}
-            href={a.href}
-            className="group flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:border-border hover:bg-muted/60"
-          >
-            <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-muted ${a.tint}`}>
-              <Icon className="h-4 w-4" />
-            </div>
-            <span className="text-sm font-medium text-foreground">{t(a.labelKey as string)}</span>
-          </Link>
-        )
-      })}
-    </div>
+    <nav aria-label="Quick actions" className="grid grid-cols-2 gap-2">
+      {ACTIONS.map(({ label, href, icon: Icon }) => (
+        <Link
+          key={label}
+          href={href}
+          className="group flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-3 shadow-(--shadow-pipeline-card) transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 motion-reduce:hover:translate-y-0"
+        >
+          <span className="flex size-7 items-center justify-center rounded-lg bg-primary-soft text-primary transition-transform duration-200 group-hover:scale-110 motion-reduce:group-hover:scale-100">
+            <Icon className="size-3.5" aria-hidden="true" />
+          </span>
+          <span className="text-xs font-semibold">{label}</span>
+        </Link>
+      ))}
+    </nav>
   )
 }
