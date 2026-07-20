@@ -9,17 +9,6 @@
 -- Additive only — existing rows are untouched.
 -- ============================================================
 
+-- Keep the enum addition in its own migration. PostgreSQL requires this
+-- transaction to commit before the new value can be referenced by a constraint.
 ALTER TYPE channel_kind ADD VALUE IF NOT EXISTS 'sms';
-
--- Note: the constraint swap runs in a separate transaction from the
--- enum change (Postgres requires enum values to be committed before
--- use in constraints). Supabase runs each migration atomically, so
--- this file is safe as-is when applied after the enum commit above.
-ALTER TABLE channel_connections
-  DROP CONSTRAINT IF EXISTS channel_provider_compatible;
-ALTER TABLE channel_connections
-  ADD CONSTRAINT channel_provider_compatible CHECK (
-    (channel = 'whatsapp' AND provider IN ('meta', 'twilio')) OR
-    (channel = 'email' AND provider IN ('google', 'resend')) OR
-    (channel = 'sms' AND provider = 'twilio')
-  );
