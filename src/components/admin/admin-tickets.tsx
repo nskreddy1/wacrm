@@ -286,7 +286,12 @@ function FilterSelect({
   options: readonly string[];
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        if (v !== null) onChange(v);
+      }}
+    >
       <SelectTrigger className="w-40" aria-label={`Filter by ${name}`}>
         <SelectValue />
       </SelectTrigger>
@@ -402,7 +407,9 @@ function TicketThread({
             </Button>
             <Select
               value={ticket.status}
-              onValueChange={(v) => void patchTicket({ status: v })}
+              onValueChange={(v) => {
+                if (v !== null) void patchTicket({ status: v });
+              }}
               disabled={updating}
             >
               <SelectTrigger className="w-44" aria-label="Ticket status">
