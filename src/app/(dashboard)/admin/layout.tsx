@@ -32,7 +32,7 @@ export default async function AdminLayout({
   if (!authorized) redirect(routes.app.dashboard);
 
   return (
-    <div className="flex min-h-svh flex-col gap-6 p-4 md:p-6">
+    <div className="flex h-0 min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 md:p-6">
       <header className="flex flex-col gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-balance">

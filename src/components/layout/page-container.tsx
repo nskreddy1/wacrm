@@ -30,7 +30,7 @@ const widthClass: Record<PageWidth, string> = {
  * — keep both in sync with PageContainer's "default" width.
  */
 export const pageContainerClassName =
-  "mx-auto flex w-full max-w-[1500px] flex-col gap-6 p-4 sm:p-6 lg:p-8"
+  "app-scrollbar mx-auto h-0 min-h-0 w-full max-w-[1500px] flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8"
 
 export function PageContainer({
   children,
@@ -44,7 +44,7 @@ export function PageContainer({
   return (
     <div
       className={cn(
-        "mx-auto flex w-full flex-col gap-6 p-4 sm:p-6 lg:p-8",
+        "app-scrollbar mx-auto flex h-0 min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8",
         widthClass[width],
         className,
       )}
