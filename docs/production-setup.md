@@ -161,3 +161,47 @@ Do these in order:
 - **Key rotation**: if you rotate `ENCRYPTION_KEY`/`CHANNEL_CREDENTIALS_KEY`, re-enter all channel credentials afterwards.
 - **Meta limits**: monitor WhatsApp quality rating and messaging tier; template pacing applies to new templates.
 - **Scaling invites**: invite creation is rate-limited (30/hour/account, max 20 pending) — adjust in `api/account/invitations` if needed.
+
+---
+
+## 10. External Recipient Sources (Broadcast Audiences)
+
+Workspaces can connect an external backend (e.g. a school's student/parent database) under **Settings → External sources** and use it as a live audience when sending broadcasts. Recipients are pulled at send time; credentials are AES-256-GCM encrypted with `ENCRYPTION_KEY` and never returned to the client.
+
+### Scale limits (important)
+
+- Fetches are hard-capped at **10,000 recipients per broadcast**. Sources above the cap are rejected with guidance to filter at the source (query params / SQL `WHERE` / a smaller sheet tab) or split into segments.
+- Recipients under the cap are imported as contacts (find-or-create by phone, tagged `src:<source-name>`), so replies land in the inbox and the audience can be re-targeted by tag later.
+- Server-side queued delivery for 100k+ audiences is a documented phase-2 roadmap item, not built yet.
+
+### REST endpoint (recommended)
+
+Expose a JSON endpoint returning an array of records (directly or under a key set via "items path", e.g. `data`). Optional pagination via a next-page URL field ("next page path"). Auth: none, `Authorization: Bearer <token>`, or a custom header — the token is the stored secret.
+
+```json
+{
+  "data": [
+    { "parent_phone": "+15551234567", "parent_name": "Jane Doe", "student_name": "Sam", "class_room": "4B" }
+  ],
+  "next": "https://school.example.com/api/parents?page=2"
+}
+```
+
+Field mapping binds `phone` (required), `name` (optional), and template variables (`{{1}}` → `student_name`, etc.) to record fields; dot-paths like `parent.phone` are supported. Requests time out after 15s per page.
+
+### Postgres
+
+- Create a **read-only** database user scoped to the tables needed; use its connection string (SSL required) as the secret.
+- Configure a `SELECT` statement (must start with `SELECT`/`WITH`); the server appends a `LIMIT` guard and sets a statement timeout. Column names become field-map keys.
+
+### Google Sheet
+
+- The sheet must be shared as "anyone with the link can view" (the server fetches the CSV export URL). Header row values become field-map keys; an optional `gid` selects a tab.
+
+### Testing
+
+Use the **Test connection** button in Settings → External sources: it runs a live fetch, shows the first 5 normalized rows plus totals, and stamps `last_tested_at`/`last_row_count`. Rows with a missing or invalid phone are dropped and reported as invalid.
+
+### Alternative: push model
+
+If the external system can call out instead of being polled, it can push contacts into the workspace via the public API (`POST /api/v1/contacts` with an API key — see `docs/public-api.md`) and broadcasts can then target them by tag. No external source configuration is needed in that case.
