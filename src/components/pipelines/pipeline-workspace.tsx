@@ -75,7 +75,6 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
   const [defaultStageId, setDefaultStageId] = useState(snapshot.stages[0]?.id ?? "")
   const [pending, startTransition] = useTransition()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor))
-  console.log("[v0] render: snapshot deals =", snapshot.deals.length)
   const activeSubPipeline = snapshot.subPipelines.find((item) => item.id === activeSubPipelineId)
   const activeFilterCount = Number(owner !== "all") + Number(stage !== "all")
   // Workspace currency (Settings → Deals) — the single source of truth
@@ -145,9 +144,8 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
     const realSubPipelineId = isNew && activeSubPipelineId !== snapshot.pipeline.id ? activeSubPipelineId : undefined
     const result = await saveDealAction(input, realSubPipelineId)
     if (!result.ok) return result
-    const updated = await mutate((current) => {
+    await mutate((current) => {
       const source = current ?? snapshot
-      console.log("[v0] saveDeal mutate: current defined =", Boolean(current), "source deals =", source.deals.length)
       const exists = source.deals.some((deal) => deal.id === result.data.id)
       return {
         ...source,
@@ -157,7 +155,6 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
           : source.subPipelines,
       }
     }, { revalidate: false })
-    console.log("[v0] saveDeal mutate resolved: deals =", updated?.deals.length, "realSubPipelineId =", realSubPipelineId)
     setEditing(null); toast.success(isNew ? "Deal created" : "Deal saved"); return result
   }
   async function createSubPipeline(name: string) {
