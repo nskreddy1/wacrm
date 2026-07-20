@@ -21,6 +21,8 @@ import { PipelineSheet } from "./pipeline-data-sheet"
 import { cacheKeys } from "@/lib/cache/keys"
 import { createSubPipelineAction, deleteDealsAction, moveDealAction, reorderSubPipelinesAction, saveDealAction } from "@/lib/pipelines/actions"
 import type { PipelineDeal, PipelineMode, PipelineSnapshot, PipelineStage } from "@/lib/pipelines/domain"
+import { formatCurrency } from "@/lib/currency"
+import { useAuth } from "@/hooks/use-auth"
 import { downloadCsv } from "@/lib/download-csv"
 import { pipelinePath } from "@/lib/routes/dashboard-routes"
 import { cn } from "@/lib/utils"
@@ -28,9 +30,7 @@ import { cn } from "@/lib/utils"
 type SortKey = "createdAt" | "value" | "due"
 type FilterPreset = { name: string; owner: string; stage: string }
 
-function money(value: number, currency: string) {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(value)
-}
+const money = formatCurrency
 
 function dueState(due: string | null) {
   if (!due) return null
@@ -63,7 +63,9 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor))
   const activeSubPipeline = snapshot.subPipelines.find((item) => item.id === activeSubPipelineId)
   const activeFilterCount = Number(owner !== "all") + Number(stage !== "all")
-  const currency = snapshot.deals[0]?.currency ?? "USD"
+  // Workspace currency (Settings → Deals) — the single source of truth
+  // for every money figure across the pipeline surfaces.
+  const { defaultCurrency: currency } = useAuth()
 
   useEffect(() => {
     function shortcuts(event: KeyboardEvent) {
@@ -199,8 +201,9 @@ function StageColumn({ stage, deals, onOpen, onCreate, currency }: { stage: Pipe
 
 function DealCard({ deal, onOpen }: { deal: PipelineDeal; onOpen: (deal: PipelineDeal) => void }) {
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id: deal.id })
+  const { defaultCurrency: workspaceCurrency } = useAuth()
   const timing = dueState(deal.due)
-  return <article ref={setNodeRef} onDoubleClick={() => onOpen(deal)} className={cn("pipeline-deal-card group rounded-lg border bg-background p-3 shadow-xs", isDragging && "opacity-40")} aria-label={`Deal ${deal.title}. Double-click to edit.`}><div className="flex items-start gap-2"><button {...attributes} {...listeners} aria-label={`Drag ${deal.title}`} className="mt-0.5 cursor-grab text-muted-foreground opacity-60 transition-opacity hover:opacity-100 active:cursor-grabbing"><GripVertical className="size-4" /></button><button className="min-w-0 flex-1 text-left text-sm font-semibold leading-5 hover:text-primary" onClick={() => onOpen(deal)}>{deal.title}</button>{deal.priority !== "normal" && <span className={cn("rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground", deal.priority === "hot" && "bg-destructive/10 text-destructive")}>{deal.priority}</span>}</div><p className="mt-3 text-base font-semibold tabular-nums">{money(deal.value, deal.currency)}</p>{(deal.contact?.name || deal.company) && <p className="mt-1 truncate text-xs text-muted-foreground">{deal.contact?.name ?? deal.company}{deal.contact?.name && deal.company ? ` · ${deal.company}` : ""}</p>}<div className="mt-3 flex items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><Avatar className="size-6"><AvatarFallback>{deal.owner?.name.slice(0, 2).toUpperCase() ?? "--"}</AvatarFallback></Avatar><span className="truncate text-xs text-muted-foreground">{deal.owner?.name ?? "Unassigned"}</span></div>{timing && <span className={cn("flex shrink-0 items-center gap-1 text-xs text-muted-foreground", timing.urgent && "font-medium text-destructive")}><CalendarClock className="size-3.5" />{timing.label}</span>}</div></article>
+  return <article ref={setNodeRef} onDoubleClick={() => onOpen(deal)} className={cn("pipeline-deal-card group rounded-lg border bg-background p-3 shadow-xs", isDragging && "opacity-40")} aria-label={`Deal ${deal.title}. Double-click to edit.`}><div className="flex items-start gap-2"><button {...attributes} {...listeners} aria-label={`Drag ${deal.title}`} className="mt-0.5 cursor-grab text-muted-foreground opacity-60 transition-opacity hover:opacity-100 active:cursor-grabbing"><GripVertical className="size-4" /></button><button className="min-w-0 flex-1 text-left text-sm font-semibold leading-5 hover:text-primary" onClick={() => onOpen(deal)}>{deal.title}</button>{deal.priority !== "normal" && <span className={cn("rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground", deal.priority === "hot" && "bg-destructive/10 text-destructive")}>{deal.priority}</span>}</div><p className="mt-3 text-base font-semibold tabular-nums">{money(deal.value, workspaceCurrency)}</p>{(deal.contact?.name || deal.company) && <p className="mt-1 truncate text-xs text-muted-foreground">{deal.contact?.name ?? deal.company}{deal.contact?.name && deal.company ? ` · ${deal.company}` : ""}</p>}<div className="mt-3 flex items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><Avatar className="size-6"><AvatarFallback>{deal.owner?.name.slice(0, 2).toUpperCase() ?? "--"}</AvatarFallback></Avatar><span className="truncate text-xs text-muted-foreground">{deal.owner?.name ?? "Unassigned"}</span></div>{timing && <span className={cn("flex shrink-0 items-center gap-1 text-xs text-muted-foreground", timing.urgent && "font-medium text-destructive")}><CalendarClock className="size-3.5" />{timing.label}</span>}</div></article>
 }
 
 function EmptyResults({ onReset }: { onReset: () => void }) {
@@ -208,5 +211,6 @@ function EmptyResults({ onReset }: { onReset: () => void }) {
 }
 
 function DealTable({ deals, selected, onSelected, onOpen, stages }: { deals: PipelineDeal[]; selected: Set<string>; onSelected: (value: Set<string>) => void; onOpen: (deal: PipelineDeal) => void; stages: PipelineSnapshot["stages"] }) {
-  return <div className="min-h-0 flex-1 overflow-auto"><table className="min-w-full text-sm"><thead className="sticky top-0 bg-card shadow-[0_1px_0_var(--border)]"><tr><th className="w-12 p-3"><Checkbox checked={deals.length > 0 && deals.every((deal) => selected.has(deal.id))} onCheckedChange={() => onSelected(deals.every((deal) => selected.has(deal.id)) ? new Set() : new Set(deals.map((deal) => deal.id)))} aria-label="Select all deals" /></th>{["Deal", "Contact", "Company", "Stage", "Amount", "Owner", "Closing date"].map((label) => <th key={label} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">{label}</th>)}</tr></thead><tbody>{deals.map((deal) => <tr key={deal.id} className="border-b transition-colors hover:bg-muted/40 focus-within:bg-muted/40"><td className="p-3"><Checkbox checked={selected.has(deal.id)} onCheckedChange={() => { const next = new Set(selected); if (next.has(deal.id)) next.delete(deal.id); else next.add(deal.id); onSelected(next) }} aria-label={`Select ${deal.title}`} /></td><td className="px-3 py-3"><button className="font-semibold hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onOpen(deal)}>{deal.title}</button></td><td className="px-3 py-3 text-muted-foreground">{deal.contact?.name ?? "—"}</td><td className="px-3 py-3 text-muted-foreground">{deal.company ?? "—"}</td><td className="px-3 py-3">{stages.find((item) => item.id === deal.stageId)?.name ?? "—"}</td><td className="px-3 py-3 font-medium tabular-nums">{money(deal.value, deal.currency)}</td><td className="px-3 py-3 text-muted-foreground">{deal.owner?.name ?? "Unassigned"}</td><td className="px-3 py-3 text-muted-foreground">{deal.due ?? "—"}</td></tr>)}</tbody></table></div>
+  const { defaultCurrency: workspaceCurrency } = useAuth()
+  return <div className="min-h-0 flex-1 overflow-auto"><table className="min-w-full text-sm"><thead className="sticky top-0 bg-card shadow-[0_1px_0_var(--border)]"><tr><th className="w-12 p-3"><Checkbox checked={deals.length > 0 && deals.every((deal) => selected.has(deal.id))} onCheckedChange={() => onSelected(deals.every((deal) => selected.has(deal.id)) ? new Set() : new Set(deals.map((deal) => deal.id)))} aria-label="Select all deals" /></th>{["Deal", "Contact", "Company", "Stage", "Amount", "Owner", "Closing date"].map((label) => <th key={label} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">{label}</th>)}</tr></thead><tbody>{deals.map((deal) => <tr key={deal.id} className="border-b transition-colors hover:bg-muted/40 focus-within:bg-muted/40"><td className="p-3"><Checkbox checked={selected.has(deal.id)} onCheckedChange={() => { const next = new Set(selected); if (next.has(deal.id)) next.delete(deal.id); else next.add(deal.id); onSelected(next) }} aria-label={`Select ${deal.title}`} /></td><td className="px-3 py-3"><button className="font-semibold hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onOpen(deal)}>{deal.title}</button></td><td className="px-3 py-3 text-muted-foreground">{deal.contact?.name ?? "—"}</td><td className="px-3 py-3 text-muted-foreground">{deal.company ?? "—"}</td><td className="px-3 py-3">{stages.find((item) => item.id === deal.stageId)?.name ?? "—"}</td><td className="px-3 py-3 font-medium tabular-nums">{money(deal.value, workspaceCurrency)}</td><td className="px-3 py-3 text-muted-foreground">{deal.owner?.name ?? "Unassigned"}</td><td className="px-3 py-3 text-muted-foreground">{deal.due ?? "—"}</td></tr>)}</tbody></table></div>
 }
