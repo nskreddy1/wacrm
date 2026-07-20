@@ -28,6 +28,8 @@ interface AuthContextValue {
   defaultCurrency: string
   isOwner: boolean
   isAdmin: boolean
+  /** Platform-level operator (profiles.is_super_admin). Orthogonal to workspace roles. */
+  isSuperAdmin: boolean
   isAgent: boolean
   isViewer: boolean
   canManageMembers: boolean
@@ -73,6 +75,7 @@ export function AuthProvider({
     defaultCurrency: session?.account.default_currency ?? DEFAULT_CURRENCY,
     isOwner: role === "owner",
     isAdmin: role === "admin",
+    isSuperAdmin: session?.profile.is_super_admin === true,
     isAgent: role === "agent",
     isViewer: role === "viewer",
     canManageMembers: role === "owner" || role === "admin",
