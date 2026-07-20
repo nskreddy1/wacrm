@@ -40,7 +40,7 @@ export function ActivityFeed({ items, className }: { items: ActivityItem[]; clas
       href="/inbox"
       hrefLabel="View inbox"
       className={className}
-      contentClassName="app-scrollbar max-h-80 overflow-y-auto overscroll-contain p-0"
+      contentClassName="scrollbar-invisible max-h-80 overflow-y-auto overscroll-contain p-0"
     >
       <ul className="divide-y divide-border">
         {items.map((item) => {
