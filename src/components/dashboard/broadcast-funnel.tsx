@@ -1,27 +1,18 @@
 "use client"
 
 import Link from "next/link"
-import { AlertTriangle, Clock3, Loader2 } from "lucide-react"
+import { AlertTriangle, Loader2 } from "lucide-react"
+
+
+import type { BroadcastSummary } from "@/lib/data/dashboard/types"
 import { AnimatedBar } from "@/components/ui/animated-bar"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { ChannelBadge } from "@/components/ui/channel-badge"
 import { cn } from "@/lib/utils"
 
 type BroadcastFunnelProps = {
-  totals: { sent: number; delivered: number; read: number; replied: number; failed: number }
-  whatsappEnabled: boolean
-  recent: Array<{
-    id: string
-    name: string
-    channel: "whatsapp" | "sms"
-    status: "sent" | "sending" | "scheduled" | "failed"
-    totalRecipients: number
-    sent: number
-    delivered: number
-    read: number
-    failed: number
-    createdAt: string
-  }>
+  totals: BroadcastSummary["totals"]
+  recent: BroadcastSummary["recent"]
 }
 
 const FUNNEL_STEPS = [
@@ -35,11 +26,12 @@ const STATUS_META: Record<BroadcastFunnelProps["recent"][number]["status"], { la
   sent: { label: "Sent", className: "bg-positive/10 text-positive" },
   sending: { label: "Sending", className: "bg-primary-soft text-primary" },
   scheduled: { label: "Scheduled", className: "bg-muted text-muted-foreground" },
+  draft: { label: "Draft", className: "bg-muted text-muted-foreground" },
   failed: { label: "Failed", className: "bg-destructive/10 text-destructive" },
 }
 
 /** Broadcast performance: sent→delivered→read→replied funnel + recent broadcasts list. */
-export function BroadcastFunnel({ totals, whatsappEnabled, recent }: BroadcastFunnelProps) {
+export function BroadcastFunnel({ totals, recent }: BroadcastFunnelProps) {
   const max = Math.max(totals.sent, 1)
 
   return (
@@ -71,21 +63,11 @@ export function BroadcastFunnel({ totals, whatsappEnabled, recent }: BroadcastFu
         <span style={{ fontVariantNumeric: "tabular-nums" }}>{totals.failed.toLocaleString("en")} failed deliveries</span>
       </div>
 
-      {/* WhatsApp pending approval notice */}
-      {!whatsappEnabled && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-border bg-card-2 p-3">
-          <Clock3 className="mt-0.5 size-4 shrink-0 text-channel-whatsapp" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold">WhatsApp broadcasts pending template approval</p>
-            <p className="mt-0.5 text-xs text-muted-foreground text-pretty">
-              SMS broadcasts are live. WhatsApp campaigns unlock once your message templates are approved by Meta.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Recent broadcasts */}
       <div className="flex flex-col divide-y divide-border border-t border-border">
+        {recent.length === 0 && (
+          <p className="py-4 text-center text-xs text-muted-foreground">No broadcasts yet. Send your first campaign to see delivery analytics.</p>
+        )}
         {recent.map((b) => {
           const status = STATUS_META[b.status]
           const deliveredPct = b.sent > 0 ? Math.round((b.delivered / b.sent) * 100) : 0
