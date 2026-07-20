@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { isSuperAdmin } from '@/lib/auth/super-admin'
+import { requireSuperAdmin } from '@/lib/auth/super-admin'
+import { toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/ai/admin-client'
 import {
   getAiEngine,
@@ -11,34 +11,14 @@ import {
 // ============================================================
 // Platform settings — super-admin control surface.
 //
-// The interim API for flipping the platform-wide `ai_engine` flag
-// (a full super-admin UI is a future phase). Both methods require an
-// authenticated Supabase user whose email is on the
-// SUPER_ADMIN_EMAILS allowlist; everyone else gets 403.
+// Both methods are gated by the shared `requireSuperAdmin()` helper
+// (DB flag `profiles.is_super_admin`, with the SUPER_ADMIN_EMAILS
+// env allowlist as a transition fallback); everyone else gets 403.
 //
 // The table itself has RLS enabled with no policies, so reads/writes
 // only ever happen here through the service-role client — after the
 // gate has passed.
 // ============================================================
-
-/** 401 for no session, 403 for a session that isn't a super admin. */
-async function requireSuperAdmin(): Promise<NextResponse | null> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-  }
-  if (!isSuperAdmin(user.email)) {
-    return NextResponse.json(
-      { error: 'Super admin access required' },
-      { status: 403 },
-    )
-  }
-  return null
-}
 
 /**
  * GET /api/admin/platform-settings
@@ -48,8 +28,11 @@ async function requireSuperAdmin(): Promise<NextResponse | null> {
  * running, not just the raw stored value.
  */
 export async function GET() {
-  const denied = await requireSuperAdmin()
-  if (denied) return denied
+  try {
+    await requireSuperAdmin()
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 
   // Resolve fresh (bust the local cache first) so a super admin never
   // reads a stale value from this instance's TTL cache.
@@ -67,8 +50,11 @@ export async function GET() {
  * instances converge within the cache TTL (~30s).
  */
 export async function PATCH(request: Request) {
-  const denied = await requireSuperAdmin()
-  if (denied) return denied
+  try {
+    await requireSuperAdmin()
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 
   const body = (await request.json().catch(() => null)) as {
     ai_engine?: unknown

@@ -214,6 +214,37 @@ export async function POST(request: Request) {
       label = trimmed === "" ? null : trimmed;
     }
 
+    // Bound outstanding invites per account. Unlike the per-user
+    // rate limit above (which resets each minute), this caps the
+    // steady-state number of live single-use links an account can
+    // have in the wild at once — an enterprise hygiene control, not
+    // an abuse control.
+    const { count: pendingCount, error: pendingErr } = await ctx.supabase
+      .from("account_invitations")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", ctx.accountId)
+      .is("accepted_at", null)
+      .gt("expires_at", new Date().toISOString());
+
+    if (pendingErr) {
+      console.error(
+        "[POST /api/account/invitations] pending count error:",
+        pendingErr,
+      );
+      return NextResponse.json(
+        { error: "Failed to create invitation" },
+        { status: 500 },
+      );
+    }
+    if ((pendingCount ?? 0) >= MAX_PENDING_INVITES) {
+      return NextResponse.json(
+        {
+          error: `This workspace already has ${MAX_PENDING_INVITES} pending invitations. Revoke unused invites before creating new ones.`,
+        },
+        { status: 409 },
+      );
+    }
+
     const { token, hash } = generateInviteToken();
 
     const { data, error } = await ctx.supabase

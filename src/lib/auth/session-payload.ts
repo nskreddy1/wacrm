@@ -13,6 +13,7 @@ export type SessionProfile = {
   beta_features: string[];
   account_id: string;
   account_role: AccountRole;
+  is_super_admin: boolean;
 };
 
 export type SessionAccount = {
@@ -61,7 +62,7 @@ export async function getSessionPayload(): Promise<SessionPayload> {
     context.supabase
       .from("profiles")
       .select(
-        "user_id, full_name, email, avatar_url, role, beta_features, account_id, account_role, created_at",
+        "user_id, full_name, email, avatar_url, role, beta_features, account_id, account_role, is_super_admin, created_at",
       )
       .eq("user_id", context.userId)
       .single(),
