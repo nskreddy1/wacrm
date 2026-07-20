@@ -5,29 +5,15 @@ import type { User } from "@supabase/supabase-js"
 import useSWR from "swr"
 import { DEFAULT_CURRENCY } from "@/lib/currency"
 import type { AccountRole } from "@/lib/auth/roles"
-
-type Profile = {
-  id: string
-  full_name: string | null
-  email: string
-  avatar_url: string | null
-  role: string | null
-  beta_features: string[]
-  account_id: string
-  account_role: AccountRole
-}
-
-type AccountSummary = {
-  id: string
-  name: string
-  default_currency: string | null
-}
-
-type SessionUser = {
-  id: string
-  email?: string | null
-  created_at?: string
-}
+// Type-only import: erased at build time, so the "server-only" guard
+// inside session-payload.ts never runs in this client module. Sharing
+// the type guarantees the SSR-provided fallback session and the
+// client-fetched session can never drift in shape.
+import type {
+  SessionAccount as AccountSummary,
+  SessionPayload,
+  SessionProfile as Profile,
+} from "@/lib/auth/session-payload"
 
 interface AuthContextValue {
   user: User | null
@@ -49,19 +35,25 @@ interface AuthContextValue {
   canSendMessages: boolean
 }
 
-type SessionPayload = {
-  data: {
-    user: SessionUser
-    profile: Profile
-    account: AccountSummary
-  }
-  meta: { source: "mock" | "supabase" }
-}
-
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data, isLoading, mutate } = useSWR<SessionPayload>("/api/v1/session")
+export function AuthProvider({
+  children,
+  initialSession = null,
+}: {
+  children: ReactNode
+  initialSession?: SessionPayload | null
+}) {
+  // PERF: `fallbackData` seeds SWR with the session the server layout
+  // already resolved during SSR — the first paint after login renders
+  // the real profile/account immediately (isLoading is false) instead
+  // of placeholder text that pops in when a client fetch resolves.
+  // SWR still revalidates in the background per the cache provider's
+  // config, so subsequent profile/account edits propagate normally.
+  const { data, isLoading, mutate } = useSWR<SessionPayload>(
+    "/api/v1/session",
+    initialSession ? { fallbackData: initialSession } : undefined,
+  )
   const session = data?.data
   const role = session?.profile.account_role ?? null
 
