@@ -83,7 +83,9 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
         </button>)}
       </div>
       <Popover open={rearrangeOpen} onOpenChange={(open) => { if (open) setDraftOrder(pipelines); setRearrangeOpen(open) }}>
-        <PopoverTrigger render={<span className="hidden" />} />
+        {/* Invisible anchor only — the popover is opened from the dropdown
+            menu, so this trigger is intentionally not an interactive button. */}
+        <PopoverTrigger nativeButton={false} render={<span className="hidden" aria-hidden="true" />} />
         <PopoverContent side="top" align="end" sideOffset={0} className="w-84 gap-0 overflow-hidden rounded-sm p-0">
           <PopoverHeader className="flex-row items-center justify-between border-b px-4 py-3">
             <PopoverTitle className="text-base font-semibold">Rearrange Sub-Pipelines</PopoverTitle>
