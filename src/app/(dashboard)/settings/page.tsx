@@ -17,6 +17,7 @@ import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel'
 import { DealsSettings } from '@/components/settings/deals-settings';
 import { MembersTab } from '@/components/settings/members-tab';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
+import { ExternalSourcesSettings } from '@/components/settings/external-sources-settings';
 import { SupportTab } from '@/components/settings/support-tab';
 import {
   resolveSection,
@@ -64,6 +65,7 @@ export default function SettingsPage() {
     deals: <DealsSettings />,
     members: <MembersTab />,
     api: <ApiKeysSettings />,
+    'external-sources': <ExternalSourcesSettings />,
     support: <SupportTab />,
   };
 
