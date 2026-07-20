@@ -123,6 +123,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     broadcastsRes,
     appointments,
     tasks,
+    accountRes,
   ] = await Promise.all([
     ctx.supabase
       .from("conversations")
@@ -164,6 +165,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
       .limit(25),
     listAppointments(ctx, { status: "scheduled", from: new Date(now).toISOString(), limit: 6 }),
     listTasks(ctx, { status: "open", limit: 8 }),
+    ctx.supabase.from("accounts").select("default_currency").eq("id", ctx.accountId).single(),
   ])
 
   const queryError = [
@@ -212,7 +214,11 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
 
   const openDeals = deals.filter((d) => d.status === "open")
   const pipelineValue = openDeals.reduce((sum, d) => sum + Number(d.value ?? 0), 0)
-  const pipelineCurrency = openDeals.find((d) => d.currency)?.currency ?? "USD"
+  // Global workspace currency (Settings → Deals): every money figure on
+  // the dashboard renders in the account's configured currency, never a
+  // guess from whichever deal happened to sort first.
+  const pipelineCurrency =
+    (accountRes.data as { default_currency?: string | null } | null)?.default_currency ?? "USD"
 
   // Response rate: of conversations with inbound in the last 7d, how
   // many also have an outbound (agent/system) message in that window.

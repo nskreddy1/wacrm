@@ -80,6 +80,41 @@ export function formatCurrency(
 }
 
 /**
+ * Format a price with minor units ("₹5,000.00", "$19.99") for
+ * catalog/commerce surfaces where cents matter. Same total-function
+ * guarantees as {@link formatCurrency}: never throws on a bad code.
+ */
+export function formatCurrencyPrecise(
+  value: number,
+  currency: string = DEFAULT_CURRENCY,
+): string {
+  const code = (currency || DEFAULT_CURRENCY).trim();
+  const amount = Number(value) || 0;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${code} ${new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: 2,
+    }).format(amount)}`;
+  }
+}
+
+/**
+ * Symbol for a currency code ("INR" → "₹"). Falls back to the code
+ * itself for currencies we don't carry a symbol for, so callers can
+ * always render *something* stable in input adornments.
+ */
+export function getCurrencySymbol(currency: string = DEFAULT_CURRENCY): string {
+  const code = (currency || DEFAULT_CURRENCY).trim();
+  return CURRENCIES.find((c) => c.code === code)?.symbol ?? code;
+}
+
+/**
  * Compact currency for tight spaces (donut center, legend rows):
  * "$1.2M" / "€34.5k" / "₹900". Uses the currency's symbol from
  * CURRENCIES, falling back to the code when we don't carry a symbol.
