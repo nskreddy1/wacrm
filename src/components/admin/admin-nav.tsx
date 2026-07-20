@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bot,
   Building2,
   LifeBuoy,
   Radio,
@@ -15,6 +16,7 @@ const items = [
   { href: "/admin/workspaces", label: "Workspaces", icon: Building2 },
   { href: "/admin/tickets", label: "Tickets", icon: LifeBuoy },
   { href: "/admin/channels", label: "Channels", icon: Radio },
+  { href: "/admin/ai-agent", label: "AI Agent", icon: Bot },
   { href: "/admin/platform", label: "Platform", icon: SlidersHorizontal },
 ] as const;
 
