@@ -175,6 +175,15 @@ export const RATE_LIMITS = {
    *  looks like credential stuffing from THEIR side. 10/min per user
    *  is ample for a human working through a setup form. */
   configMutation: { limit: 10, windowMs: 60_000 },
+  /** Support ticket creation, per user. 5/min is far above any
+   *  legitimate human filing rate while stopping a stuck retry loop
+   *  or a compromised session from flooding the platform queue that
+   *  every super admin triages. Replies use `supportReply` below. */
+  supportTicketCreate: { limit: 5, windowMs: 60_000 },
+  /** Support ticket replies (user or admin side), per user. A live
+   *  back-and-forth conversation tops out well under one message per
+   *  two seconds sustained. */
+  supportReply: { limit: 30, windowMs: 60_000 },
 } as const;
 
 /** Test-only helper. Clears the in-memory state so unit tests don't
