@@ -60,6 +60,7 @@ import type {
   PostgresSourceConfig,
   RestSourceConfig,
 } from '@/lib/external-sources/types';
+import { getSourceSaveTarget } from '@/lib/external-sources/validate';
 import { SettingsPanelHead } from './settings-panel-head';
 
 const TYPE_LABEL: Record<ExternalSourceType, string> = {
@@ -278,9 +279,15 @@ function SourceDialog({
   onSaved: () => void;
 }) {
   const isEdit = Boolean(source);
-  const restCfg = (source?.type === 'rest' ? source.config : {}) as RestSourceConfig;
-  const pgCfg = (source?.type === 'postgres' ? source.config : {}) as PostgresSourceConfig;
-  const sheetCfg = (source?.type === 'google_sheet' ? source.config : {}) as GoogleSheetSourceConfig;
+  const restCfg = (
+    source?.type === 'rest' ? source.config : {}
+  ) as RestSourceConfig;
+  const pgCfg = (
+    source?.type === 'postgres' ? source.config : {}
+  ) as PostgresSourceConfig;
+  const sheetCfg = (
+    source?.type === 'google_sheet' ? source.config : {}
+  ) as GoogleSheetSourceConfig;
 
   const [name, setName] = useState(source?.name ?? '');
   const [type, setType] = useState<ExternalSourceType>(source?.type ?? 'rest');
@@ -331,9 +338,13 @@ function SourceDialog({
         ? {
             url: restUrl.trim(),
             authStyle,
-            ...(authStyle === 'header' ? { authHeader: authHeader.trim() } : {}),
+            ...(authStyle === 'header'
+              ? { authHeader: authHeader.trim() }
+              : {}),
             ...(itemsPath.trim() ? { itemsPath: itemsPath.trim() } : {}),
-            ...(nextPagePath.trim() ? { nextPagePath: nextPagePath.trim() } : {}),
+            ...(nextPagePath.trim()
+              ? { nextPagePath: nextPagePath.trim() }
+              : {}),
           }
         : type === 'postgres'
           ? { query: query.trim() }
@@ -381,14 +392,12 @@ function SourceDialog({
     }
     setSubmitting(true);
     try {
-      const res = await fetch(
-        isEdit ? `/api/external-sources/${source!.id}` : '/api/external-sources',
-        {
-          method: isEdit ? 'PATCH' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(buildPayload()),
-        }
-      );
+      const target = getSourceSaveTarget(source?.id ?? createdId);
+      const res = await fetch(target.url, {
+        method: target.method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload()),
+      });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         toast.error(payload.error || 'Failed to save source');
@@ -417,20 +426,19 @@ function SourceDialog({
     setTesting(true);
     setPreview(null);
     try {
-      const saveRes = await fetch(
-        isEdit ? `/api/external-sources/${source!.id}` : '/api/external-sources',
-        {
-          method: isEdit ? 'PATCH' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(buildPayload()),
-        }
-      );
+      const target = getSourceSaveTarget(source?.id ?? createdId);
+      const saveRes = await fetch(target.url, {
+        method: target.method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload()),
+      });
       const savePayload = await saveRes.json().catch(() => ({}));
       if (!saveRes.ok) {
         toast.error(savePayload.error || 'Failed to save source');
         return;
       }
       const id = (savePayload.source as ExternalSource).id;
+      setCreatedId(id);
 
       const res = await fetch(`/api/external-sources/${id}/preview`, {
         method: 'POST',
@@ -532,7 +540,9 @@ function SourceDialog({
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label className="text-muted-foreground">Authentication</Label>
+                  <Label className="text-muted-foreground">
+                    Authentication
+                  </Label>
                   <Select
                     value={authStyle}
                     onValueChange={(v) =>
@@ -568,7 +578,10 @@ function SourceDialog({
               </div>
               {authStyle !== 'none' && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="ext-src-secret" className="text-muted-foreground">
+                  <Label
+                    htmlFor="ext-src-secret"
+                    className="text-muted-foreground"
+                  >
                     {authStyle === 'bearer' ? 'Bearer token' : 'Header value'}
                   </Label>
                   <Input
@@ -587,7 +600,10 @@ function SourceDialog({
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="ext-src-items" className="text-muted-foreground">
+                  <Label
+                    htmlFor="ext-src-items"
+                    className="text-muted-foreground"
+                  >
                     Items path (optional)
                   </Label>
                   <Input
@@ -601,7 +617,10 @@ function SourceDialog({
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="ext-src-next" className="text-muted-foreground">
+                  <Label
+                    htmlFor="ext-src-next"
+                    className="text-muted-foreground"
+                  >
                     Next page path (optional)
                   </Label>
                   <Input
@@ -641,7 +660,10 @@ function SourceDialog({
                 </p>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="ext-src-query" className="text-muted-foreground">
+                <Label
+                  htmlFor="ext-src-query"
+                  className="text-muted-foreground"
+                >
                   SQL query
                 </Label>
                 <Textarea
@@ -689,7 +711,10 @@ function SourceDialog({
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="ext-src-phone" className="text-muted-foreground">
+                <Label
+                  htmlFor="ext-src-phone"
+                  className="text-muted-foreground"
+                >
                   Phone field (required)
                 </Label>
                 <Input
@@ -700,7 +725,10 @@ function SourceDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="ext-src-namef" className="text-muted-foreground">
+                <Label
+                  htmlFor="ext-src-namef"
+                  className="text-muted-foreground"
+                >
                   Name field (optional)
                 </Label>
                 <Input
@@ -808,7 +836,10 @@ function SourceDialog({
               {preview.rows.length > 0 && (
                 <ul className="space-y-1">
                   {preview.rows.map((r, i) => (
-                    <li key={i} className="text-muted-foreground font-mono text-xs">
+                    <li
+                      key={i}
+                      className="text-muted-foreground font-mono text-xs"
+                    >
                       +{r.phone}
                       {r.name ? ` · ${r.name}` : ''}
                       {Object.keys(r.params).length > 0 &&

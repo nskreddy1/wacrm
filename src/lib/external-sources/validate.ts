@@ -5,11 +5,7 @@
 // user-facing error string — no exceptions for expected bad input.
 // ============================================================
 
-import type {
-  ExternalSourceType,
-  FieldMap,
-  SourceConfig,
-} from './types';
+import type { ExternalSourceType, FieldMap, SourceConfig } from './types';
 
 export const MAX_NAME_LEN = 80;
 const MAX_FIELD_LEN = 200;
@@ -24,6 +20,20 @@ export function isSourceType(v: unknown): v is ExternalSourceType {
 }
 
 type Validated<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/**
+ * Pick the mutation endpoint for an external-source draft. A connection test
+ * persists a new draft before previewing it, so all later saves/tests must
+ * PATCH that id instead of POSTing duplicate rows.
+ */
+export function getSourceSaveTarget(persistedId: string | null): {
+  url: string;
+  method: 'POST' | 'PATCH';
+} {
+  return persistedId
+    ? { url: `/api/external-sources/${persistedId}`, method: 'PATCH' }
+    : { url: '/api/external-sources', method: 'POST' };
+}
 
 export function validateName(raw: unknown): Validated<string> {
   const name = typeof raw === 'string' ? raw.trim() : '';
@@ -60,14 +70,18 @@ export function validateConfig(
     }
     const authStyle = str('authStyle', 20);
     if (authStyle && !['none', 'bearer', 'header'].includes(authStyle)) {
-      return { ok: false, error: "authStyle must be 'none', 'bearer' or 'header'" };
+      return {
+        ok: false,
+        error: "authStyle must be 'none', 'bearer' or 'header'",
+      };
     }
     const authHeader = str('authHeader', 100);
     if (authStyle === 'header') {
       if (!authHeader || !/^[a-zA-Z0-9-]+$/.test(authHeader)) {
         return {
           ok: false,
-          error: 'Custom auth header name must be set (letters, digits, dashes)',
+          error:
+            'Custom auth header name must be set (letters, digits, dashes)',
         };
       }
     }
