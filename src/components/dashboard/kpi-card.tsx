@@ -15,6 +15,8 @@ type KpiCardProps = {
   delta?: number
   /** small line under the value, e.g. "9 unassigned" */
   detail?: string
+  /** rendered right after the value, e.g. "%" */
+  suffix?: string
   icon: ComponentType<{ className?: string }>
   href: string
 }
@@ -23,7 +25,7 @@ type KpiCardProps = {
  * KPI stat card: icon, label, animated value, delta chip, link.
  * Value uses an AnimatedNumber ticker so realtime refreshes roll smoothly.
  */
-export function KpiCard({ label, value, format, delta, detail, icon: Icon, href }: KpiCardProps) {
+export function KpiCard({ label, value, format, delta, detail, suffix, icon: Icon, href }: KpiCardProps) {
   const negative = delta != null && delta < 0
   return (
     <Link
@@ -49,7 +51,10 @@ export function KpiCard({ label, value, format, delta, detail, icon: Icon, href 
           </span>
         )}
       </div>
-      <AnimatedNumber value={value} format={format} className="mt-4 text-[26px] font-semibold leading-none tracking-tight" />
+      <p className="mt-4 text-[26px] font-semibold leading-none tracking-tight">
+        <AnimatedNumber value={value} format={format} />
+        {suffix && <span className="text-lg text-muted-foreground">{suffix}</span>}
+      </p>
       <p className="mt-2 text-[13px] font-medium text-foreground/90">{label}</p>
       {detail && <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>}
     </Link>

@@ -1,13 +1,30 @@
 "use client"
 
 import Link from "next/link"
-import useSWR from "swr"
-import { ArrowUpRight, CalendarPlus, ChevronRight, Circle, GitBranch, MessageSquareText, Plus, Send, Users } from "lucide-react"
+import {
+  Briefcase,
+  MessageSquareText,
+  Plus,
+  Radio,
+  Send,
+  UserPlus,
+  Users,
+} from "lucide-react"
+
 import { useAuth } from "@/hooks/use-auth"
 import { personDisplayName, workspaceDisplayName } from "@/lib/display-name"
-import type { DashboardData } from "@/lib/data/dashboard/types"
-
-type DashboardResponse = { data: DashboardData; meta: { source: "mock" | "supabase" } }
+import { AnimatedNumber } from "@/components/ui/animated-number"
+import { ChannelBadge, channelColorVar } from "@/components/ui/channel-badge"
+import { ActivityFeed } from "./activity-feed"
+import { BroadcastFunnel } from "./broadcast-funnel"
+import { ChartCard, CardMetaChip } from "./chart-card"
+import { ContactsGrowth } from "./contacts-growth"
+import { DEMO_OVERVIEW } from "./demo-data"
+import { KpiCard } from "./kpi-card"
+import { PipelineFunnel } from "./pipeline-funnel"
+import { Section } from "./section"
+import { TeamPerformance } from "./team-performance"
+import { VolumeChart } from "./volume-chart"
 
 function greetingForHour(hour: number) {
   if (hour < 12) return "Good morning"
@@ -15,40 +32,177 @@ function greetingForHour(hour: number) {
   return "Good evening"
 }
 
+/**
+ * Live CRM command center.
+ *
+ * NOTE: currently rendering hardcoded DEMO_OVERVIEW data while the
+ * design is finalized. Next step: /api/v1/dashboard returns this exact
+ * shape + SWR + Supabase realtime revalidation (see demo-data.ts).
+ */
 export function DashboardWorkspace() {
-  const { data, error, isLoading } = useSWR<DashboardResponse>("/api/v1/dashboard")
   const { profile, account } = useAuth()
-  const dashboardData = data?.data
-  const icons = [MessageSquareText, Users, GitBranch, Send]
+  const overview = DEMO_OVERVIEW
 
-  // Friendly names — never raw emails, even when profile/account rows
-  // still hold signup-default values (e.g. name = email address).
   const firstName = personDisplayName(profile?.full_name, profile?.email).split(/\s+/)[0] || "there"
   const workspaceName = workspaceDisplayName(account?.name)
   const today = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date())
   const greeting = greetingForHour(new Date().getHours())
 
-  if (error) return <div className="flex min-h-96 items-center justify-center text-sm text-destructive">Unable to load dashboard data.</div>
-  if (isLoading || !dashboardData) return <div className="flex min-h-96 items-center justify-center text-sm text-muted-foreground">Loading dashboard…</div>
+  const { kpis, channels, volume, broadcasts, pipeline, team, contactsGrowth, activity } = overview
+  const money: Intl.NumberFormatOptions = { style: "currency", currency: kpis.pipelineCurrency, maximumFractionDigits: 0 }
 
-  return <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
-    <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-      <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{today}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight text-balance">{`${greeting}, ${firstName}`}</h2><p className="mt-1 text-sm text-muted-foreground">{`Here is what needs your attention across ${workspaceName}.`}</p></div>
-      <div className="flex gap-2"><Link href="/contacts" className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-medium"><Plus className="size-4" /> Add contact</Link><Link href="/inbox" className="flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground"><MessageSquareText className="size-4" /> Open inbox</Link></div>
-    </section>
+  return (
+    <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+      {/* Header */}
+      <Section index={0} className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{today}</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-balance">{`${greeting}, ${firstName}`}</h2>
+          <p className="mt-1 text-sm text-muted-foreground text-pretty">{`Here is how ${workspaceName} is performing right now.`}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="mr-1 flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-positive motion-safe:animate-pulse" aria-hidden="true" />
+            Live
+          </span>
+          <Link
+            href="/contacts"
+            className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            <Plus className="size-4" aria-hidden="true" /> Add contact
+          </Link>
+          <Link
+            href="/broadcasts/new"
+            className="flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            <Send className="size-4" aria-hidden="true" /> New broadcast
+          </Link>
+        </div>
+      </Section>
 
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {dashboardData.metrics.map((metric, index) => { const Icon = icons[index]; return <article key={metric.label} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between"><div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon className="size-[18px]" /></div><span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">{metric.change}</span></div><p className="mt-5 text-2xl font-semibold tracking-tight">{metric.value}</p><p className="mt-1 text-sm font-medium">{metric.label}</p><p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p></article> })}
-    </section>
+      {/* KPI row */}
+      <Section index={1} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <KpiCard
+          label="Open conversations"
+          value={kpis.openConversations}
+          delta={kpis.openConversationsDelta}
+          detail={`${kpis.unassigned} unassigned`}
+          icon={MessageSquareText}
+          href="/inbox"
+        />
+        <KpiCard
+          label="Messages (7d)"
+          value={kpis.messages7d}
+          delta={kpis.messagesDelta}
+          detail="Inbound + outbound"
+          icon={Radio}
+          href="/inbox"
+        />
+        <KpiCard
+          label="New contacts (30d)"
+          value={kpis.newContacts30d}
+          delta={kpis.newContactsDelta}
+          detail="Across all sources"
+          icon={UserPlus}
+          href="/contacts"
+        />
+        <KpiCard
+          label="Pipeline value"
+          value={kpis.pipelineValue}
+          format={money}
+          detail={`${kpis.activeDeals} active deals`}
+          icon={Briefcase}
+          href="/pipeline"
+        />
+        <KpiCard
+          label="Response rate"
+          value={kpis.responseRatePct}
+          suffix="%"
+          detail="Conversations answered · 7d"
+          icon={Users}
+          href="/inbox"
+        />
+      </Section>
 
-    <section className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-      <article className="rounded-xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border p-4"><div><h3 className="text-sm font-semibold">Conversation volume</h3><p className="text-xs text-muted-foreground">Messages received and resolved over 7 days</p></div><button className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium">Last 7 days</button></div><div className="p-4"><div className="flex h-52 items-end gap-3 border-b border-border px-2">{dashboardData.volume.map((count, i) => { const peak = Math.max(...dashboardData.volume, 1); const height = Math.max(6, Math.round((count / peak) * 180)); return <div key={i} className="flex h-full flex-1 items-end"><div className="w-full rounded-t bg-primary/20" style={{height: `${height}px`}} title={`${count} messages`}><div className="h-1.5 w-full rounded-t bg-primary" /></div></div> })}</div><div className="mt-3 flex justify-between text-[10px] text-muted-foreground"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div></article>
-      <article className="rounded-xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border p-4"><div><h3 className="text-sm font-semibold">Team workload</h3><p className="text-xs text-muted-foreground">Open assigned conversations</p></div><Link href="/settings" className="text-xs font-semibold text-primary">Manage</Link></div><div className="flex flex-col p-2">{dashboardData.workload.map((member, i) => <div key={member.name} className="flex items-center gap-3 rounded-lg p-3 hover:bg-muted"><div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-bold">{member.name.split(" ").map(n=>n[0]).join("")}</div><div className="min-w-0 flex-1"><p className="text-sm font-medium">{member.name}</p><p className="flex items-center gap-1 text-xs text-muted-foreground"><Circle className={`size-2 fill-current ${i < 2 ? "text-primary" : "text-amber-500"}`} /> {member.status}</p></div><div className="text-right"><p className="text-sm font-semibold">{member.open}</p><p className="text-[10px] text-muted-foreground">open</p></div></div>)}</div></article>
-    </section>
+      {/* Volume + channel split */}
+      <Section index={2} className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+        <ChartCard
+          title="Message volume"
+          caption="Daily inbound + outbound messages by channel"
+          meta={<CardMetaChip>Last 14 days</CardMetaChip>}
+        >
+          <VolumeChart data={volume} />
+        </ChartCard>
+        <ChartCard title="Channel performance" caption="WhatsApp vs SMS over the last 7 days" contentClassName="flex flex-col gap-4">
+          {channels.map((ch) => {
+            const total = channels.reduce((sum, c) => sum + c.messages7d, 0) || 1
+            const share = Math.round((ch.messages7d / total) * 100)
+            return (
+              <div key={ch.channel} className="flex flex-col gap-2.5 rounded-lg border border-border bg-card-2 p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <ChannelBadge channel={ch.channel} />
+                  <span className="text-xs text-muted-foreground tabular-nums">{share}% of volume</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full" style={{ width: `${share}%`, background: channelColorVar(ch.channel) }} />
+                </div>
+                <dl className="grid grid-cols-3 gap-2 text-center">
+                  {(
+                    [
+                      ["Messages", ch.messages7d],
+                      ["Inbound", ch.inbound7d],
+                      ["Open chats", ch.openConversations],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+                      <dd className="mt-0.5 text-sm font-semibold">
+                        <AnimatedNumber value={value} />
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )
+          })}
+        </ChartCard>
+      </Section>
 
-    <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-      <article className="rounded-xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border p-4"><h3 className="text-sm font-semibold">Recent activity</h3><button className="text-xs font-semibold text-primary">View all</button></div><div className="divide-y divide-border">{dashboardData.activity.map(item => <div key={item.title} className="flex items-center gap-3 p-4"><div className="size-2 rounded-full bg-primary" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{item.title}</p><p className="text-xs text-muted-foreground">{item.type} · {item.time}</p></div><ChevronRight className="size-4 text-muted-foreground" /></div>)}</div></article>
-      <article className="rounded-xl bg-primary p-5 text-primary-foreground shadow-sm"><p className="text-xs font-semibold uppercase tracking-widest text-primary-foreground/70">Quick actions</p><h3 className="mt-2 text-lg font-semibold">Keep work moving</h3><div className="mt-5 grid gap-2"><Link href="/broadcasts/new" className="flex items-center gap-3 rounded-lg bg-primary-foreground/10 p-3 text-sm font-medium hover:bg-primary-foreground/15"><Send className="size-4" /> Create broadcast <ArrowUpRight className="ml-auto size-4" /></Link><Link href="/bookings" className="flex items-center gap-3 rounded-lg bg-primary-foreground/10 p-3 text-sm font-medium hover:bg-primary-foreground/15"><CalendarPlus className="size-4" /> Manage bookings <ArrowUpRight className="ml-auto size-4" /></Link></div></article>
-    </section>
-  </div>
+      {/* Broadcasts + pipeline */}
+      <Section index={3} className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+        <ChartCard
+          title="Broadcast performance"
+          caption="Delivery funnel across your latest campaigns"
+          href="/broadcasts"
+          meta={<CardMetaChip>Last 5 campaigns</CardMetaChip>}
+        >
+          <BroadcastFunnel totals={broadcasts.totals} whatsappEnabled={broadcasts.whatsappEnabled} recent={broadcasts.recent} />
+        </ChartCard>
+        <ChartCard title="Sales pipeline" caption="Active deals by stage" href="/pipeline">
+          <PipelineFunnel
+            stages={pipeline.stages}
+            wonValue30d={pipeline.wonValue30d}
+            wonCount30d={pipeline.wonCount30d}
+            lostCount30d={pipeline.lostCount30d}
+            currency={kpis.pipelineCurrency}
+          />
+        </ChartCard>
+      </Section>
+
+      {/* Team + contacts growth */}
+      <Section index={4} className="grid gap-4 xl:grid-cols-[1fr_1.6fr]">
+        <ChartCard title="Team performance" caption="Open vs resolved conversations per agent" href="/settings" hrefLabel="Manage">
+          <TeamPerformance team={team} />
+        </ChartCard>
+        <ChartCard title="Contacts growth" caption="Total contact base over time" meta={<CardMetaChip>Last 30 days</CardMetaChip>} href="/contacts">
+          <ContactsGrowth data={contactsGrowth} />
+        </ChartCard>
+      </Section>
+
+      {/* Activity */}
+      <Section index={5}>
+        <ActivityFeed items={activity} />
+      </Section>
+    </div>
+  )
 }
