@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import {
+  assignImportedContactTags,
+  resolveImportTagIds,
+} from '@/lib/contacts/resolve-import-tags';
 import { Contact, MessageTemplate } from '@/types';
 
 export type CustomFieldOperator = 'is' | 'is_not' | 'contains';
@@ -14,12 +18,18 @@ export interface CustomFieldFilter {
 }
 
 export interface AudienceConfig {
-  type: 'all' | 'tags' | 'custom_field' | 'csv';
+  type: 'all' | 'tags' | 'custom_field' | 'csv' | 'external';
   tagIds?: string[];
   customField?: CustomFieldFilter;
   csvContacts?: { phone: string; name?: string }[];
   /** Contacts carrying any of these tags are subtracted from the result. */
   excludeTagIds?: string[];
+  /** External source connector (type === 'external'). */
+  externalSourceId?: string;
+  /** Display name of the source — used for the auto-applied src: tag. */
+  externalSourceName?: string;
+  /** Row count from the last preview, for the review-step estimate. */
+  externalCount?: number;
 }
 
 /**
@@ -32,7 +42,13 @@ export interface AudienceConfig {
 export type VariableMapping =
   | { type: 'static'; value: string }
   | { type: 'field'; value: string }
-  | { type: 'custom_field'; value: string };
+  | { type: 'custom_field'; value: string }
+  /**
+   * External-source column — `value` is the param key ("1", "2", …)
+   * carried on each fetched recipient. Only meaningful when the
+   * audience type is 'external'.
+   */
+  | { type: 'external_param'; value: string };
 
 interface BroadcastPayload {
   name: string;
@@ -97,6 +113,7 @@ export function resolveVariables(
   variables: Record<string, VariableMapping>,
   contact: Contact,
   customValues?: Map<string, string>,
+  externalParams?: Record<string, string>,
 ): string[] {
   // Keys are typically "1","2",... — numeric-aware sort keeps
   // {{1}} before {{10}}.
@@ -121,6 +138,10 @@ export function resolveVariables(
       return fieldMap[v.value] ?? '';
     }
 
+    if (v.type === 'external_param') {
+      return externalParams?.[v.value] ?? '';
+    }
+
     // custom_field
     return customValues?.get(v.value) ?? '';
   });
@@ -139,6 +160,7 @@ export function renderSmsBody(
   variables: Record<string, VariableMapping>,
   contact: Contact,
   customValues?: Map<string, string>,
+  externalParams?: Record<string, string>,
 ): string {
   return bodyText.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, key: string) => {
     const mapping = variables[key];
@@ -152,6 +174,9 @@ export function renderSmsBody(
         company: contact.company,
       };
       return fieldMap[mapping.value] ?? '';
+    }
+    if (mapping.type === 'external_param') {
+      return externalParams?.[mapping.value] ?? '';
     }
     return customValues?.get(mapping.value) ?? '';
   });
@@ -192,12 +217,23 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  async function resolveAudience(audience: AudienceConfig): Promise<Contact[]> {
+  interface ResolvedAudience {
+    contacts: Contact[];
+    /** phone → template param values, only set for external audiences. */
+    externalParams: Map<string, Record<string, string>> | null;
+  }
+
+  async function resolveAudience(audience: AudienceConfig): Promise<ResolvedAudience> {
     const supabase = createClient();
 
     let contacts: Contact[] = [];
+    let externalParams: Map<string, Record<string, string>> | null = null;
 
-    if (audience.type === 'all') {
+    if (audience.type === 'external' && audience.externalSourceId) {
+      const resolved = await resolveExternalAudience(supabase, audience);
+      contacts = resolved.contacts;
+      externalParams = resolved.externalParams;
+    } else if (audience.type === 'all') {
       const { data, error } = await supabase.from('contacts').select('*');
       if (error) throw new Error(`Failed to fetch contacts: ${error.message}`);
       contacts = data ?? [];
@@ -242,7 +278,80 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       contacts = contacts.filter((c) => !excludedIds.has(c.id));
     }
 
-    return contacts;
+    return { contacts, externalParams };
+  }
+
+  /**
+   * External connector audience — pull recipients from the configured
+   * source (server-side fetch, ≤10k cap enforced by the API), then
+   * find-or-create matching contacts so replies land in the inbox and
+   * broadcast_recipients FKs resolve. Each contact is tagged
+   * `src:<source name>` (best-effort) so the audience can be
+   * re-targeted later, and per-recipient template params are returned
+   * keyed by phone for variable resolution during the send loop.
+   */
+  async function resolveExternalAudience(
+    supabase: ReturnType<typeof createClient>,
+    audience: AudienceConfig,
+  ): Promise<{
+    contacts: Contact[];
+    externalParams: Map<string, Record<string, string>>;
+  }> {
+    const res = await fetch(
+      `/api/external-sources/${audience.externalSourceId}/recipients`,
+      { method: 'POST' },
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to fetch external recipients');
+    }
+
+    const fetched: { phone: string; name?: string; params: Record<string, string> }[] =
+      data.recipients ?? [];
+    if (fetched.length === 0) {
+      throw new Error('The external source returned no valid recipients.');
+    }
+
+    // Params index keyed by phone — contacts resolve back to their
+    // source row through the (deduped, sanitized) phone number.
+    const externalParams = new Map<string, Record<string, string>>();
+    for (const r of fetched) {
+      externalParams.set(r.phone, r.params ?? {});
+    }
+
+    const contacts = await upsertCsvContacts(
+      supabase,
+      fetched.map((r) => ({ phone: r.phone, name: r.name })),
+    );
+
+    // Best-effort src: tag — RLS may deny tag creation for
+    // member-level users; a failure here never blocks the send.
+    const sourceName = (data.sourceName as string) || audience.externalSourceName;
+    if (sourceName) {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user && accountId) {
+          const tagName = `src:${sourceName}`;
+          const { tagIdByKey } = await resolveImportTagIds(supabase, {
+            accountId,
+            userId: session.user.id,
+            tagNames: [tagName],
+            canCreateTags: true,
+          });
+          await assignImportedContactTags(
+            supabase,
+            contacts.map((c) => ({ contactId: c.id, tagNames: [tagName] })),
+            tagIdByKey,
+          );
+        }
+      } catch (err) {
+        console.error('[useBroadcastSending] source tagging skipped:', err);
+      }
+    }
+
+    return { contacts, externalParams };
   }
 
   /**
@@ -385,7 +494,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
       // ── Step 1: Resolve audience contacts ─────────────────────────
       setProgress(5);
-      const contacts = await resolveAudience(payload.audience);
+      const { contacts, externalParams } = await resolveAudience(
+        payload.audience,
+      );
 
       if (contacts.length === 0) {
         throw new Error('No contacts found for this audience.');
