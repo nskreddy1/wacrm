@@ -10,7 +10,7 @@ describe('fetchRecipients REST security', () => {
         config: { url: 'http://127.0.0.1:4599/parents', authStyle: 'none' },
         fieldMap: { phone: 'phone' },
         secret: null,
-      }),
+      })
     ).rejects.toThrow('publicly reachable');
   });
 });
