@@ -13,8 +13,10 @@ import { Textarea } from "@/components/ui/textarea"
 import type { ActionResult } from "@/lib/pipelines/actions"
 import type { PipelineDeal, PipelineSnapshot } from "@/lib/pipelines/domain"
 import { dealInputSchema, type DealInput } from "@/lib/pipelines/validation"
+import { formatCurrency, getCurrencySymbol } from "@/lib/currency"
+import { useAuth } from "@/hooks/use-auth"
 
-function draftFrom(deal: PipelineDeal | null, snapshot: PipelineSnapshot, stageId: string): DealInput {
+function draftFrom(deal: PipelineDeal | null, snapshot: PipelineSnapshot, stageId: string, currency: string): DealInput {
   return {
     id: deal?.id,
     pipelineId: snapshot.pipeline.id,
@@ -23,7 +25,9 @@ function draftFrom(deal: PipelineDeal | null, snapshot: PipelineSnapshot, stageI
     assignedTo: deal?.assignedTo ?? null,
     title: deal?.title ?? "",
     value: deal?.value ?? 0,
-    currency: deal?.currency ?? "USD",
+    // Deals always carry the workspace currency (Settings → Deals);
+    // saving an old deal migrates it to the global setting.
+    currency,
     company: deal?.company ?? null,
     priority: deal?.priority ?? "normal",
     probability: deal?.probability ?? 20,
@@ -46,7 +50,8 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
   onOpenChange: (open: boolean) => void
   onSave: (input: DealInput) => Promise<ActionResult<PipelineDeal>>
 }) {
-  const [draft, setDraft] = useState(() => draftFrom(deal, snapshot, defaultStageId))
+  const { defaultCurrency: workspaceCurrency } = useAuth()
+  const [draft, setDraft] = useState(() => draftFrom(deal, snapshot, defaultStageId, workspaceCurrency))
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(Boolean(deal && (deal.priority !== "normal" || deal.probability !== 20 || deal.status !== "open" || deal.nextStep || deal.activity)))
@@ -54,14 +59,11 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
   const stageName = snapshot.stages.find((stage) => stage.id === draft.stageId)?.name ?? "No stage"
   const isCreate = !deal
   const busy = pending || submitting
-  const canSubmit = draft.title.trim().length > 0 && draft.currency.trim().length === 3 && !busy
-  const formattedValue = useMemo(() => {
-    try {
-      return new Intl.NumberFormat(undefined, { style: "currency", currency: draft.currency || "USD", maximumFractionDigits: 0 }).format(draft.value || 0)
-    } catch {
-      return `${draft.currency || "USD"} ${draft.value || 0}`
-    }
-  }, [draft.currency, draft.value])
+  const canSubmit = draft.title.trim().length > 0 && !busy
+  const formattedValue = useMemo(
+    () => formatCurrency(draft.value || 0, workspaceCurrency),
+    [workspaceCurrency, draft.value],
+  )
 
   function update<K extends keyof DealInput>(key: K, value: DealInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -117,17 +119,16 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
                     <FieldLabel htmlFor="deal-title">Deal name</FieldLabel>
                     <Input ref={titleRef} id="deal-title" value={draft.title} onChange={(event) => update("title", event.target.value)} placeholder="Acme annual contract" autoFocus required aria-invalid={!draft.title.trim() && Boolean(error)} />
                   </Field>
-                  <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
-                    <Field>
-                      <FieldLabel htmlFor="deal-value"><CircleDollarSign aria-hidden="true" />Amount</FieldLabel>
-                      <Input id="deal-value" type="number" min="0" step="0.01" inputMode="decimal" value={draft.value} onChange={(event) => update("value", Number(event.target.value))} />
-                      <FieldDescription>{formattedValue}</FieldDescription>
-                    </Field>
-                    <Field data-invalid={draft.currency.trim().length !== 3 && Boolean(error)}>
-                      <FieldLabel htmlFor="deal-currency">Currency</FieldLabel>
-                      <Input id="deal-currency" maxLength={3} value={draft.currency} onChange={(event) => update("currency", event.target.value.toUpperCase())} aria-invalid={draft.currency.trim().length !== 3 && Boolean(error)} />
-                    </Field>
-                  </div>
+                  <Field>
+                    <FieldLabel htmlFor="deal-value"><CircleDollarSign aria-hidden="true" />Amount ({workspaceCurrency})</FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground" aria-hidden="true">
+                        {getCurrencySymbol(workspaceCurrency)}
+                      </span>
+                      <Input id="deal-value" type="number" min="0" step="0.01" inputMode="decimal" className="pl-8" value={draft.value} onChange={(event) => update("value", Number(event.target.value))} />
+                    </div>
+                    <FieldDescription>{formattedValue} · workspace currency is set in Settings</FieldDescription>
+                  </Field>
                 </FieldGroup>
               </section>
 
