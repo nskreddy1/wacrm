@@ -32,14 +32,15 @@ const KIND_BADGE: Record<ActivityItem["type"], string> = {
   booking: "bg-[var(--chart-5)]/10 text-[var(--chart-5)]",
 }
 
-export function ActivityFeed({ items }: { items: ActivityItem[] }) {
+export function ActivityFeed({ items, className }: { items: ActivityItem[]; className?: string }) {
   return (
     <ChartCard
       title="Recent activity"
       caption="Latest events across channels, broadcasts and deals"
       href="/inbox"
       hrefLabel="View inbox"
-      contentClassName="p-0"
+      className={className}
+      contentClassName="max-h-80 overflow-y-auto overscroll-contain p-0"
     >
       <ul className="divide-y divide-border">
         {items.map((item) => {

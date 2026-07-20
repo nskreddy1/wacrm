@@ -64,6 +64,15 @@ export type DashboardOverview = {
     type: "message" | "broadcast" | "deal" | "contact" | "booking"
     href: string
   }>
+  /** next scheduled bookings, soonest first */
+  bookings: Array<{
+    id: string
+    contact: string
+    service: string
+    /** e.g. "Today · 2:30 PM" */
+    when: string
+    channel: Channel
+  }>
 }
 
 function daysAgo(n: number) {
@@ -186,5 +195,14 @@ export const DEMO_OVERVIEW: DashboardOverview = {
     { id: "a4", title: "12 new contacts imported from CSV", time: "3h ago", type: "contact", href: "/contacts" },
     { id: "a5", title: "Booking confirmed with Meera Patel", time: "5h ago", type: "booking", href: "/bookings" },
     { id: "a6", title: "New SMS conversation from +1 415 555 0132", time: "6h ago", type: "message", href: "/inbox" },
+    { id: "a7", title: "Deal 'Studio branding' marked as won", time: "8h ago", type: "deal", href: "/pipeline" },
+    { id: "a8", title: "Broadcast 'Appointment reminders' completed", time: "1d ago", type: "broadcast", href: "/broadcasts" },
+    { id: "a9", title: "5 contacts added via web form", time: "1d ago", type: "contact", href: "/contacts" },
+  ],
+  bookings: [
+    { id: "bk1", contact: "Meera Patel", service: "Product demo", when: "Today · 2:30 PM", channel: "whatsapp" },
+    { id: "bk2", contact: "James Wilson", service: "Onboarding call", when: "Today · 4:00 PM", channel: "sms" },
+    { id: "bk3", contact: "Ananya Iyer", service: "Consultation", when: "Tomorrow · 10:15 AM", channel: "whatsapp" },
+    { id: "bk4", contact: "Carlos Ruiz", service: "Follow-up review", when: "Tomorrow · 3:45 PM", channel: "sms" },
   ],
 }

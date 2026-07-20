@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { AlertTriangle, Clock3, Loader2 } from "lucide-react"
+import { AnimatedBar } from "@/components/ui/animated-bar"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { ChannelBadge } from "@/components/ui/channel-badge"
 import { cn } from "@/lib/utils"
@@ -52,15 +53,11 @@ export function BroadcastFunnel({ totals, whatsappEnabled, recent }: BroadcastFu
             <div key={step.key} className="flex flex-col gap-1.5 rounded-lg border border-border bg-card-2 p-3">
               <p className="text-[11px] font-medium text-muted-foreground">{step.label}</p>
               <AnimatedNumber value={value} className="text-lg font-semibold leading-none" />
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${Math.max(pct, 3)}%`,
-                    background: `color-mix(in oklch, var(--primary) ${100 - i * 14}%, var(--muted))`,
-                  }}
-                />
-              </div>
+              <AnimatedBar
+                percent={Math.max(pct, 3)}
+                delay={i * 0.06}
+                color={`color-mix(in oklch, var(--primary) ${100 - i * 14}%, var(--muted))`}
+              />
               <p className="text-[10px] text-muted-foreground" style={{ fontVariantNumeric: "tabular-nums" }}>
                 {pct}% of sent
               </p>

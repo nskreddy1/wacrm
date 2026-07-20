@@ -22,7 +22,9 @@ import { ContactsGrowth } from "./contacts-growth"
 import { DEMO_OVERVIEW } from "./demo-data"
 import { KpiCard } from "./kpi-card"
 import { PipelineFunnel } from "./pipeline-funnel"
+import { QuickActions } from "./quick-actions"
 import { Section } from "./section"
+import { UpcomingBookings } from "./upcoming-bookings"
 import { TeamPerformance } from "./team-performance"
 import { VolumeChart } from "./volume-chart"
 
@@ -48,7 +50,7 @@ export function DashboardWorkspace() {
   const today = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date())
   const greeting = greetingForHour(new Date().getHours())
 
-  const { kpis, channels, volume, broadcasts, pipeline, team, contactsGrowth, activity } = overview
+  const { kpis, channels, volume, broadcasts, pipeline, team, contactsGrowth, activity, bookings } = overview
   const money: Intl.NumberFormatOptions = { style: "currency", currency: kpis.pipelineCurrency, maximumFractionDigits: 0 }
 
   return (
@@ -124,8 +126,11 @@ export function DashboardWorkspace() {
         />
       </Section>
 
+      {/* Body: main analytics column + sticky right rail */}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex min-w-0 flex-col gap-5">
       {/* Volume + channel split */}
-      <Section index={2} className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+      <Section index={2} className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         <ChartCard
           title="Message volume"
           caption="Daily inbound + outbound messages by channel"
@@ -169,7 +174,7 @@ export function DashboardWorkspace() {
       </Section>
 
       {/* Broadcasts + pipeline */}
-      <Section index={3} className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+      <Section index={3} className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         <ChartCard
           title="Broadcast performance"
           caption="Delivery funnel across your latest campaigns"
@@ -190,7 +195,7 @@ export function DashboardWorkspace() {
       </Section>
 
       {/* Team + contacts growth */}
-      <Section index={4} className="grid gap-4 xl:grid-cols-[1fr_1.6fr]">
+      <Section index={4} className="grid gap-4 lg:grid-cols-[1fr_1.6fr]">
         <ChartCard title="Team performance" caption="Open vs resolved conversations per agent" href="/settings" hrefLabel="Manage">
           <TeamPerformance team={team} />
         </ChartCard>
@@ -198,11 +203,18 @@ export function DashboardWorkspace() {
           <ContactsGrowth data={contactsGrowth} />
         </ChartCard>
       </Section>
+        </div>
 
-      {/* Activity */}
-      <Section index={5}>
-        <ActivityFeed items={activity} />
-      </Section>
+        {/* Right rail: sticky on xl, scrolls with the page below */}
+        <Section
+          index={3}
+          className="flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-2 xl:max-h-[calc(100vh-9rem)] xl:overflow-y-auto xl:overscroll-contain xl:pb-1"
+        >
+          <QuickActions />
+          <UpcomingBookings bookings={bookings} />
+          <ActivityFeed items={activity} />
+        </Section>
+      </div>
     </div>
   )
 }

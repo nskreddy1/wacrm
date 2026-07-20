@@ -1,5 +1,6 @@
 "use client"
 
+import { AnimatedBar } from "@/components/ui/animated-bar"
 import { ChartLegend } from "@/components/ui/chart"
 
 type TeamPerformanceProps = {
@@ -43,12 +44,8 @@ export function TeamPerformance({ team }: TeamPerformanceProps) {
                 </p>
               </div>
               <div className="mt-1.5 flex flex-col gap-1">
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max((member.open / max) * 100, 2)}%` }} />
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-positive" style={{ width: `${Math.max((member.resolved7d / max) * 100, 2)}%` }} />
-                </div>
+                <AnimatedBar percent={Math.max((member.open / max) * 100, 2)} color="var(--primary)" />
+                <AnimatedBar percent={Math.max((member.resolved7d / max) * 100, 2)} color="var(--positive)" delay={0.08} />
               </div>
             </div>
           </div>

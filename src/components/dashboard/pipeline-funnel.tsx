@@ -1,6 +1,7 @@
 "use client"
 
 import { Trophy, XCircle } from "lucide-react"
+import { AnimatedBar } from "@/components/ui/animated-bar"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 
 type PipelineFunnelProps = {
@@ -30,16 +31,12 @@ export function PipelineFunnel({ stages, wonValue30d, wonCount30d, lostCount30d,
                   {stage.count} {stage.count === 1 ? "deal" : "deals"} · {moneyFormatter.format(stage.value)}
                 </span>
               </div>
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted" role="presentation">
-                <div
-                  className="h-full rounded-full transition-transform duration-300"
-                  style={{
-                    width: `${pct}%`,
-                    background: `color-mix(in oklch, var(--primary) ${100 - i * 16}%, var(--muted))`,
-                    transitionTimingFunction: "var(--ease-pipeline)",
-                  }}
-                />
-              </div>
+              <AnimatedBar
+                percent={pct}
+                delay={i * 0.06}
+                color={`color-mix(in oklch, var(--primary) ${100 - i * 16}%, var(--muted))`}
+                className="h-2.5"
+              />
             </div>
           )
         })}
