@@ -34,13 +34,17 @@ export default function NewBroadcastPage() {
   const [enabledChannels, setEnabledChannels] = useState<BroadcastChannel[] | null>(null);
   const [channel, setChannel] = useState<BroadcastChannel>('whatsapp');
   const [audience, setAudience] = useState<{
-    type: 'all' | 'tags' | 'custom_field' | 'csv';
+    type: 'all' | 'tags' | 'custom_field' | 'csv' | 'external';
     tagIds?: string[];
     customField?: { fieldId: string; operator: 'is' | 'is_not' | 'contains'; value: string };
     csvContacts?: { phone: string; name?: string }[];
     excludeTagIds?: string[];
+    externalSourceId?: string;
+    externalSourceName?: string;
+    externalCount?: number;
+    externalParamMap?: Record<string, string>;
   }>({ type: 'all' });
-  const [variables, setVariables] = useState<Record<string, { type: 'static' | 'field' | 'custom_field'; value: string }>>({});
+  const [variables, setVariables] = useState<Record<string, { type: 'static' | 'field' | 'custom_field' | 'external_param'; value: string }>>({});
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [name, setName] = useState('');
 
@@ -128,7 +132,7 @@ export default function NewBroadcastPage() {
   const stepContent = [
     <Step1ChooseTemplate key="template" channel={channel} selectedTemplate={template} onSelect={setTemplate} onNext={() => setCurrentStep(1)} onBack={() => router.push('/broadcasts')} />,
     <Step2SelectAudience key="audience" audience={audience} onUpdate={setAudience} onNext={() => setCurrentStep(2)} onBack={() => setCurrentStep(0)} />,
-    template ? <Step3Personalize key="personalize" channel={channel} template={template} variables={variables} onUpdate={setVariables} headerMediaUrl={headerMediaUrl} onHeaderMediaUrlChange={setHeaderMediaUrl} onNext={() => setCurrentStep(3)} onBack={() => setCurrentStep(1)} /> : null,
+    template ? <Step3Personalize key="personalize" channel={channel} template={template} variables={variables} onUpdate={setVariables} headerMediaUrl={headerMediaUrl} onHeaderMediaUrlChange={setHeaderMediaUrl} externalParamMap={audience.type === 'external' ? audience.externalParamMap : undefined} onNext={() => setCurrentStep(3)} onBack={() => setCurrentStep(1)} /> : null,
     template ? <Step4ScheduleSend key="send" name={name} onNameChange={setName} template={template} audience={audience} onSend={handleSend} onSaveDraft={handleSaveDraft} onBack={() => setCurrentStep(2)} isProcessing={isProcessing} progress={progress} /> : null,
   ];
 

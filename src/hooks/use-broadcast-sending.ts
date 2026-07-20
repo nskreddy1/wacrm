@@ -30,6 +30,12 @@ export interface AudienceConfig {
   externalSourceName?: string;
   /** Row count from the last preview, for the review-step estimate. */
   externalCount?: number;
+  /**
+   * Param key → source column label from the source's field_map,
+   * captured at selection time so the personalize step can offer
+   * "External column" mappings without refetching the source.
+   */
+  externalParamMap?: Record<string, string>;
 }
 
 /**
@@ -492,7 +498,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         throw new Error('Your profile is not linked to an account.');
       }
 
-      // ── Step 1: Resolve audience contacts ─────────────────────────
+      // ── Step 1: Resolve audience contacts ────────────────────��────
       setProgress(5);
       const { contacts, externalParams } = await resolveAudience(
         payload.audience,

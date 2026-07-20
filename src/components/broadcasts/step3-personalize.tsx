@@ -15,7 +15,7 @@ import {
 import { ArrowLeft, ArrowRight, Eye, ImageIcon, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-type VariableType = 'static' | 'field' | 'custom_field';
+type VariableType = 'static' | 'field' | 'custom_field' | 'external_param';
 
 interface VariableMapping {
   type: VariableType;
@@ -27,6 +27,12 @@ interface Step3Props {
   template: MessageTemplate;
   variables: Record<string, VariableMapping>;
   onUpdate: (variables: Record<string, VariableMapping>) => void;
+  /**
+   * Param key → source column label, present only when the audience is
+   * an external source. Enables the "External column" mapping type so
+   * template variables can bind to columns pulled from the source.
+   */
+  externalParamMap?: Record<string, string>;
   /** Media URL for an IMAGE/VIDEO/DOCUMENT header, when the template has one. */
   headerMediaUrl: string;
   onHeaderMediaUrlChange: (url: string) => void;
@@ -75,9 +81,14 @@ export function Step3Personalize({
   onUpdate,
   headerMediaUrl,
   onHeaderMediaUrlChange,
+  externalParamMap,
   onNext,
   onBack,
 }: Step3Props) {
+  const externalParamKeys = useMemo(
+    () => Object.keys(externalParamMap ?? {}),
+    [externalParamMap],
+  );
   const t = useTranslations('Broadcasts.wizard');
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [loadingFields, setLoadingFields] = useState(true);
@@ -221,6 +232,10 @@ export function Step3Personalize({
           replacement = fieldMap[mapping.value] ?? placeholder;
         } else if (mapping.type === 'custom_field' && mapping.value) {
           replacement = customValues.get(mapping.value) || placeholder;
+        } else if (mapping.type === 'external_param' && mapping.value) {
+          // Real values only exist at send time (pulled from the
+          // source) — show the mapped column name as a stand-in.
+          replacement = `⟨${externalParamMap?.[mapping.value] ?? mapping.value}⟩`;
         }
       }
       text = text.replaceAll(placeholder, replacement);
@@ -232,6 +247,7 @@ export function Step3Personalize({
     placeholders,
     firstContact,
     firstContactCustomValues,
+    externalParamMap,
   ]);
 
   const previewLabel = firstContact
@@ -336,6 +352,11 @@ export function Step3Personalize({
                         <SelectItem value="custom_field">
                           {t('personalize.typeCustom')}
                         </SelectItem>
+                        {externalParamKeys.length > 0 && (
+                          <SelectItem value="external_param">
+                            {t('personalize.typeExternal')}
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -367,6 +388,26 @@ export function Step3Personalize({
                           {contactFields.map((field) => (
                             <SelectItem key={field.value} value={field.value}>
                               {t(`personalize.fieldMap.${field.labelKey}`)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : mapping.type === 'external_param' ? (
+                      <Select
+                        value={mapping.value || undefined}
+                        onValueChange={(val) =>
+                          updateVariable(key, { value: val || '' })
+                        }
+                      >
+                        <SelectTrigger className="w-full border-border bg-muted text-foreground">
+                          <SelectValue
+                            placeholder={t('personalize.selectExternalColumn')}
+                          />
+                        </SelectTrigger>
+                        <SelectContent className="border-border bg-popover">
+                          {externalParamKeys.map((paramKey) => (
+                            <SelectItem key={paramKey} value={paramKey}>
+                              {externalParamMap?.[paramKey] ?? paramKey}
                             </SelectItem>
                           ))}
                         </SelectContent>

@@ -13,10 +13,12 @@ import {
   ArrowRight,
   ArrowLeft,
   X,
+  Database,
+  AlertTriangle,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-type AudienceType = 'all' | 'tags' | 'custom_field' | 'csv';
+type AudienceType = 'all' | 'tags' | 'custom_field' | 'csv' | 'external';
 type CustomFieldOperator = 'is' | 'is_not' | 'contains';
 
 interface CustomFieldFilter {
@@ -31,7 +33,27 @@ interface AudienceConfig {
   customField?: CustomFieldFilter;
   csvContacts?: { phone: string; name?: string }[];
   excludeTagIds?: string[];
+  externalSourceId?: string;
+  externalSourceName?: string;
+  externalCount?: number;
+  externalParamMap?: Record<string, string>;
 }
+
+/** Shape returned by GET /api/external-sources (no secrets). */
+interface ExternalSourceRow {
+  id: string;
+  name: string;
+  type: 'rest' | 'postgres' | 'google_sheet';
+  field_map: { phone: string; name?: string; params?: Record<string, string> };
+  last_tested_at: string | null;
+  last_row_count: number | null;
+}
+
+const SOURCE_TYPE_LABELS: Record<ExternalSourceRow['type'], string> = {
+  rest: 'REST API',
+  postgres: 'Postgres',
+  google_sheet: 'Google Sheet',
+};
 
 interface Step2Props {
   audience: AudienceConfig;
@@ -84,6 +106,12 @@ export function Step2SelectAudience({
       description: t('selectAudience.csvDesc'),
       icon: Upload,
     },
+    {
+      type: 'external',
+      label: t('selectAudience.method.external'),
+      description: t('selectAudience.externalDesc'),
+      icon: Database,
+    },
   ], [t]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
@@ -91,6 +119,12 @@ export function Step2SelectAudience({
   const [loadingFields, setLoadingFields] = useState(false);
   const [estimatedCount, setEstimatedCount] = useState<number | null>(null);
   const [loadingCount, setLoadingCount] = useState(false);
+  const [sources, setSources] = useState<ExternalSourceRow[] | null>(null);
+  const [loadingSources, setLoadingSources] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewCapped, setPreviewCapped] = useState(false);
+  const [previewInvalid, setPreviewInvalid] = useState(0);
 
   // Tags are used both by the primary "Filter by Tags" audience type
   // AND by the exclude-list below — so always load once on mount.
@@ -127,7 +161,86 @@ export function Step2SelectAudience({
     fetchFields();
   }, [audience.type]);
 
+  // Lazy-load external sources only when that audience type is active.
+  useEffect(() => {
+    if (audience.type !== 'external' || sources !== null) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingSources(true);
+      try {
+        const res = await fetch('/api/external-sources');
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          setSources(res.ok ? ((data.sources ?? []) as ExternalSourceRow[]) : []);
+        }
+      } catch {
+        if (!cancelled) setSources([]);
+      } finally {
+        if (!cancelled) setLoadingSources(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [audience.type, sources]);
+
+  /**
+   * Runs the source's fetcher server-side and stores the resulting
+   * count on the audience config so step 4 (and the summary card)
+   * can show the estimate without refetching.
+   */
+  const runSourcePreview = useCallback(
+    async (sourceId: string, next: AudienceConfig) => {
+      setPreviewing(true);
+      setPreviewError(null);
+      setPreviewCapped(false);
+      setPreviewInvalid(0);
+      try {
+        const res = await fetch(`/api/external-sources/${sourceId}/preview`, {
+          method: 'POST',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setPreviewError(
+            (data.error as string) || t('selectAudience.errorSourcePreview'),
+          );
+          onUpdate({ ...next, externalCount: undefined });
+          return;
+        }
+        setPreviewCapped(Boolean(data.capped));
+        setPreviewInvalid(Number(data.invalid) || 0);
+        onUpdate({ ...next, externalCount: Number(data.count) || 0 });
+      } catch {
+        setPreviewError(t('selectAudience.errorSourcePreview'));
+        onUpdate({ ...next, externalCount: undefined });
+      } finally {
+        setPreviewing(false);
+      }
+    },
+    [onUpdate, t],
+  );
+
+  function selectExternalSource(sourceId: string) {
+    const source = sources?.find((s) => s.id === sourceId);
+    if (!source) return;
+    const next: AudienceConfig = {
+      ...audience,
+      externalSourceId: source.id,
+      externalSourceName: source.name,
+      externalParamMap: source.field_map?.params,
+      externalCount: undefined,
+    };
+    onUpdate(next);
+    void runSourcePreview(source.id, next);
+  }
+
   const fetchEstimatedCount = useCallback(async () => {
+    // External audiences get their count from the preview endpoint —
+    // skip the Supabase estimation path entirely.
+    if (audience.type === 'external') {
+      setEstimatedCount(audience.externalCount ?? null);
+      return;
+    }
     setLoadingCount(true);
     try {
       const supabase = createClient();
@@ -207,6 +320,7 @@ export function Step2SelectAudience({
     audience.customField,
     audience.csvContacts,
     audience.excludeTagIds,
+    audience.externalCount,
   ]);
 
   useEffect(() => {
@@ -246,7 +360,13 @@ export function Step2SelectAudience({
       audience.customField.value.length > 0) ||
     (audience.type === 'csv' &&
       audience.csvContacts &&
-      audience.csvContacts.length > 0);
+      audience.csvContacts.length > 0) ||
+    (audience.type === 'external' &&
+      !!audience.externalSourceId &&
+      (audience.externalCount ?? 0) > 0 &&
+      !previewCapped &&
+      !previewError &&
+      !previewing);
 
   return (
     <div className="space-y-6">
@@ -277,6 +397,14 @@ export function Step2SelectAudience({
                       : undefined,
                   csvContacts:
                     option.type === 'csv' ? audience.csvContacts : undefined,
+                  externalSourceId:
+                    option.type === 'external' ? audience.externalSourceId : undefined,
+                  externalSourceName:
+                    option.type === 'external' ? audience.externalSourceName : undefined,
+                  externalCount:
+                    option.type === 'external' ? audience.externalCount : undefined,
+                  externalParamMap:
+                    option.type === 'external' ? audience.externalParamMap : undefined,
                 })
               }
               className={`flex items-start gap-3 rounded-xl border p-4 text-left transition-all ${
@@ -387,6 +515,82 @@ export function Step2SelectAudience({
                 className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
+          )}
+        </div>
+      )}
+
+      {audience.type === 'external' && (
+        <div className="space-y-3 rounded-xl border border-border bg-card/50 p-4">
+          <p className="text-sm font-medium text-foreground">
+            {t('selectAudience.selectSource')}
+          </p>
+          {loadingSources ? (
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          ) : !sources || sources.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {t('selectAudience.noSourcesFound')}
+            </p>
+          ) : (
+            <>
+              <select
+                value={audience.externalSourceId ?? ''}
+                onChange={(e) => selectExternalSource(e.target.value)}
+                disabled={previewing}
+                className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:max-w-md"
+              >
+                <option value="">{t('selectAudience.selectSourcePlaceholder')}</option>
+                {sources.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({SOURCE_TYPE_LABELS[s.type]})
+                  </option>
+                ))}
+              </select>
+
+              {previewing && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-xs text-muted-foreground">
+                    {t('selectAudience.sourceTesting')}
+                  </span>
+                </div>
+              )}
+
+              {!previewing && previewError && (
+                <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+                  <p className="text-xs leading-5 text-red-300">{previewError}</p>
+                </div>
+              )}
+
+              {!previewing && !previewError && previewCapped && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                  <p className="text-xs leading-5 text-amber-300">
+                    {t('selectAudience.sourceCapped')}
+                  </p>
+                </div>
+              )}
+
+              {!previewing &&
+                !previewError &&
+                !previewCapped &&
+                audience.externalSourceId &&
+                audience.externalCount !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('selectAudience.sourcePreviewCount', {
+                      count: audience.externalCount,
+                    })}
+                    {previewInvalid > 0 && (
+                      <span className="text-amber-300">
+                        {' '}
+                        {t('selectAudience.sourceInvalidRows', {
+                          count: previewInvalid,
+                        })}
+                      </span>
+                    )}
+                  </p>
+                )}
+            </>
           )}
         </div>
       )}
