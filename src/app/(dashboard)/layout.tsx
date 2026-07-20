@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { getCurrentAccount } from "@/lib/auth/account";
 import type { AccountRole } from "@/lib/auth/roles";
+import { getSessionPayload, type SessionPayload } from "@/lib/auth/session-payload";
 import { DashboardShell } from "./dashboard-shell";
 
 // Server layout whose only job is to declare "do not index" metadata
@@ -28,20 +28,27 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Resolve the viewer's role on the server so the sidebar's first
-  // paint already shows the full role-scoped navigation — no staged
-  // "few items now, more items later" flash. getCurrentAccount() is
-  // request-cached, so route handlers/pages resolving it in the same
-  // request pay zero extra queries. Falls back to null (viewer-safe
-  // subset) if resolution fails; proxy will redirect unauthenticated
-  // visitors anyway.
+  // Resolve the viewer's FULL session (user + profile + account) on
+  // the server so the first paint after login already renders the real
+  // account name, greeting, and role-scoped navigation — no "Account"
+  // placeholder flash while a client-side /api/v1/session fetch runs.
+  // The payload seeds AuthProvider's SWR cache as fallbackData; SWR
+  // still revalidates in the background, so profile edits propagate.
+  // Falls back to null (viewer-safe subset + client fetch) if
+  // resolution fails; proxy redirects unauthenticated visitors anyway.
+  let initialSession: SessionPayload | null = null;
   let initialRole: AccountRole | null = null;
   try {
-    const account = await getCurrentAccount();
-    initialRole = account.role;
+    initialSession = await getSessionPayload();
+    initialRole = initialSession.data.profile.account_role;
   } catch {
+    initialSession = null;
     initialRole = null;
   }
 
-  return <DashboardShell initialRole={initialRole}>{children}</DashboardShell>;
+  return (
+    <DashboardShell initialRole={initialRole} initialSession={initialSession}>
+      {children}
+    </DashboardShell>
+  );
 }

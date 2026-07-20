@@ -5,6 +5,7 @@ import { DashboardCacheProvider } from "@/components/providers/dashboard-cache-p
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AuthProvider } from "@/hooks/use-auth"
 import type { AccountRole } from "@/lib/auth/roles"
+import type { SessionPayload } from "@/lib/auth/session-payload"
 
 function DashboardShellInner({
   children,
@@ -30,9 +31,16 @@ function DashboardShellInner({
 export function DashboardShell({
   children,
   initialRole = null,
+  initialSession = null,
 }: {
   children: React.ReactNode
   initialRole?: AccountRole | null
+  /**
+   * Server-resolved session payload. Seeds AuthProvider's SWR cache so
+   * the first client paint after login shows the real account/profile
+   * instead of placeholders while /api/v1/session fetches.
+   */
+  initialSession?: SessionPayload | null
 }) {
   // DashboardCacheProvider must wrap AuthProvider: AuthProvider's
   // useSWR("/api/v1/session") relies on the global fetcher configured
@@ -40,7 +48,7 @@ export function DashboardShell({
   // every consumer of useAuth() renders permanent fallbacks.
   return (
     <DashboardCacheProvider>
-      <AuthProvider>
+      <AuthProvider initialSession={initialSession}>
         <DashboardShellInner initialRole={initialRole}>{children}</DashboardShellInner>
       </AuthProvider>
     </DashboardCacheProvider>
