@@ -67,12 +67,22 @@ export async function proxy(request: NextRequest) {
     },
   })
 
-  const { data: { user } } = await supabase.auth.getUser()
+  // PERF: `getClaims()` verifies the JWT locally (signature + `exp`
+  // expiration check against the project's public signing keys) with no
+  // network round-trip on the hot path — unlike `getUser()`, which
+  // called the Supabase Auth server on every request. When the access
+  // token is expired, the client transparently refreshes it via the
+  // refresh token (one network call, only near expiry) and the new
+  // cookies propagate through the `setAll` handler above. Security is
+  // unchanged: expired or tampered tokens fail verification and the
+  // request is treated as signed out.
+  const { data: claims } = await supabase.auth.getClaims()
+  const isAuthenticated = Boolean(claims?.claims.sub)
 
-  if (user && (pathname === routes.home || authRouteSet.has(pathname))) {
+  if (isAuthenticated && (pathname === routes.home || authRouteSet.has(pathname))) {
     return redirectWithCookies(request, authenticatedDestination(request), response)
   }
-  if (!user && !isPublicPath(pathname)) {
+  if (!isAuthenticated && !isPublicPath(pathname)) {
     return redirectWithCookies(request, routes.auth.login, response)
   }
   return response
