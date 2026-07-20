@@ -135,7 +135,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
       .eq("account_id", ctx.accountId),
     ctx.supabase
       .from("contacts")
-      .select("id, values, created_at")
+      .select("id, name, created_at")
       .eq("account_id", ctx.accountId)
       .gte("created_at", since60d)
       .order("created_at", { ascending: false }),
@@ -188,7 +188,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
   const contactsTotal = contactsTotalRes.count ?? 0
   const recentContacts = (contactsRecentRes.data ?? []) as Array<{
     id: string
-    values: Record<string, unknown> | null
+    name: string | null
     created_at: string
   }>
   const contactDates = recentContacts.map((row) => String(row.created_at))
@@ -359,11 +359,6 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
 
   // ---- Activity feed ---------------------------------------
   // Merge the latest events across surfaces, then sort by recency.
-  const contactDisplayName = (values: Record<string, unknown> | null) => {
-    const name = values?.name ?? values?.full_name
-    return typeof name === "string" && name.trim() ? name.trim() : "New contact"
-  }
-
   const activityCandidates: Array<ActivityEntry & { at: number }> = [
     ...messages.slice(0, 4).map((message) => ({
       id: `msg-${message.id}`,
@@ -400,7 +395,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     })),
     ...recentContacts.slice(0, 3).map((row) => ({
       id: `contact-${row.id}`,
-      title: `Contact "${contactDisplayName(row.values)}" was added`,
+      title: `Contact "${row.name?.trim() || "New contact"}" was added`,
       time: relativeTime(row.created_at),
       at: new Date(row.created_at).getTime(),
       type: "contact" as const,
