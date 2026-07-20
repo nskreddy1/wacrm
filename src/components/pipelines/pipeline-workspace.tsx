@@ -43,7 +43,21 @@ function dueState(due: string | null) {
 export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipelineId, initialSavedViewId }: { initialSnapshot: PipelineSnapshot; initialMode: PipelineMode; initialSubPipelineId?: string; initialSavedViewId?: string }) {
   const router = useRouter()
   const searchRef = useRef<HTMLInputElement>(null)
-  const { data: snapshot = initialSnapshot, mutate } = useSWR<PipelineSnapshot>(cacheKeys.pipelineSnapshot(initialSnapshot.accountId, initialSnapshot.pipeline.id), null, { fallbackData: initialSnapshot, revalidateOnFocus: false })
+  // Client-side cache only: all updates flow through explicit `mutate`
+  // calls with { revalidate: false }. Revalidation must stay fully off —
+  // otherwise SWR joins the array key into a bogus URL ("/account,…,snapshot")
+  // and hits the global fetcher with it (observed as repeating 404s).
+  const { data: snapshot = initialSnapshot, mutate } = useSWR<PipelineSnapshot>(
+    cacheKeys.pipelineSnapshot(initialSnapshot.accountId, initialSnapshot.pipeline.id),
+    null,
+    {
+      fallbackData: initialSnapshot,
+      revalidateOnMount: false,
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  )
   const [query, setQuery] = useState("")
   const [owner, setOwner] = useState("all")
   const [stage, setStage] = useState("all")
