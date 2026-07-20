@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
   Briefcase,
@@ -35,6 +36,24 @@ function greetingForHour(hour: number) {
 }
 
 /**
+ * Time-of-day values must be computed after mount: the server clock
+ * (UTC) can disagree with the visitor's local clock, which caused a
+ * hydration mismatch ("Good morning" vs "Good afternoon"). SSR renders
+ * the neutral fallbacks, then the client swaps in local values.
+ */
+function useLocalClock() {
+  const [clock, setClock] = useState<{ greeting: string; today: string } | null>(null)
+  useEffect(() => {
+    const now = new Date()
+    setClock({
+      greeting: greetingForHour(now.getHours()),
+      today: new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(now),
+    })
+  }, [])
+  return clock
+}
+
+/**
  * Live CRM command center.
  *
  * NOTE: currently rendering hardcoded DEMO_OVERVIEW data while the
@@ -47,8 +66,9 @@ export function DashboardWorkspace() {
 
   const firstName = personDisplayName(profile?.full_name, profile?.email).split(/\s+/)[0] || "there"
   const workspaceName = workspaceDisplayName(account?.name)
-  const today = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date())
-  const greeting = greetingForHour(new Date().getHours())
+  const clock = useLocalClock()
+  const greeting = clock?.greeting ?? "Welcome back"
+  const today = clock?.today ?? "Overview"
 
   const { kpis, channels, volume, broadcasts, pipeline, team, contactsGrowth, activity, bookings } = overview
   const money: Intl.NumberFormatOptions = { style: "currency", currency: kpis.pipelineCurrency, maximumFractionDigits: 0 }
