@@ -11,8 +11,8 @@ type KpiCardProps = {
   value: number
   /** Intl format for the value (e.g. currency) */
   format?: Intl.NumberFormatOptions
-  /** percentage change vs previous period; omit to hide the delta chip */
-  delta?: number
+  /** Percentage change vs previous period; omit or null hides the delta chip. */
+  delta?: number | null
   /** small line under the value, e.g. "9 unassigned" */
   detail?: string
   /** rendered right after the value, e.g. "%" */

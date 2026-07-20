@@ -1,8 +1,11 @@
-import { MessageCircle, MessageSquareText } from "lucide-react"
+import { Mail, MessageCircle, MessageSquareText } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+/** Every channel the product can display (conversations: whatsapp/email, broadcasts: whatsapp/sms). */
+export type BadgeChannel = "whatsapp" | "sms" | "email"
+
 type ChannelBadgeProps = {
-  channel: "whatsapp" | "sms"
+  channel: BadgeChannel
   className?: string
   /** compact = icon + short label, useful in dense tables */
   compact?: boolean
@@ -11,6 +14,7 @@ type ChannelBadgeProps = {
 const CHANNEL_META = {
   whatsapp: { label: "WhatsApp", Icon: MessageCircle, dot: "bg-channel-whatsapp", text: "text-channel-whatsapp" },
   sms: { label: "SMS", Icon: MessageSquareText, dot: "bg-channel-sms", text: "text-channel-sms" },
+  email: { label: "Email", Icon: Mail, dot: "bg-channel-email", text: "text-channel-email" },
 } as const
 
 /** Fixed semantic channel identity: icon + label + channel color (never color alone). */
@@ -30,10 +34,10 @@ export function ChannelBadge({ channel, className, compact = false }: ChannelBad
   )
 }
 
-export function channelColorVar(channel: "whatsapp" | "sms") {
-  return channel === "whatsapp" ? "var(--channel-whatsapp)" : "var(--channel-sms)"
+export function channelColorVar(channel: BadgeChannel) {
+  return `var(--channel-${channel})`
 }
 
-export function channelLabel(channel: "whatsapp" | "sms") {
+export function channelLabel(channel: BadgeChannel) {
   return CHANNEL_META[channel].label
 }
