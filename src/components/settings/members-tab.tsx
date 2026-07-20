@@ -21,7 +21,7 @@
 //   the role anyway.
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
@@ -29,6 +29,7 @@ import {
   Mail,
   MailX,
   Plus,
+  Search,
   Trash2,
   UsersRound,
 } from 'lucide-react';
@@ -47,6 +48,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -95,6 +97,17 @@ interface Invitation {
   expires_at: string;
 }
 
+/** Whole-account role counts from the paginated members API. */
+interface RoleSummary {
+  total: number;
+  owner: number;
+  admin: number;
+  agent: number;
+  viewer: number;
+}
+
+const PAGE_SIZE = 50;
+
 // These roles are translated via `useTranslations("Settings.roles")` where they are used.
 const EDITABLE_ROLES: { value: AccountRole }[] = [
   { value: 'admin' },
@@ -134,7 +147,11 @@ export function MembersTab() {
 
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [summary, setSummary] = useState<RoleSummary | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
@@ -142,45 +159,104 @@ export function MembersTab() {
     null,
   );
 
-  const loadEverything = useCallback(async () => {
-    try {
-      const [mres, ires] = await Promise.all([
-        fetch('/api/account/members', { cache: 'no-store' }),
-        canManageMembers
-          ? fetch('/api/account/invitations', { cache: 'no-store' })
-          : Promise.resolve(null),
-      ]);
+  // Monotonically increasing request id — a stale search response
+  // arriving after a newer one must not clobber the newer page.
+  const requestSeq = useRef(0);
 
-      if (!mres.ok) {
-        const payload = await mres.json().catch(() => ({}));
-        toast.error(payload.error || 'Failed to load members');
-        return;
-      }
-      const mdata = (await mres.json()) as { members: Member[] };
-      setMembers(mdata.members);
+  const loadEverything = useCallback(
+    async (q: string) => {
+      const seq = ++requestSeq.current;
+      try {
+        const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+        if (q) params.set('q', q);
+        const [mres, ires] = await Promise.all([
+          fetch(`/api/account/members?${params}`, { cache: 'no-store' }),
+          canManageMembers
+            ? fetch('/api/account/invitations', { cache: 'no-store' })
+            : Promise.resolve(null),
+        ]);
+        if (seq !== requestSeq.current) return;
 
-      if (ires) {
-        if (!ires.ok) {
-          const payload = await ires.json().catch(() => ({}));
-          toast.error(payload.error || 'Failed to load invitations');
+        if (!mres.ok) {
+          const payload = await mres.json().catch(() => ({}));
+          toast.error(payload.error || 'Failed to load members');
           return;
         }
-        const idata = (await ires.json()) as { invitations: Invitation[] };
-        setInvitations(idata.invitations);
-      } else {
-        setInvitations([]);
+        const mdata = (await mres.json()) as {
+          members: Member[];
+          next_cursor: string | null;
+          summary: RoleSummary;
+        };
+        if (seq !== requestSeq.current) return;
+        setMembers(mdata.members);
+        setNextCursor(mdata.next_cursor);
+        setSummary(mdata.summary);
+
+        if (ires) {
+          if (!ires.ok) {
+            const payload = await ires.json().catch(() => ({}));
+            toast.error(payload.error || 'Failed to load invitations');
+            return;
+          }
+          const idata = (await ires.json()) as { invitations: Invitation[] };
+          setInvitations(idata.invitations);
+        } else {
+          setInvitations([]);
+        }
+      } catch (err) {
+        console.error('[MembersTab] load error:', err);
+        toast.error('Could not reach the server');
+      } finally {
+        if (seq === requestSeq.current) setLoading(false);
       }
+    },
+    [canManageMembers],
+  );
+
+  // Initial load + debounced server-side search (300ms).
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadEverything(search.trim());
+    }, search ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [search, loadEverything]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        cursor: nextCursor,
+      });
+      const q = search.trim();
+      if (q) params.set('q', q);
+      const res = await fetch(`/api/account/members?${params}`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || 'Failed to load more members');
+        return;
+      }
+      const data = (await res.json()) as {
+        members: Member[];
+        next_cursor: string | null;
+      };
+      setMembers((prev) => {
+        // Dedupe defensively: a role change between pages could shift
+        // keyset boundaries and repeat a row.
+        const seen = new Set(prev.map((m) => m.user_id));
+        return [...prev, ...data.members.filter((m) => !seen.has(m.user_id))];
+      });
+      setNextCursor(data.next_cursor);
     } catch (err) {
-      console.error('[MembersTab] load error:', err);
+      console.error('[MembersTab] load more error:', err);
       toast.error('Could not reach the server');
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-  }, [canManageMembers]);
-
-  useEffect(() => {
-    void loadEverything();
-  }, [loadEverything]);
+  }, [nextCursor, loadingMore, search]);
 
   async function handleRoleChange(member: Member, nextRole: AccountRole) {
     if (member.role === nextRole) return;
@@ -215,6 +291,16 @@ export function MembersTab() {
         toast.error(payload.error || 'Failed to update role');
         return;
       }
+      // Keep the whole-account role counts honest without a refetch.
+      setSummary((prev) =>
+        prev
+          ? {
+              ...prev,
+              [previousRole]: Math.max(0, prev[previousRole] - 1),
+              [nextRole]: prev[nextRole] + 1,
+            }
+          : prev,
+      );
       toast.success(t('updatedToast', { name: member.full_name || t('unnamed'), role: tRoles(nextRole) }));
     } catch (err) {
       // Same revert on network failure.
@@ -246,6 +332,15 @@ export function MembersTab() {
       toast.success(t('removedToast', { name: removingMember.full_name || t('unnamed') }));
       setMembers((prev) =>
         prev.filter((m) => m.user_id !== removingMember.user_id),
+      );
+      setSummary((prev) =>
+        prev
+          ? {
+              ...prev,
+              total: Math.max(0, prev.total - 1),
+              [removingMember.role]: Math.max(0, prev[removingMember.role] - 1),
+            }
+          : prev,
       );
       setRemovingMember(null);
     } catch (err) {
@@ -301,6 +396,61 @@ export function MembersTab() {
           name is what every member sees in their sidebar. */}
       <WorkspaceNameCard />
 
+      {/* Enterprise summary strip — whole-account counts from the
+          server (independent of search/pagination), so the numbers
+          stay honest even when only one page of rows is loaded. */}
+      {summary && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Card>
+            <CardContent className="px-4 py-3">
+              <p className="text-xs text-muted-foreground">{t('statTotal')}</p>
+              <p className="mt-0.5 text-xl font-semibold text-foreground">
+                {summary.total}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="px-4 py-3">
+              <p className="text-xs text-muted-foreground">{t('statAdmins')}</p>
+              <p className="mt-0.5 text-xl font-semibold text-foreground">
+                {summary.owner + summary.admin}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="px-4 py-3">
+              <p className="text-xs text-muted-foreground">{t('statAgents')}</p>
+              <p className="mt-0.5 text-xl font-semibold text-foreground">
+                {summary.agent + summary.viewer}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="px-4 py-3">
+              <p className="text-xs text-muted-foreground">
+                {t('statPendingInvites')}
+              </p>
+              <p className="mt-0.5 text-xl font-semibold text-foreground">
+                {canManageMembers ? invitations.length : '—'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Server-side roster search — debounced; scales to hundreds of
+          members because filtering happens in the DB, not the client. */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t('searchPlaceholder')}
+          aria-label={t('searchPlaceholder')}
+          className="pl-9"
+        />
+      </div>
+
       {/* Live presence summary across the roster. Updates without a
           full refresh as heartbeats and the local re-derive tick land. */}
       {members.length > 0 &&
@@ -321,7 +471,7 @@ export function MembersTab() {
                 {counts.offline} {t('offline')}
               </span>
               <span className="text-muted-foreground/70">
-                · {t('memberCount', { count: members.length })}
+                · {t('memberCount', { count: summary?.total ?? members.length })}
               </span>
             </div>
           );
@@ -330,6 +480,14 @@ export function MembersTab() {
       {/* Roster */}
       <Card>
         <CardContent className="p-0">
+          {members.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <UsersRound className="size-6 text-muted-foreground" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                {search.trim() ? t('noSearchResults') : t('memberCount', { count: 0 })}
+              </p>
+            </div>
+          )}
           <ul className="divide-y divide-border">
             {members.map((member) => {
               const roleMeta = ROLE_META[member.role];
@@ -479,6 +637,25 @@ export function MembersTab() {
               );
             })}
           </ul>
+          {nextCursor && (
+            <div className="border-t border-border p-3 text-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    {t('loadingMore')}
+                  </>
+                ) : (
+                  t('loadMore')
+                )}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -572,7 +749,7 @@ export function MembersTab() {
       <InviteMemberDialog
         open={inviteOpen}
         onOpenChange={setInviteOpen}
-        onCreated={loadEverything}
+        onCreated={() => void loadEverything(search.trim())}
       />
 
       <Dialog
