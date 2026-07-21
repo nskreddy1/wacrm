@@ -14,7 +14,12 @@ const ANTHROPIC_VERSION = '2023-06-01'
 
 interface AnthropicResponse {
   content?: { type?: string; text?: string }[]
-  usage?: { input_tokens?: number; output_tokens?: number }
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    cache_read_input_tokens?: number
+    cache_creation_input_tokens?: number
+  }
 }
 
 /**
@@ -41,7 +46,21 @@ function normalizeForAnthropic(messages: ChatMessage[]): ChatMessage[] {
  * in the shared dispatch layer).
  */
 export async function generateAnthropic(args: ProviderArgs): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args
+  const { apiKey, model, systemPrompt, messages, timeoutMs, systemBlocks } = args
+
+  // Cache-aligned path: send the system prompt as an array of blocks,
+  // each ending in a `cache_control` breakpoint — block 0 (platform
+  // scaffold) is shared by EVERY account, block 1 (business context)
+  // by every conversation of the account. Anthropic then bills cached
+  // reads at 10% of input price. Legacy path keeps the plain string.
+  const system =
+    systemBlocks && systemBlocks.length > 0
+      ? systemBlocks.map((text) => ({
+          type: 'text' as const,
+          text,
+          cache_control: { type: 'ephemeral' as const },
+        }))
+      : systemPrompt
 
   let res: Response
   try {
@@ -54,7 +73,7 @@ export async function generateAnthropic(args: ProviderArgs): Promise<ProviderRes
       },
       body: JSON.stringify({
         model,
-        system: systemPrompt,
+        system,
         max_tokens: MAX_OUTPUT_TOKENS,
         messages: normalizeForAnthropic(messages),
       }),
@@ -80,9 +99,15 @@ export async function generateAnthropic(args: ProviderArgs): Promise<ProviderRes
     })
   }
   // Anthropic reports input/output but no total — normalizeUsage sums.
+  // Note: input_tokens EXCLUDES cache reads/writes, so add them back
+  // for a comparable "full prompt size" number across providers.
+  const cacheRead = data?.usage?.cache_read_input_tokens ?? 0
+  const cacheWrite = data?.usage?.cache_creation_input_tokens ?? 0
   const usage = normalizeUsage({
-    prompt: data?.usage?.input_tokens,
+    prompt: (data?.usage?.input_tokens ?? 0) + cacheRead + cacheWrite,
     completion: data?.usage?.output_tokens,
+    cached: data?.usage?.cache_read_input_tokens,
+    cacheWrite: data?.usage?.cache_creation_input_tokens,
   })
   return { text, usage }
 }

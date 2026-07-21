@@ -19,6 +19,8 @@ interface GeminiResponse {
     promptTokenCount?: number
     candidatesTokenCount?: number
     totalTokenCount?: number
+    /** Tokens served from Gemini's implicit prefix cache (75-90% off). */
+    cachedContentTokenCount?: number
   }
 }
 
@@ -75,6 +77,7 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
     prompt: data?.usageMetadata?.promptTokenCount,
     completion: data?.usageMetadata?.candidatesTokenCount,
     total: data?.usageMetadata?.totalTokenCount,
+    cached: data?.usageMetadata?.cachedContentTokenCount,
   })
   return { text, usage }
 }

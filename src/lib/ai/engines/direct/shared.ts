@@ -37,6 +37,10 @@ export function normalizeUsage(raw: {
   prompt?: unknown
   completion?: unknown
   total?: unknown
+  /** Provider-reported cached (discounted) prompt tokens. */
+  cached?: unknown
+  /** Anthropic cache_creation_input_tokens (one-time +25% write). */
+  cacheWrite?: unknown
 }): AiUsage | null {
   const num = (v: unknown): number =>
     typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0
@@ -47,7 +51,19 @@ export function normalizeUsage(raw: {
   if (promptTokens === 0 && completionTokens === 0 && totalTokens === 0) {
     return null
   }
-  return { promptTokens, completionTokens, totalTokens }
+  // Cache counts: keep null (not 0) when the provider didn't report,
+  // so telemetry can tell "no caching info" apart from "0% hit".
+  const cachedTokens =
+    typeof raw.cached === 'number' && Number.isFinite(raw.cached) && raw.cached >= 0
+      ? Math.floor(raw.cached)
+      : null
+  const cacheWriteTokens =
+    typeof raw.cacheWrite === 'number' &&
+    Number.isFinite(raw.cacheWrite) &&
+    raw.cacheWrite >= 0
+      ? Math.floor(raw.cacheWrite)
+      : null
+  return { promptTokens, completionTokens, totalTokens, cachedTokens, cacheWriteTokens }
 }
 
 /** Map a fetch rejection (timeout / DNS / offline) to a typed AiError. */
