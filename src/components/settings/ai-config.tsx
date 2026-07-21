@@ -525,9 +525,14 @@ export function AiConfig() {
                 </p>
               </div>
               <Switch
+                id="ai-assistant-active"
                 checked={isActive}
-                onCheckedChange={setIsActive}
+                onCheckedChange={(checked) => {
+                  setIsActive(checked);
+                  if (!checked) setAutoReplyEnabled(false);
+                }}
                 disabled={disabled}
+                aria-label={t('enableAssistant')}
               />
             </div>
 
@@ -541,9 +546,17 @@ export function AiConfig() {
                 </p>
               </div>
               <Switch
+                id="ai-auto-reply"
                 checked={autoReplyEnabled}
-                onCheckedChange={setAutoReplyEnabled}
-                disabled={disabled || !isActive}
+                onCheckedChange={(checked) => {
+                  setAutoReplyEnabled(checked);
+                  // Auto-reply requires an active assistant. Let users enable
+                  // it directly here instead of forcing them to discover and
+                  // toggle the separate assistant control first.
+                  if (checked) setIsActive(true);
+                }}
+                disabled={disabled}
+                aria-label={t('autoReply')}
               />
             </div>
 
