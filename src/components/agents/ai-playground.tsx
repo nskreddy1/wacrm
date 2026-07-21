@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import useSWR from 'swr';
 import { toast } from 'sonner';
 import { Bot, RotateCcw, Send, Loader2, UserCircle2, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -13,11 +14,32 @@ interface Turn {
   handoff?: boolean;
 }
 
+/** The subset of GET /api/ai/config the playground cares about. */
+interface ConfigStatus {
+  configured: boolean;
+  env_fallback: boolean;
+  auto_reply_live: boolean;
+  is_active?: boolean;
+}
+
+const fetchConfig = async (url: string): Promise<ConfigStatus> => {
+  const res = await fetch(url);
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error ?? 'Could not load AI status');
+  return payload as ConfigStatus;
+};
+
 export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Config-aware empty state: "Go to Setup" only shows when the agent
+  // genuinely isn't set up, instead of unconditionally.
+  const { data: config } = useSWR<ConfigStatus>('/api/ai/config', fetchConfig, {
+    revalidateOnFocus: true,
+  });
+  const isSetUp = Boolean(config && (config.configured || config.env_fallback));
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -106,20 +128,54 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
         {turns.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center text-sm text-muted-foreground">
             <Bot className="mb-2 h-8 w-8 text-muted-foreground/60" />
-            <p>Send a message to see how your agent would reply.</p>
-            <p className="mt-1 text-xs">
-              It uses your knowledge base and behaves exactly like the
-              auto-reply bot — including handoff.
-            </p>
-            {onGoToSetup && (
-              <Button
-                variant="link"
-                size="sm"
-                onClick={onGoToSetup}
-                className="mt-1 h-auto p-0 text-xs"
-              >
-                Not set up yet? Go to Setup <ArrowRight className="ml-1 h-3 w-3" />
-              </Button>
+            {!config ? (
+              // Status still loading — neutral copy, no misleading CTA.
+              <p>Send a message to see how your agent would reply.</p>
+            ) : !isSetUp ? (
+              <>
+                <p>Your agent isn&apos;t set up yet.</p>
+                <p className="mt-1 text-xs">
+                  Add a provider key in Setup, then come back here to test it.
+                </p>
+                {onGoToSetup && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={onGoToSetup}
+                    className="mt-1 h-auto p-0 text-xs"
+                  >
+                    Go to Setup <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <p>Send a message to see how your agent would reply.</p>
+                <p className="mt-1 text-xs">
+                  It uses your knowledge base and behaves exactly like the
+                  auto-reply bot — including handoff.
+                </p>
+                <p
+                  className={cn(
+                    'mt-2 flex items-center gap-1.5 text-xs',
+                    config.auto_reply_live
+                      ? 'text-emerald-600 dark:text-emerald-500'
+                      : 'text-muted-foreground'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'inline-block size-1.5 rounded-full',
+                      config.auto_reply_live
+                        ? 'bg-emerald-500'
+                        : 'bg-muted-foreground/50'
+                    )}
+                  />
+                  {config.auto_reply_live
+                    ? 'Auto-reply is live — customers get these answers automatically.'
+                    : 'Auto-reply is off — replies here are test-only until you enable it in Setup.'}
+                </p>
+              </>
             )}
           </div>
         )}
