@@ -1,193 +1,365 @@
-"use client"
+'use client';
 
-// ============================================================
-// Appointments workspace — full scheduling surface backed by
-// /api/v1/workspace/appointments and the services catalog.
-// ============================================================
-
-import { useMemo, useState } from "react"
-import useSWR from "swr"
+import { useMemo, useState } from 'react';
+import useSWR from 'swr';
 import {
-  CalendarClock,
+  AlertCircle,
   CalendarDays,
-  CheckCircle2,
-  Clock3,
   Loader2,
   MapPin,
   Plus,
   Search,
-  UserRound,
-} from "lucide-react"
-import { toast } from "sonner"
+  SlidersHorizontal,
+  X,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
-import type { Appointment, AppointmentStatus, CatalogItem } from "@/lib/data/operations/types"
-import { AppointmentCreateDialog } from "@/components/appointments/appointment-create-dialog"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import type {
+  Appointment,
+  AppointmentStatus,
+  CatalogItem,
+} from '@/lib/data/operations/types';
+import { AppointmentCreateDialog } from '@/components/appointments/appointment-create-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { cn } from "@/lib/utils"
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
-type AppointmentsResponse = { data: Appointment[] }
-type CatalogResponse = { data: CatalogItem[] }
+type AppointmentsResponse = { data: Appointment[] };
+type CatalogResponse = { data: CatalogItem[] };
+type ScheduleScope = 'upcoming' | 'today' | 'past' | 'all';
 
 const STATUS_STYLE: Record<AppointmentStatus, string> = {
-  scheduled: "border-primary/30 bg-primary/10 text-primary",
-  completed: "border-positive/30 bg-positive/10 text-positive",
-  cancelled: "border-border bg-muted text-muted-foreground",
-  no_show: "border-destructive/30 bg-destructive/10 text-destructive",
-}
+  scheduled: 'bg-primary/10 text-primary',
+  completed: 'bg-positive/10 text-positive',
+  cancelled: 'bg-muted text-muted-foreground',
+  no_show: 'bg-destructive/10 text-destructive',
+};
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  scheduled: "Scheduled",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  no_show: "No show",
+  scheduled: 'Scheduled',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  no_show: 'No show',
+};
+
+const SCOPES: Array<{ value: ScheduleScope; label: string }> = [
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'today', label: 'Today' },
+  { value: 'past', label: 'Past' },
+  { value: 'all', label: 'All' },
+];
+
+const timeFormatter = new Intl.DateTimeFormat('en', {
+  hour: 'numeric',
+  minute: '2-digit',
+});
+const weekdayFormatter = new Intl.DateTimeFormat('en', { weekday: 'long' });
+const dateFormatter = new Intl.DateTimeFormat('en', {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+function dayKey(value: string) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-const timeFormatter = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" })
-const dateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" })
+function startOfToday() {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
 
-/** Full appointments workspace: KPI strip, filterable schedule, quick status updates. */
+function formatDayHeading(value: string) {
+  const date = new Date(value);
+  const today = startOfToday();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const key = dayKey(value);
+  const relative =
+    key === dayKey(today.toISOString())
+      ? 'Today'
+      : key === dayKey(tomorrow.toISOString())
+        ? 'Tomorrow'
+        : weekdayFormatter.format(date);
+  return { relative, date: dateFormatter.format(date) };
+}
+
+function formatDuration(item: Appointment) {
+  if (!item.endsAt) return null;
+  const minutes = Math.max(
+    0,
+    Math.round(
+      (new Date(item.endsAt).getTime() - new Date(item.startsAt).getTime()) /
+        60_000
+    )
+  );
+  if (!minutes) return null;
+  return minutes >= 60 && minutes % 60 === 0
+    ? `${minutes / 60}h`
+    : `${minutes}m`;
+}
+
+function ScheduleSkeleton() {
+  return (
+    <div aria-label="Loading schedule" className="animate-pulse">
+      {[0, 1].map((group) => (
+        <div key={group}>
+          <div className="border-border bg-muted/30 h-10 border-b px-4 py-3">
+            <div className="bg-muted h-3 w-40 rounded" />
+          </div>
+          {[0, 1, 2].map((row) => (
+            <div
+              key={row}
+              className="border-border flex h-20 items-center gap-5 border-b px-4 md:px-5"
+            >
+              <div className="bg-muted h-4 w-16 rounded" />
+              <div className="flex flex-1 flex-col gap-2">
+                <div className="bg-muted h-4 w-48 rounded" />
+                <div className="bg-muted h-3 w-72 max-w-full rounded" />
+              </div>
+              <div className="bg-muted hidden h-6 w-20 rounded sm:block" />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AppointmentWorkspace() {
-  const { data, isLoading, mutate } = useSWR<AppointmentsResponse>("/api/v1/workspace/appointments?limit=200")
-  const { data: catalogData } = useSWR<CatalogResponse>("/api/v1/workspace/catalog")
+  const { data, error, isLoading, mutate } = useSWR<AppointmentsResponse>(
+    '/api/v1/workspace/appointments?limit=200'
+  );
+  const { data: catalogData } = useSWR<CatalogResponse>(
+    '/api/v1/workspace/catalog'
+  );
+  const [query, setQuery] = useState('');
+  const [scope, setScope] = useState<ScheduleScope>('upcoming');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [serviceFilter, setServiceFilter] = useState('all');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const [query, setQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [serviceFilter, setServiceFilter] = useState("all")
-  const [createOpen, setCreateOpen] = useState(false)
+  const appointments = useMemo(() => data?.data ?? [], [data]);
+  const services = catalogData?.data ?? [];
+  const { today, tomorrow } = useMemo(() => {
+    const dayStart = startOfToday();
+    const nextDay = new Date(dayStart);
+    nextDay.setDate(nextDay.getDate() + 1);
+    return { today: dayStart, tomorrow: nextDay };
+  }, []);
 
-  const appointments = useMemo(() => data?.data ?? [], [data])
-  const services = catalogData?.data ?? []
-
-  const now = Date.now()
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  const todayEnd = new Date(todayStart)
-  todayEnd.setDate(todayEnd.getDate() + 1)
-
-  const stats = useMemo(() => {
-    const today = appointments.filter((item) => {
-      const t = new Date(item.startsAt).getTime()
-      return t >= todayStart.getTime() && t < todayEnd.getTime() && item.status === "scheduled"
-    }).length
-    const upcoming = appointments.filter(
-      (item) => item.status === "scheduled" && new Date(item.startsAt).getTime() >= now,
-    ).length
-    const completed = appointments.filter((item) => item.status === "completed").length
-    return { today, upcoming, completed, services: services.filter((s) => s.isActive).length }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointments, services])
+  const stats = useMemo(
+    () => ({
+      today: appointments.filter(
+        (item) =>
+          new Date(item.startsAt) >= today &&
+          new Date(item.startsAt) < tomorrow &&
+          item.status === 'scheduled'
+      ).length,
+      upcoming: appointments.filter(
+        (item) =>
+          new Date(item.startsAt) >= today && item.status === 'scheduled'
+      ).length,
+      completed: appointments.filter((item) => item.status === 'completed')
+        .length,
+    }),
+    [appointments, today, tomorrow]
+  );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return appointments.filter((item) => {
-      const haystack = `${item.title} ${item.contactName ?? ""} ${item.catalogItemName ?? ""} ${item.location ?? ""}`.toLowerCase()
-      if (q && !haystack.includes(q)) return false
-      if (statusFilter !== "all" && item.status !== statusFilter) return false
-      if (serviceFilter !== "all" && item.catalogItemId !== serviceFilter) return false
-      return true
-    })
-  }, [appointments, query, statusFilter, serviceFilter])
+    const q = query.trim().toLowerCase();
+    return appointments
+      .filter((item) => {
+        const starts = new Date(item.startsAt);
+        const inScope =
+          scope === 'all' ||
+          (scope === 'today' && starts >= today && starts < tomorrow) ||
+          (scope === 'upcoming' && starts >= today) ||
+          (scope === 'past' && starts < today);
+        const matchesQuery =
+          !q ||
+          `${item.title} ${item.contactName ?? ''} ${item.catalogItemName ?? ''} ${item.location ?? ''}`
+            .toLowerCase()
+            .includes(q);
+        return (
+          inScope &&
+          matchesQuery &&
+          (statusFilter === 'all' || item.status === statusFilter) &&
+          (serviceFilter === 'all' || item.catalogItemId === serviceFilter)
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+      );
+  }, [
+    appointments,
+    query,
+    scope,
+    statusFilter,
+    serviceFilter,
+    today,
+    tomorrow,
+  ]);
 
-  async function updateStatus(id: string, status: AppointmentStatus) {
-    const res = await fetch("/api/v1/workspace/appointments", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    })
-    if (!res.ok) {
-      toast.error("Could not update the appointment")
-      return
+  const grouped = useMemo(() => {
+    const groups = new Map<string, Appointment[]>();
+    for (const item of filtered) {
+      const key = dayKey(item.startsAt);
+      groups.set(key, [...(groups.get(key) ?? []), item]);
     }
-    toast.success("Appointment updated")
-    void mutate()
+    return [...groups.values()];
+  }, [filtered]);
+
+  const hasFilters =
+    Boolean(query) || statusFilter !== 'all' || serviceFilter !== 'all';
+
+  function clearFilters() {
+    setQuery('');
+    setStatusFilter('all');
+    setServiceFilter('all');
   }
 
-  const kpis = [
-    { label: "Today", value: stats.today, Icon: CalendarDays, note: "Sessions scheduled today" },
-    { label: "Upcoming", value: stats.upcoming, Icon: Clock3, note: "Future scheduled sessions" },
-    { label: "Completed", value: stats.completed, Icon: CheckCircle2, note: "Finished appointments" },
-    { label: "Active services", value: stats.services, Icon: CalendarClock, note: "Bookable catalog items" },
-  ]
+  async function updateStatus(id: string, status: AppointmentStatus) {
+    if (updatingId) return;
+    setUpdatingId(id);
+    try {
+      const res = await fetch('/api/v1/workspace/appointments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Appointment updated');
+      await mutate();
+    } catch {
+      toast.error('Could not update the appointment');
+    } finally {
+      setUpdatingId(null);
+    }
+  }
 
   return (
-    <main className="flex min-h-full flex-col gap-4 p-4 md:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-        <div className="min-w-0">
-          <h1 className="text-balance text-xl font-semibold tracking-tight text-foreground">Appointments</h1>
-          <p className="text-pretty text-sm text-muted-foreground">Manage your team&apos;s schedule and sessions.</p>
+    <main className="bg-background flex min-h-full flex-col">
+      <header className="border-border border-b px-4 py-4 md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-foreground text-xl font-semibold tracking-tight text-balance">
+              Appointments
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              Coordinate sessions and keep the team on schedule.
+            </p>
+          </div>
+          <Button size="lg" onClick={() => setCreateOpen(true)}>
+            <Plus aria-hidden="true" /> New appointment
+          </Button>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" aria-hidden="true" /> New appointment
-        </Button>
+        <dl className="mt-4 flex flex-wrap items-center gap-y-2 text-sm">
+          {[
+            ['Today', stats.today],
+            ['Upcoming', stats.upcoming],
+            ['Completed', stats.completed],
+          ].map(([label, value], index) => (
+            <div
+              key={label}
+              className={cn(
+                'flex items-baseline gap-2',
+                index > 0 && 'border-border ml-4 border-l pl-4'
+              )}
+            >
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="text-foreground font-semibold tabular-nums">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </header>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Appointment overview">
-        {kpis.map(({ label, value, Icon, note }) => (
-          <Card key={label}>
-            <CardContent className="flex items-start justify-between gap-3 p-5">
-              <div className="flex flex-col gap-1">
-                <p className="text-sm text-muted-foreground">{label}</p>
-                <p className="text-3xl font-semibold tracking-tight text-foreground tabular-nums">{value}</p>
-                <p className="text-xs text-muted-foreground">{note}</p>
-              </div>
-              <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                <Icon className="size-5" aria-hidden="true" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </section>
-
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b border-border">
-          <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-            <div>
-              <CardTitle>Schedule</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">Your complete appointment queue</p>
+      <section
+        className="flex min-h-0 flex-1 flex-col"
+        aria-label="Appointment schedule"
+      >
+        <div className="border-border border-b px-4 md:px-6">
+          <div className="flex flex-col gap-3 py-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex overflow-x-auto" aria-label="Schedule range">
+              {SCOPES.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setScope(item.value)}
+                  aria-pressed={scope === item.value}
+                  className={cn(
+                    'text-muted-foreground hover:text-foreground focus-visible:ring-ring relative min-h-10 shrink-0 px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
+                    scope === item.value &&
+                      'text-foreground after:bg-primary after:absolute after:inset-x-2 after:bottom-[-13px] after:h-0.5'
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" aria-hidden="true" />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative min-w-0 sm:w-64">
+                <Search
+                  className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
+                  aria-hidden="true"
+                />
                 <Input
                   aria-label="Search appointments"
-                  className="pl-9 sm:w-64"
-                  placeholder="Search title, contact, service"
+                  className="h-9 pl-9"
+                  placeholder="Search appointments"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
               <Select
-                items={{ all: "All statuses", ...STATUS_LABEL }}
+                items={{ all: 'All statuses', ...STATUS_LABEL }}
                 value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value ?? "all")}
+                onValueChange={(value) => setStatusFilter(value ?? 'all')}
               >
-                <SelectTrigger className="sm:w-36" aria-label="Filter by status">
+                <SelectTrigger
+                  className="h-9 sm:w-36"
+                  aria-label="Filter by status"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All statuses</SelectItem>
-                  {(Object.keys(STATUS_LABEL) as AppointmentStatus[]).map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {STATUS_LABEL[status]}
-                    </SelectItem>
-                  ))}
+                  {(Object.keys(STATUS_LABEL) as AppointmentStatus[]).map(
+                    (status) => (
+                      <SelectItem key={status} value={status}>
+                        {STATUS_LABEL[status]}
+                      </SelectItem>
+                    )
+                  )}
                 </SelectContent>
               </Select>
               <Select
-                items={{ all: "All services", ...Object.fromEntries(services.map((item) => [item.id, item.name])) }}
+                items={{
+                  all: 'All services',
+                  ...Object.fromEntries(
+                    services.map((item) => [item.id, item.name])
+                  ),
+                }}
                 value={serviceFilter}
-                onValueChange={(value) => setServiceFilter(value ?? "all")}
+                onValueChange={(value) => setServiceFilter(value ?? 'all')}
               >
-                <SelectTrigger className="sm:w-44" aria-label="Filter by service">
+                <SelectTrigger
+                  className="h-9 sm:w-44"
+                  aria-label="Filter by service"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -201,91 +373,185 @@ export function AppointmentWorkspace() {
               </Select>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2 p-16 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Loading schedule
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 p-16 text-center">
-              <div className="rounded-xl bg-muted p-3 text-muted-foreground">
-                <CalendarDays className="size-6" aria-hidden="true" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">No appointments found</p>
-                <p className="text-sm text-muted-foreground">Create your first appointment or adjust the filters.</p>
-              </div>
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <Plus className="size-4" aria-hidden="true" /> Add appointment
+          <div className="border-border/60 text-muted-foreground flex min-h-9 items-center justify-between border-t text-xs">
+            <span>
+              {filtered.length}{' '}
+              {filtered.length === 1 ? 'appointment' : 'appointments'}
+            </span>
+            {hasFilters && (
+              <Button variant="ghost" size="xs" onClick={clearFilters}>
+                <X aria-hidden="true" /> Clear filters
               </Button>
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {filtered.map((item) => (
-                <article
-                  key={item.id}
-                  className="flex flex-col gap-4 p-4 transition-colors hover:bg-muted/40 md:flex-row md:items-center"
-                >
-                  <div className="flex w-20 shrink-0 flex-col">
-                    <span className="text-sm font-semibold text-foreground tabular-nums">
-                      {timeFormatter.format(new Date(item.startsAt))}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {dateFormatter.format(new Date(item.startsAt))}
-                    </span>
-                  </div>
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <UserRound className="size-5" aria-hidden="true" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">{item.title}</p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {item.contactName ?? "Unknown contact"}
-                        {item.catalogItemName ? ` · ${item.catalogItemName}` : ""}
-                        {item.location ? (
-                          <span className="inline-flex items-center gap-0.5">
-                            {" · "}
-                            <MapPin className="size-3" aria-hidden="true" />
-                            {item.location}
-                          </span>
-                        ) : null}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={cn(
-                      "w-fit rounded-full border px-2.5 py-1 text-xs font-medium",
-                      STATUS_STYLE[item.status],
-                    )}
-                  >
-                    {STATUS_LABEL[item.status]}
-                  </span>
-                  <Select
-                    items={STATUS_LABEL}
-                    value={item.status}
-                    onValueChange={(value) => value && void updateStatus(item.id, value as AppointmentStatus)}
-                  >
-                    <SelectTrigger className="w-36" aria-label={`Update status for ${item.title}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(STATUS_LABEL) as AppointmentStatus[]).map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {STATUS_LABEL[status]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </article>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </div>
+        </div>
 
-      <AppointmentCreateDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={() => void mutate()} />
+        {error ? (
+          <div className="border-destructive/30 bg-destructive/5 m-4 flex items-start justify-between gap-4 border p-4 md:m-6">
+            <div className="flex gap-3">
+              <AlertCircle
+                className="text-destructive mt-0.5 size-5"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-foreground font-medium">
+                  Schedule could not be loaded
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  Check your connection and try again.
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void mutate()}>
+              Retry
+            </Button>
+          </div>
+        ) : isLoading ? (
+          <ScheduleSkeleton />
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-20 text-center">
+            <CalendarDays
+              className="text-muted-foreground size-8"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="text-foreground font-medium">
+                {appointments.length === 0
+                  ? 'No appointments scheduled'
+                  : 'No matching appointments'}
+              </p>
+              <p className="text-muted-foreground mt-1 max-w-md text-sm">
+                {appointments.length === 0
+                  ? 'Create an appointment to start building your team schedule.'
+                  : 'Change the schedule range or clear your filters to see more results.'}
+              </p>
+            </div>
+            {appointments.length === 0 ? (
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus aria-hidden="true" /> New appointment
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={clearFilters}>
+                <SlidersHorizontal aria-hidden="true" /> Clear filters
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div>
+            {grouped.map((items) => {
+              const heading = formatDayHeading(items[0].startsAt);
+              return (
+                <section
+                  key={dayKey(items[0].startsAt)}
+                  aria-label={`${heading.relative}, ${heading.date}`}
+                >
+                  <div className="border-border bg-muted/70 sticky top-0 z-10 flex h-10 items-center gap-2 border-b px-4 backdrop-blur-sm md:px-6">
+                    <h2 className="text-foreground text-sm font-semibold">
+                      {heading.relative}
+                    </h2>
+                    <span className="text-muted-foreground text-xs">
+                      {heading.date}
+                    </span>
+                  </div>
+                  <div className="divide-border divide-y">
+                    {items.map((item) => {
+                      const duration = formatDuration(item);
+                      return (
+                        <article
+                          key={item.id}
+                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1fr)_minmax(8rem,0.35fr)_9rem] md:items-center md:gap-5 md:px-6"
+                        >
+                          <div className="flex items-baseline gap-2 md:flex-col md:items-start md:gap-0.5">
+                            <time
+                              className="text-foreground font-semibold tabular-nums"
+                              dateTime={item.startsAt}
+                            >
+                              {timeFormatter.format(new Date(item.startsAt))}
+                            </time>
+                            <span className="text-muted-foreground text-xs tabular-nums">
+                              {item.endsAt
+                                ? `to ${timeFormatter.format(new Date(item.endsAt))}`
+                                : ''}
+                              {duration ? ` · ${duration}` : ''}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-foreground truncate text-sm font-semibold">
+                              {item.title}
+                            </h3>
+                            <p className="text-muted-foreground mt-1 truncate text-sm">
+                              {item.contactName ?? 'Unknown contact'}
+                              {item.catalogItemName
+                                ? ` · ${item.catalogItemName}`
+                                : ''}
+                            </p>
+                          </div>
+                          <div className="text-muted-foreground min-w-0 text-sm">
+                            {item.location ? (
+                              <span className="flex items-center gap-1.5 truncate">
+                                <MapPin
+                                  className="size-3.5 shrink-0"
+                                  aria-hidden="true"
+                                />
+                                {item.location}
+                              </span>
+                            ) : (
+                              <span className="hidden md:inline">—</span>
+                            )}
+                          </div>
+                          <Select
+                            items={STATUS_LABEL}
+                            value={item.status}
+                            disabled={updatingId === item.id}
+                            onValueChange={(value) =>
+                              value &&
+                              void updateStatus(
+                                item.id,
+                                value as AppointmentStatus
+                              )
+                            }
+                          >
+                            <SelectTrigger
+                              className={cn(
+                                'h-8 w-36 border-transparent text-xs font-medium',
+                                STATUS_STYLE[item.status]
+                              )}
+                              aria-label={`Status for ${item.title}`}
+                            >
+                              {updatingId === item.id ? (
+                                <Loader2
+                                  className="size-3.5 animate-spin"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <SelectValue />
+                              )}
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(
+                                Object.keys(STATUS_LABEL) as AppointmentStatus[]
+                              ).map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {STATUS_LABEL[status]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      <AppointmentCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => void mutate()}
+      />
     </main>
-  )
+  );
 }
