@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
+import { useSWRConfig } from "swr"
 import { ArrowLeft, Building2, Check, Loader2, Mail, Phone, UserRound } from "lucide-react"
 import { toast } from "sonner"
 
@@ -21,6 +22,7 @@ type ContactRecordFormProps = {
 
 export function ContactRecordForm({ mode, contact }: ContactRecordFormProps) {
   const router = useRouter()
+  const { mutate } = useSWRConfig()
   const [values, setValues] = useState<ContactValues>({
     name: String(contact?.values.name ?? ""),
     phone: String(contact?.values.phone ?? ""),
@@ -61,8 +63,15 @@ export function ContactRecordForm({ mode, contact }: ContactRecordFormProps) {
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error?.message ?? "Unable to save contact")
       toast.success(isEdit ? "Contact updated" : "Contact created")
+      // Surgically revalidate every cached contacts query instead of
+      // `router.refresh()` — the contacts list is client-side SWR, so a
+      // full server re-render never updated it and only added latency.
+      void mutate(
+        (key) => typeof key === "string" && key.startsWith("/api/v1/workspace/contacts"),
+        undefined,
+        { revalidate: true },
+      )
       router.push("/contacts")
-      router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to save contact")
     } finally {

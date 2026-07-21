@@ -58,7 +58,10 @@ export function DashboardCacheProvider({ children }: { children: ReactNode }) {
         errorRetryCount: 3,
         errorRetryInterval: 2_000,
         keepPreviousData: true,
-        revalidateOnFocus: true,
+        // Focus revalidation is opt-in: volatile hooks (unread badge,
+        // dashboard overview) enable it per-key. Having it on globally
+        // caused visible refetch churn on every tab switch.
+        revalidateOnFocus: false,
         revalidateOnReconnect: true,
         shouldRetryOnError: true,
       }}
