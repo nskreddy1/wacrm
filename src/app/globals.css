@@ -1,7 +1,7 @@
-@import 'tailwindcss';
-@import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
-@import 'react-phone-number-input/style.css';
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "react-phone-number-input/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -56,9 +56,7 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-  --shadow-pipeline-card:
-    0 1px 2px color-mix(in oklch, var(--foreground) 7%, transparent),
-    0 8px 20px color-mix(in oklch, var(--foreground) 4%, transparent);
+  --shadow-pipeline-card: 0 1px 2px color-mix(in oklch, var(--foreground) 7%, transparent), 0 8px 20px color-mix(in oklch, var(--foreground) 4%, transparent);
   --ease-pipeline: cubic-bezier(0.22, 1, 0.36, 1);
   /* Fixed semantic channel colors (WhatsApp / SMS) used by the
    * dashboard kit — independent of the accent theme so the two
@@ -99,7 +97,7 @@
 /* ---- MODE: neutral surfaces ---- */
 
 :root,
-html[data-mode='dark'] {
+html[data-mode="dark"] {
   /* Explicit color-scheme so native form controls (input text, carets,
    * scrollbars) always match the app's own mode — never the embedding
    * frame's preference. Without this, a dark-preferring iframe renders
@@ -137,7 +135,7 @@ html[data-mode='dark'] {
   --positive: oklch(0.72 0.17 160);
 }
 
-html[data-mode='light'] {
+html[data-mode="light"] {
   color-scheme: light;
   --background: oklch(0.99 0.002 260);
   --foreground: oklch(0.21 0.01 260);
@@ -174,7 +172,7 @@ html[data-mode='light'] {
 /* ---- ACCENT: primary color ---- */
 
 :root,
-html[data-theme='violet'] {
+html[data-theme="violet"] {
   --primary: oklch(0.526 0.247 293);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.6 0.22 293);
@@ -187,7 +185,7 @@ html[data-theme='violet'] {
   --sidebar-ring: oklch(0.526 0.247 293);
 }
 
-html[data-theme='indigo'] {
+html[data-theme="indigo"] {
   --primary: oklch(0.5 0.24 277);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.58 0.22 277);
@@ -201,7 +199,7 @@ html[data-theme='indigo'] {
   --sidebar-ring: oklch(0.5 0.24 277);
 }
 
-html[data-theme='emerald'] {
+html[data-theme="emerald"] {
   --primary: oklch(0.62 0.16 162);
   --primary-foreground: oklch(0.16 0.02 162);
   --primary-hover: oklch(0.68 0.15 162);
@@ -215,7 +213,7 @@ html[data-theme='emerald'] {
   --sidebar-ring: oklch(0.62 0.16 162);
 }
 
-html[data-theme='cobalt'] {
+html[data-theme="cobalt"] {
   --primary: oklch(0.585 0.2 254);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.66 0.18 254);
@@ -229,7 +227,7 @@ html[data-theme='cobalt'] {
   --sidebar-ring: oklch(0.585 0.2 254);
 }
 
-html[data-theme='amber'] {
+html[data-theme="amber"] {
   --primary: oklch(0.745 0.16 65);
   --primary-foreground: oklch(0.18 0.03 65);
   --primary-hover: oklch(0.8 0.15 65);
@@ -243,7 +241,7 @@ html[data-theme='amber'] {
   --sidebar-ring: oklch(0.745 0.16 65);
 }
 
-html[data-theme='rose'] {
+html[data-theme="rose"] {
   --primary: oklch(0.645 0.22 16);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.71 0.2 16);
@@ -270,11 +268,7 @@ html[data-theme='rose'] {
 }
 
 .pipeline-deal-card {
-  transition:
-    transform 180ms var(--ease-pipeline),
-    box-shadow 180ms var(--ease-pipeline),
-    border-color 180ms var(--ease-pipeline),
-    opacity 140ms ease-out;
+  transition: transform 180ms var(--ease-pipeline), box-shadow 180ms var(--ease-pipeline), border-color 180ms var(--ease-pipeline), opacity 140ms ease-out;
   animation: pipeline-card-enter 240ms var(--ease-pipeline) both;
 }
 
@@ -288,34 +282,21 @@ html[data-theme='rose'] {
 }
 
 @keyframes pipeline-card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pipeline-deal-card {
     animation: none;
-    transition:
-      opacity 120ms ease-out,
-      border-color 120ms ease-out;
+    transition: opacity 120ms ease-out, border-color 120ms ease-out;
   }
   .pipeline-deal-card:hover,
-  .pipeline-deal-card:active {
-    transform: none;
-  }
+  .pipeline-deal-card:active { transform: none; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  [data-slot='sheet-footer'] {
-    backdrop-filter: none;
-    background: var(--background);
-  }
+  [data-slot="sheet-footer"] { backdrop-filter: none; background: var(--background); }
 }
 
 /* ============================================================
@@ -468,8 +449,7 @@ html[data-theme='rose'] {
  * matches light/dark mode instead of the UA default. */
 .app-scrollbar {
   scrollbar-width: thin; /* Firefox */
-  scrollbar-color: color-mix(in oklch, var(--foreground) 25%, transparent)
-    transparent;
+  scrollbar-color: color-mix(in oklch, var(--foreground) 25%, transparent) transparent;
 }
 
 .app-scrollbar::-webkit-scrollbar {
@@ -501,46 +481,4 @@ html[data-theme='rose'] {
 
 .scrollbar-invisible::-webkit-scrollbar {
   display: none;
-}
-
-/* Signed-in mobile foundations: prevent accidental viewport overflow, retain
- * native zoom/reflow, and make controls comfortable for touch without changing
- * the denser desktop rhythm. */
-@media (max-width: 639px) {
-  body {
-    overflow-x: hidden;
-  }
-
-  [data-slot='dialog-header'],
-  [data-slot='sheet-header'] {
-    padding-top: max(1rem, env(safe-area-inset-top));
-  }
-
-  [data-slot='dialog-footer'],
-  [data-slot='sheet-footer'] {
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  }
-
-  [data-slot='dialog-content'] input,
-  [data-slot='dialog-content'] textarea,
-  [data-slot='dialog-content'] [data-slot='select-trigger'],
-  [data-slot='sheet-content'] input,
-  [data-slot='sheet-content'] textarea,
-  [data-slot='sheet-content'] [data-slot='select-trigger'] {
-    font-size: 1rem;
-  }
-
-  [data-slot='dropdown-menu-content'],
-  [data-slot='select-content'] {
-    max-width: calc(100vw - 1rem);
-  }
-}
-
-@media (pointer: coarse) {
-  button:not([data-slot='sidebar-menu-button']),
-  [role='button'],
-  [data-slot='select-trigger'],
-  [data-slot='dropdown-menu-item'] {
-    min-height: 2.75rem;
-  }
 }

@@ -212,7 +212,7 @@ export function AppointmentCreateDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="border-border border-b px-5 py-4 sm:px-6">
           <DialogTitle>New appointment</DialogTitle>
           <DialogDescription>
@@ -524,20 +524,15 @@ export function AppointmentCreateDialog({
               </p>
             </div>
           </div>
-          <div className="flex w-full shrink-0 gap-2 sm:w-auto sm:self-auto">
+          <div className="flex shrink-0 gap-2 self-end sm:self-auto">
             <Button
-              className="shrink-0"
               variant="outline"
               onClick={() => handleOpenChange(false)}
               disabled={submitting}
             >
               Cancel
             </Button>
-            <Button
-              className="min-w-0 flex-1 sm:flex-none"
-              onClick={handleSubmit}
-              disabled={submitting}
-            >
+            <Button onClick={handleSubmit} disabled={submitting}>
               {submitting && (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               )}
