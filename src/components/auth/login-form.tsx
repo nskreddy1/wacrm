@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 
@@ -17,12 +18,17 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function showLoginError(message: string) {
+    toast.error("Sign-in failed", {
+      description: message,
+    });
+    setLoading(false);
+  }
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
     setLoading(true);
 
     try {
@@ -36,7 +42,7 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
           password,
         });
         if (signInError) {
-          setError(signInError.message);
+          showLoginError(signInError.message);
           return;
         }
       } else {
@@ -48,7 +54,7 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
         });
         if (!response.ok) {
           const body = (await response.json().catch(() => null)) as { message?: string } | null;
-          setError(body?.message ?? "Unable to sign in. Check your email and password.");
+          showLoginError(body?.message ?? "Unable to sign in. Check your email and password.");
           return;
         }
       }
@@ -63,19 +69,13 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
       // route tree/cache and appear stuck while the protected route resolves.
       window.location.assign(destination);
     } catch {
-      setError("Something went wrong while signing in. Try again.");
-      setLoading(false);
+      showLoginError("Something went wrong while signing in. Try again.");
     }
   }
 
   return (
     <form onSubmit={handleLogin}>
       <FieldGroup>
-        {error && (
-          <div className="auth-shake" role="alert">
-            <FieldError>{error}</FieldError>
-          </div>
-        )}
         <Field>
           <FieldLabel htmlFor="email">Work email</FieldLabel>
           <Input
@@ -87,7 +87,6 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
-            aria-invalid={Boolean(error)}
             variant="underline"
             size="lg"
           />
@@ -103,7 +102,6 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
-              aria-invalid={Boolean(error)}
               variant="underline"
               size="lg"
               className="pr-10"
