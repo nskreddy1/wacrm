@@ -79,8 +79,13 @@ export function AiConfig() {
   const [embeddingsKeyEdited, setEmbeddingsKeyEdited] = useState(false);
   const [hasStoredEmbeddingsKey, setHasStoredEmbeddingsKey] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState('');
-  const [isActive, setIsActive] = useState(false);
-  const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
+  // Default ON for first-time setup: the save flow validates the key
+  // with the provider before persisting, so a successful save should
+  // go live immediately — a fresh config that saves as inactive just
+  // looks broken (no drafts, no auto-reply, dead playground). Existing
+  // configs load their stored values in fetchConfig below.
+  const [isActive, setIsActive] = useState(true);
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
   const [maxPerConversation, setMaxPerConversation] = useState(3);
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
@@ -249,8 +254,10 @@ export function AiConfig() {
         setHasStoredKey(false);
         setApiKey('');
         setKeyEdited(false);
-        setIsActive(false);
-        setAutoReplyEnabled(false);
+        // Back to the first-time-setup defaults (ON) so a re-configure
+        // goes live on save, same as a fresh setup.
+        setIsActive(true);
+        setAutoReplyEnabled(true);
         setSystemPrompt('');
         setHandoffAgentId('');
       } else {
