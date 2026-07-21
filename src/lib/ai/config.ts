@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { AI_PROVIDER_DEFAULT_MODEL } from './defaults'
+import { DEFAULT_FEATURE_FLAGS, parseFeatureFlags } from './feature-flags'
 import type { AiConfig } from './types'
 
 interface AiConfigRow {
@@ -14,10 +15,11 @@ interface AiConfigRow {
   auto_reply_max_per_conversation: number
   handoff_agent_id: string | null
   embeddings_api_key: string | null
+  feature_flags: unknown
 }
 
 const CONFIG_COLUMNS =
-  'provider, model, api_key, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, embeddings_api_key'
+  'provider, model, api_key, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, embeddings_api_key, feature_flags'
 
 /**
  * Load and decrypt the account's AI config for *use* (draft or
@@ -87,6 +89,7 @@ export async function loadAiConfig(
     handoffAgentId: row.handoff_agent_id,
     embeddingsApiKey,
     keySource: 'account',
+    featureFlags: parseFeatureFlags(row.feature_flags),
   }
 }
 
@@ -115,6 +118,9 @@ export function envFallbackConfig(): AiConfig | null {
     handoffAgentId: null,
     embeddingsApiKey: null,
     keySource: 'env',
+    // Shared-key accounts get no opt-ins — optimizations are a
+    // deliberate per-account decision, never ambient.
+    featureFlags: { ...DEFAULT_FEATURE_FLAGS },
   }
 }
 

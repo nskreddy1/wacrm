@@ -24,6 +24,12 @@ export interface DirectGenerateArgs {
   systemPrompt: string
   /** Recent conversation turns, oldest first. */
   messages: ChatMessage[]
+  /** Cache-aligned system blocks (stable-prefix order). When present,
+   *  Anthropic marks each block with `cache_control`; the other
+   *  adapters keep using the joined `systemPrompt`. */
+  systemBlocks?: string[]
+  /** Per-conversation cache-routing hint → OpenAI `prompt_cache_key`. */
+  cacheKey?: string
 }
 
 /**
@@ -36,7 +42,7 @@ export interface DirectGenerateArgs {
 export async function generateReplyDirect(
   args: DirectGenerateArgs,
 ): Promise<ProviderResult> {
-  const { config, systemPrompt, messages } = args
+  const { config, systemPrompt, messages, systemBlocks, cacheKey } = args
   const timeoutMs = aiRequestTimeoutMs()
   const providerArgs = {
     apiKey: config.apiKey,
@@ -44,6 +50,8 @@ export async function generateReplyDirect(
     systemPrompt,
     messages,
     timeoutMs,
+    systemBlocks,
+    cacheKey,
   }
 
   switch (config.provider) {
