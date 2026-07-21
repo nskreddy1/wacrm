@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { CircleAlert, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 
@@ -72,8 +73,12 @@ export function LoginForm({ inviteToken, submitLabel = "Sign in" }: LoginFormPro
     <form onSubmit={handleLogin}>
       <FieldGroup>
         {error && (
-          <div className="auth-shake" role="alert">
-            <FieldError>{error}</FieldError>
+          <div className="auth-shake">
+            <Alert variant="destructive" className="border-destructive/30 bg-destructive/10 px-3 py-3">
+              <CircleAlert aria-hidden="true" />
+              <AlertTitle>Sign-in failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           </div>
         )}
         <Field>
