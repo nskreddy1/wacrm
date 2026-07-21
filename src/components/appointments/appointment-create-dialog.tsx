@@ -524,15 +524,20 @@ export function AppointmentCreateDialog({
               </p>
             </div>
           </div>
-          <div className="grid w-full shrink-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:self-auto">
+          <div className="flex w-full shrink-0 gap-2 sm:w-auto sm:self-auto">
             <Button
+              className="shrink-0"
               variant="outline"
               onClick={() => handleOpenChange(false)}
               disabled={submitting}
             >
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={submitting}>
+            <Button
+              className="min-w-0 flex-1 sm:flex-none"
+              onClick={handleSubmit}
+              disabled={submitting}
+            >
               {submitting && (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               )}
