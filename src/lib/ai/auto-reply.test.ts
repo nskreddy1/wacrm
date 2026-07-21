@@ -124,8 +124,20 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.retrieveKnowledge.mockResolvedValue(['Returns accepted within 30 days.'])
     await dispatchInboundToAiReply(ARGS)
     expect(h.retrieveKnowledge).toHaveBeenCalled()
-    const systemPrompt = h.generateReply.mock.calls[0][0].systemPrompt as string
-    expect(systemPrompt).toContain('Returns accepted within 30 days.')
+    // Knowledge rides in the cache-aligned volatile tail (final user
+    // turn), NOT in the stable system prefix — that separation is what
+    // keeps the provider's prefix cache valid across retrievals.
+    const call = h.generateReply.mock.calls[0][0] as {
+      promptParts: { systemBlocks: string[]; volatileContext: string | null }
+      cacheKey?: string
+    }
+    expect(call.promptParts.volatileContext).toContain(
+      'Returns accepted within 30 days.',
+    )
+    expect(call.promptParts.systemBlocks.join('\n\n')).not.toContain(
+      'Returns accepted within 30 days.',
+    )
+    expect(call.cacheKey).toBe('conv-1')
   })
 
   it('stands down when an active message-level automation exists', async () => {

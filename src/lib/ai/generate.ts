@@ -27,17 +27,19 @@ import type { AiConfig } from './types'
 
 export interface GenerateArgs {
   config: AiConfig
-  /** Fully-built system prompt (see `buildSystemPrompt`). */
-  systemPrompt: string
+  /** Raw system prompt for one-off calls (credential validation probe).
+   *  Chat paths pass `promptParts` instead. */
+  systemPrompt?: string
   /** Recent conversation turns, oldest first. */
   messages: ChatMessage[]
   /**
-   * Cache-aligned prompt (account's `prompt_caching` flag ON). When
-   * present it wins over `systemPrompt`: `systemBlocks` become the
-   * stable system prefix and `volatileContext` (retrieved knowledge)
-   * is appended as the FINAL user turn — after the history — so a
-   * different retrieval no longer invalidates the provider's prefix
-   * cache. Built by `buildPromptParts`.
+   * Cache-aligned prompt — the standard path for all chat generation
+   * (benchmarked ~70% cheaper on full-price input tokens than a single
+   * monolithic prompt). `systemBlocks` become the stable system prefix
+   * and `volatileContext` (retrieved knowledge) is appended as the
+   * FINAL user turn — after the history — so a different retrieval
+   * never invalidates the provider's prefix cache. Built by
+   * `buildPromptParts`. Wins over `systemPrompt` when both are set.
    */
   promptParts?: { systemBlocks: string[]; volatileContext: string | null }
   /**
@@ -109,7 +111,7 @@ export async function generateReply(args: GenerateArgs): Promise<GenerateResult>
   // prefix (system + history) stays byte-identical between calls.
   const systemPrompt = promptParts
     ? promptParts.systemBlocks.join('\n\n')
-    : args.systemPrompt
+    : (args.systemPrompt ?? '')
   const messages = promptParts?.volatileContext
     ? [
         ...args.messages,

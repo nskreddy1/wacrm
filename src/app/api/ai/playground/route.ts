@@ -4,8 +4,7 @@ import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit
 import { loadAiConfig } from '@/lib/ai/config'
 import { retrieveKnowledge } from '@/lib/ai/knowledge'
 import { generateReply } from '@/lib/ai/generate'
-import { buildSystemPrompt, buildPromptParts } from '@/lib/ai/defaults'
-import { isAiFeatureEnabled } from '@/lib/ai/feature-flags'
+import { buildPromptParts } from '@/lib/ai/defaults'
 import { latestUserMessage } from '@/lib/ai/query'
 import { AiError, type ChatMessage } from '@/lib/ai/types'
 
@@ -79,29 +78,21 @@ export async function POST(request: Request) {
       config,
       latestUserMessage(messages),
     )
-    // Mirror the live auto-reply path, including its cache-aligned
-    // prompt when the account's `prompt_caching` flag is on — the
-    // playground must exercise EXACTLY what customers will hit. The
-    // transcript is stateless client-side, but the resent prefix is
-    // byte-identical each turn, so provider caching still lands
-    // (cache key: per-account playground scope, there's no conversation).
-    const useCache = await isAiFeatureEnabled(config, 'prompt_caching')
-    const promptArgs = {
-      userPrompt: config.systemPrompt,
-      mode: 'auto_reply' as const,
-      knowledge,
-    }
-
+    // Mirror the live auto-reply path exactly, including its
+    // cache-aligned prompt — the playground must exercise what
+    // customers will hit. The transcript is stateless client-side, but
+    // the resent prefix is byte-identical each turn, so provider
+    // caching still lands (cache key: per-account playground scope,
+    // there's no conversation).
     const { text, handoff } = await generateReply({
       config,
-      systemPrompt: useCache ? '' : buildSystemPrompt(promptArgs),
       messages,
-      ...(useCache
-        ? {
-            promptParts: buildPromptParts(promptArgs),
-            cacheKey: `playground:${accountId}`,
-          }
-        : {}),
+      promptParts: buildPromptParts({
+        userPrompt: config.systemPrompt,
+        mode: 'auto_reply',
+        knowledge,
+      }),
+      cacheKey: `playground:${accountId}`,
     })
     return NextResponse.json({ reply: text, handoff })
   } catch (err) {
