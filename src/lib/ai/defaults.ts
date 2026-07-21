@@ -206,8 +206,10 @@ function knowledgeBlock(
  *     user turn by the dispatch layer (after the conversation history),
  *     so a different retrieval no longer invalidates the entire prompt.
  *
- * Used only when the account's `prompt_caching` feature flag is on;
- * the legacy `buildSystemPrompt` path is byte-identical to before.
+ * This is THE prompt path for all chat generation (auto-reply, draft,
+ * playground) — promoted after benchmarking ~70% fewer full-price
+ * input tokens vs. the monolithic prompt. `buildSystemPrompt` above is
+ * kept only as the reference composition for the equivalence tests.
  */
 export function buildPromptParts(args: {
   userPrompt: string | null

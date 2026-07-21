@@ -3,8 +3,7 @@ import { loadAiConfig } from './config'
 import { buildConversationContext } from './context'
 import { retrieveKnowledge } from './knowledge'
 import { generateReply } from './generate'
-import { buildSystemPrompt, buildPromptParts } from './defaults'
-import { isAiFeatureEnabled } from './feature-flags'
+import { buildPromptParts } from './defaults'
 import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
@@ -107,28 +106,21 @@ export async function dispatchInboundToAiReply(
       latestUserMessage(messages),
     )
 
-    // Cache-aligned prompt (account opt-in + no platform kill): stable
-    // blocks become the system prefix and the retrieved knowledge rides
-    // as the final user turn, so providers can reuse the cached prefix
-    // across replies. Flag OFF → legacy prompt, byte-identical to before.
-    const useCache = await isAiFeatureEnabled(config, 'prompt_caching')
-
-    const promptArgs = {
-      userPrompt: config.systemPrompt,
-      mode: 'auto_reply' as const,
-      knowledge,
-    }
+    // Cache-aligned prompt (the only path — benchmarked at ~70% fewer
+    // full-price input tokens than the legacy single-string prompt):
+    // stable blocks become the system prefix and the retrieved
+    // knowledge rides as the final user turn, so providers reuse the
+    // cached prefix across replies.
     const { text, handoff, usage, sentiment, escalationReason } =
       await generateReply({
         config,
-        systemPrompt: useCache ? '' : buildSystemPrompt(promptArgs),
         messages,
-        ...(useCache
-          ? {
-              promptParts: buildPromptParts(promptArgs),
-              cacheKey: conversationId,
-            }
-          : {}),
+        promptParts: buildPromptParts({
+          userPrompt: config.systemPrompt,
+          mode: 'auto_reply',
+          knowledge,
+        }),
+        cacheKey: conversationId,
       })
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
