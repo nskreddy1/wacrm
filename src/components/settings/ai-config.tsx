@@ -299,6 +299,14 @@ export function AiConfig() {
   }
 
   const disabled = !canEdit || saving;
+  // WhatsApp-config-style test-before-enable gating: the behaviour
+  // switches unlock only after the key has been verified — either via a
+  // successful "Test key" in this session (validationProof) or because a
+  // validated config is already saved (configured). Editing the key or
+  // provider clears the proof, but an existing saved config stays
+  // unlocked since its stored key was validated at save time.
+  const keyVerified = configured || validationProof !== null;
+  const togglesLocked = disabled || !keyVerified;
 
   return (
     <div>
@@ -515,6 +523,12 @@ export function AiConfig() {
               />
             </div>
 
+            {canEdit && !keyVerified && (
+              <p className="border-border bg-muted/40 text-muted-foreground rounded-md border px-3 py-2 text-xs">
+                {t('togglesLockedHint')}
+              </p>
+            )}
+
             <div className="border-border flex items-center justify-between gap-4 rounded-md border p-3">
               <div>
                 <p className="text-foreground text-sm font-medium">
@@ -527,11 +541,8 @@ export function AiConfig() {
               <Switch
                 id="ai-assistant-active"
                 checked={isActive}
-                onCheckedChange={(checked) => {
-                  setIsActive(checked);
-                  if (!checked) setAutoReplyEnabled(false);
-                }}
-                disabled={disabled}
+                onCheckedChange={setIsActive}
+                disabled={togglesLocked}
                 aria-label={t('enableAssistant')}
               />
             </div>
@@ -544,18 +555,17 @@ export function AiConfig() {
                 <p className="text-muted-foreground text-xs">
                   {t('autoReplyDesc')}
                 </p>
+                {autoReplyEnabled && !isActive && (
+                  <p className="text-destructive mt-1 text-xs">
+                    {t('autoReplyNeedsAssistant')}
+                  </p>
+                )}
               </div>
               <Switch
                 id="ai-auto-reply"
                 checked={autoReplyEnabled}
-                onCheckedChange={(checked) => {
-                  setAutoReplyEnabled(checked);
-                  // Auto-reply requires an active assistant. Let users enable
-                  // it directly here instead of forcing them to discover and
-                  // toggle the separate assistant control first.
-                  if (checked) setIsActive(true);
-                }}
-                disabled={disabled}
+                onCheckedChange={setAutoReplyEnabled}
+                disabled={togglesLocked}
                 aria-label={t('autoReply')}
               />
             </div>
