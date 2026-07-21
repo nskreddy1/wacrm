@@ -44,6 +44,10 @@ export async function logAiUsage(
       prompt_tokens: args.usage.promptTokens,
       completion_tokens: args.usage.completionTokens,
       total_tokens: args.usage.totalTokens,
+      // Cache telemetry: null = provider reported nothing (distinct
+      // from 0 = reported a miss). Drives the per-account hit-rate view.
+      cached_tokens: args.usage.cachedTokens ?? null,
+      cache_write_tokens: args.usage.cacheWriteTokens ?? null,
       key_source: args.keySource ?? 'account',
     })
     if (error) {
