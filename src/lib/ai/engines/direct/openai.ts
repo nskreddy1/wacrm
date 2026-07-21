@@ -17,6 +17,9 @@ interface OpenAiResponse {
     prompt_tokens?: number
     completion_tokens?: number
     total_tokens?: number
+    /** OpenAI (and some compatible gateways) report the discounted
+     *  prefix here when automatic prompt caching hits. */
+    prompt_tokens_details?: { cached_tokens?: number }
   }
 }
 
@@ -40,7 +43,7 @@ export async function generateOpenAi(
   args: ProviderArgs,
   opts: OpenAiCompatOptions = {},
 ): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args
+  const { apiKey, model, systemPrompt, messages, timeoutMs, cacheKey } = args
   const baseUrl = (opts.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '')
   const label = opts.providerLabel ?? 'OpenAI'
   const isOpenAiProper = baseUrl === OPENAI_BASE_URL
@@ -65,6 +68,11 @@ export async function generateOpenAi(
         ...(isOpenAiProper
           ? { max_completion_tokens: MAX_OUTPUT_TOKENS }
           : { max_tokens: MAX_OUTPUT_TOKENS }),
+        // Cache-routing hint (conversation id): OpenAI uses it to route
+        // requests to the machine holding this conversation's cached
+        // prefix, raising hit rates. Only OpenAI proper understands it —
+        // compatible gateways may reject unknown params, so gate it.
+        ...(isOpenAiProper && cacheKey ? { prompt_cache_key: cacheKey } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
     })
@@ -87,6 +95,7 @@ export async function generateOpenAi(
     prompt: data?.usage?.prompt_tokens,
     completion: data?.usage?.completion_tokens,
     total: data?.usage?.total_tokens,
+    cached: data?.usage?.prompt_tokens_details?.cached_tokens,
   })
   return { text, usage }
 }
