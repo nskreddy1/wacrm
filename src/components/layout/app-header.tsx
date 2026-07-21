@@ -1,9 +1,16 @@
-"use client"
+'use client';
 
-import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import useSWR from "swr"
-import { Bell, ChevronDown, Command, Plus, Search, UserPlus } from "lucide-react"
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import useSWR from 'swr';
+import {
+  Bell,
+  ChevronDown,
+  Command,
+  Plus,
+  Search,
+  UserPlus,
+} from 'lucide-react';
 
 import {
   Breadcrumb,
@@ -12,8 +19,8 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Button } from "@/components/ui/button"
+} from '@/components/ui/breadcrumb';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,69 +29,75 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { useAuth } from "@/hooks/use-auth"
-import { routes } from "@/lib/routing/routes"
+} from '@/components/ui/dropdown-menu';
+import { Separator } from '@/components/ui/separator';
+import { SidebarTrigger } from '@/components/ui/sidebar';
+import { useAuth } from '@/hooks/use-auth';
+import { routes } from '@/lib/routing/routes';
 
 const titles: Record<string, string> = {
-  dashboard: "Dashboard",
-  inbox: "Shared inbox",
-  contacts: "Contacts",
-  pipelines: "Pipelines",
-  appointments: "Appointments",
-  catalog: "Catalog",
-  broadcasts: "Broadcasts",
-  automations: "Automations",
-  flows: "Flows",
-  agents: "AI agents",
-  notifications: "Notifications",
-  settings: "Settings",
-}
+  dashboard: 'Dashboard',
+  inbox: 'Shared inbox',
+  contacts: 'Contacts',
+  pipelines: 'Pipelines',
+  appointments: 'Appointments',
+  catalog: 'Catalog',
+  broadcasts: 'Broadcasts',
+  automations: 'Automations',
+  flows: 'Flows',
+  agents: 'AI agents',
+  notifications: 'Notifications',
+  settings: 'Settings',
+};
 
 type NotificationItem = {
-  id: string
-  title: string
-  body: string | null
-  read_at: string | null
-  conversation_id: string | null
-}
+  id: string;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  conversation_id: string | null;
+};
 
-type NotificationsResponse = { data: NotificationItem[] }
+type NotificationsResponse = { data: NotificationItem[] };
 
 export function AppHeader() {
-  const pathname = usePathname()
-  const router = useRouter()
-  const { account } = useAuth()
-  const { data: notificationsData } = useSWR<NotificationsResponse>("/api/v1/notifications", {
-    refreshInterval: 60_000,
-  })
+  const pathname = usePathname();
+  const router = useRouter();
+  const { account } = useAuth();
+  const { data: notificationsData } = useSWR<NotificationsResponse>(
+    '/api/v1/notifications',
+    {
+      refreshInterval: 60_000,
+    }
+  );
 
-  const segments = pathname.split("/").filter(Boolean)
-  const segment = segments[0] ?? "dashboard"
-  const title = titles[segment] ?? "Workspace"
+  const segments = pathname.split('/').filter(Boolean);
+  const segment = segments[0] ?? 'dashboard';
+  const title = titles[segment] ?? 'Workspace';
   const isAutomationEditor =
-    segment === "automations" &&
-    (segments[1] === "new" || (segments[1] && segments[2] === "edit"))
+    segment === 'automations' &&
+    (segments[1] === 'new' || (segments[1] && segments[2] === 'edit'));
 
-  const notifications = notificationsData?.data ?? []
-  const unread = notifications.filter((notification) => !notification.read_at)
-  const recentNotifications = notifications.slice(0, 5)
+  const notifications = notificationsData?.data ?? [];
+  const unread = notifications.filter((notification) => !notification.read_at);
+  const recentNotifications = notifications.slice(0, 5);
 
   // The automation editor owns its command bar. Keeping both headers costs
   // valuable canvas height and creates competing save/create actions.
-  if (isAutomationEditor) return null
+  if (isAutomationEditor) return null;
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-4">
+    <header className="border-border bg-background sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b px-2 sm:px-4">
       <SidebarTrigger />
       <Separator orientation="vertical" className="hidden h-4 sm:block" />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium sm:hidden">
+        {title}
+      </span>
       <Breadcrumb className="hidden min-w-0 sm:block">
         <BreadcrumbList>
           <BreadcrumbItem className="hidden md:block">
             <BreadcrumbLink render={<Link href={routes.app.dashboard} />}>
-              {account?.name ?? "Workspace"}
+              {account?.name ?? 'Workspace'}
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator className="hidden md:block" />
@@ -95,12 +108,12 @@ export function AppHeader() {
       </Breadcrumb>
       <Button
         variant="outline"
-        className="min-w-0 flex-1 justify-start text-muted-foreground sm:ml-auto sm:max-w-sm sm:flex-none md:w-64"
+        className="text-muted-foreground size-10 flex-none justify-center px-0 sm:ml-auto sm:h-8 sm:w-auto sm:max-w-sm sm:justify-start sm:px-3 md:w-64"
         aria-label="Search workspace"
       >
         <Search data-icon="inline-start" />
-        <span className="truncate">Search...</span>
-        <span className="ml-auto hidden items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] md:flex">
+        <span className="hidden truncate sm:inline">Search...</span>
+        <span className="border-border ml-auto hidden items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] md:flex">
           <Command />K
         </span>
       </Button>
@@ -118,15 +131,21 @@ export function AppHeader() {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuGroup>
               <DropdownMenuLabel>Create new</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => router.push(routes.app.contacts)}>
+              <DropdownMenuItem
+                onClick={() => router.push(routes.app.contacts)}
+              >
                 <UserPlus />
                 Contact
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push(routes.app.pipelines)}>
+              <DropdownMenuItem
+                onClick={() => router.push(routes.app.pipelines)}
+              >
                 <Plus />
                 Deal
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push(routes.app.appointments)}>
+              <DropdownMenuItem
+                onClick={() => router.push(routes.app.appointments)}
+              >
                 <Plus />
                 Appointment
               </DropdownMenuItem>
@@ -139,12 +158,19 @@ export function AppHeader() {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={unread.length > 0 ? `Notifications, ${unread.length} unread` : "Notifications"}
+                aria-label={
+                  unread.length > 0
+                    ? `Notifications, ${unread.length} unread`
+                    : 'Notifications'
+                }
                 className="relative"
               >
                 <Bell />
                 {unread.length > 0 && (
-                  <span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" aria-hidden="true" />
+                  <span
+                    className="bg-primary absolute top-2 right-2 size-1.5 rounded-full"
+                    aria-hidden="true"
+                  />
                 )}
               </Button>
             }
@@ -152,13 +178,16 @@ export function AppHeader() {
           <DropdownMenuContent align="end" className="w-72">
             <DropdownMenuGroup>
               <DropdownMenuLabel>
-                Notifications{unread.length > 0 ? ` (${unread.length} unread)` : ""}
+                Notifications
+                {unread.length > 0 ? ` (${unread.length} unread)` : ''}
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               {recentNotifications.length === 0 && (
-                <DropdownMenuItem disabled>You&apos;re all caught up</DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  You&apos;re all caught up
+                </DropdownMenuItem>
               )}
               {recentNotifications.map((notification) => (
                 <DropdownMenuItem
@@ -174,13 +203,17 @@ export function AppHeader() {
                   <span className="min-w-0">
                     <span
                       className={
-                        notification.read_at ? "block truncate text-muted-foreground" : "block truncate font-medium"
+                        notification.read_at
+                          ? 'text-muted-foreground block truncate'
+                          : 'block truncate font-medium'
                       }
                     >
                       {notification.title}
                     </span>
                     {notification.body && (
-                      <span className="block truncate text-xs text-muted-foreground">{notification.body}</span>
+                      <span className="text-muted-foreground block truncate text-xs">
+                        {notification.body}
+                      </span>
                     )}
                   </span>
                 </DropdownMenuItem>
@@ -190,5 +223,5 @@ export function AppHeader() {
         </DropdownMenu>
       </div>
     </header>
-  )
+  );
 }
