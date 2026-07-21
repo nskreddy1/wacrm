@@ -11,6 +11,13 @@ export interface ProviderArgs {
   systemPrompt: string
   messages: ChatMessage[]
   timeoutMs: number
+  /** Cache-aligned system blocks (stable → semi-stable). Set only when
+   *  the account's `prompt_caching` flag is on. Anthropic turns each
+   *  block into a `cache_control`-marked segment; other adapters ignore
+   *  this and use the joined `systemPrompt`. */
+  systemBlocks?: string[]
+  /** Per-conversation cache-routing hint (OpenAI `prompt_cache_key`). */
+  cacheKey?: string
 }
 
 /** Raw text + usage a provider adapter returns before handoff parsing. */

@@ -74,6 +74,9 @@ export interface AiConfig {
    *  shared `process.env.GEMINI_API_KEY` fallback. Logged to
    *  `ai_usage_log.key_source` so shared-key spend is auditable. */
   keySource: 'account' | 'env'
+  /** Per-account AI optimization opt-ins (`ai_configs.feature_flags`).
+   *  Parsed by `parseFeatureFlags`; everything defaults to OFF. */
+  featureFlags: import('./feature-flags').AiFeatureFlags
 }
 
 /** A single conversation turn in the shape both providers accept. */
@@ -91,6 +94,14 @@ export interface AiUsage {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  /** Provider-reported cached (discounted) prompt tokens — OpenAI
+   *  `prompt_tokens_details.cached_tokens`, Anthropic
+   *  `cache_read_input_tokens`, Gemini `cachedContentTokenCount`.
+   *  Null/undefined when the provider didn't report. */
+  cachedTokens?: number | null
+  /** Anthropic-only `cache_creation_input_tokens` (billed at +25% once
+   *  when a new prefix is written to the cache). */
+  cacheWriteTokens?: number | null
 }
 
 /** Customer sentiment classified by the model in the [[META]] tail. */

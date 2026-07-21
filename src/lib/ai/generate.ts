@@ -31,6 +31,21 @@ export interface GenerateArgs {
   systemPrompt: string
   /** Recent conversation turns, oldest first. */
   messages: ChatMessage[]
+  /**
+   * Cache-aligned prompt (account's `prompt_caching` flag ON). When
+   * present it wins over `systemPrompt`: `systemBlocks` become the
+   * stable system prefix and `volatileContext` (retrieved knowledge)
+   * is appended as the FINAL user turn — after the history — so a
+   * different retrieval no longer invalidates the provider's prefix
+   * cache. Built by `buildPromptParts`.
+   */
+  promptParts?: { systemBlocks: string[]; volatileContext: string | null }
+  /**
+   * Stable per-conversation cache-routing hint (we pass the
+   * conversation id). Forwarded as OpenAI's `prompt_cache_key`;
+   * harmless elsewhere. Only used when `promptParts` is set.
+   */
+  cacheKey?: string
 }
 
 /**
@@ -86,8 +101,21 @@ export function normalizeTurns(
  * engines.
  */
 export async function generateReply(args: GenerateArgs): Promise<GenerateResult> {
-  const { config, systemPrompt, messages } = args
+  const { config, promptParts, cacheKey } = args
   const engine = await getAiEngine()
+
+  // Cache-aligned path: stable blocks form the system prompt; the
+  // volatile knowledge context rides as the final user turn so the
+  // prefix (system + history) stays byte-identical between calls.
+  const systemPrompt = promptParts
+    ? promptParts.systemBlocks.join('\n\n')
+    : args.systemPrompt
+  const messages = promptParts?.volatileContext
+    ? [
+        ...args.messages,
+        { role: 'user' as const, content: promptParts.volatileContext },
+      ]
+    : args.messages
 
   const raw =
     engine === 'langchain'
@@ -96,7 +124,13 @@ export async function generateReply(args: GenerateArgs): Promise<GenerateResult>
           systemPrompt,
           turns: normalizeTurns(messages, config.provider),
         })
-      : await generateReplyDirect({ config, systemPrompt, messages })
+      : await generateReplyDirect({
+          config,
+          systemPrompt,
+          messages,
+          systemBlocks: promptParts?.systemBlocks,
+          cacheKey: promptParts ? cacheKey : undefined,
+        })
 
   const text = raw.text.trim()
   if (!text) {
