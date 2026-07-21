@@ -119,16 +119,11 @@ export function AppointmentWorkspace() {
   ]
 
   return (
-    <main className="flex min-h-full flex-col gap-6 p-4 md:p-6">
-      <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium text-primary">Operations</p>
-          <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
-            Appointments
-          </h1>
-          <p className="text-pretty text-sm text-muted-foreground">
-            Schedule and track sessions with your contacts, linked to your services catalog.
-          </p>
+    <main className="flex min-h-full flex-col gap-4 p-4 md:p-6">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="min-w-0">
+          <h1 className="text-balance text-xl font-semibold tracking-tight text-foreground">Appointments</h1>
+          <p className="text-pretty text-sm text-muted-foreground">Manage your team&apos;s schedule and sessions.</p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" aria-hidden="true" /> New appointment
