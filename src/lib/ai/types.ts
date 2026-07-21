@@ -46,6 +46,29 @@ export function isAiProvider(value: unknown): value is AiProvider {
 }
 
 /**
+ * What `autoReplyMaxPerConversation` counts against:
+ *  - `per_conversation` — lifetime cap per thread (legacy behaviour)
+ *  - `per_day`          — cap resets daily per thread
+ *  - `never`            — no cap; the bot always replies
+ */
+export type AutoReplyLimitMode = 'per_conversation' | 'per_day' | 'never'
+
+export const AUTO_REPLY_LIMIT_MODES: readonly AutoReplyLimitMode[] = [
+  'per_conversation',
+  'per_day',
+  'never',
+]
+
+export function isAutoReplyLimitMode(
+  value: unknown,
+): value is AutoReplyLimitMode {
+  return (
+    typeof value === 'string' &&
+    AUTO_REPLY_LIMIT_MODES.includes(value as AutoReplyLimitMode)
+  )
+}
+
+/**
  * Account AI setup, decrypted and ready to use. Produced by
  * `loadAiConfig` — `apiKey` is the plaintext BYO provider key
  * (stored AES-256-GCM-encrypted at rest).
@@ -62,6 +85,17 @@ export interface AiConfig {
   isActive: boolean
   autoReplyEnabled: boolean
   autoReplyMaxPerConversation: number
+  /** What the reply cap counts against (lifetime, daily, or no cap). */
+  autoReplyLimitMode: AutoReplyLimitMode
+  /** Auto-reply window start, 'HH:MM' 24h local to `autoReplyTimezone`.
+   *  Null (with end also null) = always on — the default. */
+  autoReplyScheduleStart: string | null
+  /** Auto-reply window end, 'HH:MM'. May be earlier than start for an
+   *  overnight window (e.g. 20:00 → 06:00). */
+  autoReplyScheduleEnd: string | null
+  /** IANA timezone the schedule is evaluated in (e.g. 'Asia/Kolkata').
+   *  Null = UTC. */
+  autoReplyTimezone: string | null
   /** Where auto-reply hands a conversation off when the model bails: an
    *  agent's `auth.users.id`, or null to leave it unassigned (drop into
    *  the shared queue). */

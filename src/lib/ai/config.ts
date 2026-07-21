@@ -12,12 +12,24 @@ interface AiConfigRow {
   is_active: boolean
   auto_reply_enabled: boolean
   auto_reply_max_per_conversation: number
+  auto_reply_limit_mode: AiConfig['autoReplyLimitMode']
+  auto_reply_schedule_start: string | null
+  auto_reply_schedule_end: string | null
+  auto_reply_timezone: string | null
   handoff_agent_id: string | null
   embeddings_api_key: string | null
 }
 
 const CONFIG_COLUMNS =
-  'provider, model, api_key, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, embeddings_api_key'
+  'provider, model, api_key, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_limit_mode, auto_reply_schedule_start, auto_reply_schedule_end, auto_reply_timezone, handoff_agent_id, embeddings_api_key'
+
+/** Postgres `time` columns come back as 'HH:MM:SS'; the app works in
+ *  'HH:MM'. Normalizes either shape (or null) to 'HH:MM' | null. */
+function toHhMm(value: string | null): string | null {
+  if (!value) return null
+  const m = /^(\d{2}:\d{2})/.exec(value)
+  return m ? m[1] : null
+}
 
 /**
  * Load and decrypt the account's AI config for *use* (draft or
@@ -84,6 +96,10 @@ export async function loadAiConfig(
     isActive: row.is_active,
     autoReplyEnabled: row.auto_reply_enabled,
     autoReplyMaxPerConversation: row.auto_reply_max_per_conversation,
+    autoReplyLimitMode: row.auto_reply_limit_mode ?? 'per_conversation',
+    autoReplyScheduleStart: toHhMm(row.auto_reply_schedule_start),
+    autoReplyScheduleEnd: toHhMm(row.auto_reply_schedule_end),
+    autoReplyTimezone: row.auto_reply_timezone,
     handoffAgentId: row.handoff_agent_id,
     embeddingsApiKey,
     keySource: 'account',
@@ -112,6 +128,10 @@ export function envFallbackConfig(): AiConfig | null {
     isActive: true,
     autoReplyEnabled: true,
     autoReplyMaxPerConversation: ENV_FALLBACK_MAX_PER_CONVERSATION,
+    autoReplyLimitMode: 'per_conversation',
+    autoReplyScheduleStart: null,
+    autoReplyScheduleEnd: null,
+    autoReplyTimezone: null,
     handoffAgentId: null,
     embeddingsApiKey: null,
     keySource: 'env',
