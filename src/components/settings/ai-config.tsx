@@ -40,7 +40,7 @@ import {
   normalizeProviderBaseUrl,
   OLLAMA_DEFAULT_BASE_URL,
 } from '@/lib/ai/providers';
-import type { AiProvider } from '@/lib/ai/types';
+import type { AiProvider, AutoReplyLimitMode } from '@/lib/ai/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AccountMember } from '@/types';
 import { fetchAccountMembers, memberLabel } from '@/lib/account/members';
@@ -87,6 +87,17 @@ export function AiConfig() {
   const [isActive, setIsActive] = useState(true);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
   const [maxPerConversation, setMaxPerConversation] = useState(3);
+  // What the reply cap counts against (lifetime / per day / no cap).
+  const [limitMode, setLimitMode] = useState<AutoReplyLimitMode>(
+    'per_conversation'
+  );
+  // Reply-hours window. Both empty = always on (the default). The
+  // timezone is pinned to the browser's zone when a window is set —
+  // "9:00–18:00" means the admin's local hours, no extra picker needed.
+  const [scheduleStart, setScheduleStart] = useState('');
+  const [scheduleEnd, setScheduleEnd] = useState('');
+  const [timezone, setTimezone] = useState<string | null>(null);
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
   const [members, setMembers] = useState<AccountMember[]>([]);
@@ -120,6 +131,13 @@ export function AiConfig() {
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
         setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
+        setLimitMode(data.auto_reply_limit_mode ?? 'per_conversation');
+        // Postgres `time` serializes as 'HH:MM:SS'; the inputs use 'HH:MM'.
+        setScheduleStart(
+          (data.auto_reply_schedule_start ?? '').slice(0, 5)
+        );
+        setScheduleEnd((data.auto_reply_schedule_end ?? '').slice(0, 5));
+        setTimezone(data.auto_reply_timezone ?? null);
         setHandoffAgentId(data.handoff_agent_id ?? '');
         setHasStoredKey(Boolean(data.has_key));
         setApiKey(data.has_key ? MASKED_KEY : '');
@@ -182,6 +200,14 @@ export function AiConfig() {
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
+    auto_reply_limit_mode: limitMode,
+    auto_reply_schedule_start: scheduleStart || null,
+    auto_reply_schedule_end: scheduleEnd || null,
+    // Pin the window to the zone it was authored in (existing saved
+    // zone wins so an admin in another country editing an unrelated
+    // field doesn't silently shift the hours).
+    auto_reply_timezone:
+      scheduleStart && scheduleEnd ? (timezone ?? browserTimezone) : null,
     handoff_agent_id: handoffAgentId || null,
     validation_proof: validationProof ?? undefined,
   });
@@ -259,6 +285,10 @@ export function AiConfig() {
         setIsActive(true);
         setAutoReplyEnabled(true);
         setSystemPrompt('');
+        setLimitMode('per_conversation');
+        setScheduleStart('');
+        setScheduleEnd('');
+        setTimezone(null);
         setHandoffAgentId('');
       } else {
         const data = await res.json();
@@ -570,27 +600,108 @@ export function AiConfig() {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <Label htmlFor="ai-max">{t('maxAutoReplies')}</Label>
-                <p className="text-muted-foreground text-xs">
-                  {t('maxAutoRepliesDesc')}
-                </p>
+            <div className="space-y-2">
+              <Label htmlFor="ai-limit-mode">{t('maxAutoReplies')}</Label>
+              <p className="text-muted-foreground text-xs">
+                {t('limitModeDesc')}
+              </p>
+              <div className="flex items-center gap-2">
+                <Select
+                  items={{
+                    per_conversation: t('limitPerConversation'),
+                    per_day: t('limitPerDay'),
+                    never: t('limitNever'),
+                  }}
+                  value={limitMode}
+                  onValueChange={(v) =>
+                    setLimitMode(v as AutoReplyLimitMode)
+                  }
+                  disabled={disabled || !autoReplyEnabled}
+                >
+                  <SelectTrigger id="ai-limit-mode" className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="per_conversation">
+                      {t('limitPerConversation')}
+                    </SelectItem>
+                    <SelectItem value="per_day">{t('limitPerDay')}</SelectItem>
+                    <SelectItem value="never">{t('limitNever')}</SelectItem>
+                  </SelectContent>
+                </Select>
+                {limitMode !== 'never' && (
+                  <Input
+                    id="ai-max"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={maxPerConversation}
+                    onChange={(e) =>
+                      setMaxPerConversation(
+                        Math.min(20, Math.max(1, Number(e.target.value) || 1))
+                      )
+                    }
+                    disabled={disabled || !autoReplyEnabled}
+                    className="w-20"
+                    aria-label={t('maxAutoReplies')}
+                  />
+                )}
               </div>
-              <Input
-                id="ai-max"
-                type="number"
-                min={1}
-                max={20}
-                value={maxPerConversation}
-                onChange={(e) =>
-                  setMaxPerConversation(
-                    Math.min(20, Math.max(1, Number(e.target.value) || 1))
-                  )
-                }
-                disabled={disabled || !autoReplyEnabled}
-                className="w-20"
-              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="ai-schedule">{t('replyHours')}</Label>
+                  <p className="text-muted-foreground text-xs">
+                    {t('replyHoursDesc')}
+                  </p>
+                </div>
+                <Switch
+                  id="ai-schedule"
+                  checked={Boolean(scheduleStart && scheduleEnd)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      // Sensible business-hours default; editable below.
+                      setScheduleStart('09:00');
+                      setScheduleEnd('18:00');
+                      if (!timezone) setTimezone(browserTimezone);
+                    } else {
+                      setScheduleStart('');
+                      setScheduleEnd('');
+                      setTimezone(null);
+                    }
+                  }}
+                  disabled={disabled || !autoReplyEnabled}
+                  aria-label={t('replyHours')}
+                />
+              </div>
+              {scheduleStart && scheduleEnd && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="time"
+                    value={scheduleStart}
+                    onChange={(e) => setScheduleStart(e.target.value)}
+                    disabled={disabled || !autoReplyEnabled}
+                    className="w-32"
+                    aria-label={t('replyHoursFrom')}
+                  />
+                  <span className="text-muted-foreground text-sm">
+                    {t('replyHoursTo')}
+                  </span>
+                  <Input
+                    type="time"
+                    value={scheduleEnd}
+                    onChange={(e) => setScheduleEnd(e.target.value)}
+                    disabled={disabled || !autoReplyEnabled}
+                    className="w-32"
+                    aria-label={t('replyHoursTo')}
+                  />
+                  <span className="text-muted-foreground text-xs">
+                    {timezone ?? browserTimezone}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
