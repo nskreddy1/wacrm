@@ -585,11 +585,7 @@ export function AiConfig() {
                 <p className="text-muted-foreground text-xs">
                   {t('autoReplyDesc')}
                 </p>
-                {autoReplyEnabled && !isActive && (
-                  <p className="text-destructive mt-1 text-xs">
-                    {t('autoReplyNeedsAssistant')}
-                  </p>
-                )}
+
               </div>
               <Switch
                 id="ai-auto-reply"

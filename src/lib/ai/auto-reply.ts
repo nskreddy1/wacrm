@@ -48,7 +48,10 @@ export async function dispatchInboundToAiReply(
   try {
     const db = supabaseAdmin()
 
-    const config = await loadAiConfig(db, accountId)
+    // Auto-reply is independent from the inbox "Draft with AI" master
+    // switch. Load the saved provider config even when `is_active` is off;
+    // this worker is governed exclusively by `auto_reply_enabled`.
+    const config = await loadAiConfig(db, accountId, { requireActive: false })
     if (!config || !config.autoReplyEnabled) return
 
     // Reply-hours window: outside the configured schedule the bot stands

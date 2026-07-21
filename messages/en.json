@@ -1692,7 +1692,6 @@
       "replyHoursDesc": "Outside these hours the bot stays quiet and messages wait for your team. Off = the bot replies around the clock.",
       "replyHoursFrom": "From",
       "replyHoursTo": "to",
-      "autoReplyNeedsAssistant": "Auto-reply only takes effect while the AI assistant is enabled.",
       "maxAutoReplies": "Max auto-replies per conversation",
       "maxAutoRepliesDesc": "After this many bot replies in one thread, the bot goes quiet.",
       "handoffTo": "Hand off to",
