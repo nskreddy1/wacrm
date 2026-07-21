@@ -12,6 +12,7 @@ import {
   AiError,
   AI_PROVIDERS,
   isAiProvider,
+  isAutoReplyLimitMode,
   type AiProvider,
 } from '@/lib/ai/types'
 import { verifyValidationProof } from '@/lib/ai/validation-proof'
@@ -282,6 +283,10 @@ export async function POST(request: Request) {
           isActive,
           autoReplyEnabled,
           autoReplyMaxPerConversation: maxPer,
+          autoReplyLimitMode: 'per_conversation',
+          autoReplyScheduleStart: null,
+          autoReplyScheduleEnd: null,
+          autoReplyTimezone: null,
           handoffAgentId: null,
           embeddingsApiKey: null,
           keySource: 'account',
@@ -324,6 +329,10 @@ export async function POST(request: Request) {
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
       auto_reply_max_per_conversation: maxPer,
+      auto_reply_limit_mode: limitMode,
+      auto_reply_schedule_start: scheduleStart,
+      auto_reply_schedule_end: scheduleEnd,
+      auto_reply_timezone: timezone,
     }
     // Only touch the handoff target when the form actually sent the field,
     // so a partial save (e.g. flipping a toggle) doesn't wipe it.
