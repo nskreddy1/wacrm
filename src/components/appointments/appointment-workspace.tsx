@@ -158,24 +158,6 @@ export function AppointmentWorkspace() {
     return { today: dayStart, tomorrow: nextDay };
   }, []);
 
-  const stats = useMemo(
-    () => ({
-      today: appointments.filter(
-        (item) =>
-          new Date(item.startsAt) >= today &&
-          new Date(item.startsAt) < tomorrow &&
-          item.status === 'scheduled'
-      ).length,
-      upcoming: appointments.filter(
-        (item) =>
-          new Date(item.startsAt) >= today && item.status === 'scheduled'
-      ).length,
-      completed: appointments.filter((item) => item.status === 'completed')
-        .length,
-    }),
-    [appointments, today, tomorrow]
-  );
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return appointments
@@ -265,26 +247,6 @@ export function AppointmentWorkspace() {
             <Plus aria-hidden="true" /> New appointment
           </Button>
         </div>
-        <dl className="mt-4 flex flex-wrap items-center gap-y-2 text-sm">
-          {[
-            ['Today', stats.today],
-            ['Upcoming', stats.upcoming],
-            ['Completed', stats.completed],
-          ].map(([label, value], index) => (
-            <div
-              key={label}
-              className={cn(
-                'flex items-baseline gap-2',
-                index > 0 && 'border-border ml-4 border-l pl-4'
-              )}
-            >
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="text-foreground font-semibold tabular-nums">
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
       </header>
 
       <section
