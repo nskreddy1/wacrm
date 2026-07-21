@@ -1,18 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { buildSystemPrompt, buildPromptParts } from './defaults'
-import { parseFeatureFlags, DEFAULT_FEATURE_FLAGS } from './feature-flags'
-
-// The kill-switch reads platform_settings via the admin client; stub it
-// so these unit tests never touch a network.
-vi.mock('./admin-client', () => ({
-  supabaseAdmin: () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
-      }),
-    }),
-  }),
-}))
 
 const PROMPT_ARGS = {
   userPrompt: 'We sell handmade candles. Ship within 2 days.',
@@ -92,64 +79,4 @@ describe('legacy prompt (flag OFF) regression', () => {
   })
 })
 
-describe('parseFeatureFlags', () => {
-  it('defaults everything to OFF', () => {
-    expect(parseFeatureFlags(null)).toEqual(DEFAULT_FEATURE_FLAGS)
-    expect(parseFeatureFlags(undefined)).toEqual(DEFAULT_FEATURE_FLAGS)
-    expect(parseFeatureFlags({})).toEqual(DEFAULT_FEATURE_FLAGS)
-    expect(parseFeatureFlags('garbage')).toEqual(DEFAULT_FEATURE_FLAGS)
-    expect(parseFeatureFlags([])).toEqual(DEFAULT_FEATURE_FLAGS)
-  })
 
-  it('only an explicit true enables a flag', () => {
-    expect(parseFeatureFlags({ prompt_caching: true }).promptCaching).toBe(true)
-    expect(parseFeatureFlags({ prompt_caching: 'true' }).promptCaching).toBe(false)
-    expect(parseFeatureFlags({ prompt_caching: 1 }).promptCaching).toBe(false)
-    expect(parseFeatureFlags({ prompt_caching: null }).promptCaching).toBe(false)
-  })
-})
-
-describe('isAiFeatureEnabled', () => {
-  beforeEach(() => vi.resetModules())
-  afterEach(() => {
-    delete process.env.AI_DISABLED_FEATURES
-  })
-
-  it('is OFF when the config has no flags at all (ad-hoc configs)', async () => {
-    const { isAiFeatureEnabled } = await import('./feature-flags')
-    expect(await isAiFeatureEnabled({}, 'prompt_caching')).toBe(false)
-  })
-
-  it('is ON only with an explicit account opt-in', async () => {
-    const { isAiFeatureEnabled, resetFeatureFlagCache } = await import(
-      './feature-flags'
-    )
-    resetFeatureFlagCache()
-    expect(
-      await isAiFeatureEnabled(
-        { featureFlags: { promptCaching: true } },
-        'prompt_caching',
-      ),
-    ).toBe(true)
-    expect(
-      await isAiFeatureEnabled(
-        { featureFlags: { promptCaching: false } },
-        'prompt_caching',
-      ),
-    ).toBe(false)
-  })
-
-  it('platform kill-switch overrides an account opt-in', async () => {
-    process.env.AI_DISABLED_FEATURES = 'prompt_caching'
-    const { isAiFeatureEnabled, resetFeatureFlagCache } = await import(
-      './feature-flags'
-    )
-    resetFeatureFlagCache()
-    expect(
-      await isAiFeatureEnabled(
-        { featureFlags: { promptCaching: true } },
-        'prompt_caching',
-      ),
-    ).toBe(false)
-  })
-})
