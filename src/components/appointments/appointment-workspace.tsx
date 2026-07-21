@@ -255,7 +255,10 @@ export function AppointmentWorkspace() {
       >
         <div className="border-border border-b px-4 md:px-6">
           <div className="flex flex-col gap-3 py-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex overflow-x-auto" aria-label="Schedule range">
+            <div
+              className="flex flex-wrap items-center gap-1"
+              aria-label="Schedule range"
+            >
               {SCOPES.map((item) => (
                 <button
                   key={item.value}
@@ -263,9 +266,9 @@ export function AppointmentWorkspace() {
                   onClick={() => setScope(item.value)}
                   aria-pressed={scope === item.value}
                   className={cn(
-                    'text-muted-foreground hover:text-foreground focus-visible:ring-ring relative min-h-10 shrink-0 px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
+                    'text-muted-foreground hover:text-foreground focus-visible:ring-ring relative min-h-9 px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
                     scope === item.value &&
-                      'text-foreground after:bg-primary after:absolute after:inset-x-2 after:bottom-[-13px] after:h-0.5'
+                      'text-foreground after:bg-primary after:absolute after:inset-x-3 after:bottom-0 after:h-0.5'
                   )}
                 >
                   {item.label}
