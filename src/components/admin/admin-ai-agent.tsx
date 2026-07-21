@@ -314,9 +314,15 @@ function AgentForm({
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState(config.base_url ?? "");
   const [systemPrompt, setSystemPrompt] = useState(config.system_prompt ?? "");
-  const [isActive, setIsActive] = useState(config.is_active ?? false);
+  // Unprovisioned workspace → default the switches ON so a validated
+  // first save goes live immediately (the backend tests the key with
+  // the provider before persisting). Existing configs keep their
+  // stored values.
+  const [isActive, setIsActive] = useState(
+    config.configured ? (config.is_active ?? false) : true,
+  );
   const [autoReply, setAutoReply] = useState(
-    config.auto_reply_enabled ?? false,
+    config.configured ? (config.auto_reply_enabled ?? false) : true,
   );
   const [maxPer, setMaxPer] = useState(
     String(config.auto_reply_max_per_conversation ?? 3),

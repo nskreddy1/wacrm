@@ -7,6 +7,7 @@ import { buildPromptParts } from './defaults'
 import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
+import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule'
 import { sendChannelMessage } from '@/lib/orchestration/outbound'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
@@ -50,6 +51,10 @@ export async function dispatchInboundToAiReply(
     const config = await loadAiConfig(db, accountId)
     if (!config || !config.autoReplyEnabled) return
 
+    // Reply-hours window: outside the configured schedule the bot stands
+    // down entirely and the inbound waits in the inbox for a human.
+    if (!isWithinAutoReplySchedule(config)) return
+
     // Deterministic, user-configured responders win over the LLM — the
     // caller already excludes messages a Flow consumed. Message-level
     // automations (`new_message_received` / `keyword_match`) are
@@ -75,9 +80,35 @@ export async function dispatchInboundToAiReply(
     if (convErr || !conv) return
     if (conv.assigned_agent_id) return // a human owns this thread
     if (conv.ai_autoreply_disabled) return // handed off / turned off here
-    // Cheap early-out; the authoritative cap check is the atomic claim
-    // below (this read can race a concurrent inbound).
-    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return
+    // Reply-cap gate, by limit mode:
+    //  - never:            no cap — the bot always replies.
+    //  - per_conversation: lifetime cap; cheap early-out here, the
+    //                      authoritative check is the atomic claim below.
+    //  - per_day:          cap resets at midnight in the account's
+    //                      timezone; counted from today's bot messages.
+    if (
+      config.autoReplyLimitMode === 'per_conversation' &&
+      conv.ai_reply_count >= config.autoReplyMaxPerConversation
+    ) {
+      return
+    }
+    if (config.autoReplyLimitMode === 'per_day') {
+      const dayStart = startOfTodayUtc(config.autoReplyTimezone)
+      const { count, error: cntErr } = await db
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId)
+        .eq('sender_type', 'bot')
+        .eq('ai_generated', true)
+        .gte('created_at', dayStart.toISOString())
+      if (cntErr) {
+        // Can't establish today's count — fail safe (don't reply) so a
+        // transient DB error can never blow past the cap.
+        console.error('[ai auto-reply] per-day count failed:', cntErr)
+        return
+      }
+      if ((count ?? 0) >= config.autoReplyMaxPerConversation) return
+    }
 
     const messages = await buildConversationContext(db, conversationId)
     if (messages.length === 0) return
@@ -219,11 +250,18 @@ export async function dispatchInboundToAiReply(
     // another inbound just took the last slot, `claimed` is false and we
     // skip the send. (We consume a slot slightly before the send lands —
     // fail-safe: under-reply rather than over-reply.)
+    // In per_day / never modes the lifetime counter must not block the
+    // send (their gates already ran above), but we still claim a slot so
+    // `ai_reply_count` keeps tracking total bot replies for the thread.
+    const lifetimeCap =
+      config.autoReplyLimitMode === 'per_conversation'
+        ? config.autoReplyMaxPerConversation
+        : 2147483647
     const { data: claimed, error: claimErr } = await db.rpc(
       'claim_ai_reply_slot',
       {
         conversation_id: conversationId,
-        max_replies: config.autoReplyMaxPerConversation,
+        max_replies: lifetimeCap,
       },
     )
     if (claimErr) {

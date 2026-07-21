@@ -37,7 +37,7 @@ export async function GET() {
       // `api_key` is selected only to derive `has_key` — it is stripped
       // out below and never returned to the client.
       .select(
-        'provider, model, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key',
+        'provider, model, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_limit_mode, auto_reply_schedule_start, auto_reply_schedule_end, auto_reply_timezone, handoff_agent_id, api_key, embeddings_api_key',
       )
       .eq('account_id', accountId)
       .maybeSingle()
@@ -149,6 +149,50 @@ export async function POST(request: Request) {
     let maxPer = Number(body.auto_reply_max_per_conversation)
     if (!Number.isFinite(maxPer)) maxPer = 3
     maxPer = Math.min(20, Math.max(1, Math.floor(maxPer)))
+
+    // Limit mode: what the cap counts against. Absent/invalid → the
+    // legacy per-conversation behaviour.
+    const limitMode = isAutoReplyLimitMode(body.auto_reply_limit_mode)
+      ? body.auto_reply_limit_mode
+      : 'per_conversation'
+
+    // Reply-hours schedule: both bounds must be valid 'HH:MM' strings or
+    // both null ("always on"). Half-open input → treated as always on
+    // rather than rejected, matching the switch-flip save UX.
+    const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+    const rawStart =
+      typeof body.auto_reply_schedule_start === 'string'
+        ? body.auto_reply_schedule_start.trim()
+        : ''
+    const rawEnd =
+      typeof body.auto_reply_schedule_end === 'string'
+        ? body.auto_reply_schedule_end.trim()
+        : ''
+    let scheduleStart: string | null = null
+    let scheduleEnd: string | null = null
+    if (rawStart && rawEnd) {
+      if (!HHMM.test(rawStart) || !HHMM.test(rawEnd)) {
+        return bad('schedule times must be HH:MM (24-hour)')
+      }
+      scheduleStart = rawStart
+      scheduleEnd = rawEnd
+    }
+
+    // Timezone: must resolve in Intl, else the schedule silently
+    // evaluates in the wrong zone. Only meaningful alongside a window.
+    let timezone: string | null = null
+    const rawTz =
+      typeof body.auto_reply_timezone === 'string'
+        ? body.auto_reply_timezone.trim()
+        : ''
+    if (rawTz && scheduleStart) {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: rawTz })
+        timezone = rawTz
+      } catch {
+        return bad('auto_reply_timezone must be a valid IANA timezone')
+      }
+    }
 
     // Handoff routing target for auto-reply. A non-empty string must be a
     // member of this account (else the conversation would be assigned to a
