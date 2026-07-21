@@ -29,10 +29,35 @@ describe('logAiUsage', () => {
       prompt_tokens: 30,
       completion_tokens: 6,
       total_tokens: 36,
+      // Null (not 0) when the provider reported no cache info —
+      // telemetry must distinguish "no data" from "0% hit".
+      cached_tokens: null,
+      cache_write_tokens: null,
       // Defaults to the account's own BYO key when the caller doesn't
       // specify which key paid for the request.
       key_source: 'account',
     })
+  })
+
+  it('records provider cache telemetry when reported', async () => {
+    const { db, insert } = fakeDb()
+    await logAiUsage(db, {
+      accountId: 'acct-1',
+      conversationId: 'conv-1',
+      mode: 'auto_reply',
+      provider: 'anthropic',
+      model: 'claude-x',
+      usage: {
+        promptTokens: 1000,
+        completionTokens: 50,
+        totalTokens: 1050,
+        cachedTokens: 800,
+        cacheWriteTokens: 120,
+      },
+    })
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ cached_tokens: 800, cache_write_tokens: 120 }),
+    )
   })
 
   it('is a no-op when the provider reported no usage', async () => {

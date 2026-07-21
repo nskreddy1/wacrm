@@ -75,8 +75,11 @@ export interface AiConfig {
    *  `ai_usage_log.key_source` so shared-key spend is auditable. */
   keySource: 'account' | 'env'
   /** Per-account AI optimization opt-ins (`ai_configs.feature_flags`).
-   *  Parsed by `parseFeatureFlags`; everything defaults to OFF. */
-  featureFlags: import('./feature-flags').AiFeatureFlags
+   *  Parsed by `parseFeatureFlags`. OPTIONAL by design: ad-hoc configs
+   *  (test routes, config-validation probes, test fixtures) omit it and
+   *  `isAiFeatureEnabled` treats undefined as all-OFF — a missing flag
+   *  object can never accidentally switch an optimization on. */
+  featureFlags?: import('./feature-flags').AiFeatureFlags
 }
 
 /** A single conversation turn in the shape both providers accept. */
