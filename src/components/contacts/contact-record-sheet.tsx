@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
 import { Building2, Check, ChevronDown, Loader2, MinusCircle, Pencil, PlusCircle, Save } from "lucide-react"
 import { toast } from "sonner"
 
@@ -19,6 +19,10 @@ export type ContactSheetState = { mode: "create" | "view" | "edit"; contact?: Wo
 
 const PHONE_TYPES = ["Mobile", "Home Phone", "Work Phone", "Phone"] as const
 
+// These labels are rendered as dedicated inputs in the form; hide them from
+// the generic "Additional Information" custom-field list to avoid duplicates.
+const RESERVED_FIELD_LABELS = new Set(["title", "description", "street", "city", "other phones"])
+
 function ownerInitials(name: string) {
   return name.split(/\s+/).map((part) => part[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?"
 }
@@ -34,7 +38,7 @@ export function ContactRecordSheet({ state, fields, owners = [], currentUserId =
   const [extraPhones, setExtraPhones] = useState<string[]>([])
   const [addressOpen, setAddressOpen] = useState(false)
   const [additionalOpen, setAdditionalOpen] = useState(false)
-  const customFields = useMemo(() => fields.filter((field) => field.custom), [fields])
+  const customFields = useMemo(() => fields.filter((field) => field.custom && !RESERVED_FIELD_LABELS.has(field.label.toLocaleLowerCase())), [fields])
 
   useEffect(() => {
     // The same mounted sheet instance serves different records, so opening a
@@ -123,10 +127,51 @@ export function ContactRecordSheet({ state, fields, owners = [], currentUserId =
 
   function renderCustomField(field: ContactField) {
     const value = String(values[field.id] ?? "")
+    const inputId = `contact-${field.id}`
+    let control: ReactNode
+    if (field.type === "checkbox") {
+      const checked = value === "true" || value === "Yes"
+      control = (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={checked}
+          aria-labelledby={`${inputId}-label`}
+          disabled={readonly}
+          onClick={() => setValue(field.id, checked ? "false" : "true")}
+          className="flex size-5 items-center justify-center rounded border border-input bg-background transition-colors data-[checked=true]:border-primary data-[checked=true]:bg-primary data-[checked=true]:text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+          data-checked={checked}
+        >
+          {checked ? <Check className="size-3.5" /> : null}
+        </button>
+      )
+    } else if ((field.type === "single_select" || field.type === "multi_select") && field.options?.length) {
+      control = (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<button type="button" id={inputId} disabled={readonly} className="flex h-11 w-full items-center justify-between rounded-lg border border-input bg-transparent px-2.5 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50" />}
+          >
+            <span className={value ? "" : "text-muted-foreground"}>{value || "Select an option"}</span>
+            <ChevronDown className="size-4 text-muted-foreground" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {field.options.map((option) => (
+              <DropdownMenuItem key={option} onClick={() => setValue(field.id, option)}>
+                <span className="flex-1">{option}</span>
+                {option === value ? <Check className="size-4 text-primary" /> : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
+    } else {
+      const htmlType = field.type === "number" || field.type === "currency" ? "number" : field.type === "date" ? "date" : field.type === "email" ? "email" : field.type === "phone" ? "tel" : field.type === "url" ? "url" : "text"
+      control = <Input id={inputId} type={htmlType} value={value} onChange={(event) => setValue(field.id, event.target.value)} disabled={readonly} className="h-11 flex-1" />
+    }
     return (
       <Field key={field.id} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
-        <FieldLabel htmlFor={`contact-${field.id}`} className="sm:w-36 sm:justify-end">{field.label}</FieldLabel>
-        <Input id={`contact-${field.id}`} value={value} onChange={(event) => setValue(field.id, event.target.value)} disabled={readonly} className="h-11 flex-1" />
+        <FieldLabel id={`${inputId}-label`} htmlFor={inputId} className="sm:w-36 sm:justify-end">{field.label}</FieldLabel>
+        {control}
       </Field>
     )
   }
