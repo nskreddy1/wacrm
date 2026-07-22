@@ -151,7 +151,7 @@ export function RecordOwnerPicker({ owners, value, currentUserId = "", disabled 
 // --------------------------------------------------------------- RecordLookup
 // Bigin-style lookup: input-like trigger, search box, option list, optional
 // "+ New X" quick-create row at the bottom.
-export function RecordLookup({ id, value, options, placeholder = "", icon, createLabel, disabled = false, onSelect, onCreateNew }: {
+export function RecordLookup({ id, value, options, placeholder = "", icon, createLabel, disabled = false, allowCustom = false, onSelect, onCreateNew }: {
   id?: string
   value: string | null
   options: { id: string; label: string; hint?: string }[]
@@ -159,24 +159,30 @@ export function RecordLookup({ id, value, options, placeholder = "", icon, creat
   icon?: ReactNode
   createLabel?: string
   disabled?: boolean
+  /** When true, the typed search text can be used directly as the value (free-text lookups like Company). */
+  allowCustom?: boolean
   onSelect: (id: string | null) => void
   onCreateNew?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const selected = options.find((option) => option.id === value) ?? null
+  // Free-text lookups show the raw value when it doesn't match an option
+  const display = selected?.label ?? (allowCustom && value ? value : null)
   const filtered = useMemo(() => {
     const trimmed = query.trim().toLowerCase()
     if (!trimmed) return options
     return options.filter((option) => option.label.toLowerCase().includes(trimmed))
   }, [options, query])
+  const trimmedQuery = query.trim()
+  const exactMatch = options.some((option) => option.label.toLowerCase() === trimmedQuery.toLowerCase())
 
   return (
     <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setQuery("") }}>
       <PopoverTrigger
         render={<button type="button" id={id} disabled={disabled} className={cn("flex h-11 w-full items-center justify-between gap-2 rounded-md border bg-transparent px-3 text-sm shadow-xs transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60", !selected && "text-muted-foreground")} />}
       >
-        <span className="truncate">{selected?.label ?? placeholder}</span>
+        <span className="truncate">{display ?? placeholder}</span>
         {icon ?? <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 gap-0 p-0">
@@ -192,7 +198,12 @@ export function RecordLookup({ id, value, options, placeholder = "", icon, creat
               Clear selection
             </button>
           ) : null}
-          {filtered.length === 0 ? <p className="px-3 py-2 text-sm text-muted-foreground">No matches found.</p> : filtered.map((option) => (
+          {allowCustom && trimmedQuery && !exactMatch ? (
+            <button type="button" className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm font-medium text-primary transition-colors hover:bg-muted" onClick={() => { onSelect(trimmedQuery); setOpen(false) }}>
+              <Plus className="size-4" aria-hidden="true" />Use &quot;{trimmedQuery}&quot;
+            </button>
+          ) : null}
+          {filtered.length === 0 && !(allowCustom && trimmedQuery) ? <p className="px-3 py-2 text-sm text-muted-foreground">No matches found.</p> : filtered.map((option) => (
             <button
               key={option.id}
               type="button"
