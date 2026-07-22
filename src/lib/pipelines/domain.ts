@@ -44,6 +44,7 @@ export interface PipelineDeal {
   stageId: string
   contactId: string | null
   catalogItemId: string | null
+  customValues: Record<string, string>
   assignedTo: string | null
   title: string
   value: number

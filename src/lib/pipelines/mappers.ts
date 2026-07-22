@@ -55,6 +55,7 @@ export function mapDeal(row: Row): PipelineDeal {
     stageId: String(row.stage_id),
     contactId: nullable(row.contact_id),
     catalogItemId: nullable(row.catalog_item_id),
+    customValues: (row.custom_values && typeof row.custom_values === "object" ? row.custom_values : {}) as Record<string, string>,
     assignedTo: nullable(row.assigned_to),
     title: String(row.title),
     value: Number(row.value ?? 0),

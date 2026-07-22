@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
-import { ArrowRight, Building2, CalendarDays, ChevronDown, CircleDollarSign, Contact, Package, Plus, UserRound, X } from "lucide-react"
+import { ArrowRight, Building2, CalendarDays, ChevronDown, CircleDollarSign, Contact, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -11,11 +11,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
-import type { ActionResult } from "@/lib/pipelines/actions"
+import { getDealFieldLayoutAction, listDealItemsAction, saveDealFieldLayoutAction, saveDealItemsAction, type ActionResult } from "@/lib/pipelines/actions"
 import type { PipelineDeal, PipelineSnapshot } from "@/lib/pipelines/domain"
-import { dealInputSchema, type DealInput } from "@/lib/pipelines/validation"
+import { dealInputSchema, type DealFieldLayout, type DealInput } from "@/lib/pipelines/validation"
 import { formatCurrency, getCurrencySymbol } from "@/lib/currency"
 import { useAuth } from "@/hooks/use-auth"
+import { DealFieldsEditor } from "./deal-fields-editor"
+import { DealItemsTable, itemTotal, type DraftDealItem } from "./deal-items-table"
 
 function draftFrom(deal: PipelineDeal | null, snapshot: PipelineSnapshot, stageId: string, currency: string): DealInput {
   return {
