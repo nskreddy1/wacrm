@@ -1,17 +1,18 @@
 "use client"
 
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-import { Building2, Check, ChevronDown, Loader2, Pencil, PlusCircle, Save } from "lucide-react"
+import { Building2, Check, ChevronDown, Loader2, MinusCircle, Pencil, PlusCircle, Save } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
-import { validInternationalPhone } from "@/components/contacts/international-phone-input"
+import { InternationalPhoneInput, validInternationalPhone } from "@/components/contacts/international-phone-input"
 import type { ContactField, ContactValue, WorkspaceContact } from "@/lib/data/contacts/types"
 
 export type ContactSheetState = { mode: "create" | "view" | "edit"; contact?: WorkspaceContact } | null
@@ -22,6 +23,7 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
   const [values, setValues] = useState<Record<string, ContactValue>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [extraPhones, setExtraPhones] = useState<string[]>([])
   const [addressOpen, setAddressOpen] = useState(false)
   const [additionalOpen, setAdditionalOpen] = useState(false)
   const customFields = useMemo(() => fields.filter((field) => field.custom), [fields])
@@ -43,6 +45,12 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
       street: contact?.values.street ?? "",
       city: contact?.values.city ?? "",
     })
+    setExtraPhones(
+      String(contact?.values.otherPhones ?? "")
+        .split(",")
+        .map((phone) => phone.trim())
+        .filter(Boolean),
+    )
     setErrors({})
   }, [state, contact, fields])
 
@@ -64,6 +72,9 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
     }
     const phone = String(values.phone ?? "").trim()
     if (phone && !validInternationalPhone(phone)) next.phone = "Choose a country and enter a valid phone number."
+    extraPhones.forEach((extra, index) => {
+      if (extra.trim() && !validInternationalPhone(extra.trim())) next[`extraPhone-${index}`] = "Enter a valid phone number."
+    })
     const email = String(values.email ?? "").trim()
     if (email && !/^\S+@\S+\.\S+$/.test(email)) next.email = "Enter a valid email address."
     setErrors(next)
@@ -78,10 +89,14 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
       const response = await fetch("/api/v1/workspace/contacts", {
         method: contact ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(contact
-          ? { id: contact.id, values: { ...values, name: [values.firstName, values.lastName].map(String).filter(Boolean).join(" ") } }
-          : { values: { ...values, name: [values.firstName, values.lastName].map(String).filter(Boolean).join(" ") } },
-        ),
+        body: JSON.stringify((() => {
+          const payloadValues = {
+            ...values,
+            name: [values.firstName, values.lastName].map(String).filter(Boolean).join(" "),
+            otherPhones: extraPhones.map((phone) => phone.trim()).filter(Boolean).join(", "),
+          }
+          return contact ? { id: contact.id, values: payloadValues } : { values: payloadValues }
+        })()),
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error?.message ?? "Unable to save contact")
@@ -98,9 +113,9 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
   function renderCustomField(field: ContactField) {
     const value = String(values[field.id] ?? "")
     return (
-      <Field key={field.id}>
-        <FieldLabel htmlFor={`contact-${field.id}`}>{field.label}</FieldLabel>
-        <Input id={`contact-${field.id}`} value={value} onChange={(event) => setValue(field.id, event.target.value)} disabled={readonly} />
+      <Field key={field.id} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
+        <FieldLabel htmlFor={`contact-${field.id}`} className="sm:w-36 sm:justify-end">{field.label}</FieldLabel>
+        <Input id={`contact-${field.id}`} value={value} onChange={(event) => setValue(field.id, event.target.value)} disabled={readonly} className="h-11 flex-1" />
       </Field>
     )
   }
@@ -148,7 +163,30 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
                   </Field>
                   <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4" data-invalid={Boolean(errors.phone)}>
                     <FieldLabel htmlFor="contact-phone" className="sm:w-36 sm:justify-end">Mobile <ChevronDown className="size-3.5 text-muted-foreground" /></FieldLabel>
-                    <div className="flex flex-1 items-start gap-2"><div className="flex flex-1 flex-col gap-1.5"><Input id="contact-phone" type="tel" autoComplete="tel" value={String(values.phone ?? "")} onChange={(event) => setValue("phone", event.target.value)} disabled={readonly} aria-invalid={Boolean(errors.phone)} className="h-11" /><FieldError>{errors.phone}</FieldError></div><Button type="button" variant="ghost" size="icon" className="mt-0.5 shrink-0 text-muted-foreground" aria-label="Add another phone number"><PlusCircle className="size-5" /></Button></div>
+                    <div className="flex flex-1 flex-col gap-2.5">
+                      <div className="flex items-start gap-2">
+                        <div className="flex flex-1 flex-col gap-1.5"><InternationalPhoneInput value={String(values.phone ?? "")} onChange={(value) => setValue("phone", value)} invalid={Boolean(errors.phone)} disabled={readonly} /><FieldError>{errors.phone}</FieldError></div>
+                        {!readonly ? <Button type="button" variant="ghost" size="icon" className="mt-1 shrink-0 text-muted-foreground" aria-label="Add another phone number" onClick={() => setExtraPhones((current) => [...current, ""])}><PlusCircle className="size-5" /></Button> : null}
+                      </div>
+                      {extraPhones.map((extra, index) => (
+                        <div key={index} className="flex items-start gap-2">
+                          <div className="flex flex-1 flex-col gap-1.5">
+                            <InternationalPhoneInput
+                              id={`contact-phone-extra-${index}`}
+                              value={extra}
+                              onChange={(value) => {
+                                setExtraPhones((current) => current.map((item, i) => (i === index ? value : item)))
+                                setErrors((current) => ({ ...current, [`extraPhone-${index}`]: "" }))
+                              }}
+                              invalid={Boolean(errors[`extraPhone-${index}`])}
+                              disabled={readonly}
+                            />
+                            <FieldError>{errors[`extraPhone-${index}`]}</FieldError>
+                          </div>
+                          {!readonly ? <Button type="button" variant="ghost" size="icon" className="mt-1 shrink-0 text-muted-foreground" aria-label={`Remove phone number ${index + 2}`} onClick={() => setExtraPhones((current) => current.filter((_, i) => i !== index))}><MinusCircle className="size-5" /></Button> : null}
+                        </div>
+                      ))}
+                    </div>
                   </Field>
                   <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
                     <FieldLabel htmlFor="contact-description" className="sm:w-36 sm:justify-end">Description</FieldLabel>
@@ -159,12 +197,23 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
 
               <Collapsible open={addressOpen} onOpenChange={setAddressOpen}>
                 <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md py-2 text-left font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] motion-safe:transition-transform motion-safe:duration-150"><span>Address Information</span><ChevronDown className="motion-safe:transition-transform motion-safe:duration-200 group-data-panel-open:rotate-180" /></CollapsibleTrigger>
-                <CollapsibleContent className="data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-safe:transition-[height,opacity] motion-safe:duration-200"><FieldGroup className="grid gap-4 pt-4 sm:grid-cols-2"><Field><FieldLabel htmlFor="contact-street">Street</FieldLabel><Input id="contact-street" value={String(values.street ?? "")} onChange={(event) => setValue("street", event.target.value)} disabled={readonly} /></Field><Field><FieldLabel htmlFor="contact-city">City</FieldLabel><Input id="contact-city" value={String(values.city ?? "")} onChange={(event) => setValue("city", event.target.value)} disabled={readonly} /></Field></FieldGroup></CollapsibleContent>
+                <CollapsibleContent className="data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-safe:transition-[height,opacity] motion-safe:duration-200">
+                  <FieldGroup className="gap-5 pt-4">
+                    <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
+                      <FieldLabel htmlFor="contact-street" className="sm:w-36 sm:justify-end">Street</FieldLabel>
+                      <Input id="contact-street" value={String(values.street ?? "")} onChange={(event) => setValue("street", event.target.value)} disabled={readonly} className="h-11 flex-1" />
+                    </Field>
+                    <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
+                      <FieldLabel htmlFor="contact-city" className="sm:w-36 sm:justify-end">City</FieldLabel>
+                      <Input id="contact-city" value={String(values.city ?? "")} onChange={(event) => setValue("city", event.target.value)} disabled={readonly} className="h-11 flex-1" />
+                    </Field>
+                  </FieldGroup>
+                </CollapsibleContent>
               </Collapsible>
 
               <Collapsible open={additionalOpen} onOpenChange={setAdditionalOpen}>
                 <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md py-2 text-left font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] motion-safe:transition-transform motion-safe:duration-150"><span>Additional Information</span><ChevronDown className="motion-safe:transition-transform motion-safe:duration-200 group-data-panel-open:rotate-180" /></CollapsibleTrigger>
-                <CollapsibleContent className="data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-safe:transition-[height,opacity] motion-safe:duration-200"><FieldGroup className="grid gap-4 pt-4 sm:grid-cols-2">{customFields.length ? customFields.map(renderCustomField) : <p className="text-sm text-muted-foreground sm:col-span-2">No custom fields have been configured.</p>}</FieldGroup></CollapsibleContent>
+                <CollapsibleContent className="data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-safe:transition-[height,opacity] motion-safe:duration-200"><FieldGroup className="gap-5 pt-4">{customFields.length ? customFields.map(renderCustomField) : <p className="text-sm text-muted-foreground">No custom fields have been configured.</p>}</FieldGroup></CollapsibleContent>
               </Collapsible>
             </div>
           </ScrollArea>

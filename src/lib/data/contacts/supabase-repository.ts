@@ -58,6 +58,7 @@ const EXTENDED_CONTACT_FIELDS: Record<string, string> = {
   description: "Description",
   street: "Street",
   city: "City",
+  otherPhones: "Other Phones",
 }
 
 async function resolveExtendedValues(ctx: AccountContext, values: Partial<Record<string, ContactValue>>) {
