@@ -64,6 +64,17 @@ export interface PipelineDeal {
   owner: PipelineMember | null
 }
 
+export interface DealItem {
+  id: string
+  dealId: string
+  catalogItemId: string | null
+  name: string
+  listPrice: number
+  quantity: number
+  discountPct: number
+  position: number
+}
+
 export interface PipelineSavedView {
   id: string
   accountId: string

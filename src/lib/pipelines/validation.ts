@@ -37,6 +37,37 @@ export const dealInputSchema = z.object({
   due: z.iso.date().nullable().optional(),
   status: z.enum(["open", "won", "lost"]).default("open"),
   position: z.coerce.number().int().min(0).default(0),
+  customValues: z.record(z.string().max(60), z.string().max(500)).optional(),
+})
+
+// A single "Associated Catalog" line item on a deal (Bigin's Associated Products)
+export const dealItemInputSchema = z.object({
+  id: uuidSchema.optional(),
+  catalogItemId: uuidSchema.nullable().optional(),
+  name: z.string().trim().min(1, "Pick a catalog item").max(160),
+  listPrice: z.coerce.number().finite().min(0),
+  quantity: z.coerce.number().finite().gt(0, "Quantity must be above zero").max(99999),
+  discountPct: z.coerce.number().finite().min(0).max(100),
+  position: z.coerce.number().int().min(0).default(0),
+})
+
+export const dealItemsSaveSchema = z.object({
+  pipelineId: uuidSchema,
+  dealId: uuidSchema,
+  items: z.array(dealItemInputSchema).max(50),
+})
+
+// Customize Fields layout stored per pipeline in deal_field_settings.layout
+export const dealFieldLayoutSchema = z.object({
+  hidden: z.array(z.string().max(40)).max(30).default([]),
+  custom: z
+    .array(z.object({
+      id: z.string().min(1).max(40),
+      label: z.string().trim().min(1, "Field label is required").max(60),
+      type: z.enum(["text", "number", "date"]).default("text"),
+    }))
+    .max(10, "You can add up to 10 custom fields")
+    .default([]),
 })
 
 export const savedViewInputSchema = z.object({
@@ -58,5 +89,7 @@ export const subPipelineInputSchema = z.object({
 })
 
 export type DealInput = z.infer<typeof dealInputSchema>
+export type DealItemInput = z.infer<typeof dealItemInputSchema>
+export type DealFieldLayout = z.infer<typeof dealFieldLayoutSchema>
 export type SavedViewInput = z.infer<typeof savedViewInputSchema>
 export type SubPipelineInput = z.infer<typeof subPipelineInputSchema>
