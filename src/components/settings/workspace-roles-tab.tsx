@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Plus, Share2, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import {
@@ -36,24 +36,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  RecordField,
+  RecordLookup,
+  RecordSheet,
+} from '@/components/shared/record-sheet';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -252,13 +241,24 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
 
   return (
     <section className="animate-in fade-in-50">
-      {/* Bigin-style header row: blurb left, action right */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 max-w-2xl">
-          <h3 className="text-lg font-semibold text-foreground">{t('rolesTitle')}</h3>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground text-pretty">
-            {t('rolesDesc')}
-          </p>
+      {/* Expand / collapse controls left, New Role action right */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 text-sm">
+          <button
+            type="button"
+            onClick={() => setCollapsed(new Set())}
+            className="font-medium text-primary hover:underline"
+          >
+            {t('expandAll')}
+          </button>
+          <span className="text-border">·</span>
+          <button
+            type="button"
+            onClick={() => setCollapsed(new Set(roles.map((r) => r.id)))}
+            className="font-medium text-primary hover:underline"
+          >
+            {t('collapseAll')}
+          </button>
         </div>
         {canManage && (
           <Button
@@ -269,25 +269,6 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
             {t('newRole')}
           </Button>
         )}
-      </div>
-
-      {/* Expand / collapse controls */}
-      <div className="mt-4 flex items-center gap-3 text-sm">
-        <button
-          type="button"
-          onClick={() => setCollapsed(new Set())}
-          className="font-medium text-primary hover:underline"
-        >
-          {t('expandAll')}
-        </button>
-        <span className="text-border">·</span>
-        <button
-          type="button"
-          onClick={() => setCollapsed(new Set(roles.map((r) => r.id)))}
-          className="font-medium text-primary hover:underline"
-        >
-          {t('collapseAll')}
-        </button>
       </div>
 
       {/* Role hierarchy tree */}
@@ -303,114 +284,66 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
         )}
       </div>
 
-      {/* Create New Role — generic right-side sheet, same pattern as
-          Create Deal / Create Contact / Invite User. */}
-      <Sheet
+      {/* Create New Role — generic RecordSheet, the same primitive that
+          Create Deal / Create Contact use, so all record editors match. */}
+      <RecordSheet
         open={sheetOpen}
+        title={t('createRoleTitle')}
+        description={t('rolesDesc')}
+        saving={saving}
+        isCreate
         onOpenChange={(next) => {
           if (!next) resetSheet();
           setSheetOpen(next);
         }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleCreate();
+        }}
       >
-        <SheetContent side="right" className="w-full data-[side=right]:sm:max-w-lg">
-          <SheetHeader className="border-b border-border">
-            <SheetTitle className="text-xl">{t('createRoleTitle')}</SheetTitle>
-            <SheetDescription className="sr-only">{t('rolesDesc')}</SheetDescription>
-          </SheetHeader>
+        <RecordField label={t('roleNameLabel')} htmlFor="role-name">
+          <Input
+            id="role-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={80}
+            className="h-11"
+          />
+        </RecordField>
 
-          <div className="flex-1 space-y-5 overflow-y-auto px-6 py-4">
-            <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3">
-              <Label htmlFor="role-name" className="justify-self-end text-muted-foreground">
-                {t('roleNameLabel')}
-              </Label>
-              <Input
-                id="role-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={80}
-                className="bg-muted border-border text-foreground"
-              />
-            </div>
+        <RecordField label={t('reportsToLabel')} htmlFor="role-reports-to">
+          <RecordLookup
+            id="role-reports-to"
+            value={parentId || null}
+            options={roles.map((r) => ({ id: r.id, label: r.name }))}
+            placeholder={t('selectPlaceholder')}
+            icon={<Share2 className="size-4 shrink-0 rotate-90 text-muted-foreground" aria-hidden="true" />}
+            onSelect={(id) => setParentId(id ?? '')}
+          />
+        </RecordField>
 
-            <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3">
-              <Label className="justify-self-end text-muted-foreground">
-                {t('reportsToLabel')}
-              </Label>
-              <Select value={parentId} onValueChange={(v) => v && setParentId(v)}>
-                <SelectTrigger className="w-full bg-muted border-border text-foreground">
-                  <SelectValue placeholder={t('selectPlaceholder')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3">
-              <Label
-                htmlFor="role-peer-visibility"
-                className="justify-self-end text-muted-foreground"
-              >
-                {t('peerVisibilityLabel')}
-              </Label>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="role-peer-visibility"
-                  checked={peerVisibility}
-                  onCheckedChange={setPeerVisibility}
-                />
-                <span className="text-sm text-foreground">{t('peerVisibilityText')}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-[130px_minmax(0,1fr)] items-start gap-3">
-              <Label
-                htmlFor="role-description"
-                className="justify-self-end pt-2 text-muted-foreground"
-              >
-                {t('descriptionLabel')}
-              </Label>
-              <Textarea
-                id="role-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={t('descPlaceholder')}
-                maxLength={500}
-                rows={3}
-                className="bg-muted border-border text-foreground"
-              />
-            </div>
+        <RecordField label={t('peerVisibilityLabel')} htmlFor="role-peer-visibility">
+          <div className="flex min-h-11 items-center gap-2 rounded-md bg-muted/50 px-3">
+            <Switch
+              id="role-peer-visibility"
+              checked={peerVisibility}
+              onCheckedChange={setPeerVisibility}
+            />
+            <span className="text-sm text-foreground">{t('peerVisibilityText')}</span>
           </div>
+        </RecordField>
 
-          <SheetFooter className="flex-row justify-end gap-2 border-t border-border">
-            <Button
-              variant="outline"
-              onClick={() => setSheetOpen(false)}
-              className="border-border text-muted-foreground hover:bg-muted"
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={saving}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  {t('saving')}
-                </>
-              ) : (
-                t('save')
-              )}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+        <RecordField label={t('descriptionLabel')} htmlFor="role-description">
+          <Textarea
+            id="role-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={t('descPlaceholder')}
+            maxLength={500}
+            rows={3}
+          />
+        </RecordField>
+      </RecordSheet>
 
       {/* Delete confirmation */}
       <AlertDialog
