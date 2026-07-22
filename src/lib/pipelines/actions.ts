@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache"
 import { requireRole } from "@/lib/auth/account"
 import { pipelinePath } from "@/lib/routes/dashboard-routes"
-import type { PipelineDeal, SubPipeline } from "./domain"
-import { mapDeal } from "./mappers"
-import { dealInputSchema, formatPipelineError, savedViewInputSchema, subPipelineInputSchema, uuidSchema, type DealInput } from "./validation"
+import type { DealItem, PipelineDeal, SubPipeline } from "./domain"
+import { mapDeal, mapDealItem } from "./mappers"
+import { dealFieldLayoutSchema, dealInputSchema, dealItemsSaveSchema, formatPipelineError, savedViewInputSchema, subPipelineInputSchema, uuidSchema, type DealFieldLayout, type DealInput } from "./validation"
 
 export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string }
 

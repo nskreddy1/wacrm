@@ -1,4 +1,4 @@
-import type { DealPriority, PipelineContact, PipelineDeal, PipelineMember, PipelineSavedView, PipelineStage, StageTone, SubPipeline } from "./domain"
+import type { DealItem, DealPriority, PipelineContact, PipelineDeal, PipelineMember, PipelineSavedView, PipelineStage, StageTone, SubPipeline } from "./domain"
 
 const tones: StageTone[] = ["blue", "cyan", "amber", "green", "red"]
 
@@ -74,6 +74,19 @@ export function mapDeal(row: Row): PipelineDeal {
     updatedAt: String(row.updated_at ?? row.created_at),
     contact: contact ? mapContact(contact) : null,
     owner: owner ? mapMember(owner) : null,
+  }
+}
+
+export function mapDealItem(row: Row): DealItem {
+  return {
+    id: String(row.id),
+    dealId: String(row.deal_id),
+    catalogItemId: nullable(row.catalog_item_id),
+    name: String(row.name),
+    listPrice: Number(row.list_price ?? 0),
+    quantity: Number(row.quantity ?? 1),
+    discountPct: Number(row.discount_pct ?? 0),
+    position: Number(row.position ?? 0),
   }
 }
 

@@ -42,70 +42,8 @@ function draftFrom(deal: PipelineDeal | null, snapshot: PipelineSnapshot, stageI
     due: deal?.due ?? null,
     status: deal?.status ?? "open",
     position: deal?.position ?? 0,
+    customValues: deal?.customValues ?? {},
   }
-}
-
-type CatalogItem = { id: string; name: string; price: number; currency: string; category: string | null; isActive?: boolean }
-
-const catalogFetcher = async (url: string): Promise<CatalogItem[]> => {
-  const response = await fetch(url)
-  if (!response.ok) throw new Error("Unable to load catalog")
-  const payload = (await response.json()) as { data?: unknown[] }
-  return ((payload.data ?? []) as Record<string, unknown>[]).map((row) => ({
-    id: String(row.id),
-    name: String(row.name),
-    price: Number(row.price ?? 0),
-    currency: String(row.currency ?? "USD"),
-    category: row.category ? String(row.category) : null,
-  }))
-}
-
-// Bigin's "+ Products" — our products live in the Catalog module.
-function CatalogSection({ catalogItemId, onSelect }: { catalogItemId: string | null; onSelect: (item: CatalogItem | null) => void }) {
-  const [open, setOpen] = useState(Boolean(catalogItemId))
-  const { data: items, isLoading } = useSWR(open ? "/api/v1/workspace/catalog" : null, catalogFetcher)
-  const selected = items?.find((item) => item.id === catalogItemId) ?? null
-  const { defaultCurrency } = useAuth()
-
-  if (!open) {
-    return (
-      <div className="border-t pt-6">
-        <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-2 rounded-lg bg-muted/50 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-muted">
-          <Plus className="size-4" aria-hidden="true" />Catalog
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <section className="flex flex-col gap-4 border-t pt-6" aria-labelledby="deal-catalog-heading">
-      <div>
-        <h2 id="deal-catalog-heading" className="flex items-center gap-2 text-sm font-semibold"><Package className="size-4 text-muted-foreground" aria-hidden="true" />Catalog</h2>
-        <p className="text-sm text-muted-foreground">Attach the catalog item this deal is selling.</p>
-      </div>
-      {selected ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{selected.name}</p>
-            <p className="text-xs text-muted-foreground">{formatCurrency(selected.price, defaultCurrency)}{selected.category ? ` · ${selected.category}` : ""}</p>
-          </div>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${selected.name}`} onClick={() => onSelect(null)}><X /></Button>
-        </div>
-      ) : (
-        <Field>
-          <FieldLabel htmlFor="deal-catalog-item">Item</FieldLabel>
-          <Select
-            items={Object.fromEntries((items ?? []).map((item) => [item.id, item.name]))}
-            value={catalogItemId ?? ""}
-            onValueChange={(value) => { const item = items?.find((entry) => entry.id === value); if (item) onSelect(item) }}
-          >
-            <SelectTrigger id="deal-catalog-item" className="w-full"><SelectValue placeholder={isLoading ? "Loading catalog…" : items?.length ? "Choose a catalog item" : "No catalog items yet"} /></SelectTrigger>
-            <SelectContent><SelectGroup>{(items ?? []).map((item) => <SelectItem key={item.id} value={item.id}>{item.name} — {formatCurrency(item.price, defaultCurrency)}</SelectItem>)}</SelectGroup></SelectContent>
-          </Select>
-        </Field>
-      )}
-    </section>
-  )
 }
 
 export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pending, onOpenChange, onSave }: {
@@ -119,8 +57,33 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
 }) {
   const { defaultCurrency: workspaceCurrency } = useAuth()
   const [draft, setDraft] = useState(() => draftFrom(deal, snapshot, defaultStageId, workspaceCurrency))
+  const [items, setItems] = useState<DraftDealItem[]>([])
+  const [fieldsOpen, setFieldsOpen] = useState(false)
+  const [layoutPending, setLayoutPending] = useState(false)
+  const { data: layout, mutate: mutateLayout } = useSWR(
+    open ? ["deal-field-layout", snapshot.pipeline.id] : null,
+    async () => {
+      const result = await getDealFieldLayoutAction(snapshot.pipeline.id)
+      return result.ok ? result.data : { hidden: [], custom: [] }
+    },
+  )
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
+
+  // Load persisted line items when editing an existing deal
+  useEffect(() => {
+    let cancelled = false
+    if (open && deal?.id) {
+      listDealItemsAction(snapshot.pipeline.id, deal.id).then((result) => {
+        if (!cancelled && result.ok) setItems(result.data.map((item) => ({ key: item.id, id: item.id, catalogItemId: item.catalogItemId, name: item.name, listPrice: item.listPrice, quantity: item.quantity, discountPct: item.discountPct })))
+      })
+    } else {
+      setItems([])
+    }
+    return () => { cancelled = true }
+  }, [open, deal?.id, snapshot.pipeline.id])
+
+  const hidden = useMemo(() => new Set(layout?.hidden ?? []), [layout])
   const [advancedOpen, setAdvancedOpen] = useState(Boolean(deal && (deal.priority !== "normal" || deal.probability !== 20 || deal.status !== "open" || deal.nextStep || deal.activity)))
   const titleRef = useRef<HTMLInputElement>(null)
   const stageName = snapshot.stages.find((stage) => stage.id === draft.stageId)?.name ?? "No stage"
@@ -148,11 +111,31 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
     setSubmitting(true)
     try {
       const result = await onSave(parsed.data)
-      if (!result.ok) setError(result.error)
+      if (!result.ok) { setError(result.error); return }
+      // Persist the Associated Catalog line items against the saved deal
+      const dealId = result.data?.id ?? deal?.id
+      if (dealId) {
+        const itemsResult = await saveDealItemsAction({
+          pipelineId: snapshot.pipeline.id,
+          dealId,
+          items: items.map((item, index) => ({ id: item.id, catalogItemId: item.catalogItemId, name: item.name, listPrice: item.listPrice, quantity: item.quantity, discountPct: item.discountPct, position: index })),
+        })
+        if (!itemsResult.ok) setError(`Deal saved, but the catalog items failed: ${itemsResult.error}`)
+      }
     } catch {
       setError("The deal could not be saved. Please try again.")
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function saveLayout(next: DealFieldLayout) {
+    setLayoutPending(true)
+    try {
+      const result = await saveDealFieldLayoutAction(snapshot.pipeline.id, next)
+      if (result.ok) { await mutateLayout(result.data, { revalidate: false }); setFieldsOpen(false) }
+    } finally {
+      setLayoutPending(false)
     }
   }
 
@@ -219,29 +202,42 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
                       <SelectContent><SelectGroup><SelectItem value="none">Unassigned</SelectItem>{snapshot.members.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectGroup></SelectContent>
                     </Select>
                   </Field>
-                  <Field>
+                  {!hidden.has("contact") && <Field>
                     <FieldLabel htmlFor="deal-contact"><Contact aria-hidden="true" />Contact</FieldLabel>
                     <Select items={{ none: "No contact", ...Object.fromEntries(snapshot.contacts.map((contact) => [contact.id, contact.name])) }} value={draft.contactId ?? "none"} onValueChange={(value) => value && update("contactId", value === "none" ? null : value)}>
                       <SelectTrigger id="deal-contact" className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent><SelectGroup><SelectItem value="none">No contact</SelectItem>{snapshot.contacts.map((contact) => <SelectItem key={contact.id} value={contact.id}>{contact.name}</SelectItem>)}</SelectGroup></SelectContent>
                     </Select>
-                  </Field>
-                  <Field>
+                  </Field>}
+                  {!hidden.has("company") && <Field>
                     <FieldLabel htmlFor="deal-company"><Building2 aria-hidden="true" />Company</FieldLabel>
                     <Input id="deal-company" value={draft.company ?? ""} onChange={(event) => update("company", event.target.value || null)} placeholder="Acme Inc." />
-                  </Field>
-                  <Field>
+                  </Field>}
+                  {!hidden.has("due") && <Field>
                     <FieldLabel htmlFor="deal-date"><CalendarDays aria-hidden="true" />Expected close</FieldLabel>
                     <Input id="deal-date" type="date" value={draft.due ?? ""} onChange={(event) => update("due", event.target.value || null)} />
-                  </Field>
-                  <Field>
+                  </Field>}
+                  {!hidden.has("source") && <Field>
                     <FieldLabel htmlFor="deal-source">Source</FieldLabel>
                     <Input id="deal-source" value={draft.source ?? ""} onChange={(event) => update("source", event.target.value || null)} placeholder="Referral, campaign, inbound…" />
-                  </Field>
+                  </Field>}
                 </FieldGroup>
               </section>
 
-              <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="border-t pt-6">
+              {(layout?.custom.length ?? 0) > 0 && <section className="flex flex-col gap-4 border-t pt-6" aria-labelledby="deal-custom-heading">
+                <div>
+                  <h2 id="deal-custom-heading" className="text-sm font-semibold">Additional Information</h2>
+                  <p className="text-sm text-muted-foreground">Custom fields for this pipeline.</p>
+                </div>
+                <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                  {layout?.custom.map((field) => <Field key={field.id}>
+                    <FieldLabel htmlFor={`deal-custom-${field.id}`}>{field.label}</FieldLabel>
+                    <Input id={`deal-custom-${field.id}`} type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"} value={draft.customValues?.[field.id] ?? ""} onChange={(event) => update("customValues", { ...(draft.customValues ?? {}), [field.id]: event.target.value })} />
+                  </Field>)}
+                </FieldGroup>
+              </section>}
+
+              {!hidden.has("salesDetails") && <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="border-t pt-6">
                 <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg p-2 text-left transition-[background-color,transform] duration-150 ease-out hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none">
                   <span><span className="block text-sm font-semibold">Sales details</span><span className="block text-sm text-muted-foreground">{draft.priority} priority · {draft.probability}% probability · {draft.status}</span></span>
                   <ChevronDown className={advancedOpen ? "rotate-180 transition-transform duration-200" : "transition-transform duration-200"} aria-hidden="true" />
@@ -255,11 +251,11 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
                     <Field><FieldLabel htmlFor="deal-activity">Latest activity</FieldLabel><Input id="deal-activity" value={draft.activity ?? ""} onChange={(event) => update("activity", event.target.value || null)} placeholder="Discovery call completed" /></Field>
                   </FieldGroup>
                 </CollapsibleContent>
-              </Collapsible>
+              </Collapsible>}
 
-              <CatalogSection catalogItemId={draft.catalogItemId ?? null} onSelect={(item) => { update("catalogItemId", item?.id ?? null); if (item && !draft.value) update("value", item.price) }} />
+              {!hidden.has("catalog") && <DealItemsTable items={items} currency={workspaceCurrency} onChange={(next) => { setItems(next); const total = next.reduce((sum, item) => sum + itemTotal(item), 0); if (total > 0) update("value", Math.round(total * 100) / 100) }} />}
 
-              <section className="flex flex-col gap-4 border-t pt-6" aria-labelledby="deal-context-heading">
+              {!hidden.has("description") && <section className="flex flex-col gap-4 border-t pt-6" aria-labelledby="deal-context-heading">
                 <div>
                   <h2 id="deal-context-heading" className="text-sm font-semibold">Context</h2>
                   <p className="text-sm text-muted-foreground">Leave a useful handoff for the next person.</p>
@@ -269,14 +265,14 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
                   <Textarea id="deal-description" value={draft.description ?? ""} onChange={(event) => update("description", event.target.value || null)} placeholder="Buying intent, constraints, and what matters next…" rows={5} />
                   <FieldDescription>{(draft.description ?? "").length} / 4000</FieldDescription>
                 </Field>
-              </section>
+              </section>}
 
               {error && <Field data-invalid><FieldError>{error}</FieldError></Field>}
             </div>
           </ScrollArea>
 
           <SheetFooter className="border-t bg-background/95 px-5 py-4 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-7">
-            <p className="hidden text-xs text-muted-foreground sm:block">Press Esc to cancel</p>
+            <Button type="button" variant="link" className="justify-start px-0 text-primary" onClick={() => setFieldsOpen(true)}>Customize Fields</Button>
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
               <Button type="submit" disabled={!canSubmit}>{busy ? (isCreate ? "Creating…" : "Saving…") : (isCreate ? "Create deal" : "Save changes")}</Button>
@@ -284,6 +280,8 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
           </SheetFooter>
         </form>
       </SheetContent>
+
+      {fieldsOpen && layout && <DealFieldsEditor open={fieldsOpen} pipelineName={snapshot.pipeline.name} layout={layout} pending={layoutPending} onOpenChange={setFieldsOpen} onSave={saveLayout} />}
     </Sheet>
   )
 }
