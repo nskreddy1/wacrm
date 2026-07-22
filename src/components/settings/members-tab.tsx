@@ -75,6 +75,12 @@ import {
   PRESENCE_DOT_CLASS,
   PresenceDot,
 } from '@/components/presence/presence-dot';
+import {
+  DataTable,
+  FilterChips,
+  SectionTabs,
+  SectionToolbar,
+} from '@/components/shared/section-view';
 import { InviteMemberDialog } from './invite-member-dialog';
 import { SettingsPanelHead } from './settings-panel-head';
 import { WorkspaceNameCard } from './workspace-name-card';
@@ -154,6 +160,9 @@ export function MembersTab() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [inviteOpen, setInviteOpen] = useState(false);
+  // Bigin-style section state — top tab strip + role filter chips.
+  const [tab, setTab] = useState<'users' | 'invitations'>('users');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admins' | 'agent' | 'viewer'>('all');
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
   const [pendingMemberAction, setPendingMemberAction] = useState<string | null>(
     null,
@@ -379,81 +388,55 @@ export function MembersTab() {
 
   return (
     <section className="animate-in fade-in-50 space-y-6 duration-200">
-      <SettingsPanelHead
-        title={t('title')}
-        description={t('description')}
-        action={
-          <RequireRole min="admin">
-            <Button onClick={() => setInviteOpen(true)}>
-              <Plus className="size-4" />
-              {t('inviteMember')}
-            </Button>
-          </RequireRole>
-        }
-      />
+      <SettingsPanelHead title={t('title')} description={t('description')} />
 
       {/* Workspace identity — rename lives with the team because the
           name is what every member sees in their sidebar. */}
       <WorkspaceNameCard />
 
-      {/* Enterprise summary strip — whole-account counts from the
-          server (independent of search/pagination), so the numbers
-          stay honest even when only one page of rows is loaded. */}
-      {summary && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Card>
-            <CardContent className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">{t('statTotal')}</p>
-              <p className="mt-0.5 text-xl font-semibold text-foreground">
-                {summary.total}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">{t('statAdmins')}</p>
-              <p className="mt-0.5 text-xl font-semibold text-foreground">
-                {summary.owner + summary.admin}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">{t('statAgents')}</p>
-              <p className="mt-0.5 text-xl font-semibold text-foreground">
-                {summary.agent + summary.viewer}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">
-                {t('statPendingInvites')}
-              </p>
-              <p className="mt-0.5 text-xl font-semibold text-foreground">
-                {canManageMembers ? invitations.length : '—'}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* Bigin-style top tab strip: Users | Invitations. */}
+      <SectionTabs
+        tabs={[
+          { id: 'users', label: t('title'), badge: summary?.total },
+          ...(canManageMembers
+            ? [{ id: 'invitations', label: t('pendingInvitations'), badge: invitations.length }]
+            : []),
+        ]}
+        active={tab}
+        onSelect={(id) => setTab(id as 'users' | 'invitations')}
+      />
 
-      {/* Server-side roster search — debounced; scales to hundreds of
-          members because filtering happens in the DB, not the client. */}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('searchPlaceholder')}
-          aria-label={t('searchPlaceholder')}
-          className="pl-9"
+      {tab === 'users' && (
+        <SectionToolbar
+          left={
+            <FilterChips
+              chips={[
+                { id: 'all', label: t('statTotal'), count: summary?.total },
+                { id: 'admins', label: t('statAdmins'), count: summary ? summary.owner + summary.admin : undefined },
+                { id: 'agent', label: tRoles('agent'), count: summary?.agent },
+                { id: 'viewer', label: tRoles('viewer'), count: summary?.viewer },
+              ]}
+              active={roleFilter}
+              onSelect={(id) => setRoleFilter(id as typeof roleFilter)}
+            />
+          }
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder={t('searchPlaceholder')}
+          action={
+            <RequireRole min="admin">
+              <Button onClick={() => setInviteOpen(true)}>
+                <Plus className="size-4" />
+                {t('inviteMember')}
+              </Button>
+            </RequireRole>
+          }
         />
-      </div>
+      )}
 
       {/* Live presence summary across the roster. Updates without a
           full refresh as heartbeats and the local re-derive tick land. */}
-      {members.length > 0 &&
+      {tab === 'users' && members.length > 0 &&
         (() => {
           const counts = summarize(members.map((m) => getPresence(m.user_id)));
           return (
@@ -477,168 +460,160 @@ export function MembersTab() {
           );
         })()}
 
-      {/* Roster */}
-      <Card>
-        <CardContent className="p-0">
-          {members.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <UsersRound className="size-6 text-muted-foreground" />
-              <p className="mt-2 text-sm text-muted-foreground">
+      {/* Roster — Bigin-style generic DataTable. Role filter chips
+          slice the loaded rows client-side; search stays server-side. */}
+      {tab === 'users' && (
+        <>
+          <DataTable<Member>
+            rows={members.filter((m) =>
+              roleFilter === 'all'
+                ? true
+                : roleFilter === 'admins'
+                  ? m.role === 'owner' || m.role === 'admin'
+                  : m.role === roleFilter,
+            )}
+            rowKey={(m) => m.user_id}
+            empty={
+              <span className="inline-flex flex-col items-center gap-2">
+                <UsersRound className="size-6" />
                 {search.trim() ? t('noSearchResults') : t('memberCount', { count: 0 })}
-              </p>
-            </div>
-          )}
-          <ul className="divide-y divide-border">
-            {members.map((member) => {
-              const roleMeta = ROLE_META[member.role];
-              const RoleIcon = roleMeta.icon;
-              const isSelf = member.user_id === user?.id;
-              const isOwnerRow = member.role === 'owner';
-              const isBusy = pendingMemberAction === member.user_id;
-              const presence = getPresence(member.user_id);
-              const presenceRow = getRow(member.user_id);
-              const presenceText = presenceLabel(
-                presence,
-                presenceRow?.last_seen_at ?? null,
-                now,
-              );
-
-              return (
-                <li
-                  key={member.user_id}
-                  // Mobile: stack identity (avatar+name+email) above the
-                  // role/remove actions so the role dropdown's fixed
-                  // 128px width doesn't force the name into a 50-pixel
-                  // truncation. Desktop (sm+): everything inline as
-                  // before.
-                  className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
-                >
-                  <div className="flex min-w-0 flex-1 items-center gap-4">
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Avatar className="size-9 shrink-0">
-                            {member.avatar_url ? (
-                              <AvatarImage
-                                src={member.avatar_url}
-                                alt={member.full_name || 'Member'}
+              </span>
+            }
+            columns={[
+              {
+                id: 'name',
+                header: t('colName'),
+                className: 'w-[34%]',
+                cell: (member) => {
+                  const presence = getPresence(member.user_id);
+                  const presenceRow = getRow(member.user_id);
+                  const presenceText = presenceLabel(
+                    presence,
+                    presenceRow?.last_seen_at ?? null,
+                    now,
+                  );
+                  const isSelf = member.user_id === user?.id;
+                  return (
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Avatar className="size-8 shrink-0">
+                              {member.avatar_url ? (
+                                <AvatarImage
+                                  src={member.avatar_url}
+                                  alt={member.full_name || 'Member'}
+                                />
+                              ) : null}
+                              <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                                {(member.full_name || member.email || 'U')
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </AvatarFallback>
+                              <AvatarBadge
+                                role="img"
+                                aria-label={presenceText}
+                                className={PRESENCE_DOT_CLASS[presence]}
                               />
-                            ) : null}
-                            <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                              {(member.full_name || member.email || 'U')
-                                .charAt(0)
-                                .toUpperCase()}
-                            </AvatarFallback>
-                            {/* role+label so screen readers announce
-                                presence — the hover tooltip alone isn't
-                                reachable by keyboard/AT on a non-focusable
-                                avatar. */}
-                            <AvatarBadge
-                              role="img"
-                              aria-label={presenceText}
-                              className={PRESENCE_DOT_CLASS[presence]}
-                            />
-                          </Avatar>
-                        }
-                      />
-                      <TooltipContent>{presenceText}</TooltipContent>
-                    </Tooltip>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground">
-                          {/* Friendly name derived from email when no
-                              full name is set — never "Unnamed" next
-                              to a perfectly good address. */}
-                          {personDisplayName(member.full_name, member.email)}
-                        </span>
-                        {isSelf && (
-                          <Badge className="bg-muted text-muted-foreground border-border text-[10px] uppercase tracking-wide">
-                            {t('you')}
-                          </Badge>
-                        )}
-                      </div>
-                      {member.email && (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {member.email}
-                        </p>
+                            </Avatar>
+                          }
+                        />
+                        <TooltipContent>{presenceText}</TooltipContent>
+                      </Tooltip>
+                      <span className="truncate font-medium text-foreground">
+                        {personDisplayName(member.full_name, member.email)}
+                      </span>
+                      {isSelf && (
+                        <Badge className="bg-muted text-muted-foreground border-border text-[10px] uppercase tracking-wide">
+                          {t('you')}
+                        </Badge>
                       )}
                     </div>
-                  </div>
-
-                  {/* Joined date stays desktop-only. The mobile row's
-                      vertical density makes the joined date noise. */}
-                  <div className="hidden sm:block text-right text-xs text-muted-foreground">
-                    {t('joined', { date: fmtDate(member.joined_at) })}
-                  </div>
-
-                  {/* Actions cluster. On mobile this is its own row
-                      below the identity block; on desktop it sits
-                      inline. Items align to the start on mobile so the
-                      role dropdown lines up under the avatar. */}
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    {/* Role display / editor. Inline Select is admin+
-                        only AND not allowed on the owner row (owner
-                        changes go through transfer, which lands later). */}
-                    {canManageMembers && !isOwnerRow && !isSelf ? (
-                      <Select
-                        value={member.role}
-                        onValueChange={(v) =>
-                          // Base UI Select can emit null on clear. We
-                          // don't expose a clear affordance, so the
-                          // guard is defensive — but the typed
-                          // signature requires it.
-                          v && handleRoleChange(member, v as AccountRole)
-                        }
-                      >
-                        <SelectTrigger
-                          className="w-32 bg-muted border-border text-foreground"
-                          disabled={isBusy}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {EDITABLE_ROLES.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>
-                              {tRoles(r.value)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${roleMeta.className}`}
-                      >
-                        <RoleIcon className="size-3.5" />
-                        {tRoles(member.role)}
-                      </span>
-                    )}
-
-                    {/* Remove. Admin+ only; never on the owner row;
-                        never on yourself. Pre-polish styling was
-                        neutral-default + red-on-hover — the
-                        destructive intent was invisible until the
-                        user moused over. Now red is the default
-                        state with a darker shade on hover so the
-                        affordance reads at-a-glance. */}
-                    {canManageMembers && !isOwnerRow && !isSelf && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setRemovingMember(member)}
+                  );
+                },
+              },
+              {
+                id: 'email',
+                header: t('colEmail'),
+                className: 'w-[30%]',
+                cell: (member) => (
+                  <span className="truncate text-muted-foreground">{member.email ?? '—'}</span>
+                ),
+              },
+              {
+                id: 'role',
+                header: t('colRole'),
+                cell: (member) => {
+                  const roleMeta = ROLE_META[member.role];
+                  const RoleIcon = roleMeta.icon;
+                  const isSelf = member.user_id === user?.id;
+                  const isOwnerRow = member.role === 'owner';
+                  const isBusy = pendingMemberAction === member.user_id;
+                  return canManageMembers && !isOwnerRow && !isSelf ? (
+                    <Select
+                      value={member.role}
+                      onValueChange={(v) =>
+                        v && handleRoleChange(member, v as AccountRole)
+                      }
+                    >
+                      <SelectTrigger
+                        className="w-32 bg-muted border-border text-foreground"
                         disabled={isBusy}
-                        className="border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20 hover:border-red-500/60 hover:text-red-200"
                       >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EDITABLE_ROLES.map((r) => (
+                          <SelectItem key={r.value} value={r.value}>
+                            {tRoles(r.value)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${roleMeta.className}`}
+                    >
+                      <RoleIcon className="size-3.5" />
+                      {tRoles(member.role)}
+                    </span>
+                  );
+                },
+              },
+              {
+                id: 'joined',
+                header: t('colJoined'),
+                className: 'hidden md:table-cell',
+                cell: (member) => (
+                  <span className="text-xs text-muted-foreground">{fmtDate(member.joined_at)}</span>
+                ),
+              },
+              {
+                id: 'actions',
+                header: <span className="sr-only">{t('colActions')}</span>,
+                className: 'w-12 text-right',
+                cell: (member) => {
+                  const isSelf = member.user_id === user?.id;
+                  const isOwnerRow = member.role === 'owner';
+                  const isBusy = pendingMemberAction === member.user_id;
+                  return canManageMembers && !isOwnerRow && !isSelf ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRemovingMember(member)}
+                      disabled={isBusy}
+                      aria-label={t('removeBtn')}
+                      className="border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20 hover:border-red-500/60 hover:text-red-200"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  ) : null;
+                },
+              },
+            ]}
+          />
           {nextCursor && (
-            <div className="border-t border-border p-3 text-center">
+            <div className="text-center">
               <Button
                 variant="outline"
                 size="sm"
@@ -656,10 +631,11 @@ export function MembersTab() {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </>
+      )}
 
-      {/* Pending invitations — admin+ only */}
+      {/* Pending invitations — admin+ only, on their own tab */}
+      {tab === 'invitations' && (
       <RequireRole min="admin">
         <div>
           <div className="mb-2 flex items-center gap-2">
@@ -745,6 +721,7 @@ export function MembersTab() {
           )}
         </div>
       </RequireRole>
+      )}
 
       <InviteMemberDialog
         open={inviteOpen}
