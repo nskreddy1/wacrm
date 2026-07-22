@@ -4,6 +4,14 @@ export const FIELD_TYPES = ["text", "number", "date", "email", "phone", "url", "
 const SELECT_TYPES = new Set<FieldType>(["single_select", "multi_select"])
 const CORE_LABELS = new Set(["name", "phone", "email", "company"])
 
+// Auto-provisioned custom fields backing dedicated Create Contact inputs.
+// They are managed by the form itself, not the custom-field editor.
+export const RESERVED_CONTACT_FIELD_LABELS = new Set(["title", "description", "street", "city", "other phones"])
+
+export function isReservedContactField(label: string) {
+  return RESERVED_CONTACT_FIELD_LABELS.has(normalizeFieldLabel(label).toLocaleLowerCase())
+}
+
 export function normalizeFieldLabel(value: unknown) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : ""
 }

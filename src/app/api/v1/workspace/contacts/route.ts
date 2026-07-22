@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       kind?: string
       values?: Record<string, ContactValue>
-      field?: { label: string; type: FieldType; options?: string[]; width?: number }
+      field?: { label: string; type: FieldType; options?: string[]; width?: number; required?: boolean; unique?: boolean }
     }
     if (body.kind === "field") {
       if (!body.field) throw new Error("Field details are required")
@@ -66,7 +66,7 @@ export async function PATCH(request: Request) {
       id?: string
       values?: Partial<Record<string, ContactValue>>
       preferences?: Partial<ContactPreferences>
-      field?: { label?: string; type?: FieldType; options?: string[] }
+      field?: { label?: string; type?: FieldType; options?: string[]; required?: boolean; unique?: boolean }
     }
     if (body.kind === "preferences") return response(body.preferences ?? {})
     if (body.kind === "field") {

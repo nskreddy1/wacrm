@@ -15,6 +15,7 @@ export type ContactField = {
   label: string
   type: FieldType
   required?: boolean
+  unique?: boolean
   readOnly?: boolean
   options?: string[]
   width: number
