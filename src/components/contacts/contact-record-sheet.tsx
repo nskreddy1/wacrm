@@ -34,7 +34,15 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
     const nextValues = Object.fromEntries(fields.map((field) => [field.id, contact?.values[field.id] ?? ""]))
     const fullName = String(contact?.values.name ?? "").trim()
     const [firstName = "", ...lastNameParts] = fullName.split(/\s+/)
-    setValues({ ...nextValues, firstName, lastName: lastNameParts.join(" "), title: contact?.values.title ?? "" })
+    setValues({
+      ...nextValues,
+      firstName,
+      lastName: lastNameParts.join(" "),
+      title: contact?.values.title ?? "",
+      description: contact?.values.description ?? "",
+      street: contact?.values.street ?? "",
+      city: contact?.values.city ?? "",
+    })
     setErrors({})
   }, [state, contact, fields])
 
