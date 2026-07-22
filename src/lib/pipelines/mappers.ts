@@ -54,6 +54,7 @@ export function mapDeal(row: Row): PipelineDeal {
     pipelineId: String(row.pipeline_id),
     stageId: String(row.stage_id),
     contactId: nullable(row.contact_id),
+    catalogItemId: nullable(row.catalog_item_id),
     assignedTo: nullable(row.assigned_to),
     title: String(row.title),
     value: Number(row.value ?? 0),

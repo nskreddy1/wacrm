@@ -22,6 +22,7 @@ export const dealInputSchema = z.object({
   pipelineId: uuidSchema,
   stageId: uuidSchema,
   contactId: uuidSchema.nullable().optional(),
+  catalogItemId: uuidSchema.nullable().optional(),
   assignedTo: uuidSchema.nullable().optional(),
   title: z.string().trim().min(1, "Deal name is required").max(160),
   value: z.coerce.number().finite().min(0),

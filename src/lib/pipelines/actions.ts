@@ -26,7 +26,7 @@ async function verifyStage(pipelineId: string, stageId: string, supabase: Awaite
 function dealRow(input: DealInput, accountId: string, userId: string) {
   return {
     account_id: accountId, user_id: userId, pipeline_id: input.pipelineId, stage_id: input.stageId,
-    contact_id: input.contactId ?? null, assigned_to: input.assignedTo ?? null, title: input.title,
+    contact_id: input.contactId ?? null, catalog_item_id: input.catalogItemId ?? null, assigned_to: input.assignedTo ?? null, title: input.title,
     value: input.value, currency: input.currency, company: input.company ?? null, priority: input.priority,
     probability: input.probability, lead_source: input.source ?? null, last_activity: input.activity ?? null,
     next_step: input.nextStep ?? null, description: input.description ?? null, notes: input.description ?? null,

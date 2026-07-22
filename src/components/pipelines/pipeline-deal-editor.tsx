@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { ArrowRight, Building2, CalendarDays, ChevronDown, CircleDollarSign, Contact, UserRound } from "lucide-react"
+import useSWR from "swr"
+import { ArrowRight, Building2, CalendarDays, ChevronDown, CircleDollarSign, Contact, Package, Plus, UserRound, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -22,6 +23,7 @@ function draftFrom(deal: PipelineDeal | null, snapshot: PipelineSnapshot, stageI
     pipelineId: snapshot.pipeline.id,
     stageId: deal?.stageId ?? stageId,
     contactId: deal?.contactId ?? null,
+    catalogItemId: deal?.catalogItemId ?? null,
     assignedTo: deal?.assignedTo ?? null,
     title: deal?.title ?? "",
     value: deal?.value ?? 0,
@@ -39,6 +41,69 @@ function draftFrom(deal: PipelineDeal | null, snapshot: PipelineSnapshot, stageI
     status: deal?.status ?? "open",
     position: deal?.position ?? 0,
   }
+}
+
+type CatalogItem = { id: string; name: string; price: number; currency: string; category: string | null; isActive?: boolean }
+
+const catalogFetcher = async (url: string): Promise<CatalogItem[]> => {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error("Unable to load catalog")
+  const payload = (await response.json()) as { data?: unknown[] }
+  return ((payload.data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    price: Number(row.price ?? 0),
+    currency: String(row.currency ?? "USD"),
+    category: row.category ? String(row.category) : null,
+  }))
+}
+
+// Bigin's "+ Products" — our products live in the Catalog module.
+function CatalogSection({ catalogItemId, onSelect }: { catalogItemId: string | null; onSelect: (item: CatalogItem | null) => void }) {
+  const [open, setOpen] = useState(Boolean(catalogItemId))
+  const { data: items, isLoading } = useSWR(open ? "/api/v1/workspace/catalog" : null, catalogFetcher)
+  const selected = items?.find((item) => item.id === catalogItemId) ?? null
+  const { defaultCurrency } = useAuth()
+
+  if (!open) {
+    return (
+      <div className="border-t pt-6">
+        <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-2 rounded-lg bg-muted/50 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-muted">
+          <Plus className="size-4" aria-hidden="true" />Catalog
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <section className="flex flex-col gap-4 border-t pt-6" aria-labelledby="deal-catalog-heading">
+      <div>
+        <h2 id="deal-catalog-heading" className="flex items-center gap-2 text-sm font-semibold"><Package className="size-4 text-muted-foreground" aria-hidden="true" />Catalog</h2>
+        <p className="text-sm text-muted-foreground">Attach the catalog item this deal is selling.</p>
+      </div>
+      {selected ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{selected.name}</p>
+            <p className="text-xs text-muted-foreground">{formatCurrency(selected.price, defaultCurrency)}{selected.category ? ` · ${selected.category}` : ""}</p>
+          </div>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${selected.name}`} onClick={() => onSelect(null)}><X /></Button>
+        </div>
+      ) : (
+        <Field>
+          <FieldLabel htmlFor="deal-catalog-item">Item</FieldLabel>
+          <Select
+            items={Object.fromEntries((items ?? []).map((item) => [item.id, item.name]))}
+            value={catalogItemId ?? ""}
+            onValueChange={(value) => { const item = items?.find((entry) => entry.id === value); if (item) onSelect(item) }}
+          >
+            <SelectTrigger id="deal-catalog-item" className="w-full"><SelectValue placeholder={isLoading ? "Loading catalog…" : items?.length ? "Choose a catalog item" : "No catalog items yet"} /></SelectTrigger>
+            <SelectContent><SelectGroup>{(items ?? []).map((item) => <SelectItem key={item.id} value={item.id}>{item.name} — {formatCurrency(item.price, defaultCurrency)}</SelectItem>)}</SelectGroup></SelectContent>
+          </Select>
+        </Field>
+      )}
+    </section>
+  )
 }
 
 export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pending, onOpenChange, onSave }: {
@@ -189,6 +254,8 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
                   </FieldGroup>
                 </CollapsibleContent>
               </Collapsible>
+
+              <CatalogSection catalogItemId={draft.catalogItemId ?? null} onSelect={(item) => { update("catalogItemId", item?.id ?? null); if (item && !draft.value) update("value", item.price) }} />
 
               <section className="flex flex-col gap-4 border-t pt-6" aria-labelledby="deal-context-heading">
                 <div>

@@ -43,6 +43,7 @@ export interface PipelineDeal {
   pipelineId: string
   stageId: string
   contactId: string | null
+  catalogItemId: string | null
   assignedTo: string | null
   title: string
   value: number

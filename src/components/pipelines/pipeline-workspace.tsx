@@ -81,7 +81,7 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
       const next = new Set(current)
       if (next.has(stageId)) next.delete(stageId)
       else next.add(stageId)
-      localStorage.setItem(`pipeline-collapsed:${snapshot.pipeline.id}`, JSON.stringify([...next]))
+      localStorage.setItem(`pipeline-collapsed:${initialSnapshot.pipeline.id}`, JSON.stringify([...next]))
       return next
     })
   }
@@ -224,20 +224,24 @@ function StageColumn({ stage, deals, onOpen, onCreate, currency, collapsed, onTo
   const total = money(deals.reduce((sum, deal) => sum + deal.value, 0), currency)
 
   if (collapsed) {
-    // Minimized strip — still a drop target; click anywhere to expand
-    return <section ref={setNodeRef} aria-label={`${stage.name} stage, minimized`} className={cn("flex min-h-0 w-12 shrink-0 flex-col items-center overflow-hidden rounded-xl border bg-card shadow-xs transition-[box-shadow,border-color,width] duration-200", isOver && "border-primary ring-2 ring-primary/20")}>
-      <span className="mt-2 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} aria-hidden="true" />
-      <button type="button" onClick={() => onToggleCollapsed(stage.id)} aria-label={`Expand ${stage.name} stage`} className="flex min-h-0 flex-1 flex-col items-center gap-3 py-3 transition-colors hover:bg-muted/50">
+    // Minimized strip — still a drop target; the whole strip expands on click
+    return <section ref={setNodeRef} aria-label={`${stage.name} stage, minimized`} className={cn("flex min-h-0 w-12 shrink-0 flex-col items-stretch overflow-hidden rounded-xl border bg-card shadow-xs transition-[box-shadow,border-color,width] duration-200", isOver && "border-primary ring-2 ring-primary/20")}>
+      <button type="button" onClick={() => onToggleCollapsed(stage.id)} aria-label={`Expand ${stage.name} stage`} className="flex min-h-0 flex-1 cursor-pointer flex-col items-center gap-3 py-3 transition-colors hover:bg-muted/50">
+        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} aria-hidden="true" />
         <span className="text-sm font-semibold [writing-mode:vertical-rl]">{stage.name}</span>
         <span className="text-xs text-muted-foreground [writing-mode:vertical-rl]">{total} · {deals.length} Deal{deals.length === 1 ? "" : "s"}</span>
+        <span className="mt-auto text-muted-foreground" aria-hidden="true"><Maximize2 className="size-3.5" /></span>
       </button>
-      <span className="mb-2 text-muted-foreground" aria-hidden="true"><Maximize2 className="size-3.5" /></span>
     </section>
   }
 
   return <section ref={setNodeRef} className={cn("group/stage flex min-h-0 w-72 flex-1 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-xs transition-[box-shadow,border-color] duration-200", "min-w-[17rem]", isOver && "border-primary ring-2 ring-primary/20")}>
-    <header className="flex items-start justify-between gap-2 border-b p-3"><div className="min-w-0"><div className="flex items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} aria-hidden="true" /><h2 className="truncate text-sm font-semibold">{stage.name}</h2><span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{deals.length}</span></div><p className="mt-1 text-xs text-muted-foreground">{total}</p></div><div className="flex items-center gap-0.5"><Button variant="ghost" size="icon-sm" className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover/stage:opacity-100" onClick={() => onToggleCollapsed(stage.id)} aria-label={`Minimize ${stage.name} stage`}><Minimize2 /></Button><Button variant="ghost" size="icon-sm" onClick={() => onCreate(stage.id)} aria-label={`Add deal to ${stage.name}`}><Plus /></Button></div></header>
-    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">{deals.map((deal) => <DealCard key={deal.id} deal={deal} onOpen={onOpen} />)}{deals.length === 0 && <div className={cn("m-auto flex w-full flex-col items-center gap-3 rounded-lg border border-dashed p-6 text-center", isOver && "border-primary bg-primary/5")}><span className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground"><Target className="size-4" /></span><div><p className="text-sm font-medium">No deals yet</p><p className="mt-1 text-xs text-muted-foreground">Add a deal or drop one here.</p></div><Button variant="outline" size="sm" onClick={() => onCreate(stage.id)}><Plus data-icon="inline-start" />Add deal</Button></div>}</div>
+    <header className="flex items-start justify-between gap-2 border-b p-3"><div className="min-w-0"><div className="flex items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} aria-hidden="true" /><h2 className="truncate text-sm font-semibold">{stage.name}</h2><span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{deals.length}</span></div><p className="mt-1 text-xs text-muted-foreground">{total}</p></div></header>
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">{deals.map((deal) => <DealCard key={deal.id} deal={deal} onOpen={onOpen} />)}{deals.length === 0 && <div className={cn("m-auto flex w-full flex-col items-center gap-3 rounded-lg border border-dashed p-6 text-center", isOver && "border-primary bg-primary/5")}><span className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground"><Target className="size-4" /></span><div><p className="text-sm font-medium">No deals yet</p><p className="mt-1 text-xs text-muted-foreground">Add a deal or drop one here.</p></div></div>}</div>
+    <footer className="flex shrink-0 items-center justify-between border-t px-2 py-1.5">
+      <Button variant="ghost" size="sm" className="text-primary hover:text-primary" onClick={() => onCreate(stage.id)} aria-label={`Add deal to ${stage.name}`}><Plus data-icon="inline-start" />Deal</Button>
+      <Button variant="ghost" size="icon-sm" className="text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover/stage:opacity-100" onClick={() => onToggleCollapsed(stage.id)} aria-label={`Minimize ${stage.name} stage`}><Minimize2 /></Button>
+    </footer>
   </section>
 }
 
