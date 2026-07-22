@@ -2,6 +2,7 @@
 
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { DashboardCacheProvider } from "@/components/providers/dashboard-cache-provider"
+import { TeamChatWidget } from "@/components/team-chat/team-chat-widget"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AuthProvider } from "@/hooks/use-auth"
 import type { AccountRole } from "@/lib/auth/roles"
@@ -24,6 +25,8 @@ function DashboardShellInner({
       <SidebarInset className="flex min-w-0 flex-col overflow-hidden">
         <main className="flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">{children}</main>
       </SidebarInset>
+      {/* Workspace-wide team chat (floating launcher, bottom-right). */}
+      <TeamChatWidget />
     </SidebarProvider>
   )
 }
