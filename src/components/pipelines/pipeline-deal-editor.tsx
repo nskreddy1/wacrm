@@ -91,7 +91,7 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-hidden border-l bg-background p-0 sm:max-w-2xl" showCloseButton>
+      <SheetContent side="right" className="w-full gap-0 overflow-hidden border-l bg-background p-0 sm:max-w-[45rem]" showCloseButton>
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
           <SheetHeader className="border-b px-5 py-5 sm:px-7">
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
