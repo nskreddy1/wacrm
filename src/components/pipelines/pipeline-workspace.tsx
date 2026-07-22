@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { ArrowDown, ArrowUp, CalendarClock, CircleDollarSign, Download, Ellipsis, Filter, GripVertical, LayoutGrid, List, Plus, Search, SlidersHorizontal, Table2, Target, Trash2, TrendingUp, Users, X } from "lucide-react"
+import { ArrowDown, ArrowUp, CalendarClock, CircleDollarSign, Download, Ellipsis, Filter, GripVertical, LayoutGrid, List, Maximize2, Minimize2, Plus, Search, SlidersHorizontal, Table2, Target, Trash2, TrendingUp, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -71,6 +71,20 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
   })
   const [presetName, setPresetName] = useState("")
   const [activeSubPipelineId, setActiveSubPipelineId] = useState(initialSubPipelineId ?? snapshot.subPipelines[0]?.id ?? snapshot.pipeline.id)
+  // Stage columns minimized to a narrow vertical strip, persisted per pipeline
+  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set()
+    try { return new Set(JSON.parse(localStorage.getItem(`pipeline-collapsed:${initialSnapshot.pipeline.id}`) ?? "[]") as string[]) } catch { return new Set() }
+  })
+  function toggleStageCollapsed(stageId: string) {
+    setCollapsedStages((current) => {
+      const next = new Set(current)
+      if (next.has(stageId)) next.delete(stageId)
+      else next.add(stageId)
+      localStorage.setItem(`pipeline-collapsed:${snapshot.pipeline.id}`, JSON.stringify([...next]))
+      return next
+    })
+  }
   const [editing, setEditing] = useState<PipelineDeal | "new" | null>(null)
   const [defaultStageId, setDefaultStageId] = useState(snapshot.stages[0]?.id ?? "")
   const [pending, startTransition] = useTransition()
@@ -193,7 +207,7 @@ export function PipelineWorkspace({ initialSnapshot, initialMode, initialSubPipe
 
     {selected.size > 0 && <div className="flex items-center gap-2 border-b bg-muted px-4 py-2 text-sm"><strong>{selected.size} selected</strong><Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}><Trash2 data-icon="inline-start" />Delete</Button><Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button></div>}
 
-    {deals.length === 0 && (query || activeFilterCount > 0) ? <EmptyResults onReset={() => { setQuery(""); clearFilters() }} /> : initialMode === "board" ? <DndContext sensors={sensors} onDragEnd={(event: DragEndEvent) => { if (event.over) void moveDeal(String(event.active.id), String(event.over.id)) }}><div className="grid min-h-0 flex-1 auto-cols-[minmax(17rem,1fr)] grid-flow-col gap-3 overflow-x-auto bg-muted/20 p-3">{snapshot.stages.map((item) => <StageColumn key={item.id} stage={item} deals={deals.filter((deal) => deal.stageId === item.id)} onOpen={setEditing} onCreate={createInStage} currency={currency} />)}</div></DndContext> : initialMode === "sheet" ? <PipelineSheet deals={deals} stages={snapshot.stages} members={snapshot.members} onSave={saveDeal} /> : <DealTable deals={deals} selected={selected} onSelected={setSelected} onOpen={setEditing} stages={snapshot.stages} />}
+    {deals.length === 0 && (query || activeFilterCount > 0) ? <EmptyResults onReset={() => { setQuery(""); clearFilters() }} /> : initialMode === "board" ? <DndContext sensors={sensors} onDragEnd={(event: DragEndEvent) => { if (event.over) void moveDeal(String(event.active.id), String(event.over.id)) }}><div className="flex min-h-0 flex-1 gap-3 overflow-x-auto bg-muted/20 p-3">{snapshot.stages.map((item) => <StageColumn key={item.id} stage={item} deals={deals.filter((deal) => deal.stageId === item.id)} onOpen={setEditing} onCreate={createInStage} currency={currency} collapsed={collapsedStages.has(item.id)} onToggleCollapsed={toggleStageCollapsed} />)}</div></DndContext> : initialMode === "sheet" ? <PipelineSheet deals={deals} stages={snapshot.stages} members={snapshot.members} onSave={saveDeal} /> : <DealTable deals={deals} selected={selected} onSelected={setSelected} onOpen={setEditing} stages={snapshot.stages} />}
 
     {initialMode === "board" && <SubPipelineTabs pipelines={snapshot.subPipelines} activePipelineId={activeSubPipelineId} onActivate={(id) => { setActiveSubPipelineId(id); router.replace(pipelinePath(snapshot.accountId, snapshot.pipeline.id, initialMode, { subPipeline: id, savedView: initialSavedViewId })) }} onCreate={(name) => startTransition(() => void createSubPipeline(name))} onReorder={(items) => startTransition(() => void reorderSubPipelines(items))} />}
     {editing !== null && <PipelineDealEditor key={editing === "new" ? `new-${defaultStageId}` : editing.id} open deal={editing === "new" ? null : editing} defaultStageId={defaultStageId} snapshot={snapshot} pending={pending} onOpenChange={(open) => { if (!open) setEditing(null) }} onSave={saveDeal} />}
@@ -205,10 +219,24 @@ function Insight({ icon: Icon, label, value, urgent }: { icon: typeof Target; la
   return <div className="flex min-w-0 items-center gap-3 border-r border-b px-4 py-3 sm:border-b-0"><span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground", urgent && "bg-destructive/10 text-destructive")}><Icon className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-xs text-muted-foreground">{label}</p><p className={cn("truncate text-sm font-semibold", urgent && "text-destructive")}>{value}</p></div></div>
 }
 
-function StageColumn({ stage, deals, onOpen, onCreate, currency }: { stage: PipelineStage; deals: PipelineDeal[]; onOpen: (deal: PipelineDeal) => void; onCreate: (stageId: string) => void; currency: string }) {
+function StageColumn({ stage, deals, onOpen, onCreate, currency, collapsed, onToggleCollapsed }: { stage: PipelineStage; deals: PipelineDeal[]; onOpen: (deal: PipelineDeal) => void; onCreate: (stageId: string) => void; currency: string; collapsed: boolean; onToggleCollapsed: (stageId: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
-  return <section ref={setNodeRef} className={cn("flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-xs transition-[box-shadow,border-color] duration-200", isOver && "border-primary ring-2 ring-primary/20")}>
-    <header className="flex items-start justify-between gap-3 border-b p-3"><div className="min-w-0"><div className="flex items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} aria-hidden="true" /><h2 className="truncate text-sm font-semibold">{stage.name}</h2><span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{deals.length}</span></div><p className="mt-1 text-xs text-muted-foreground">{money(deals.reduce((sum, deal) => sum + deal.value, 0), currency)}</p></div><Button variant="ghost" size="icon-sm" onClick={() => onCreate(stage.id)} aria-label={`Add deal to ${stage.name}`}><Plus /></Button></header>
+  const total = money(deals.reduce((sum, deal) => sum + deal.value, 0), currency)
+
+  if (collapsed) {
+    // Minimized strip — still a drop target; click anywhere to expand
+    return <section ref={setNodeRef} aria-label={`${stage.name} stage, minimized`} className={cn("flex min-h-0 w-12 shrink-0 flex-col items-center overflow-hidden rounded-xl border bg-card shadow-xs transition-[box-shadow,border-color,width] duration-200", isOver && "border-primary ring-2 ring-primary/20")}>
+      <span className="mt-2 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} aria-hidden="true" />
+      <button type="button" onClick={() => onToggleCollapsed(stage.id)} aria-label={`Expand ${stage.name} stage`} className="flex min-h-0 flex-1 flex-col items-center gap-3 py-3 transition-colors hover:bg-muted/50">
+        <span className="text-sm font-semibold [writing-mode:vertical-rl]">{stage.name}</span>
+        <span className="text-xs text-muted-foreground [writing-mode:vertical-rl]">{total} · {deals.length} Deal{deals.length === 1 ? "" : "s"}</span>
+      </button>
+      <span className="mb-2 text-muted-foreground" aria-hidden="true"><Maximize2 className="size-3.5" /></span>
+    </section>
+  }
+
+  return <section ref={setNodeRef} className={cn("group/stage flex min-h-0 w-72 flex-1 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-xs transition-[box-shadow,border-color] duration-200", "min-w-[17rem]", isOver && "border-primary ring-2 ring-primary/20")}>
+    <header className="flex items-start justify-between gap-2 border-b p-3"><div className="min-w-0"><div className="flex items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} aria-hidden="true" /><h2 className="truncate text-sm font-semibold">{stage.name}</h2><span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{deals.length}</span></div><p className="mt-1 text-xs text-muted-foreground">{total}</p></div><div className="flex items-center gap-0.5"><Button variant="ghost" size="icon-sm" className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover/stage:opacity-100" onClick={() => onToggleCollapsed(stage.id)} aria-label={`Minimize ${stage.name} stage`}><Minimize2 /></Button><Button variant="ghost" size="icon-sm" onClick={() => onCreate(stage.id)} aria-label={`Add deal to ${stage.name}`}><Plus /></Button></div></header>
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">{deals.map((deal) => <DealCard key={deal.id} deal={deal} onOpen={onOpen} />)}{deals.length === 0 && <div className={cn("m-auto flex w-full flex-col items-center gap-3 rounded-lg border border-dashed p-6 text-center", isOver && "border-primary bg-primary/5")}><span className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground"><Target className="size-4" /></span><div><p className="text-sm font-medium">No deals yet</p><p className="mt-1 text-xs text-muted-foreground">Add a deal or drop one here.</p></div><Button variant="outline" size="sm" onClick={() => onCreate(stage.id)}><Plus data-icon="inline-start" />Add deal</Button></div>}</div>
   </section>
 }
