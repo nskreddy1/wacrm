@@ -79,12 +79,12 @@ export function DealItemsTable({ items, currency, onChange }: {
 
   return (
     <section className="flex flex-col gap-3 border-t pt-6" aria-labelledby="deal-items-heading">
-      <h2 id="deal-items-heading" className="text-sm font-semibold">Associated Catalog</h2>
+      <h2 id="deal-items-heading" className="text-lg font-semibold">Associated Products</h2>
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[36rem] text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-              <th scope="col" className="px-3 py-2 font-medium">Item</th>
+              <th scope="col" className="px-3 py-2 font-medium">Product</th>
               <th scope="col" className="w-28 px-3 py-2 font-medium">List Price ({symbol})</th>
               <th scope="col" className="w-20 px-3 py-2 font-medium">Quantity</th>
               <th scope="col" className="w-24 px-3 py-2 font-medium">Discount (%)</th>
