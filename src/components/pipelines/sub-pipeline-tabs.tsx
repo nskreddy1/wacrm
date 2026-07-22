@@ -1,10 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, ChevronUp, GripVertical, MoreHorizontal, Plus, X } from "lucide-react"
+import { ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
@@ -41,11 +40,6 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [name, setName] = useState("")
 
-  function openRearrange() {
-    setDraftOrder(pipelines)
-    setRearrangeOpen(true)
-  }
-
   function movePipeline(targetId: string) {
     if (!draggedId || draggedId === targetId) return
     setDraftOrder((current) => moveItem(current, draggedId, targetId))
@@ -81,11 +75,14 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
           <GripVertical className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="truncate">{pipeline.name}</span>
         </button>)}
+        <button type="button" onClick={() => setCreateOpen(true)} className="flex shrink-0 items-center border-r px-4 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Create sub-pipeline">
+          <Plus className="size-4" aria-hidden="true" />
+        </button>
       </div>
       <Popover open={rearrangeOpen} onOpenChange={(open) => { if (open) setDraftOrder(pipelines); setRearrangeOpen(open) }}>
-        {/* Invisible anchor only — the popover is opened from the dropdown
-            menu, so this trigger is intentionally not an interactive button. */}
-        <PopoverTrigger nativeButton={false} render={<span className="hidden" aria-hidden="true" />} />
+        <PopoverTrigger render={<Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-l" aria-label="Rearrange sub-pipelines" />}>
+          <ArrowUpDown />
+        </PopoverTrigger>
         <PopoverContent side="top" align="end" sideOffset={0} className="w-84 gap-0 overflow-hidden rounded-sm p-0">
           <PopoverHeader className="flex-row items-center justify-between border-b px-4 py-3">
             <PopoverTitle className="text-base font-semibold">Rearrange Sub-Pipelines</PopoverTitle>
@@ -96,7 +93,6 @@ export function SubPipelineTabs({ pipelines, activePipelineId, onActivate, onCre
           <div className="flex justify-start border-t bg-muted/30 px-4 py-3"><Button className="rounded-full" onClick={() => { onReorder(draftOrder.map((pipeline) => ({ ...pipeline, name: pipeline.name.trim() || "Untitled pipeline" }))); setRearrangeOpen(false) }}>Save</Button></div>
         </PopoverContent>
       </Popover>
-      <DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-full shrink-0 rounded-none border-l" aria-label="Sub-pipeline options" />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={() => setCreateOpen(true)}><Plus /> New sub-pipeline</DropdownMenuItem><DropdownMenuItem onClick={openRearrange}><GripVertical /> Rearrange sub-pipelines</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
     </footer>
 
     <Dialog open={createOpen} onOpenChange={setCreateOpen}>
