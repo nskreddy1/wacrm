@@ -28,7 +28,13 @@ import { FeatureLoading, FeatureState } from "@/components/ui/feature-state"
 import { countRules, emptyFilterGroup, flattenRules, matchesFilter, summarizeRule, type FilterGroup } from "@/lib/data/contacts/filters"
 import { downloadCsv } from "@/lib/download-csv"
 
-type Store = { contacts: WorkspaceContact[]; fields: ContactField[]; preferences: { visible: string[]; order: string[]; frozen: string[]; widths: Record<string, number> } }
+type Store = {
+  contacts: WorkspaceContact[]
+  fields: ContactField[]
+  preferences: { visible: string[]; order: string[]; frozen: string[]; widths: Record<string, number> }
+  owners?: { userId: string; name: string; avatarUrl: string | null }[]
+  currentUserId?: string
+}
 type View = ContactViewMode
 type Sort = { field: string; direction: "asc" | "desc" } | null
 async function api(method: string, body: unknown) {
@@ -185,7 +191,7 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
       <footer className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-b border-t bg-card px-4 py-2 text-xs shadow-xs"><span aria-live="polite">{hasRefinements ? "Matching contacts" : "Total contacts"} <strong>{filtered.length}</strong></span>{showPagination && <><label className="ml-auto" htmlFor="contacts-page-size">Rows per page</label><Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(0) }}><SelectTrigger id="contacts-page-size" size="sm" aria-label="Rows per page"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{[10,20,50,100].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectGroup></SelectContent></Select><span aria-live="polite">{safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, filtered.length)} of {filtered.length}</span><Button variant="ghost" size="icon-sm" disabled={safePage === 0} onClick={() => setPage((value) => Math.max(0, value - 1))} aria-label="Previous page"><ChevronLeft /></Button><Button variant="ghost" size="icon-sm" disabled={safePage >= totalPages - 1} onClick={() => setPage((value) => Math.min(totalPages - 1, value + 1))} aria-label="Next page"><ChevronRight /></Button></>}</footer>
 
       {filterOpen && <ContactFilterBuilder open={filterOpen} fields={orderedFields} value={filters} onOpenChange={setFilterOpen} onApply={(value) => { setFilters(value); setPage(0) }} onClear={() => { setFilters(emptyFilterGroup()); setPage(0) }} />}
-      <ContactRecordSheet state={contactSheet ?? (detail ? { mode: "view", contact: detail } : null)} fields={orderedFields} owners={store.owners ?? []} currentUserId={store.currentUserId ?? ""} onOpenChange={(open) => { if (!open) { setContactSheet(null); if (detail) router.push(contactsPath(undefined, { mode: view, view: savedViewId })) } }} onSaved={() => mutate()} />
+      <ContactRecordSheet state={contactSheet ?? (detail ? { mode: "view", contact: detail } : null)} fields={orderedFields} preferences={store.preferences} owners={store.owners ?? []} currentUserId={store.currentUserId ?? ""} onOpenChange={(open) => { if (!open) { setContactSheet(null); if (detail) router.push(contactsPath(undefined, { mode: view, view: savedViewId })) } }} onSaved={() => mutate()} />
       <ImportModal open={importOpen} onOpenChange={setImportOpen} onImported={() => void mutate()} />
       <CustomFieldsManager open={fieldsManagerOpen} onOpenChange={(open) => { setFieldsManagerOpen(open); if (!open) void mutate() }} />
       <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>

@@ -13,7 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { InternationalPhoneInput, validInternationalPhone } from "@/components/contacts/international-phone-input"
-import type { ContactField, ContactOwner, ContactValue, WorkspaceContact } from "@/lib/data/contacts/types"
+import { EditContactFieldsSheet } from "@/components/contacts/edit-contact-fields-sheet"
+import type { ContactField, ContactOwner, ContactPreferences, ContactValue, WorkspaceContact } from "@/lib/data/contacts/types"
 
 export type ContactSheetState = { mode: "create" | "view" | "edit"; contact?: WorkspaceContact } | null
 
@@ -27,7 +28,7 @@ function ownerInitials(name: string) {
   return name.split(/\s+/).map((part) => part[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?"
 }
 
-export function ContactRecordSheet({ state, fields, owners = [], currentUserId = "", onOpenChange, onSaved }: { state: ContactSheetState; fields: ContactField[]; owners?: ContactOwner[]; currentUserId?: string; onOpenChange: (open: boolean) => void; onSaved: () => Promise<unknown> | void }) {
+export function ContactRecordSheet({ state, fields, preferences, owners = [], currentUserId = "", onOpenChange, onSaved }: { state: ContactSheetState; fields: ContactField[]; preferences?: ContactPreferences; owners?: ContactOwner[]; currentUserId?: string; onOpenChange: (open: boolean) => void; onSaved: () => Promise<unknown> | void }) {
   const contact = state?.contact
   const [mode, setMode] = useState<"create" | "view" | "edit">(state?.mode ?? "view")
   const [values, setValues] = useState<Record<string, ContactValue>>({})
@@ -38,6 +39,7 @@ export function ContactRecordSheet({ state, fields, owners = [], currentUserId =
   const [extraPhones, setExtraPhones] = useState<string[]>([])
   const [addressOpen, setAddressOpen] = useState(false)
   const [additionalOpen, setAdditionalOpen] = useState(false)
+  const [fieldsEditorOpen, setFieldsEditorOpen] = useState(false)
   const customFields = useMemo(() => fields.filter((field) => field.custom && !RESERVED_FIELD_LABELS.has(field.label.toLocaleLowerCase())), [fields])
 
   useEffect(() => {
@@ -311,7 +313,7 @@ export function ContactRecordSheet({ state, fields, owners = [], currentUserId =
           </ScrollArea>
 
           <SheetFooter className="flex-row items-center justify-between border-t bg-background px-8 py-3">
-            <Button type="button" variant="link" className="h-auto px-0 text-primary" onClick={() => setAdditionalOpen(true)}>Customize Fields</Button>
+            <Button type="button" variant="link" className="h-auto px-0 text-primary" onClick={() => setFieldsEditorOpen(true)}>Customize Fields</Button>
             <div className="ml-auto flex gap-2">
               <Button type="button" variant="outline" className="rounded-full px-6" onClick={() => mode === "edit" ? setMode("view") : onOpenChange(false)} disabled={saving}>Cancel</Button>
               {!readonly ? <Button type="submit" className="rounded-full px-6" disabled={saving}>{saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : mode === "create" ? <Check data-icon="inline-start" /> : <Save data-icon="inline-start" />}{saving ? "Saving" : "Save"}</Button> : null}
@@ -319,6 +321,13 @@ export function ContactRecordSheet({ state, fields, owners = [], currentUserId =
           </SheetFooter>
         </form>
       </SheetContent>
+      <EditContactFieldsSheet
+        open={fieldsEditorOpen}
+        fields={fields}
+        preferences={preferences ?? { visible: fields.map((field) => field.id), order: fields.map((field) => field.id), frozen: [], widths: {} }}
+        onOpenChange={setFieldsEditorOpen}
+        onSaved={onSaved}
+      />
     </Sheet>
   )
 }
