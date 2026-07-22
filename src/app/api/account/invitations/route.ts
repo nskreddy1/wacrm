@@ -27,6 +27,7 @@ import {
   inviteUrl,
 } from "@/lib/auth/invitations";
 import { isAccountRole } from "@/lib/auth/roles";
+import { sendInviteEmail } from "@/lib/email/invite-email";
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -147,7 +148,7 @@ export async function GET() {
     const { data, error } = await ctx.supabase
       .from("account_invitations")
       .select(
-        "id, role, label, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id",
+        "id, role, label, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id, invited_email, invited_first_name, invited_last_name",
       )
       .eq("account_id", ctx.accountId)
       .is("accepted_at", null)
@@ -183,7 +184,15 @@ export async function POST(request: Request) {
     if (!limit.success) return rateLimitResponse(limit);
 
     const body = (await request.json().catch(() => null)) as
-      | { role?: unknown; expiresInDays?: unknown; label?: unknown }
+      | {
+          role?: unknown;
+          expiresInDays?: unknown;
+          label?: unknown;
+          email?: unknown;
+          firstName?: unknown;
+          lastName?: unknown;
+          workspaceRoleId?: unknown;
+        }
       | null;
 
     const role = body?.role;
@@ -216,6 +225,57 @@ export async function POST(request: Request) {
         );
       }
       label = trimmed === "" ? null : trimmed;
+    }
+
+    // ------------------------------------------------------------
+    // Optional person fields (the Bigin-style "Invite User" sheet).
+    // When an email is present we address the invite to a specific
+    // person and send them the email; without one this remains the
+    // legacy anonymous share-link flow.
+    // ------------------------------------------------------------
+    let invitedEmail: string | null = null;
+    if (typeof body?.email === "string" && body.email.trim() !== "") {
+      const trimmed = body.email.trim().toLowerCase();
+      // Pragmatic RFC-lite check — the definitive validation is the
+      // email actually arriving.
+      if (trimmed.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        return NextResponse.json(
+          { error: "'email' must be a valid email address" },
+          { status: 400 },
+        );
+      }
+      invitedEmail = trimmed;
+    }
+
+    const nameField = (v: unknown): string | null => {
+      if (typeof v !== "string") return null;
+      const trimmed = v.trim();
+      return trimmed === "" ? null : trimmed.slice(0, 80);
+    };
+    const invitedFirstName = nameField(body?.firstName);
+    const invitedLastName = nameField(body?.lastName);
+
+    // Workspace role (reporting hierarchy) — optional, validated
+    // against this account's roles so a crafted ID can't attach a
+    // foreign account's role.
+    let workspaceRoleId: string | null = null;
+    if (
+      typeof body?.workspaceRoleId === "string" &&
+      body.workspaceRoleId.trim() !== ""
+    ) {
+      const { data: wsRole } = await ctx.supabase
+        .from("workspace_roles")
+        .select("id")
+        .eq("id", body.workspaceRoleId.trim())
+        .eq("account_id", ctx.accountId)
+        .maybeSingle();
+      if (!wsRole) {
+        return NextResponse.json(
+          { error: "'workspaceRoleId' does not match a role in this workspace" },
+          { status: 400 },
+        );
+      }
+      workspaceRoleId = wsRole.id;
     }
 
     // Bound outstanding invites per account. Unlike the per-user
@@ -260,8 +320,12 @@ export async function POST(request: Request) {
         created_by_user_id: ctx.userId,
         label,
         expires_at: expiresAt.toISOString(),
+        invited_email: invitedEmail,
+        invited_first_name: invitedFirstName,
+        invited_last_name: invitedLastName,
+        workspace_role_id: workspaceRoleId,
       })
-      .select("id, role, label, expires_at, created_at")
+      .select("id, role, label, expires_at, created_at, invited_email")
       .single();
 
     if (error || !data) {
@@ -272,13 +336,52 @@ export async function POST(request: Request) {
       );
     }
 
+    const url = inviteUrl(token, getBaseUrl(request));
+
+    // Best-effort email delivery — Resend in production, Supabase's
+    // built-in invite email as the default/testing fallback. A failed
+    // send never fails the invite: the admin still gets the copyable
+    // link in the response.
+    let emailSent = false;
+    let emailProvider: string | null = null;
+    if (invitedEmail) {
+      const [{ data: accountRow }, { data: inviterProfile }] =
+        await Promise.all([
+          ctx.supabase
+            .from("accounts")
+            .select("name")
+            .eq("id", ctx.accountId)
+            .maybeSingle(),
+          ctx.supabase
+            .from("profiles")
+            .select("full_name, email")
+            .eq("id", ctx.userId)
+            .maybeSingle(),
+        ]);
+
+      const result = await sendInviteEmail({
+        to: invitedEmail,
+        firstName: invitedFirstName,
+        lastName: invitedLastName,
+        accountName: accountRow?.name ?? "your team's workspace",
+        inviterName:
+          inviterProfile?.full_name ?? inviterProfile?.email ?? "A teammate",
+        inviteUrl: url,
+        expiresInDays: expiryDays,
+      });
+      emailSent = result.sent;
+      emailProvider = result.provider;
+    }
+
     return NextResponse.json(
       {
         invitation: data,
         // Plaintext payload — visible to the admin exactly once.
         token,
-        url: inviteUrl(token, getBaseUrl(request)),
+        url,
         expiresInDays: expiryDays,
+        emailSent,
+        emailProvider,
       },
       { status: 201 },
     );
