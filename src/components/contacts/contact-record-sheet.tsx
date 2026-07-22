@@ -118,31 +118,31 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
                 </div>
 
                 <FieldGroup className="gap-5">
-                  <Field orientation="responsive" data-invalid={Boolean(errors.firstName)}>
+                  <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4" data-invalid={Boolean(errors.firstName)}>
                     <FieldLabel htmlFor="contact-first-name" className="sm:w-36 sm:justify-end">First Name</FieldLabel>
                     <div className="flex flex-1 flex-col gap-1.5"><Input id="contact-first-name" autoFocus={!readonly} value={String(values.firstName ?? "")} onChange={(event) => setValue("firstName", event.target.value)} disabled={readonly} aria-invalid={Boolean(errors.firstName)} className="h-11" /><FieldError>{errors.firstName}</FieldError></div>
                   </Field>
-                  <Field orientation="responsive" data-invalid={Boolean(errors.lastName)}>
+                  <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4" data-invalid={Boolean(errors.lastName)}>
                     <FieldLabel htmlFor="contact-last-name" className="sm:w-36 sm:justify-end">Last Name</FieldLabel>
                     <div className="flex flex-1 flex-col gap-1.5"><Input id="contact-last-name" value={String(values.lastName ?? "")} onChange={(event) => setValue("lastName", event.target.value)} disabled={readonly} aria-invalid={Boolean(errors.lastName)} className="h-11" /><FieldError>{errors.lastName}</FieldError></div>
                   </Field>
-                  <Field orientation="responsive">
+                  <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
                     <FieldLabel htmlFor="contact-title" className="sm:w-36 sm:justify-end">Title</FieldLabel>
                     <Input id="contact-title" value={String(values.title ?? "")} onChange={(event) => setValue("title", event.target.value)} disabled={readonly} className="h-11 flex-1" />
                   </Field>
-                  <Field orientation="responsive" data-invalid={Boolean(errors.email)}>
+                  <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4" data-invalid={Boolean(errors.email)}>
                     <FieldLabel htmlFor="contact-email" className="sm:w-36 sm:justify-end">Email</FieldLabel>
                     <div className="flex flex-1 flex-col gap-1.5"><Input id="contact-email" type="email" value={String(values.email ?? "")} onChange={(event) => setValue("email", event.target.value)} disabled={readonly} aria-invalid={Boolean(errors.email)} className="h-11" /><FieldError>{errors.email}</FieldError></div>
                   </Field>
-                  <Field orientation="responsive">
+                  <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
                     <FieldLabel htmlFor="contact-company" className="sm:w-36 sm:justify-end">Company Name</FieldLabel>
                     <div className="relative flex-1"><Input id="contact-company" value={String(values.company ?? "")} onChange={(event) => setValue("company", event.target.value)} disabled={readonly} className="h-11 pr-10" /><Building2 className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" /></div>
                   </Field>
-                  <Field orientation="responsive" data-invalid={Boolean(errors.phone)}>
+                  <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4" data-invalid={Boolean(errors.phone)}>
                     <FieldLabel htmlFor="contact-phone" className="sm:w-36 sm:justify-end">Mobile <ChevronDown className="size-3.5 text-muted-foreground" /></FieldLabel>
                     <div className="flex flex-1 items-start gap-2"><div className="flex flex-1 flex-col gap-1.5"><Input id="contact-phone" type="tel" autoComplete="tel" value={String(values.phone ?? "")} onChange={(event) => setValue("phone", event.target.value)} disabled={readonly} aria-invalid={Boolean(errors.phone)} className="h-11" /><FieldError>{errors.phone}</FieldError></div><Button type="button" variant="ghost" size="icon" className="mt-0.5 shrink-0 text-muted-foreground" aria-label="Add another phone number"><PlusCircle className="size-5" /></Button></div>
                   </Field>
-                  <Field orientation="responsive">
+                  <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
                     <FieldLabel htmlFor="contact-description" className="sm:w-36 sm:justify-end">Description</FieldLabel>
                     <Textarea id="contact-description" value={String(values.description ?? "")} onChange={(event) => setValue("description", event.target.value)} disabled={readonly} rows={2} placeholder="A few words about this contact" className="min-h-11 flex-1 resize-none" />
                   </Field>
