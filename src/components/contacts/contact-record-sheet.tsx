@@ -92,7 +92,7 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
 
   return (
     <Sheet open={Boolean(state)} onOpenChange={onOpenChange}>
-      <SheetContent side="right" showCloseButton={false} className="w-full gap-0 overflow-hidden bg-background p-0 sm:max-w-[45rem]">
+      <SheetContent side="right" showCloseButton={false} className="w-full gap-0 overflow-hidden bg-background p-0 sm:max-w-[52rem]">
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <SheetHeader className="flex-row items-center border-b px-6 py-4 text-left">
             <div className="min-w-0 flex-1">
