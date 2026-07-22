@@ -51,6 +51,42 @@ function contactColumns(values: Partial<Record<string, ContactValue>>) {
   return Object.fromEntries(allowed.filter((key) => values[key] !== undefined).map((key) => [key, values[key]]))
 }
 
+// Extra form fields (no dedicated columns on `contacts`) persisted as
+// auto-provisioned custom fields so the full Create Contact form round-trips.
+const EXTENDED_CONTACT_FIELDS: Record<string, string> = {
+  title: "Title",
+  description: "Description",
+  street: "Street",
+  city: "City",
+}
+
+async function resolveExtendedValues(ctx: AccountContext, values: Partial<Record<string, ContactValue>>) {
+  const entries = Object.entries(EXTENDED_CONTACT_FIELDS).filter(([key]) => values[key] !== undefined)
+  if (!entries.length) return values
+  const { data: rows, error } = await ctx.supabase.from("custom_fields").select("id, field_name").eq("account_id", ctx.accountId)
+  if (error) throw new Error(error.message)
+  const byLabel = new Map((rows ?? []).map((row) => [String(row.field_name).toLocaleLowerCase(), String(row.id)]))
+  const next: Partial<Record<string, ContactValue>> = { ...values }
+  for (const [key, label] of entries) {
+    const value = next[key]
+    delete next[key]
+    let fieldId = byLabel.get(label.toLocaleLowerCase())
+    if (!fieldId) {
+      if (!String(value ?? "").trim()) continue
+      const { data, error: insertError } = await ctx.supabase
+        .from("custom_fields")
+        .insert({ account_id: ctx.accountId, user_id: ctx.userId, field_name: label, field_type: "text", field_options: null })
+        .select("id")
+        .single()
+      if (insertError) throw new Error(insertError.message)
+      fieldId = String(data.id)
+      byLabel.set(label.toLocaleLowerCase(), fieldId)
+    }
+    next[fieldId] = value
+  }
+  return next
+}
+
 async function saveCustomValues(ctx: AccountContext, contactId: string, values: Partial<Record<string, ContactValue>>) {
   const { data: fieldRows, error: fieldsError } = await ctx.supabase.from("custom_fields").select("id, field_name, field_type, field_options").eq("account_id", ctx.accountId)
   if (fieldsError) throw new Error(fieldsError.message)
@@ -91,8 +127,20 @@ export async function getSupabaseContactWorkspace(ctx: AccountContext): Promise<
     frozen: ["name"],
     widths: {},
   }
+  const aliasByFieldId = new Map<string, string>()
+  for (const field of fields) {
+    if (!field.custom) continue
+    const alias = Object.entries(EXTENDED_CONTACT_FIELDS).find(([, label]) => label.toLocaleLowerCase() === field.label.toLocaleLowerCase())?.[0]
+    if (alias) aliasByFieldId.set(field.id, alias)
+  }
   return {
-    contacts: (contactsResult.data ?? []).map((row) => mapContact(row, valuesByContact.get(String(row.id)))),
+    contacts: (contactsResult.data ?? []).map((row) => {
+      const customValues = valuesByContact.get(String(row.id)) ?? {}
+      const aliases = Object.fromEntries(
+        [...aliasByFieldId].filter(([fieldId]) => customValues[fieldId] !== undefined).map(([fieldId, alias]) => [alias, customValues[fieldId]]),
+      )
+      return mapContact(row, { ...customValues, ...aliases })
+    }),
     fields,
     preferences,
   }
@@ -102,8 +150,9 @@ export async function createSupabaseContact(ctx: AccountContext, values: Record<
   const fields = validateContactIdentity(values)
   const { data, error } = await ctx.supabase.from("contacts").insert({ ...fields, account_id: ctx.accountId, user_id: ctx.userId }).select(CONTACT_SELECT).single()
   if (error) throw new Error(error.code === "23505" ? "A contact with these details already exists" : error.message)
-  await saveCustomValues(ctx, String(data.id), values)
-  return mapContact(data, values)
+  const resolved = await resolveExtendedValues(ctx, values)
+  await saveCustomValues(ctx, String(data.id), resolved)
+  return mapContact(data, Object.fromEntries(Object.entries(resolved).filter((entry): entry is [string, ContactValue] => entry[1] !== undefined)))
 }
 
 export async function updateSupabaseContact(ctx: AccountContext, id: string, values: Partial<Record<string, ContactValue>>) {
@@ -118,8 +167,9 @@ export async function updateSupabaseContact(ctx: AccountContext, id: string, val
     if (error) throw new Error(error.code === "23505" ? "A contact with these details already exists" : error.message)
     row = data
   }
-  await saveCustomValues(ctx, id, values)
-  const mergedValues = Object.fromEntries(Object.entries({ ...currentContact.values, ...values }).filter((entry): entry is [string, ContactValue] => entry[1] !== undefined))
+  const resolved = await resolveExtendedValues(ctx, values)
+  await saveCustomValues(ctx, id, resolved)
+  const mergedValues = Object.fromEntries(Object.entries({ ...currentContact.values, ...resolved }).filter((entry): entry is [string, ContactValue] => entry[1] !== undefined))
   return mapContact(row, mergedValues)
 }
 
