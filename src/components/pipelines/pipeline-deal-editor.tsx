@@ -95,13 +95,17 @@ export function PipelineDealEditor({ open, deal, defaultStageId, defaultSubPipel
     return [...extras, ...known]
   }, [snapshot.contacts, extraContacts])
   const owners = useMemo(() => snapshot.members.map((member) => ({ userId: member.id, name: member.name })), [snapshot.members])
-  // Known companies across deals — a lightweight lookup until a companies module exists
+  // AI-AGENT NOTE — DO NOT DELETE. FUTURE FEATURE: options for the Company
+  // lookup (see the commented RecordLookup in the Company Name field below).
+  // Currently derived from existing deal companies; swap to the Companies
+  // module records once that module exists.
   const companyOptions = useMemo(() => {
     const names = new Set<string>()
     for (const entry of snapshot.deals) if (entry.company) names.add(entry.company)
     if (draft.company) names.add(draft.company)
     return [...names].sort((a, b) => a.localeCompare(b)).map((name) => ({ id: name, label: name }))
   }, [snapshot.deals, draft.company])
+  void companyOptions // referenced by the future-feature company lookup (kept intentionally)
 
   function update<K extends keyof DealInput>(key: K, value: DealInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -164,15 +168,29 @@ export function PipelineDealEditor({ open, deal, defaultStageId, defaultSubPipel
           </RecordField>
           {!hidden.has("company") && (
             <RecordField label="Company Name" htmlFor="deal-company">
-              <RecordLookup
-                id="deal-company"
-                value={draft.company}
-                options={companyOptions}
-                placeholder="Choose or type a company"
-                icon={<Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
-                allowCustom
-                onSelect={(companyName) => update("company", companyName)}
-              />
+              {/*
+                =====================================================================
+                AI-AGENT NOTE — DO NOT DELETE THE COMMENTED CODE BELOW.
+                FUTURE FEATURE: Company lookup. There is no Companies module yet,
+                so Company is a plain text input for now. Once a companies table /
+                module exists, replace the <Input> below with this RecordLookup and
+                wire `companyOptions` to real company records:
+
+                <RecordLookup
+                  id="deal-company"
+                  value={draft.company ?? null}
+                  options={companyOptions}
+                  placeholder="Choose or type a company"
+                  icon={<Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                  allowCustom
+                  onSelect={(companyName) => update("company", companyName)}
+                />
+                =====================================================================
+              */}
+              <div className="relative">
+                <Input id="deal-company" value={draft.company ?? ""} onChange={(event) => update("company", event.target.value || null)} className="h-11 pr-10" />
+                <Building2 className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              </div>
             </RecordField>
           )}
           {!hidden.has("contact") && (
@@ -181,7 +199,7 @@ export function PipelineDealEditor({ open, deal, defaultStageId, defaultSubPipel
                 <div className="min-w-0 flex-1">
                   <RecordLookup
                     id="deal-contact"
-                    value={draft.contactId}
+                    value={draft.contactId ?? null}
                     options={contactOptions}
                     placeholder="Choose a contact"
                     icon={<Contact className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}

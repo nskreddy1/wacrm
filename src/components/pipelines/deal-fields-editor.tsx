@@ -1,26 +1,36 @@
 "use client"
 
-import { RecordFieldsEditor, type RecordFieldDef } from "@/components/shared/record-fields-editor"
+import { useMemo, useState } from "react"
+import { RecordFieldsEditor, type RecordCustomFieldDraft, type RecordEditorField } from "@/components/shared/record-fields-editor"
 import type { DealFieldLayout } from "@/lib/pipelines/validation"
 
-// Standard fields that can be hidden from the deal form (required ones excluded)
-const OPTIONAL_FIELDS: RecordFieldDef[] = [
-  { id: "company", label: "Company Name", kind: "Single Line" },
-  { id: "contact", label: "Contact Name", kind: "Lookup" },
-  { id: "due", label: "Closing Date", kind: "Date Picker" },
-  { id: "source", label: "Source", kind: "Single Line" },
-  { id: "salesDetails", label: "Sales Details", kind: "Section" },
-  { id: "catalog", label: "Associated Products", kind: "Line Items" },
-  { id: "description", label: "Description", kind: "Multi-line (Large)" },
+// Standard fields pinned on every deal form (cannot be removed)
+const REQUIRED_FIELDS: RecordEditorField[] = [
+  { id: "title", label: "Deal Name", typeLabel: "Single Line", required: true },
+  { id: "value", label: "Amount", typeLabel: "Currency", required: true },
+  { id: "stage", label: "Sub-Pipeline & Stage", typeLabel: "Single Select", required: true },
+  { id: "owner", label: "Owner", typeLabel: "Lookup", required: true },
 ]
 
-const REQUIRED_FIELDS: RecordFieldDef[] = [
-  { id: "title", label: "Deal Name", kind: "Single Line" },
-  { id: "value", label: "Amount", kind: "Currency" },
-  { id: "stage", label: "Sub-Pipeline & Stage", kind: "Single Select" },
-  { id: "owner", label: "Owner", kind: "Lookup" },
+// Standard fields that can be hidden from the deal form
+const OPTIONAL_FIELDS: RecordEditorField[] = [
+  { id: "company", label: "Company Name", typeLabel: "Single Line", removable: true },
+  { id: "contact", label: "Contact Name", typeLabel: "Lookup", removable: true },
+  { id: "due", label: "Closing Date", typeLabel: "Date Picker", removable: true },
+  { id: "source", label: "Source", typeLabel: "Single Line", removable: true },
+  { id: "salesDetails", label: "Sales Details", typeLabel: "Section", removable: true },
+  { id: "catalog", label: "Associated Products", typeLabel: "Line Items", removable: true },
+  { id: "description", label: "Description", typeLabel: "Multi-line (Large)", removable: true },
 ]
 
+const DEAL_FIELD_TYPES: Record<string, string> = { text: "Single Line", number: "Number", date: "Date Picker" }
+const OPTIONAL_IDS = new Set(OPTIONAL_FIELDS.map((field) => field.id))
+
+/**
+ * Deal flavour of the generic RecordFieldsEditor. Custom fields live inside
+ * the pipeline's DealFieldLayout, so creating one only mutates local state —
+ * everything persists together when the layout is saved.
+ */
 export function DealFieldsEditor({ open, pipelineName, layout, pending, onOpenChange, onSave }: {
   open: boolean
   pipelineName: string
@@ -29,18 +39,62 @@ export function DealFieldsEditor({ open, pipelineName, layout, pending, onOpenCh
   onOpenChange: (open: boolean) => void
   onSave: (layout: DealFieldLayout) => Promise<void>
 }) {
+  const [custom, setCustom] = useState(layout.custom)
+
+  const fields = useMemo<RecordEditorField[]>(() => [
+    ...REQUIRED_FIELDS,
+    ...OPTIONAL_FIELDS,
+    ...custom.map((field) => ({
+      id: field.id,
+      label: field.label,
+      typeLabel: DEAL_FIELD_TYPES[field.type] ?? field.type,
+      removable: true,
+      editable: true,
+      countsTowardLimit: true,
+      draft: { label: field.label, type: field.type, options: [], required: false, unique: false },
+    })),
+  ], [custom])
+
+  const initialUsed = useMemo(() => [
+    ...REQUIRED_FIELDS.map((field) => field.id),
+    ...OPTIONAL_FIELDS.filter((field) => !layout.hidden.includes(field.id)).map((field) => field.id),
+    ...custom.map((field) => field.id),
+  ], [layout.hidden, custom])
+
   return (
     <RecordFieldsEditor
       open={open}
       title="Edit Deal Fields"
       badge={pipelineName}
       sectionTitle="Deal Information"
-      requiredFields={REQUIRED_FIELDS}
-      optionalFields={OPTIONAL_FIELDS}
-      layout={layout}
-      pending={pending}
+      fields={fields}
+      initialUsed={initialUsed}
+      fieldTypes={DEAL_FIELD_TYPES}
+      saving={pending}
       onOpenChange={onOpenChange}
-      onSave={onSave}
+      onSave={async (usedIds) => {
+        const usedSet = new Set(usedIds)
+        await onSave({
+          hidden: [...OPTIONAL_IDS].filter((id) => !usedSet.has(id)),
+          // Custom fields removed from the form are deleted from the layout
+          custom: custom.filter((field) => usedSet.has(field.id)),
+        })
+      }}
+      onCreateField={async (draft: RecordCustomFieldDraft) => {
+        const id = crypto.randomUUID().slice(0, 8)
+        const type = (["text", "number", "date"].includes(draft.type) ? draft.type : "text") as "text" | "number" | "date"
+        setCustom((current) => [...current, { id, label: draft.label, type }])
+        return id
+      }}
+      onEditField={async (id, draft) => {
+        const type = (["text", "number", "date"].includes(draft.type) ? draft.type : "text") as "text" | "number" | "date"
+        setCustom((current) => current.map((field) => (field.id === id ? { ...field, label: draft.label, type } : field)))
+      }}
+      validateField={(draft, editingId) => {
+        const clash = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS].some((field) => field.label.toLowerCase() === draft.label.toLowerCase())
+          || custom.some((field) => field.id !== editingId && field.label.toLowerCase() === draft.label.toLowerCase())
+        return clash ? "A field with this label already exists" : ""
+      }}
     />
   )
 }
