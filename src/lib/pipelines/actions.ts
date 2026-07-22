@@ -31,6 +31,7 @@ function dealRow(input: DealInput, accountId: string, userId: string) {
     probability: input.probability, lead_source: input.source ?? null, last_activity: input.activity ?? null,
     next_step: input.nextStep ?? null, description: input.description ?? null, notes: input.description ?? null,
     expected_close_date: input.due ?? null, status: input.status, position: input.position,
+    custom_values: input.customValues ?? {},
   }
 }
 
@@ -79,6 +80,61 @@ export async function deleteDealsAction(pipelineId: string, dealIds: string[]): 
     const { error } = await supabase.from("deals").delete().eq("account_id", accountId).eq("pipeline_id", pipelineId).in("id", dealIds)
     if (error) throw new Error(error.message)
     return { ok: true, data: undefined }
+  } catch (error) { return fail(error) }
+}
+
+export async function listDealItemsAction(pipelineId: string, dealId: string): Promise<ActionResult<DealItem[]>> {
+  try {
+    uuidSchema.parse(pipelineId); uuidSchema.parse(dealId)
+    const { supabase, accountId } = await requireRole("viewer")
+    const { data, error } = await supabase.from("deal_items").select("*").eq("account_id", accountId).eq("deal_id", dealId).order("position")
+    if (error) throw new Error(error.message)
+    return { ok: true, data: (data ?? []).map((row) => mapDealItem(row as Record<string, unknown>)) }
+  } catch (error) { return fail(error) }
+}
+
+// Replace-all save keeps ordering and deletions simple for a small line-item list
+export async function saveDealItemsAction(raw: unknown): Promise<ActionResult<DealItem[]>> {
+  try {
+    const input = dealItemsSaveSchema.parse(raw)
+    const { supabase, accountId } = await requireRole("agent")
+    await verifyPipeline(accountId, input.pipelineId, supabase)
+    const { data: deal } = await supabase.from("deals").select("id").eq("id", input.dealId).eq("account_id", accountId).eq("pipeline_id", input.pipelineId).maybeSingle()
+    if (!deal) throw new Error("Deal not found")
+    const { error: deleteError } = await supabase.from("deal_items").delete().eq("account_id", accountId).eq("deal_id", input.dealId)
+    if (deleteError) throw new Error(deleteError.message)
+    if (input.items.length === 0) return { ok: true, data: [] }
+    const rows = input.items.map((item, index) => ({
+      account_id: accountId, deal_id: input.dealId, catalog_item_id: item.catalogItemId ?? null,
+      name: item.name, list_price: item.listPrice, quantity: item.quantity, discount_pct: item.discountPct, position: index,
+    }))
+    const { data, error } = await supabase.from("deal_items").insert(rows).select("*")
+    if (error) throw new Error(error.message)
+    revalidatePath(pipelinePath(accountId, input.pipelineId, "board"))
+    return { ok: true, data: (data ?? []).map((row) => mapDealItem(row as Record<string, unknown>)) }
+  } catch (error) { return fail(error) }
+}
+
+export async function getDealFieldLayoutAction(pipelineId: string): Promise<ActionResult<DealFieldLayout>> {
+  try {
+    uuidSchema.parse(pipelineId)
+    const { supabase, accountId } = await requireRole("viewer")
+    const { data, error } = await supabase.from("deal_field_settings").select("layout").eq("account_id", accountId).eq("pipeline_id", pipelineId).maybeSingle()
+    if (error) throw new Error(error.message)
+    return { ok: true, data: dealFieldLayoutSchema.parse(data?.layout ?? {}) }
+  } catch (error) { return fail(error) }
+}
+
+export async function saveDealFieldLayoutAction(pipelineId: string, raw: unknown): Promise<ActionResult<DealFieldLayout>> {
+  try {
+    uuidSchema.parse(pipelineId)
+    const layout = dealFieldLayoutSchema.parse(raw)
+    const { supabase, accountId, userId } = await requireRole("agent")
+    await verifyPipeline(accountId, pipelineId, supabase)
+    const { error } = await supabase.from("deal_field_settings").upsert({ account_id: accountId, pipeline_id: pipelineId, layout, updated_by: userId, updated_at: new Date().toISOString() })
+    if (error) throw new Error(error.message)
+    revalidatePath(pipelinePath(accountId, pipelineId, "board"))
+    return { ok: true, data: layout }
   } catch (error) { return fail(error) }
 }
 
