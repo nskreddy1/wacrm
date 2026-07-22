@@ -161,7 +161,7 @@ export function MembersTab() {
 
   const [inviteOpen, setInviteOpen] = useState(false);
   // Bigin-style section state — top tab strip + role filter chips.
-  const [tab, setTab] = useState<'users' | 'invitations'>('users');
+  const [tab, setTab] = useState<'users' | 'roles' | 'workspace' | 'invitations'>('users');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admins' | 'agent' | 'viewer'>('all');
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
   const [pendingMemberAction, setPendingMemberAction] = useState<string | null>(
@@ -390,21 +390,25 @@ export function MembersTab() {
     <section className="animate-in fade-in-50 space-y-6 duration-200">
       <SettingsPanelHead title={t('title')} description={t('description')} />
 
-      {/* Workspace identity — rename lives with the team because the
-          name is what every member sees in their sidebar. */}
-      <WorkspaceNameCard />
-
-      {/* Bigin-style top tab strip: Users | Invitations. */}
+      {/* Bigin-style top tab strip: Users | Roles | Workspace | Invitations. */}
       <SectionTabs
         tabs={[
-          { id: 'users', label: t('title'), badge: summary?.total },
+          { id: 'users', label: t('tabUsers'), badge: summary?.total },
+          { id: 'roles', label: t('tabRoles') },
+          { id: 'workspace', label: t('tabWorkspace') },
           ...(canManageMembers
             ? [{ id: 'invitations', label: t('pendingInvitations'), badge: invitations.length }]
             : []),
         ]}
         active={tab}
-        onSelect={(id) => setTab(id as 'users' | 'invitations')}
+        onSelect={(id) => setTab(id as typeof tab)}
       />
+
+      {/* Workspace identity — rename on its own tab (annotation #3). */}
+      {tab === 'workspace' && <WorkspaceNameCard />}
+
+      {/* Roles — DB-backed reporting hierarchy, admin-managed. */}
+      {tab === 'roles' && <WorkspaceRolesTab canManage={canManageMembers} />}
 
       {tab === 'users' && (
         <SectionToolbar
@@ -723,7 +727,7 @@ export function MembersTab() {
       </RequireRole>
       )}
 
-      <InviteMemberDialog
+      <InviteUserSheet
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         onCreated={() => void loadEverything(search.trim())}
