@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-import { Contact, Plus } from "lucide-react"
+import { Building2, Contact, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -44,17 +44,19 @@ function draftFrom(deal: PipelineDeal | null, snapshot: PipelineSnapshot, stageI
   }
 }
 
-export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pending, onOpenChange, onSave }: {
+export function PipelineDealEditor({ open, deal, defaultStageId, defaultSubPipelineId, snapshot, pending, onOpenChange, onSave }: {
   open: boolean
   deal: PipelineDeal | null
   defaultStageId: string
+  defaultSubPipelineId?: string
   snapshot: PipelineSnapshot
   pending: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (input: DealInput) => Promise<ActionResult<PipelineDeal>>
+  onSave: (input: DealInput, subPipelineId?: string) => Promise<ActionResult<PipelineDeal>>
 }) {
   const { defaultCurrency: workspaceCurrency } = useAuth()
   const [draft, setDraft] = useState(() => draftFrom(deal, snapshot, defaultStageId, workspaceCurrency))
+  const [subPipelineId, setSubPipelineId] = useState(() => defaultSubPipelineId ?? snapshot.subPipelines.find((entry) => deal && entry.dealIds.includes(deal.id))?.id ?? snapshot.subPipelines[0]?.id ?? "")
   const [items, setItems] = useState<DraftDealItem[]>([])
   const [extraContacts, setExtraContacts] = useState<{ id: string; name: string }[]>([])
   const [quickContactOpen, setQuickContactOpen] = useState(false)
@@ -93,6 +95,13 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
     return [...extras, ...known]
   }, [snapshot.contacts, extraContacts])
   const owners = useMemo(() => snapshot.members.map((member) => ({ userId: member.id, name: member.name })), [snapshot.members])
+  // Known companies across deals — a lightweight lookup until a companies module exists
+  const companyOptions = useMemo(() => {
+    const names = new Set<string>()
+    for (const entry of snapshot.deals) if (entry.company) names.add(entry.company)
+    if (draft.company) names.add(draft.company)
+    return [...names].sort((a, b) => a.localeCompare(b)).map((name) => ({ id: name, label: name }))
+  }, [snapshot.deals, draft.company])
 
   function update<K extends keyof DealInput>(key: K, value: DealInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -108,7 +117,7 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
     }
     setSubmitting(true)
     try {
-      const result = await onSave(parsed.data)
+      const result = await onSave(parsed.data, subPipelineId || undefined)
       if (!result.ok) { setError(result.error); return }
       // Persist the Associated Products line items against the saved deal
       const dealId = result.data?.id ?? deal?.id
@@ -155,7 +164,15 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
           </RecordField>
           {!hidden.has("company") && (
             <RecordField label="Company Name" htmlFor="deal-company">
-              <Input id="deal-company" value={draft.company ?? ""} onChange={(event) => update("company", event.target.value || null)} className="h-11" />
+              <RecordLookup
+                id="deal-company"
+                value={draft.company}
+                options={companyOptions}
+                placeholder="Choose or type a company"
+                icon={<Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                allowCustom
+                onSelect={(companyName) => update("company", companyName)}
+              />
             </RecordField>
           )}
           {!hidden.has("contact") && (
@@ -179,11 +196,11 @@ export function PipelineDealEditor({ open, deal, defaultStageId, snapshot, pendi
               </div>
             </RecordField>
           )}
-          <RecordField label="Stage" htmlFor="deal-stage">
+          <RecordField label="Sub-Pipeline & Stage" htmlFor="deal-stage">
             <div className="grid gap-2 sm:grid-cols-2">
-              <Select items={{ [snapshot.pipeline.id]: snapshot.pipeline.name }} value={snapshot.pipeline.id} onValueChange={() => undefined}>
-                <SelectTrigger aria-label="Pipeline" className="h-11 w-full"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup><SelectItem value={snapshot.pipeline.id}>{snapshot.pipeline.name}</SelectItem></SelectGroup></SelectContent>
+              <Select items={Object.fromEntries(snapshot.subPipelines.map((entry) => [entry.id, entry.name]))} value={subPipelineId} onValueChange={(value) => value && setSubPipelineId(value)}>
+                <SelectTrigger aria-label="Sub-pipeline" className="h-11 w-full"><SelectValue placeholder="Choose a board" /></SelectTrigger>
+                <SelectContent><SelectGroup>{snapshot.subPipelines.map((entry) => <SelectItem key={entry.id} value={entry.id}>{entry.name}</SelectItem>)}</SelectGroup></SelectContent>
               </Select>
               <Select items={Object.fromEntries(snapshot.stages.map((stage) => [stage.id, stage.name]))} value={draft.stageId} onValueChange={(value) => value && update("stageId", value)}>
                 <SelectTrigger id="deal-stage" aria-label="Stage" className="h-11 w-full"><SelectValue placeholder="Choose a stage" /></SelectTrigger>
