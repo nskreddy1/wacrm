@@ -84,6 +84,7 @@ import {
 import { InviteMemberDialog } from './invite-member-dialog';
 import { SettingsPanelHead } from './settings-panel-head';
 import { WorkspaceNameCard } from './workspace-name-card';
+import { WorkspaceRolesTab } from './workspace-roles-tab';
 import { ROLE_META } from './role-meta';
 
 interface Member {
@@ -161,7 +162,7 @@ export function MembersTab() {
 
   const [inviteOpen, setInviteOpen] = useState(false);
   // Bigin-style section state — top tab strip + role filter chips.
-  const [tab, setTab] = useState<'users' | 'invitations'>('users');
+  const [tab, setTab] = useState<'workspace' | 'users' | 'roles' | 'invitations'>('users');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admins' | 'agent' | 'viewer'>('all');
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
   const [pendingMemberAction, setPendingMemberAction] = useState<string | null>(
@@ -390,21 +391,25 @@ export function MembersTab() {
     <section className="animate-in fade-in-50 space-y-6 duration-200">
       <SettingsPanelHead title={t('title')} description={t('description')} />
 
-      {/* Workspace identity — rename lives with the team because the
-          name is what every member sees in their sidebar. */}
-      <WorkspaceNameCard />
-
-      {/* Bigin-style top tab strip: Users | Invitations. */}
+      {/* Bigin-style top tab strip: Workspace | Users | Roles | Invitations. */}
       <SectionTabs
         tabs={[
-          { id: 'users', label: t('title'), badge: summary?.total },
+          { id: 'workspace', label: t('tabWorkspace') },
+          { id: 'users', label: t('tabUsers'), badge: summary?.total },
+          { id: 'roles', label: t('tabRoles') },
           ...(canManageMembers
             ? [{ id: 'invitations', label: t('pendingInvitations'), badge: invitations.length }]
             : []),
         ]}
         active={tab}
-        onSelect={(id) => setTab(id as 'users' | 'invitations')}
+        onSelect={(id) => setTab(id as typeof tab)}
       />
+
+      {/* Workspace identity — rename lives on its own tab. */}
+      {tab === 'workspace' && <WorkspaceNameCard />}
+
+      {/* Roles — DB-backed custom RBAC, admin-managed. */}
+      {tab === 'roles' && <WorkspaceRolesTab />}
 
       {tab === 'users' && (
         <SectionToolbar
