@@ -81,9 +81,10 @@ import {
   SectionTabs,
   SectionToolbar,
 } from '@/components/shared/section-view';
-import { InviteMemberDialog } from './invite-member-dialog';
+import { InviteUserSheet } from './invite-user-sheet';
 import { SettingsPanelHead } from './settings-panel-head';
 import { WorkspaceNameCard } from './workspace-name-card';
+import { WorkspaceRolesTab } from './workspace-roles-tab';
 import { ROLE_META } from './role-meta';
 
 interface Member {
