@@ -13,16 +13,24 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { InternationalPhoneInput, validInternationalPhone } from "@/components/contacts/international-phone-input"
-import type { ContactField, ContactValue, WorkspaceContact } from "@/lib/data/contacts/types"
+import type { ContactField, ContactOwner, ContactValue, WorkspaceContact } from "@/lib/data/contacts/types"
 
 export type ContactSheetState = { mode: "create" | "view" | "edit"; contact?: WorkspaceContact } | null
 
-export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { state: ContactSheetState; fields: ContactField[]; onOpenChange: (open: boolean) => void; onSaved: () => Promise<unknown> | void }) {
+const PHONE_TYPES = ["Mobile", "Home Phone", "Work Phone", "Phone"] as const
+
+function ownerInitials(name: string) {
+  return name.split(/\s+/).map((part) => part[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?"
+}
+
+export function ContactRecordSheet({ state, fields, owners = [], currentUserId = "", onOpenChange, onSaved }: { state: ContactSheetState; fields: ContactField[]; owners?: ContactOwner[]; currentUserId?: string; onOpenChange: (open: boolean) => void; onSaved: () => Promise<unknown> | void }) {
   const contact = state?.contact
   const [mode, setMode] = useState<"create" | "view" | "edit">(state?.mode ?? "view")
   const [values, setValues] = useState<Record<string, ContactValue>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [ownerId, setOwnerId] = useState("")
+  const [phoneType, setPhoneType] = useState<(typeof PHONE_TYPES)[number]>("Mobile")
   const [extraPhones, setExtraPhones] = useState<string[]>([])
   const [addressOpen, setAddressOpen] = useState(false)
   const [additionalOpen, setAdditionalOpen] = useState(false)
@@ -51,11 +59,13 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
         .map((phone) => phone.trim())
         .filter(Boolean),
     )
+    setOwnerId(contact?.ownerId || currentUserId)
     setErrors({})
-  }, [state, contact, fields])
+  }, [state, contact, fields, currentUserId])
 
   const readonly = mode === "view"
   const displayName = [values.firstName, values.lastName].map(String).filter(Boolean).join(" ") || String(contact?.values.name ?? "New contact")
+  const selectedOwner = owners.find((owner) => owner.userId === ownerId) ?? null
 
   function setValue(field: string, value: ContactValue) {
     setValues((current) => ({ ...current, [field]: value }))
@@ -94,6 +104,7 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
             ...values,
             name: [values.firstName, values.lastName].map(String).filter(Boolean).join(" "),
             otherPhones: extraPhones.map((phone) => phone.trim()).filter(Boolean).join(", "),
+            ownerId,
           }
           return contact ? { id: contact.id, values: payloadValues } : { values: payloadValues }
         })()),
@@ -137,7 +148,27 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
               <section className="flex flex-col gap-6" aria-labelledby="contact-information-heading">
                 <div className="flex items-center justify-between gap-4">
                   <h2 id="contact-information-heading" className="text-lg font-semibold">Contact Information</h2>
-                  <div className="flex items-center gap-3 text-sm"><span>Owner</span><span className="inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 font-medium"><span className="flex size-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">SS</span>Sunil Sunil<ChevronDown className="size-3.5 text-muted-foreground" /></span></div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span id="contact-owner-label">Owner</span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={<button type="button" aria-labelledby="contact-owner-label" disabled={readonly} className="inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 font-medium transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-70" />}
+                      >
+                        <span className="flex size-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">{ownerInitials(selectedOwner?.name ?? "?")}</span>
+                        {selectedOwner?.name ?? "Unassigned"}
+                        <ChevronDown className="size-3.5 text-muted-foreground" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64">
+                        {owners.length === 0 ? <DropdownMenuItem disabled>No team members found</DropdownMenuItem> : owners.map((owner) => (
+                          <DropdownMenuItem key={owner.userId} onClick={() => setOwnerId(owner.userId)}>
+                            <span className="flex size-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">{ownerInitials(owner.name)}</span>
+                            <span className="flex-1 truncate">{owner.name}{owner.userId === currentUserId ? " (You)" : ""}</span>
+                            {owner.userId === ownerId ? <Check className="size-4 text-primary" /> : null}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
 
                 <FieldGroup className="gap-5">
@@ -162,7 +193,23 @@ export function ContactRecordSheet({ state, fields, onOpenChange, onSaved }: { s
                     <div className="relative flex-1"><Input id="contact-company" value={String(values.company ?? "")} onChange={(event) => setValue("company", event.target.value)} disabled={readonly} className="h-11 pr-10" /><Building2 className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" /></div>
                   </Field>
                   <Field className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4" data-invalid={Boolean(errors.phone)}>
-                    <FieldLabel htmlFor="contact-phone" className="sm:w-36 sm:justify-end">Mobile <ChevronDown className="size-3.5 text-muted-foreground" /></FieldLabel>
+                    <div className="flex sm:w-36 sm:justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={<button type="button" aria-label="Phone number type" disabled={readonly} className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium transition-colors hover:bg-muted disabled:pointer-events-none" />}
+                        >
+                          {phoneType} <ChevronDown className="size-3.5 text-muted-foreground" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-40">
+                          {PHONE_TYPES.map((type) => (
+                            <DropdownMenuItem key={type} onClick={() => setPhoneType(type)}>
+                              <span className="flex-1">{type}</span>
+                              {type === phoneType ? <Check className="size-4 text-primary" /> : null}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                     <div className="flex flex-1 flex-col gap-2.5">
                       <div className="flex items-start gap-2">
                         <div className="flex flex-1 flex-col gap-1.5"><InternationalPhoneInput value={String(values.phone ?? "")} onChange={(value) => setValue("phone", value)} invalid={Boolean(errors.phone)} disabled={readonly} /><FieldError>{errors.phone}</FieldError></div>

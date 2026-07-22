@@ -4,7 +4,7 @@ import type { AccountContext } from "@/lib/auth/account"
 import type { ContactField, ContactPreferences, ContactValue, ContactWorkspaceData, FieldType, WorkspaceContact } from "./types"
 import { validateContactIdentity, validateContactValue, validateFieldDefinition } from "./validation"
 
-const CONTACT_SELECT = "id, account_id, name, phone, email, company, created_at, updated_at"
+const CONTACT_SELECT = "id, account_id, user_id, name, phone, email, company, created_at, updated_at"
 
 export const coreContactFields: ContactField[] = [
   { id: "name", label: "Name", type: "text", required: true, width: 220 },
@@ -34,6 +34,7 @@ function mapContact(row: Record<string, unknown>, customValues: Record<string, C
   return {
     id: String(row.id),
     accountId: String(row.account_id),
+    ownerId: String(row.user_id ?? ""),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
     values: {
@@ -106,14 +107,16 @@ async function saveCustomValues(ctx: AccountContext, contactId: string, values: 
 }
 
 export async function getSupabaseContactWorkspace(ctx: AccountContext): Promise<ContactWorkspaceData> {
-  const [contactsResult, fieldsResult, valuesResult] = await Promise.all([
+  const [contactsResult, fieldsResult, valuesResult, profilesResult] = await Promise.all([
     ctx.supabase.from("contacts").select(CONTACT_SELECT).eq("account_id", ctx.accountId).order("created_at", { ascending: false }),
     ctx.supabase.from("custom_fields").select("id, field_name, field_type, field_options").eq("account_id", ctx.accountId).order("created_at"),
     ctx.supabase.from("contact_custom_values").select("contact_id, custom_field_id, value"),
+    ctx.supabase.from("profiles").select("user_id, full_name, email, avatar_url").eq("account_id", ctx.accountId),
   ])
   if (contactsResult.error) throw new Error(contactsResult.error.message)
   if (fieldsResult.error) throw new Error(fieldsResult.error.message)
   if (valuesResult.error) throw new Error(valuesResult.error.message)
+  if (profilesResult.error) throw new Error(profilesResult.error.message)
 
   const valuesByContact = new Map<string, Record<string, ContactValue>>()
   for (const row of valuesResult.data ?? []) {
@@ -144,31 +147,42 @@ export async function getSupabaseContactWorkspace(ctx: AccountContext): Promise<
     }),
     fields,
     preferences,
+    owners: (profilesResult.data ?? []).map((profile) => ({
+      userId: String(profile.user_id),
+      name: (profile.full_name as string | null) || (profile.email as string | null) || "Team member",
+      avatarUrl: (profile.avatar_url as string | null) ?? null,
+    })),
+    currentUserId: ctx.userId,
   }
 }
 
 export async function createSupabaseContact(ctx: AccountContext, values: Record<string, ContactValue>) {
-  const fields = validateContactIdentity(values)
-  const { data, error } = await ctx.supabase.from("contacts").insert({ ...fields, account_id: ctx.accountId, user_id: ctx.userId }).select(CONTACT_SELECT).single()
+  const { ownerId, ...rest } = values
+  const fields = validateContactIdentity(rest)
+  const owner = typeof ownerId === "string" && ownerId.trim() ? ownerId : ctx.userId
+  const { data, error } = await ctx.supabase.from("contacts").insert({ ...fields, account_id: ctx.accountId, user_id: owner }).select(CONTACT_SELECT).single()
   if (error) throw new Error(error.code === "23505" ? "A contact with these details already exists" : error.message)
-  const resolved = await resolveExtendedValues(ctx, values)
+  const resolved = await resolveExtendedValues(ctx, rest)
   await saveCustomValues(ctx, String(data.id), resolved)
   return mapContact(data, Object.fromEntries(Object.entries(resolved).filter((entry): entry is [string, ContactValue] => entry[1] !== undefined)))
 }
 
 export async function updateSupabaseContact(ctx: AccountContext, id: string, values: Partial<Record<string, ContactValue>>) {
+  const { ownerId, ...rest } = values
   const { data: current, error: currentError } = await ctx.supabase.from("contacts").select(CONTACT_SELECT).eq("account_id", ctx.accountId).eq("id", id).single()
   if (currentError) throw new Error(currentError.message)
   const currentContact = mapContact(current)
-  const identityTouched = ["name", "phone", "email", "company"].some((key) => values[key] !== undefined)
+  const identityTouched = ["name", "phone", "email", "company"].some((key) => rest[key] !== undefined)
+  const ownerTouched = typeof ownerId === "string" && ownerId.trim() && ownerId !== currentContact.ownerId
   let row = current as Record<string, unknown>
-  if (identityTouched) {
-    const identity = validateContactIdentity({ ...currentContact.values, ...values })
-    const { data, error } = await ctx.supabase.from("contacts").update(identity).eq("account_id", ctx.accountId).eq("id", id).select(CONTACT_SELECT).single()
+  if (identityTouched || ownerTouched) {
+    const identity = identityTouched ? validateContactIdentity({ ...currentContact.values, ...rest }) : {}
+    const patch = ownerTouched ? { ...identity, user_id: ownerId } : identity
+    const { data, error } = await ctx.supabase.from("contacts").update(patch).eq("account_id", ctx.accountId).eq("id", id).select(CONTACT_SELECT).single()
     if (error) throw new Error(error.code === "23505" ? "A contact with these details already exists" : error.message)
     row = data
   }
-  const resolved = await resolveExtendedValues(ctx, values)
+  const resolved = await resolveExtendedValues(ctx, rest)
   await saveCustomValues(ctx, id, resolved)
   const mergedValues = Object.fromEntries(Object.entries({ ...currentContact.values, ...resolved }).filter((entry): entry is [string, ContactValue] => entry[1] !== undefined))
   return mapContact(row, mergedValues)

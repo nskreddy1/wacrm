@@ -26,9 +26,16 @@ export type ContactValue = string | number | boolean | string[]
 export type WorkspaceContact = {
   id: string
   accountId: string
+  ownerId: string
   createdAt: string
   updatedAt: string
   values: Record<string, ContactValue>
+}
+
+export type ContactOwner = {
+  userId: string
+  name: string
+  avatarUrl: string | null
 }
 
 export type ContactPreferences = {
@@ -42,4 +49,6 @@ export type ContactWorkspaceData = {
   contacts: WorkspaceContact[]
   fields: ContactField[]
   preferences: ContactPreferences
+  owners: ContactOwner[]
+  currentUserId: string
 }
