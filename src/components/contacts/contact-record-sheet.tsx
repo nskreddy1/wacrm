@@ -93,6 +93,9 @@ export function ContactRecordSheet({ state, fields, preferences, owners = [], cu
     })
     const email = String(values.email ?? "").trim()
     if (email && !/^\S+@\S+\.\S+$/.test(email)) next.email = "Enter a valid email address."
+    for (const field of customFields) {
+      if (field.required && !String(values[field.id] ?? "").trim()) next[field.id] = `${field.label} is required.`
+    }
     setErrors(next)
     return Object.keys(next).length === 0
   }

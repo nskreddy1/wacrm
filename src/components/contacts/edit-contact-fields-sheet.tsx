@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Check, ChevronDown, GripVertical, Loader2, Plus, Search } from "lucide-react"
+import { Check, ChevronDown, GripVertical, Info, Loader2, Pencil, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import type { ContactField, ContactPreferences, FieldType } from "@/lib/data/contacts/types"
-import { validateFieldDefinition } from "@/lib/data/contacts/validation"
+import { isReservedContactField, validateFieldDefinition } from "@/lib/data/contacts/validation"
 
 const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: "Single Line",
@@ -50,13 +50,15 @@ export function EditContactFieldsSheet({
   const [initialized, setInitialized] = useState(false)
   const [search, setSearch] = useState("")
   const [saving, setSaving] = useState(false)
-  const [createOpen, setCreateOpen] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
 
-  // Create Custom Field panel state
+  // Stacked panel state: create a new custom field or edit an existing one
+  const [panel, setPanel] = useState<{ mode: "create" } | { mode: "edit"; fieldId: string } | null>(null)
   const [label, setLabel] = useState("")
   const [type, setType] = useState<FieldType>("text")
   const [options, setOptions] = useState("")
+  const [mandatory, setMandatory] = useState(false)
+  const [noDuplicates, setNoDuplicates] = useState(false)
   const [formError, setFormError] = useState("")
   const [creating, setCreating] = useState(false)
 
@@ -70,7 +72,7 @@ export function EditContactFieldsSheet({
   }
   if (!open && initialized) {
     setInitialized(false)
-    setCreateOpen(false)
+    setPanel(null)
     setSearch("")
   }
 
@@ -78,7 +80,23 @@ export function EditContactFieldsSheet({
     () => fields.filter((field) => !used.includes(field.id) && field.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())),
     [fields, used, search],
   )
-  const usedCustomCount = used.filter((id) => fieldById.get(id)?.custom).length
+  // Only fields the user created count toward the limit — auto-provisioned
+  // form fields (Title, Description, Street, City, Other Phones) are excluded.
+  const usedCustomCount = used.filter((id) => {
+    const field = fieldById.get(id)
+    return field?.custom && !isReservedContactField(field.label)
+  }).length
+
+  function openPanel(target: { mode: "create" } | { mode: "edit"; fieldId: string }) {
+    const editing = target.mode === "edit" ? fieldById.get(target.fieldId) : null
+    setLabel(editing?.label ?? "")
+    setType(editing?.type ?? "text")
+    setOptions(editing?.options?.join(", ") ?? "")
+    setMandatory(editing?.required === true)
+    setNoDuplicates(editing?.unique === true)
+    setFormError("")
+    setPanel(target)
+  }
 
   function moveField(sourceId: string, targetId: string) {
     setUsed((current) => {
@@ -104,31 +122,42 @@ export function EditContactFieldsSheet({
     }
   }
 
-  async function createField(addAnother: boolean) {
+  async function saveField(addAnother: boolean) {
+    const editingId = panel?.mode === "edit" ? panel.fieldId : undefined
     let definition: ReturnType<typeof validateFieldDefinition>
     try {
-      definition = validateFieldDefinition({ label, type, options: options.split(",").map((item) => item.trim()).filter(Boolean) }, fields)
+      definition = validateFieldDefinition({ label, type, options: options.split(",").map((item) => item.trim()).filter(Boolean) }, fields, editingId)
       setFormError("")
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Check the field details")
       return
     }
-    if (usedCustomCount >= MAX_CUSTOM_FIELDS) {
+    if (!editingId && usedCustomCount >= MAX_CUSTOM_FIELDS) {
       setFormError(`You can use up to ${MAX_CUSTOM_FIELDS} custom fields.`)
       return
     }
     setCreating(true)
     try {
-      const created = (await request("POST", { kind: "field", field: definition })) as ContactField
-      toast.success("Custom field created")
-      await onSaved()
-      if (created?.id) setUsed((current) => [...current, created.id])
-      setLabel("")
-      setType("text")
-      setOptions("")
-      if (!addAnother) setCreateOpen(false)
+      const payload = { ...definition, required: mandatory, unique: noDuplicates }
+      if (editingId) {
+        await request("PATCH", { kind: "field", id: editingId, field: payload })
+        toast.success("Custom field updated")
+        await onSaved()
+        setPanel(null)
+      } else {
+        const created = (await request("POST", { kind: "field", field: payload })) as ContactField
+        toast.success("Custom field created")
+        await onSaved()
+        if (created?.id) setUsed((current) => [...current, created.id])
+        setLabel("")
+        setType("text")
+        setOptions("")
+        setMandatory(false)
+        setNoDuplicates(false)
+        if (!addAnother) setPanel(null)
+      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to create field")
+      toast.error(error instanceof Error ? error.message : "Unable to save field")
     } finally {
       setCreating(false)
     }
@@ -168,15 +197,20 @@ export function EditContactFieldsSheet({
                       >
                         <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground/60 group-hover:text-muted-foreground" aria-hidden="true" />
                         <div className="flex h-11 flex-1 items-center justify-between rounded-lg border bg-card px-3">
-                          <span className="text-sm font-medium">{field.label}</span>
-                          <span className="text-xs text-muted-foreground">{FIELD_TYPE_LABELS[field.type]}{field.required ? "  (Required)" : ""}</span>
+                          <span className="text-sm font-medium">{field.label}{field.required ? <span aria-hidden="true" className="ml-0.5 text-destructive">*</span> : null}</span>
+                          <span className="text-xs text-muted-foreground">{FIELD_TYPE_LABELS[field.type]}{field.unique ? "  (Unique)" : ""}</span>
                         </div>
-                        {field.custom && !field.required ? (
-                          <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" aria-label={`Remove ${field.label}`} onClick={() => setUsed((current) => current.filter((item) => item !== id))}>
-                            <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full bg-destructive/15 text-destructive">−</span>
-                          </Button>
+                        {field.custom && !isReservedContactField(field.label) ? (
+                          <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`Edit ${field.label}`} onClick={() => openPanel({ mode: "edit", fieldId: id })}>
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`Remove ${field.label}`} onClick={() => setUsed((current) => current.filter((item) => item !== id))}>
+                              <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full bg-destructive/15 text-destructive">−</span>
+                            </Button>
+                          </span>
                         ) : (
-                          <span className="w-8" aria-hidden="true" />
+                          <span className="w-16" aria-hidden="true" />
                         )}
                       </li>
                     )
@@ -188,7 +222,7 @@ export function EditContactFieldsSheet({
             {/* Unused fields rail */}
             <ScrollArea className="min-h-0 bg-muted/20">
               <div className="flex flex-col gap-4 px-6 py-6">
-                <Button type="button" variant="outline" className="self-start rounded-full border-primary/40 text-primary hover:bg-primary/5 hover:text-primary" onClick={() => setCreateOpen(true)}>
+                <Button type="button" variant="outline" className="self-start rounded-full border-primary/40 text-primary hover:bg-primary/5 hover:text-primary" onClick={() => openPanel({ mode: "create" })}>
                   <Plus data-icon="inline-start" /> Custom Field
                 </Button>
                 <div className="flex flex-col gap-3">
@@ -235,13 +269,13 @@ export function EditContactFieldsSheet({
             </div>
           </SheetFooter>
 
-          {/* Stacked Create Custom Field panel */}
+          {/* Stacked Create / Edit Custom Field panel */}
           <div
-            aria-hidden={!createOpen}
-            className={`absolute inset-y-0 right-0 z-10 flex w-full flex-col bg-background shadow-2xl transition-transform duration-300 ease-out sm:w-[min(560px,90%)] sm:border-l ${createOpen ? "translate-x-0" : "pointer-events-none translate-x-full"}`}
+            aria-hidden={!panel}
+            className={`absolute inset-y-0 right-0 z-10 flex w-full flex-col bg-background shadow-2xl transition-transform duration-300 ease-out sm:w-[min(560px,90%)] sm:border-l ${panel ? "translate-x-0" : "pointer-events-none translate-x-full"}`}
           >
             <div className="flex items-center gap-3 border-b px-8 py-4">
-              <h2 className="text-xl font-semibold tracking-tight">Create Custom Field</h2>
+              <h2 className="text-xl font-semibold tracking-tight">{panel?.mode === "edit" ? "Edit Custom Field" : "Create Custom Field"}</h2>
               <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">Contacts</span>
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-4 px-8 py-6">
@@ -287,12 +321,25 @@ export function EditContactFieldsSheet({
                   />
                 </div>
               ) : null}
+              <div className="flex flex-col gap-3 pt-1">
+                <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm">
+                  <input type="checkbox" checked={mandatory} onChange={(event) => setMandatory(event.target.checked)} className="size-4 accent-primary" />
+                  Mandatory Field
+                </label>
+                <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm">
+                  <input type="checkbox" checked={noDuplicates} onChange={(event) => setNoDuplicates(event.target.checked)} className="size-4 accent-primary" />
+                  Do not allow duplicate values
+                  <span title="Two contacts cannot share the same value for this field"><Info className="size-3.5 text-muted-foreground" aria-hidden="true" /></span>
+                </label>
+              </div>
               {formError ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</p> : null}
             </div>
             <div className="flex items-center justify-end gap-2 border-t px-8 py-3">
-              <Button type="button" variant="outline" className="rounded-full px-6" onClick={() => { setCreateOpen(false); setFormError("") }} disabled={creating}>Cancel</Button>
-              <Button type="button" variant="outline" className="rounded-full border-primary/40 px-6 text-primary hover:bg-primary/5 hover:text-primary" onClick={() => createField(true)} disabled={creating || !label.trim()}>Save &amp; New</Button>
-              <Button type="button" className="rounded-full px-6" onClick={() => createField(false)} disabled={creating || !label.trim()}>
+              <Button type="button" variant="outline" className="rounded-full px-6" onClick={() => { setPanel(null); setFormError("") }} disabled={creating}>Cancel</Button>
+              {panel?.mode !== "edit" ? (
+                <Button type="button" variant="outline" className="rounded-full border-primary/40 px-6 text-primary hover:bg-primary/5 hover:text-primary" onClick={() => saveField(true)} disabled={creating || !label.trim()}>Save &amp; New</Button>
+              ) : null}
+              <Button type="button" className="rounded-full px-6" onClick={() => saveField(false)} disabled={creating || !label.trim()}>
                 {creating ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
                 Save
               </Button>
