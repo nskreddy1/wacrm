@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { ModuleCustomFieldsSection } from "@/components/shared/module-custom-fields-section"
 
 export function CatalogItemDialog({
   open,
@@ -47,6 +48,7 @@ export function CatalogItemDialog({
   const [category, setCategory] = useState("")
   const [price, setPrice] = useState("0")
   const [isActive, setIsActive] = useState(true)
+  const [customValues, setCustomValues] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
 
   const isEdit = item !== null
@@ -59,6 +61,7 @@ export function CatalogItemDialog({
     setCategory(item?.category ?? "")
     setPrice(item ? String(item.price) : "0")
     setIsActive(item?.isActive ?? true)
+    setCustomValues(item?.customValues ?? {})
   }, [open, item])
 
   const parsedPrice = Number.parseFloat(price)
@@ -78,6 +81,7 @@ export function CatalogItemDialog({
         // rows to the global setting instead of preserving drift.
         currency: defaultCurrency,
         isActive,
+        customValues,
       }
       const res = await fetch("/api/v1/workspace/catalog", {
         method: isEdit ? "PATCH" : "POST",
@@ -188,6 +192,13 @@ export function CatalogItemDialog({
               </p>
             </div>
           </fieldset>
+
+          <ModuleCustomFieldsSection
+            module="catalog"
+            values={customValues}
+            onChange={setCustomValues}
+            disabled={submitting}
+          />
         </div>
 
         <DialogFooter className="border-t border-border px-6 py-4">

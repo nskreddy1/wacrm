@@ -12,6 +12,9 @@ export type TaskStatus = "open" | "done" | "cancelled"
 
 export type TaskPriority = "low" | "medium" | "high"
 
+/** Values for account-defined custom fields, keyed by field id. */
+export type CustomValues = Record<string, string>
+
 export interface CatalogItem {
   id: string
   name: string
@@ -20,6 +23,7 @@ export interface CatalogItem {
   price: number
   currency: string
   isActive: boolean
+  customValues: CustomValues
   createdAt: string
 }
 
@@ -37,6 +41,7 @@ export interface Appointment {
   catalogItemName: string | null
   assignedTo: string | null
   dealId: string | null
+  customValues: CustomValues
   createdAt: string
 }
 
@@ -64,6 +69,7 @@ export interface CatalogItemInput {
   price?: number
   currency?: string
   isActive?: boolean
+  customValues?: CustomValues | null
 }
 
 export interface AppointmentInput {
@@ -76,6 +82,7 @@ export interface AppointmentInput {
   catalogItemId?: string | null
   assignedTo?: string | null
   dealId?: string | null
+  customValues?: CustomValues | null
 }
 
 export interface TaskInput {
