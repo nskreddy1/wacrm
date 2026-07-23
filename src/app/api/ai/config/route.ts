@@ -378,6 +378,72 @@ export async function POST(request: Request) {
 }
 
 /**
+ * PATCH /api/ai/config  (admin+)
+ *
+ * Lightweight toggle endpoint: flips `is_active` (AI assistant) and/or
+ * `auto_reply_enabled` on the EXISTING row without requiring the full
+ * form payload. The POST handler demands provider + model + key and may
+ * re-validate with the provider — overkill for a switch flip, and the
+ * reason toggles previously appeared to "not stick" when the form
+ * didn't have the key in memory. A toggle never changes credentials,
+ * so no provider round-trip is needed.
+ */
+export async function PATCH(request: Request) {
+  try {
+    const { supabase, accountId, userId } = await requireRole('admin')
+
+    const limit = checkRateLimit(`ai-config:${userId}`, RATE_LIMITS.adminAction)
+    if (!limit.success) return rateLimitResponse(limit)
+
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== 'object') return bad('Invalid request body')
+
+    const patch: Record<string, boolean> = {}
+    if (typeof body.is_active === 'boolean') patch.is_active = body.is_active
+    if (typeof body.auto_reply_enabled === 'boolean') {
+      patch.auto_reply_enabled = body.auto_reply_enabled
+    }
+    if (Object.keys(patch).length === 0) {
+      return bad('Provide is_active and/or auto_reply_enabled as booleans')
+    }
+
+    const { data: existing, error: findErr } = await supabase
+      .from('ai_configs')
+      .select('id')
+      .eq('account_id', accountId)
+      .maybeSingle()
+    if (findErr) {
+      console.error('[ai/config PATCH] fetch error:', findErr)
+      return NextResponse.json(
+        { error: 'Failed to load AI configuration' },
+        { status: 500 },
+      )
+    }
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Set up the AI agent before enabling it.' },
+        { status: 404 },
+      )
+    }
+
+    const { error: upErr } = await supabase
+      .from('ai_configs')
+      .update(patch)
+      .eq('account_id', accountId)
+    if (upErr) {
+      console.error('[ai/config PATCH] update error:', upErr)
+      return NextResponse.json(
+        { error: 'Failed to update AI configuration' },
+        { status: 500 },
+      )
+    }
+    return NextResponse.json({ success: true, ...patch })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
+}
+
+/**
  * DELETE /api/ai/config  (admin+)
  *
  * Removes the account's AI config (turns everything off and forgets the
