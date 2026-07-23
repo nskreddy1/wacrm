@@ -19,6 +19,13 @@ const optionalText = (max: number) =>
     .transform((value) => (value.length > 0 ? value : null))
     .nullish()
 
+/** Values for account-defined custom fields, keyed by field id. */
+export const customValuesSchema = z
+  .record(z.string().max(60), z.string().max(500))
+  .refine((value) => Object.keys(value).length <= 10, {
+    message: "Too many custom field values",
+  })
+
 export const catalogItemCreateSchema = z.object({
   name: requiredText(160),
   description: optionalText(2000),
@@ -26,6 +33,7 @@ export const catalogItemCreateSchema = z.object({
   price: z.number().min(0).max(999_999_999).default(0),
   currency: z.string().trim().length(3).toUpperCase().default("USD"),
   isActive: z.boolean().default(true),
+  customValues: customValuesSchema.nullish(),
 })
 
 export const catalogItemUpdateSchema = catalogItemCreateSchema
@@ -43,6 +51,7 @@ export const appointmentCreateSchema = z
     catalogItemId: uuid.nullish(),
     assignedTo: uuid.nullish(),
     dealId: uuid.nullish(),
+    customValues: customValuesSchema.nullish(),
   })
   .refine(
     (value) => !value.endsAt || new Date(value.endsAt) > new Date(value.startsAt),
@@ -60,6 +69,7 @@ export const appointmentUpdateSchema = z.object({
   catalogItemId: uuid.nullish(),
   assignedTo: uuid.nullish(),
   dealId: uuid.nullish(),
+  customValues: customValuesSchema.nullish(),
 })
 
 export const taskCreateSchema = z.object({
