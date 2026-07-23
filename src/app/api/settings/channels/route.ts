@@ -4,7 +4,8 @@ import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { channelAdmin } from '@/lib/channels/admin-client'
 import { createChannelAdapter } from '@/lib/channels/adapters'
-import { encryptProviderCredentials, type ProviderCredentials } from '@/lib/channels/credentials'
+import { decryptProviderCredentials, encryptProviderCredentials, type ProviderCredentials } from '@/lib/channels/credentials'
+import { discoverTwilioAccount, isDiscoveryError } from '@/lib/channels/discovery'
 import { getProviderCapabilities, isProviderCompatible, PROVIDER_CHANNELS, PROVIDER_LABEL } from '@/lib/channels/provider-registry'
 import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
 
@@ -113,6 +114,34 @@ export async function POST(request: Request) {
     const body: unknown = await request.json()
     if (typeof body !== 'object' || body === null || !('action' in body)) return NextResponse.json({ error: 'Invalid channel request' }, { status: 400 })
 
+    if (body.action === 'discover') {
+      const parsed = discoverSchema.safeParse(body)
+      if (!parsed.success) return NextResponse.json({ error: 'Invalid discovery request' }, { status: 400 })
+      let sid = parsed.data.accountSid
+      let token = parsed.data.authToken
+      // Reuse credentials from an existing connection server-side —
+      // secrets never round-trip to the browser.
+      if ((!sid || !token) && parsed.data.reuseCredentialsFromId) {
+        const source = await channelAdmin()
+          .from('channel_connections')
+          .select('provider,credentials_encrypted')
+          .eq('id', parsed.data.reuseCredentialsFromId)
+          .eq('account_id', accountId)
+          .maybeSingle()
+        if (source.error) throw source.error
+        if (!source.data || source.data.provider !== 'twilio') {
+          return NextResponse.json({ error: 'No Twilio connection found to reuse credentials from' }, { status: 404 })
+        }
+        const decrypted = decryptProviderCredentials(source.data as ChannelConnection & { credentials_encrypted?: string })
+        if (decrypted.provider !== 'twilio') return NextResponse.json({ error: 'Stored credentials are not Twilio credentials' }, { status: 400 })
+        sid = decrypted.value.accountSid
+        token = decrypted.value.authToken
+      }
+      if (!sid || !token) return NextResponse.json({ error: 'Twilio Account SID and Auth token are required' }, { status: 400 })
+      const discovery = await discoverTwilioAccount(sid, token)
+      return NextResponse.json({ discovery })
+    }
+
     if (body.action === 'test') {
       const parsed = testSchema.safeParse(body)
       if (!parsed.success) return NextResponse.json({ error: 'Invalid connection test' }, { status: 400 })
@@ -193,6 +222,9 @@ export async function POST(request: Request) {
         { status: 503 },
       )
     }
+    // Discovery failures carry their upstream HTTP status (401 bad
+    // credentials, 400 malformed SID) — surface the message directly.
+    if (isDiscoveryError(error)) return NextResponse.json({ error: error.message }, { status: error.status >= 500 ? 502 : error.status })
     if (error instanceof Error && /required|configuration|Port 587/.test(error.message)) return NextResponse.json({ error: error.message }, { status: 400 })
     // Postgres unique violation (23505): same sender identity already
     // connected for this channel+provider — a 409, not an opaque 500.
