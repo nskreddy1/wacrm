@@ -90,7 +90,7 @@ export function AssistantWidget() {
         size="icon"
         aria-label={open ? 'Close helper agent' : 'Open helper agent'}
         onClick={() => setOpen((v) => !v)}
-        className="fixed right-5 bottom-5 z-50 size-12 rounded-full shadow-lg"
+        className="fixed right-20 bottom-4 z-40 size-12 rounded-full shadow-lg"
       >
         {open ? <X className="size-5" /> : <Sparkles className="size-5" />}
       </Button>
@@ -100,7 +100,7 @@ export function AssistantWidget() {
         <div
           role="dialog"
           aria-label="Helper agent chat"
-          className="fixed right-5 bottom-20 z-50 flex h-[540px] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+          className="fixed right-4 bottom-20 z-50 flex h-[min(540px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
         >
           {/* Header */}
           <div className="flex items-center gap-2.5 border-b border-border bg-muted/40 px-4 py-3">

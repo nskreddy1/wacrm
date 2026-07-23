@@ -5,8 +5,10 @@ import { supabaseAdmin } from '@/lib/ai/admin-client'
 import { encrypt } from '@/lib/whatsapp/encryption'
 import {
   ASSISTANT_DEFAULT_MODEL,
+  ASSISTANT_PROVIDERS,
   ASSISTANT_SETTING_KEY,
   isAssistantProvider,
+  providerRequiresKey,
 } from '@/lib/assistant/config'
 
 // ============================================================
@@ -24,6 +26,7 @@ interface StoredShape {
   provider?: unknown
   model?: unknown
   api_key?: unknown
+  base_url?: unknown
   enabled?: unknown
 }
 
@@ -47,12 +50,16 @@ export async function GET() {
   }
 
   const v = (data?.value ?? null) as StoredShape | null
+  const hasKey = !!v && typeof v.api_key === 'string' && v.api_key.length > 0
+  const storedProvider = isAssistantProvider(v?.provider) ? v?.provider : null
   return NextResponse.json({
+    // Keyless providers (Ollama) count as configured once saved.
     configured:
-      !!v && typeof v.api_key === 'string' && v.api_key.length > 0,
+      hasKey || (!!storedProvider && !providerRequiresKey(storedProvider)),
     enabled: v?.enabled !== false,
-    provider: isAssistantProvider(v?.provider) ? v?.provider : null,
+    provider: storedProvider,
     model: typeof v?.model === 'string' ? v.model : null,
+    base_url: typeof v?.base_url === 'string' ? v.base_url : null,
     updated_at: data?.updated_at ?? null,
   })
 }
@@ -75,12 +82,13 @@ export async function PATCH(request: Request) {
     provider?: unknown
     model?: unknown
     api_key?: unknown
+    base_url?: unknown
     enabled?: unknown
   } | null
 
   if (!body || !isAssistantProvider(body.provider)) {
     return NextResponse.json(
-      { error: "provider must be 'openai', 'anthropic' or 'gemini'" },
+      { error: `provider must be one of: ${ASSISTANT_PROVIDERS.join(', ')}` },
       { status: 400 },
     )
   }
@@ -90,6 +98,18 @@ export async function PATCH(request: Request) {
       ? body.model.trim()
       : ASSISTANT_DEFAULT_MODEL[provider]
   const enabled = body.enabled !== false
+  const baseUrl =
+    typeof body.base_url === 'string' && body.base_url.trim().length > 0
+      ? body.base_url.trim()
+      : null
+
+  // Reject junk endpoints early (mainly for self-hosted Ollama/NIM).
+  if (baseUrl && !/^https?:\/\//.test(baseUrl)) {
+    return NextResponse.json(
+      { error: 'base_url must start with http:// or https://' },
+      { status: 400 },
+    )
+  }
 
   const admin = supabaseAdmin()
 
@@ -109,7 +129,7 @@ export async function PATCH(request: Request) {
     }
   }
 
-  if (!encryptedKey) {
+  if (!encryptedKey && providerRequiresKey(provider)) {
     return NextResponse.json(
       { error: 'api_key is required for initial setup' },
       { status: 400 },
@@ -119,7 +139,13 @@ export async function PATCH(request: Request) {
   const { error } = await admin.from('platform_settings').upsert(
     {
       key: ASSISTANT_SETTING_KEY,
-      value: { provider, model, api_key: encryptedKey, enabled },
+      value: {
+        provider,
+        model,
+        api_key: encryptedKey ?? '',
+        base_url: baseUrl,
+        enabled,
+      },
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'key' },
