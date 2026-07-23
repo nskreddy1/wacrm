@@ -82,6 +82,8 @@ export interface AccountMember {
   is_owner: boolean;
   /** Assigned workspace profile (permission set), if any. */
   workspace_profile: { id: string; name: string } | null;
+  /** Assigned hierarchy role (record visibility, e.g. "Level 1"), if any. */
+  workspace_role: { id: string; name: string } | null;
 }
 
 /**
