@@ -271,6 +271,19 @@ export interface ChannelConnection {
    *               credentials or delete the connection.
    */
   managed_by?: 'workspace' | 'platform';
+  /**
+   * Whether workspace admins may enable/disable this connection
+   * themselves. Set to false by the support team while e.g. a Twilio
+   * number is under carrier review — the toggle is then locked and
+   * platform_notice explains why.
+   */
+  client_can_toggle?: boolean;
+  /**
+   * Support-authored message shown to the client on the connection
+   * (e.g. "This number is pending Twilio verification — expected back
+   * online Friday."). Null/empty when there is nothing to announce.
+   */
+  platform_notice?: string | null;
   last_connected_at?: string;
   last_synced_at?: string;
   last_error?: string;
