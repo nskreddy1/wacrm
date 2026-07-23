@@ -11,7 +11,7 @@ import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
 
 const providers = ['meta', 'twilio', 'google', 'microsoft', 'resend', 'smtp'] as const
 const channels = ['whatsapp', 'sms', 'email'] as const
-const safeColumns = 'id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,last_connected_at,last_synced_at,last_error,created_at,updated_at'
+const safeColumns = 'id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,last_connected_at,last_synced_at,last_error,created_at,updated_at'
 
 const saveSchema = z.object({
   action: z.literal('save'),
@@ -202,6 +202,12 @@ export async function POST(request: Request) {
       if (result.error) throw result.error
       existing = result.data
       if (!existing) return NextResponse.json({ error: 'Channel connection not found' }, { status: 404 })
+      // Platform-managed connections are provisioned by the platform
+      // team from the admin console — workspaces can enable/disable
+      // them (PATCH) but never edit credentials or configuration.
+      if (existing.managed_by === 'platform') {
+        return NextResponse.json({ error: 'This connection is managed by the platform team. Contact support to change it.' }, { status: 403 })
+      }
       if (existing.provider !== provider && !suppliedCredentials) return NextResponse.json({ error: 'New credentials are required when switching providers' }, { status: 400 })
     }
     // Credential precedence: freshly supplied > reused from a sibling
