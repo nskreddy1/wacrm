@@ -36,23 +36,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { DataTable } from '@/components/shared/section-view';
+import {
+  RecordField,
+  RecordLookup,
+  RecordSection,
+  RecordSheet,
+} from '@/components/shared/record-sheet';
 import { useCan } from '@/hooks/use-can';
 import {
   PERMISSION_GROUPS,
@@ -330,35 +321,38 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
         />
       )}
 
-      {/* ---- Create / Edit sheet with grouped permission matrix ---- */}
-      <Sheet open={editor !== null} onOpenChange={(open) => !open && setEditor(null)}>
-        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-lg">
-          <SheetHeader className="border-b border-border">
-            <SheetTitle>
-              {editor?.mode === 'create' ? 'Create New Profile' : `Edit ${editor?.profile?.name}`}
-            </SheetTitle>
-            <SheetDescription>
-              Choose what users assigned to this profile can see and do.
-            </SheetDescription>
-          </SheetHeader>
-
-          {editor && (
-            <div className="flex-1 space-y-6 p-4">
-              <div className="space-y-2">
-                <Label htmlFor="profile-name">Profile name</Label>
+      {/* ---- Create / Edit sheet — the generic RecordSheet design shared
+              with Create Contact / Create Deal / Create Role / New User ---- */}
+      <RecordSheet
+        open={editor !== null}
+        title={editor?.mode === 'create' ? 'Create New Profile' : `Edit ${editor?.profile?.name ?? ''}`}
+        description="Choose what users assigned to this profile can see and do."
+        saving={saving}
+        isCreate={editor?.mode === 'create'}
+        onOpenChange={(open) => !open && setEditor(null)}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save();
+        }}
+      >
+        {editor && (
+          <>
+            <RecordSection id="profile-details" title="Profile Information">
+              <RecordField label="Profile Name" htmlFor="profile-name">
                 <Input
                   id="profile-name"
+                  autoFocus
                   value={editor.name}
                   maxLength={80}
                   onChange={(e) =>
                     setEditor((prev) => (prev ? { ...prev, name: e.target.value } : prev))
                   }
                   placeholder="e.g. Sales Agent"
+                  className="h-11"
                 />
-              </div>
+              </RecordField>
 
-              <div className="space-y-2">
-                <Label htmlFor="profile-description">Description</Label>
+              <RecordField label="Description" htmlFor="profile-description">
                 <Textarea
                   id="profile-description"
                   value={editor.description}
@@ -371,13 +365,20 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
                   }
                   placeholder="What is this profile for?"
                 />
-              </div>
+              </RecordField>
 
               {editor.mode === 'create' && profiles.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Start from</Label>
-                  <Select
-                    onValueChange={(id) => {
+                <RecordField label="Start from" htmlFor="profile-start-from">
+                  <RecordLookup
+                    id="profile-start-from"
+                    value={null}
+                    options={profiles.map((p) => ({
+                      id: p.id,
+                      label: p.name,
+                      hint: p.is_system ? 'System' : undefined,
+                    }))}
+                    placeholder="Copy permissions from an existing profile"
+                    onSelect={(id) => {
                       const source = profiles.find((p) => p.id === id);
                       if (source) {
                         setEditor((prev) =>
@@ -392,78 +393,57 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
                         );
                       }
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Copy permissions from an existing profile" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {profiles.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  />
+                </RecordField>
               )}
+            </RecordSection>
 
-              <div className="space-y-5">
-                {PERMISSION_GROUPS.map((group) => {
-                  const slugs = group.permissions.map((p) => p.slug);
-                  const onCount = slugs.filter((s) => editor.permissions.has(s)).length;
-                  const allOn = onCount === slugs.length;
-                  return (
-                    <fieldset key={group.key} className="space-y-2.5">
-                      <legend className="flex w-full items-center justify-between text-sm font-semibold text-foreground">
-                        {group.label}
-                        <button
-                          type="button"
-                          className="text-xs font-medium text-primary hover:underline"
-                          onClick={() => toggleGroup(slugs, allOn)}
+            <RecordSection id="profile-permissions" title="Permissions">
+              {PERMISSION_GROUPS.map((group) => {
+                const slugs = group.permissions.map((p) => p.slug);
+                const onCount = slugs.filter((s) => editor.permissions.has(s)).length;
+                const allOn = onCount === slugs.length;
+                return (
+                  <fieldset key={group.key} className="space-y-2.5">
+                    <legend className="flex w-full items-center justify-between text-sm font-semibold text-foreground">
+                      {group.label}
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary hover:underline"
+                        onClick={() => toggleGroup(slugs, allOn)}
+                      >
+                        {allOn ? 'Clear all' : 'Select all'}
+                      </button>
+                    </legend>
+                    <div className="space-y-2 rounded-lg border p-3">
+                      {group.permissions.map((perm) => (
+                        <label
+                          key={perm.slug}
+                          className="flex cursor-pointer items-start gap-2.5"
                         >
-                          {allOn ? 'Clear all' : 'Select all'}
-                        </button>
-                      </legend>
-                      <div className="space-y-2 rounded-lg border p-3">
-                        {group.permissions.map((perm) => (
-                          <label
-                            key={perm.slug}
-                            className="flex cursor-pointer items-start gap-2.5"
-                          >
-                            <Checkbox
-                              checked={editor.permissions.has(perm.slug)}
-                              onCheckedChange={() => togglePermission(perm.slug)}
-                              className="mt-0.5"
-                            />
-                            <span className="min-w-0">
-                              <span className="block text-sm font-medium text-foreground">
-                                {perm.label}
-                              </span>
-                              <span className="block text-xs leading-relaxed text-muted-foreground">
-                                {perm.description}
-                              </span>
+                          <Checkbox
+                            checked={editor.permissions.has(perm.slug)}
+                            onCheckedChange={() => togglePermission(perm.slug)}
+                            className="mt-0.5"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-foreground">
+                              {perm.label}
                             </span>
-                          </label>
-                        ))}
-                      </div>
-                    </fieldset>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-background p-4">
-            <Button variant="outline" onClick={() => setEditor(null)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={() => void save()} disabled={saving}>
-              {saving && <Loader2 className="size-4 animate-spin" />}
-              {editor?.mode === 'create' ? 'Create Profile' : 'Save Changes'}
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+                            <span className="block text-xs leading-relaxed text-muted-foreground">
+                              {perm.description}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                );
+              })}
+            </RecordSection>
+          </>
+        )}
+      </RecordSheet>
 
       {/* ---- Delete confirmation ---- */}
       <Dialog

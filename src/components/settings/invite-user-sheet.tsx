@@ -1,25 +1,26 @@
 'use client';
 
 // ============================================================
-// InviteUserSheet — Bigin-style "Invite User" panel.
+// InviteUserSheet — Bigin-style "New User" panel.
 //
-// A right-side sheet with labeled rows (First Name, Last Name,
-// Email, Role, Profile) and a Cancel / Invite User footer —
-// mirroring Bigin's Users and Controls > New User flow.
+// Composes the generic RecordSheet / RecordField / RecordLookup
+// primitives (the same shared design as Create Contact, Create
+// Deal, and Create Role) so every "create record" surface in the
+// app looks identical.
 //
 //   • Role    = workspace reporting role (workspace_roles table,
 //               e.g. "Level 1"), loaded live for this account.
-//   • Profile = permission profile (account_role: admin / agent /
-//               viewer) — what the person can DO.
+//   • Profile = workspace profile (permission set: Administrator,
+//               Standard, or custom) — what the person can DO.
 //
 // On success the sheet closes and an "Invite sent!" confirmation
-// dialog appears (again mirroring Bigin), with the copyable
-// invite link as a fallback for undelivered email.
+// dialog appears (mirroring Bigin), with the copyable invite
+// link as a fallback for undelivered email.
 // ============================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { Copy, Loader2 } from 'lucide-react';
+import { Copy, Share2, ShieldCheck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Button } from '@/components/ui/button';
@@ -32,30 +33,23 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+  RecordField,
+  RecordLookup,
+  RecordSheet,
+} from '@/components/shared/record-sheet';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-
-type ProfileRole = 'admin' | 'agent' | 'viewer';
 
 interface WorkspaceRoleOption {
   id: string;
   name: string;
+}
+
+interface WorkspaceProfileOption {
+  id: string;
+  name: string;
+  is_system: boolean;
 }
 
 interface InviteUserSheetProps {
@@ -77,35 +71,47 @@ export function InviteUserSheet({
   onCreated,
 }: InviteUserSheetProps) {
   const t = useTranslations('Settings.invite');
-  const tRoles = useTranslations('Settings.roles');
   const { profile } = useAuth();
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [workspaceRoleId, setWorkspaceRoleId] = useState<string>('');
-  const [profileRole, setProfileRole] = useState<ProfileRole>('agent');
+  const [workspaceProfileId, setWorkspaceProfileId] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
   const [wsRoles, setWsRoles] = useState<WorkspaceRoleOption[]>([]);
+  const [wsProfiles, setWsProfiles] = useState<WorkspaceProfileOption[]>([]);
   const [sent, setSent] = useState<SentInvite | null>(null);
 
-  // Load this workspace's reporting roles when the sheet opens.
-  // RLS scopes the select to the member's account automatically.
+  // Load this workspace's reporting roles + permission profiles when
+  // the sheet opens. RLS scopes both to the member's account.
   useEffect(() => {
     if (!open || !profile?.account_id) return;
     let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const { data } = await supabase
-        .from('workspace_roles')
-        .select('id, name')
-        .eq('account_id', profile.account_id)
-        .order('created_at', { ascending: true });
-      if (!cancelled && data) {
-        setWsRoles(data);
+      const [{ data: roles }, profilesRes] = await Promise.all([
+        supabase
+          .from('workspace_roles')
+          .select('id, name')
+          .eq('account_id', profile.account_id)
+          .order('created_at', { ascending: true }),
+        fetch('/api/account/profiles').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      if (cancelled) return;
+      if (roles) {
+        setWsRoles(roles);
         // Default to the first role ("Level 1" seed) like Bigin.
-        setWorkspaceRoleId((prev) => prev || data[0]?.id || '');
+        setWorkspaceRoleId((prev) => prev || roles[0]?.id || '');
+      }
+      const profiles = (profilesRes?.data ?? []) as WorkspaceProfileOption[];
+      if (profiles.length > 0) {
+        setWsProfiles(profiles);
+        // Default to the "Standard" system profile like Bigin.
+        const standard = profiles.find((p) => p.is_system && p.name === 'Standard');
+        setWorkspaceProfileId((prev) => prev || standard?.id || profiles[0]?.id || '');
       }
     })();
     return () => {
@@ -117,29 +123,42 @@ export function InviteUserSheet({
     setFirstName('');
     setLastName('');
     setEmail('');
+    setEmailError('');
     setWorkspaceRoleId('');
-    setProfileRole('agent');
+    setWorkspaceProfileId('');
     setSubmitting(false);
   }
 
-  async function handleInvite() {
+  async function handleInvite(event: FormEvent) {
+    event.preventDefault();
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      toast.error(t('emailInvalid'));
+      setEmailError(t('emailInvalid'));
       return;
     }
+    setEmailError('');
     setSubmitting(true);
     try {
+      // Legacy role enum kept for compatibility: Administrator system
+      // profile maps to admin, everything else invites as agent. The
+      // real capabilities come from workspaceProfileId.
+      const selectedProfile = wsProfiles.find((p) => p.id === workspaceProfileId);
+      const legacyRole =
+        selectedProfile?.is_system && selectedProfile.name === 'Administrator'
+          ? 'admin'
+          : 'agent';
+
       const res = await fetch('/api/account/invitations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          role: profileRole,
+          role: legacyRole,
           expiresInDays: 7,
           email: trimmedEmail,
           firstName: firstName.trim() || undefined,
           lastName: lastName.trim() || undefined,
           workspaceRoleId: workspaceRoleId || undefined,
+          workspaceProfileId: workspaceProfileId || undefined,
           label:
             [firstName.trim(), lastName.trim()].filter(Boolean).join(' ') ||
             trimmedEmail,
@@ -182,133 +201,80 @@ export function InviteUserSheet({
 
   return (
     <>
-      <Sheet
+      <RecordSheet
         open={open}
+        title={t('sheetTitle')}
+        description={t('sheetDesc')}
+        saving={submitting}
+        isCreate
         onOpenChange={(next) => {
           if (!next) reset();
           onOpenChange(next);
         }}
+        onSubmit={handleInvite}
       >
-        <SheetContent
-          side="right"
-          className="w-full data-[side=right]:sm:max-w-lg"
-        >
-          <SheetHeader className="border-b border-border">
-            <SheetTitle className="text-xl">{t('sheetTitle')}</SheetTitle>
-            <SheetDescription className="sr-only">
-              {t('sheetDesc')}
-            </SheetDescription>
-          </SheetHeader>
+        <RecordField label={t('firstName')} htmlFor="invite-first-name">
+          <Input
+            id="invite-first-name"
+            autoFocus
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            maxLength={80}
+            className="h-11"
+          />
+        </RecordField>
 
-          {/* Bigin-style label-left rows */}
-          <div className="flex-1 space-y-5 overflow-y-auto px-6 py-4">
-            <div className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3">
-              <Label htmlFor="invite-first-name" className="justify-self-end text-muted-foreground">
-                {t('firstName')}
-              </Label>
-              <Input
-                id="invite-first-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                maxLength={80}
-                className="bg-muted border-border text-foreground"
-              />
-            </div>
+        <RecordField label={t('lastName')} htmlFor="invite-last-name">
+          <Input
+            id="invite-last-name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            maxLength={80}
+            className="h-11"
+          />
+        </RecordField>
 
-            <div className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3">
-              <Label htmlFor="invite-last-name" className="justify-self-end text-muted-foreground">
-                {t('lastName')}
-              </Label>
-              <Input
-                id="invite-last-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                maxLength={80}
-                className="bg-muted border-border text-foreground"
-              />
-            </div>
+        <RecordField label={t('emailLabel')} htmlFor="invite-email" error={emailError}>
+          <Input
+            id="invite-email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) setEmailError('');
+            }}
+            maxLength={320}
+            className="h-11"
+          />
+        </RecordField>
 
-            <div className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3">
-              <Label htmlFor="invite-email" className="justify-self-end text-muted-foreground">
-                {t('emailLabel')}
-              </Label>
-              <Input
-                id="invite-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                maxLength={320}
-                className="bg-muted border-border text-foreground"
-              />
-            </div>
+        <RecordField label={t('roleLabel')} htmlFor="invite-role">
+          <RecordLookup
+            id="invite-role"
+            value={workspaceRoleId || null}
+            options={wsRoles.map((r) => ({ id: r.id, label: r.name }))}
+            placeholder={t('roleLabel')}
+            icon={<Share2 className="size-4 shrink-0 rotate-90 text-muted-foreground" aria-hidden="true" />}
+            onSelect={(id) => setWorkspaceRoleId(id ?? '')}
+          />
+        </RecordField>
 
-            <div className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3">
-              <Label className="justify-self-end text-muted-foreground">
-                {t('roleLabel')}
-              </Label>
-              <Select
-                value={workspaceRoleId}
-                onValueChange={(v) => v && setWorkspaceRoleId(v)}
-              >
-                <SelectTrigger className="w-full bg-muted border-border text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {wsRoles.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3">
-              <Label className="justify-self-end text-muted-foreground">
-                {t('profileLabel')}
-              </Label>
-              <Select
-                value={profileRole}
-                onValueChange={(v) => v && setProfileRole(v as ProfileRole)}
-              >
-                <SelectTrigger className="w-full bg-muted border-border text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">{tRoles('admin')}</SelectItem>
-                  <SelectItem value="agent">{tRoles('agent')}</SelectItem>
-                  <SelectItem value="viewer">{tRoles('viewer')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <SheetFooter className="flex-row justify-end gap-2 border-t border-border">
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className="border-border text-muted-foreground hover:bg-muted"
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              onClick={handleInvite}
-              disabled={submitting}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  {t('inviting')}
-                </>
-              ) : (
-                t('inviteUser')
-              )}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+        <RecordField label={t('profileLabel')} htmlFor="invite-profile">
+          <RecordLookup
+            id="invite-profile"
+            value={workspaceProfileId || null}
+            options={wsProfiles.map((p) => ({
+              id: p.id,
+              label: p.name,
+              hint: p.is_system ? t('systemProfileHint') : undefined,
+            }))}
+            placeholder={t('profileLabel')}
+            icon={<ShieldCheck className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+            onSelect={(id) => setWorkspaceProfileId(id ?? '')}
+          />
+        </RecordField>
+      </RecordSheet>
 
       {/* Bigin-style "Invite sent!" confirmation */}
       <Dialog open={sent !== null} onOpenChange={(next) => !next && setSent(null)}>
@@ -332,24 +298,15 @@ export function InviteUserSheet({
                 className="bg-muted border-border text-foreground font-mono text-xs"
                 onFocus={(e) => e.currentTarget.select()}
               />
-              <Button
-                type="button"
-                onClick={copyLink}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
-              >
+              <Button type="button" onClick={copyLink} className="shrink-0">
                 <Copy className="size-4" />
                 {t('copy')}
               </Button>
             </div>
           )}
 
-          <DialogFooter className="bg-popover border-border">
-            <Button
-              onClick={() => setSent(null)}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              {t('okayGotIt')}
-            </Button>
+          <DialogFooter>
+            <Button onClick={() => setSent(null)}>{t('okayGotIt')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
