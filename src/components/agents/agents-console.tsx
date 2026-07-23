@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AiPlayground } from '@/components/agents/ai-playground'
 import { AiUsageCard } from '@/components/agents/ai-usage'
 import { AiConfig } from '@/components/settings/ai-config'
+import { AiKnowledgeCard } from '@/components/settings/ai-knowledge'
 import { useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +45,7 @@ interface AiConfigData {
   env_fallback?: boolean
   auto_reply_live?: boolean
   has_key?: boolean
+  has_embeddings_key?: boolean
   provider?: string
   model?: string
   is_active?: boolean
@@ -63,7 +65,7 @@ interface UsageData {
 }
 
 type AgentKey = 'copilot' | 'autoreply'
-type TabKey = 'overview' | 'configuration' | 'playground' | 'runs' | 'usage'
+type TabKey = 'overview' | 'configuration' | 'knowledge' | 'playground' | 'runs' | 'usage'
 
 interface RunRow {
   id: string
@@ -98,7 +100,7 @@ const AGENT_META: Record<
 }
 
 export function AgentsConsole() {
-  const { can } = useAuth()
+  const { can, accountId } = useAuth()
   const canManage = can('ai:manage')
 
   const {
@@ -280,6 +282,7 @@ export function AgentsConsole() {
               [
                 { key: 'overview' as const, label: 'Overview' },
                 { key: 'configuration' as const, label: 'Configuration' },
+                { key: 'knowledge' as const, label: 'Knowledge Base' },
                 { key: 'playground' as const, label: 'Playground' },
                 ...(canManage
                   ? [
@@ -319,7 +322,14 @@ export function AgentsConsole() {
                 loading={isLoading}
               />
             ) : null}
-            {tab === 'configuration' ? <AiConfig /> : null}
+            {tab === 'configuration' ? <AiConfig embedded /> : null}
+            {tab === 'knowledge' ? (
+              <AiKnowledgeCard
+                accountId={accountId}
+                canEdit={canManage}
+                hasEmbeddingsKey={config?.has_embeddings_key === true}
+              />
+            ) : null}
             {tab === 'playground' ? (
               <AiPlayground onGoToSetup={() => setTab('configuration')} />
             ) : null}
