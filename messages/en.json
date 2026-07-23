@@ -1226,6 +1226,10 @@
     "pageDesc": "Everything in one place — your account and your workspace. Pick a section to manage it.",
     "groups": {
       "account": "Account",
+      "general": "General",
+      "customization": "Customization",
+      "channels": "Channels",
+      "data": "Data Administration",
       "workspace": "Workspace"
     },
     "sections": {
@@ -1237,7 +1241,7 @@
       "channels": "Channels",
       "templates": "Templates",
       "quick-replies": "Quick replies",
-      "fields": "Fields & tags",
+      "fields": "Fields",
       "deals": "Deals & currency",
       "members": "Users and Controls",
       "api": "API keys",
