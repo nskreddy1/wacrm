@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
-import { Inter } from "next/font/google";
+import { Inter, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { ThemedToaster } from "@/components/themed-toaster";
@@ -10,6 +10,14 @@ import { DEFAULT_MODE, DEFAULT_THEME } from "@/lib/themes";
 const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
+});
+
+// Display serif for editorial headings (AI Agents console et al.) —
+// mapped to Tailwind's `font-serif` via @theme in globals.css.
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-serif-display",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -54,7 +62,7 @@ export default async function RootLayout({
       lang={locale}
       data-theme={DEFAULT_THEME}
       data-mode={DEFAULT_MODE}
-      className={`${inter.variable} h-full bg-background antialiased`}
+      className={`${inter.variable} ${instrumentSerif.variable} h-full bg-background antialiased`}
       // The `theme-boot` script below rewrites `data-theme` and
       // `data-mode` on <html> from localStorage before React hydrates,
       // so for any non-default choice the client DOM intentionally
