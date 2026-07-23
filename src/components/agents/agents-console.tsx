@@ -26,7 +26,7 @@ import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AiPlayground } from '@/components/agents/ai-playground'
 import { AiUsageCard } from '@/components/agents/ai-usage'
-import { AiConfig } from '@/components/settings/ai-config'
+import { AgentConfiguration } from '@/components/agents/agent-configuration'
 import { AiKnowledgeCard } from '@/components/settings/ai-knowledge'
 import { useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
@@ -322,7 +322,7 @@ export function AgentsConsole() {
                 loading={isLoading}
               />
             ) : null}
-            {tab === 'configuration' ? <AiConfig embedded /> : null}
+            {tab === 'configuration' ? <AgentConfiguration /> : null}
             {tab === 'knowledge' ? (
               <AiKnowledgeCard
                 accountId={accountId}
