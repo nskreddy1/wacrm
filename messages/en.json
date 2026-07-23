@@ -1370,6 +1370,7 @@
       "cancel": "Cancel",
       "creating": "Creating...",
       "generateLink": "Generate link",
+      "systemProfileHint": "System",
       "labelTooLong": "Label must be {max} characters or fewer",
       "copied": "Invite link copied",
       "clipboardBlocked": "Clipboard blocked — copy the link manually",
