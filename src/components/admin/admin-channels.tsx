@@ -1,503 +1,766 @@
-"use client";
+'use client'
 
 // ============================================================
-// AdminChannels — /admin/channels (per-tenant channel credentials).
+// AdminChannels — /admin/channels (platform console).
 //
-// Pick a workspace, then manage its four channel slots
-// (whatsapp / sms / email / voice). Secrets are write-only:
-// the API encrypts them server-side and only ever returns a
-// masked preview, so this UI never holds live credentials.
-// Test-connection runs a decrypt round-trip server-side.
+// Founder/support view of client channel connections. Works on
+// the SAME channel_connections rows the client sees in their
+// Settings → WhatsApp / SMS / Email pages:
+//   • provision a platform-managed connection for a client
+//   • fix/rotate credentials on a client's broken connection
+//   • test, enable/disable, or remove any connection
+// Secrets are write-only; the server encrypts and never returns
+// them. Every action is written to the platform audit log.
 // ============================================================
 
-import { useState } from "react";
-import useSWR from "swr";
-import { toast } from "sonner";
-import {
-  AlertTriangle,
-  KeyRound,
-  Loader2,
-  PlugZap,
-  ShieldCheck,
-} from "lucide-react";
+import { useMemo, useState } from 'react'
+import useSWR from 'swr'
+import { toast } from 'sonner'
+import { CheckCircle2, Loader2, Mail, MessageCircle, MoreHorizontal, PlugZap, Plus, ShieldCheck, Smartphone, Trash2, Wrench } from 'lucide-react'
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
+} from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
 
-const CHANNELS = ["whatsapp", "sms", "email", "voice"] as const;
-type Channel = (typeof CHANNELS)[number];
+type Connection = ChannelConnection & { providerLabel: string }
+type WorkspaceOption = { id: string; name: string }
 
-const CHANNEL_META: Record<
-  Channel,
-  { title: string; description: string; providers: string[] }
-> = {
-  whatsapp: {
-    title: "WhatsApp",
-    description: "WhatsApp Business API credentials for this workspace.",
-    providers: ["meta_cloud", "twilio", "360dialog"],
-  },
-  sms: {
-    title: "SMS",
-    description: "SMS provider credentials for outbound and inbound texts.",
-    providers: ["twilio", "vonage", "messagebird"],
-  },
-  email: {
-    title: "Email",
-    description: "Transactional email provider for this workspace.",
-    providers: ["resend", "sendgrid", "postmark", "ses"],
-  },
-  voice: {
-    title: "Voice",
-    description: "Voice-call provider credentials.",
-    providers: ["twilio", "vonage"],
-  },
-};
+const CHANNELS: ChannelKind[] = ['whatsapp', 'sms', 'email']
+const CHANNEL_LABEL: Record<ChannelKind, string> = { whatsapp: 'WhatsApp', sms: 'SMS', email: 'Email' }
+const CHANNEL_ICON: Record<ChannelKind, typeof Mail> = { whatsapp: MessageCircle, sms: Smartphone, email: Mail }
 
-interface ChannelRow {
-  id: string;
-  account_id: string;
-  channel: Channel;
-  provider: string;
-  masked_preview: string | null;
-  is_active: boolean;
-  verified_at: string | null;
-  updated_at: string;
+/** Providers offered per channel in the provision sheet. */
+const CHANNEL_PROVIDERS: Record<ChannelKind, { value: ChannelProvider; label: string }[]> = {
+  whatsapp: [
+    { value: 'twilio', label: 'Twilio' },
+    { value: 'meta', label: 'WhatsApp Cloud API (Meta)' },
+  ],
+  sms: [{ value: 'twilio', label: 'Twilio' }],
+  email: [
+    { value: 'smtp', label: 'SMTP' },
+    { value: 'resend', label: 'Resend' },
+  ],
 }
 
-interface WorkspaceOption {
-  id: string;
-  name: string;
+const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  connected: { label: 'Connected', variant: 'default' },
+  degraded: { label: 'Degraded', variant: 'destructive' },
+  draft: { label: 'Not tested', variant: 'secondary' },
+  disconnected: { label: 'Disconnected', variant: 'outline' },
 }
 
 const jsonFetcher = async (url: string) => {
-  const res = await fetch(url);
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error ?? "Request failed");
-  return body;
-};
+  const res = await fetch(url)
+  const body = await res.json().catch(() => null)
+  if (!res.ok) throw new Error(body?.error ?? 'Request failed')
+  return body
+}
 
 export function AdminChannels() {
-  const [accountId, setAccountId] = useState<string | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(null)
 
-  // Workspace picker sources the first page of the directory; the
-  // super admin can search there if the tenant list grows past it.
-  const { data: wsData, isLoading: wsLoading } = useSWR<{
-    workspaces: WorkspaceOption[];
-  }>("/api/admin/workspaces", jsonFetcher);
-  const workspaces = wsData?.workspaces ?? [];
+  const { data: wsData, isLoading: wsLoading } = useSWR<{ workspaces: WorkspaceOption[] }>(
+    '/api/admin/workspaces',
+    jsonFetcher,
+  )
+  const workspaces = wsData?.workspaces ?? []
 
-  const {
-    data: channelData,
-    isLoading: channelsLoading,
-    mutate,
-  } = useSWR<{ channels: ChannelRow[]; encryption_ready: boolean }>(
+  const { data, isLoading, mutate } = useSWR<{ connections: Connection[] }>(
     accountId ? `/api/admin/channels?account_id=${accountId}` : null,
     jsonFetcher,
-  );
-
-  const byChannel = new Map<Channel, ChannelRow>(
-    (channelData?.channels ?? []).map((c) => [c.channel, c]),
-  );
+  )
+  const connections = data?.connections ?? []
 
   return (
-    <section
-      className="flex flex-col gap-4"
-      aria-label="Channel configuration"
-    >
+    <section className="flex flex-col gap-5" aria-label="Client channel configuration">
       <div className="flex flex-col gap-2 sm:max-w-sm">
-        <Label htmlFor="channel-workspace">Workspace</Label>
+        <Label htmlFor="channel-workspace">Client workspace</Label>
         <Select
-          items={Object.fromEntries(workspaces.map((w) => [w.id, w.name]))}
           value={accountId}
-          onValueChange={(v) => {
-            if (v !== null) setAccountId(v);
+          onValueChange={(value) => {
+            if (value !== null) setAccountId(value)
           }}
         >
           <SelectTrigger id="channel-workspace" aria-label="Select workspace">
-            <SelectValue placeholder="Select a workspace…" />
+            <SelectValue placeholder={wsLoading ? 'Loading workspaces…' : 'Select a workspace…'} />
           </SelectTrigger>
           <SelectContent>
-            {workspaces.map((w) => (
-              <SelectItem key={w.id} value={w.id}>
-                {w.name}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              {workspaces.map((workspace) => (
+                <SelectItem key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
-        {wsLoading && (
-          <p className="text-xs text-muted-foreground">Loading workspaces…</p>
-        )}
       </div>
 
       {!accountId ? (
-        <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
-          Select a workspace to manage its channel provider credentials.
+        <p className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
+          Select a client workspace to view and manage its channel connections.
         </p>
-      ) : channelsLoading ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {CHANNELS.map((c) => (
-            <Skeleton key={c} className="h-40 w-full rounded-lg" />
-          ))}
+      ) : isLoading ? (
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-10 w-64 rounded-md" />
+          <Skeleton className="h-40 w-full rounded-lg" />
         </div>
       ) : (
-        <>
-          {channelData && !channelData.encryption_ready && (
-            <p
-              role="alert"
-              className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
-            >
-              <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-              CHANNEL_CREDENTIALS_KEY is not set on the server. Credentials
-              cannot be stored until it is configured.
+        <ChannelTabs accountId={accountId} connections={connections} onChanged={() => void mutate()} />
+      )}
+    </section>
+  )
+}
+
+// ------------------------------------------------------------------
+// Tabs per channel with connection rows + provision button.
+// ------------------------------------------------------------------
+
+function ChannelTabs({
+  accountId,
+  connections,
+  onChanged,
+}: {
+  accountId: string
+  connections: Connection[]
+  onChanged: () => void
+}) {
+  const [tab, setTab] = useState<ChannelKind>('whatsapp')
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<Connection | null>(null)
+
+  const byChannel = useMemo(() => {
+    const map: Record<ChannelKind, Connection[]> = { whatsapp: [], sms: [], email: [] }
+    for (const connection of connections) map[connection.channel]?.push(connection)
+    return map
+  }, [connections])
+
+  return (
+    <Tabs value={tab} onValueChange={(value) => setTab(value as ChannelKind)}>
+      <TabsList>
+        {CHANNELS.map((channel) => (
+          <TabsTrigger key={channel} value={channel}>
+            {CHANNEL_LABEL[channel]}
+            {byChannel[channel].length > 0 ? (
+              <span className="ml-1.5 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
+                {byChannel[channel].length}
+              </span>
+            ) : null}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      {CHANNELS.map((channel) => (
+        <TabsContent key={channel} value={channel} className="flex flex-col gap-3 pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              {byChannel[channel].length === 0
+                ? `No ${CHANNEL_LABEL[channel]} connections for this workspace yet.`
+                : `${byChannel[channel].length} connection${byChannel[channel].length === 1 ? '' : 's'}`}
             </p>
-          )}
-          <div className="grid gap-4 md:grid-cols-2">
-            {CHANNELS.map((channel) => (
-              <ChannelCard
-                key={channel}
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditTarget(null)
+                setSheetOpen(true)
+              }}
+            >
+              <Plus data-icon="inline-start" aria-hidden />
+              Provision connection
+            </Button>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {byChannel[channel].map((connection) => (
+              <ConnectionRow
+                key={connection.id}
                 accountId={accountId}
-                channel={channel}
-                row={byChannel.get(channel) ?? null}
-                encryptionReady={channelData?.encryption_ready ?? false}
-                onChanged={() => void mutate()}
+                connection={connection}
+                onChanged={onChanged}
+                onEdit={() => {
+                  setEditTarget(connection)
+                  setSheetOpen(true)
+                }}
               />
             ))}
           </div>
-        </>
-      )}
-    </section>
-  );
+        </TabsContent>
+      ))}
+
+      <ProvisionSheet
+        accountId={accountId}
+        channel={tab}
+        connection={editTarget}
+        open={sheetOpen}
+        onOpenChange={(next) => {
+          setSheetOpen(next)
+          if (!next) setEditTarget(null)
+        }}
+        onSaved={onChanged}
+      />
+    </Tabs>
+  )
 }
 
-function ChannelCard({
-  accountId,
-  channel,
-  row,
-  encryptionReady,
-  onChanged,
-}: {
-  accountId: string;
-  channel: Channel;
-  row: ChannelRow | null;
-  encryptionReady: boolean;
-  onChanged: () => void;
-}) {
-  const meta = CHANNEL_META[channel];
-  const [configureOpen, setConfigureOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+// ------------------------------------------------------------------
+// A single connection row — status, origin, test / toggle / actions.
+// ------------------------------------------------------------------
 
-  async function patch(payload: Record<string, unknown>) {
-    setBusy(true);
+function ConnectionRow({
+  accountId,
+  connection,
+  onChanged,
+  onEdit,
+}: {
+  accountId: string
+  connection: Connection
+  onChanged: () => void
+  onEdit: () => void
+}) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const Icon = CHANNEL_ICON[connection.channel]
+  const status = STATUS_BADGE[connection.status] ?? STATUS_BADGE.draft
+  const isPlatform = connection.managed_by === 'platform'
+
+  async function patch(payload: Record<string, unknown>, key: string) {
+    setBusy(key)
     try {
-      const res = await fetch("/api/admin/channels", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account_id: accountId, channel, ...payload }),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? "Request failed");
-      onChanged();
-      return true;
+      const res = await fetch('/api/admin/channels', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_id: accountId, id: connection.id, ...payload }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? body?.health?.error ?? 'Request failed')
+      onChanged()
+      return true
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
-      return false;
+      toast.error(err instanceof Error ? err.message : 'Something went wrong')
+      onChanged()
+      return false
     } finally {
-      setBusy(false);
+      setBusy(null)
+    }
+  }
+
+  async function remove() {
+    setBusy('delete')
+    try {
+      const res = await fetch(
+        `/api/admin/channels?id=${connection.id}&account_id=${accountId}`,
+        { method: 'DELETE' },
+      )
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? 'Failed to delete')
+      toast.success('Connection removed')
+      onChanged()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setBusy(null)
+      setConfirmDelete(false)
     }
   }
 
   return (
-    <article className="flex flex-col gap-3 rounded-lg border p-4">
-      <header className="flex items-start justify-between gap-2">
-        <div className="grid leading-tight">
-          <h3 className="text-sm font-semibold">{meta.title}</h3>
-          <p className="text-xs text-muted-foreground">{meta.description}</p>
-        </div>
-        {row ? (
-          <Badge variant={row.is_active ? "default" : "secondary"}>
-            {row.is_active ? "Active" : "Inactive"}
-          </Badge>
+    <article className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary-soft">
+        {connection.provider === 'twilio' ? (
+          <img src="/icons/brands/twilio.svg" alt="" className="size-5" />
+        ) : connection.provider === 'meta' ? (
+          <img src="/icons/brands/whatsapp.svg" alt="" className="size-5" />
         ) : (
-          <Badge variant="outline">Not configured</Badge>
+          <Icon className="size-4.5 text-primary" aria-hidden />
         )}
-      </header>
+      </div>
 
-      {row ? (
-        <dl className="grid gap-1 text-sm">
-          <div className="flex items-center justify-between gap-2">
-            <dt className="text-muted-foreground">Provider</dt>
-            <dd className="font-medium">{row.provider}</dd>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <dt className="text-muted-foreground">Credential</dt>
-            <dd className="font-mono text-xs">
-              {row.masked_preview ?? "stored"}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <dt className="text-muted-foreground">Verified</dt>
-            <dd>
-              {row.verified_at ? (
-                <span className="flex items-center gap-1 text-xs">
-                  <ShieldCheck
-                    className="size-3.5 text-primary"
-                    aria-hidden="true"
-                  />
-                  {new Date(row.verified_at).toLocaleString()}
-                </span>
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  Not verified
-                </span>
-              )}
-            </dd>
-          </div>
-        </dl>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          No credentials stored for this channel yet.
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="truncate text-sm font-medium text-foreground">{connection.display_name}</h3>
+          <Badge variant={status.variant}>{status.label}</Badge>
+          <Badge variant="outline" className="gap-1">
+            {isPlatform ? <ShieldCheck className="size-3" aria-hidden /> : null}
+            {isPlatform ? 'Platform managed' : 'Client connected'}
+          </Badge>
+        </div>
+        <p className="truncate text-xs text-muted-foreground">
+          {connection.providerLabel} · {connection.external_identity}
+          {connection.last_error ? ` · ${connection.last_error}` : ''}
         </p>
-      )}
+      </div>
 
-      <footer className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+      <div className="flex items-center gap-2">
         <Button
           size="sm"
-          variant={row ? "outline" : "default"}
-          disabled={busy || !encryptionReady}
-          onClick={() => setConfigureOpen(true)}
+          variant="outline"
+          disabled={busy !== null}
+          onClick={() =>
+            void patch({ action: 'test' }, 'test').then((ok) => {
+              if (ok) toast.success('Connection test passed')
+            })
+          }
         >
-          <KeyRound className="size-4" aria-hidden="true" />
-          {row ? "Rotate credentials" : "Configure"}
+          {busy === 'test' ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden />
+          ) : (
+            <PlugZap data-icon="inline-start" aria-hidden />
+          )}
+          Test
         </Button>
-        {row && (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                void patch({ action: "test" }).then(
-                  (ok) => ok && toast.success("Connection test passed"),
-                )
-              }
-            >
-              <PlugZap className="size-4" aria-hidden="true" />
-              Test connection
-            </Button>
-            <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-              {busy && (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-              )}
-              Active
-              <Switch
-                checked={row.is_active}
-                disabled={busy}
-                aria-label={`Toggle ${meta.title} channel`}
-                onCheckedChange={(checked) =>
-                  void patch({ is_active: checked })
-                }
-              />
-            </label>
-          </>
-        )}
-      </footer>
 
-      <ConfigureChannelDialog
-        accountId={accountId}
-        channel={channel}
-        providers={meta.providers}
-        currentProvider={row?.provider ?? null}
-        open={configureOpen}
-        onOpenChange={setConfigureOpen}
-        onSaved={onChanged}
-      />
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="sr-only">Enable {connection.display_name}</span>
+          <Switch
+            checked={connection.is_enabled}
+            disabled={busy !== null}
+            aria-label={`Toggle ${connection.display_name}`}
+            onCheckedChange={(checked) => void patch({ isEnabled: checked }, 'toggle')}
+          />
+        </label>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="flex size-8 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground"
+            aria-label={`More actions for ${connection.display_name}`}
+          >
+            <MoreHorizontal className="size-4" aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onEdit}>
+              <Wrench className="size-4" aria-hidden />
+              {isPlatform ? 'Edit / rotate credentials' : 'Fix client configuration'}
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="size-4" aria-hidden />
+              Remove connection
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this connection?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`“${connection.display_name}” will stop sending and receiving immediately. This cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={busy === 'delete'} onClick={() => void remove()}>
+              {busy === 'delete' ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : null}
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </article>
-  );
+  )
 }
 
-function ConfigureChannelDialog({
+// ------------------------------------------------------------------
+// Provision / edit sheet — same "create field" sheet design used in
+// Settings (labeled rows on bg-muted/40).
+// ------------------------------------------------------------------
+
+const FORM_DEFAULTS = {
+  displayName: '',
+  externalIdentity: '',
+  accountSid: '',
+  authToken: '',
+  messagingServiceSid: '',
+  accessToken: '',
+  phoneNumberId: '',
+  host: '',
+  port: '587',
+  username: '',
+  password: '',
+  apiKey: '',
+}
+
+function ProvisionSheet({
   accountId,
   channel,
-  providers,
-  currentProvider,
+  connection,
   open,
   onOpenChange,
   onSaved,
 }: {
-  accountId: string;
-  channel: Channel;
-  providers: string[];
-  currentProvider: string | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSaved: () => void;
+  accountId: string
+  channel: ChannelKind
+  connection: Connection | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSaved: () => void
 }) {
-  const [provider, setProvider] = useState<string | null>(currentProvider);
-  const [credentialId, setCredentialId] = useState("");
-  const [credentialSecret, setCredentialSecret] = useState("");
-  const [sender, setSender] = useState("");
-  const [saving, setSaving] = useState(false);
+  const editing = connection !== null
+  const targetChannel = connection?.channel ?? channel
+  const providerOptions = CHANNEL_PROVIDERS[targetChannel]
+  const [provider, setProvider] = useState<ChannelProvider>(providerOptions[0].value)
+  const [form, setForm] = useState(FORM_DEFAULTS)
+  const [takeover, setTakeover] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [lastOpen, setLastOpen] = useState(false)
 
-  async function submit() {
-    if (!provider) {
-      toast.error("Choose a provider first");
-      return;
+  // Reset draft state each time the sheet opens (render-time reset,
+  // no effect needed).
+  if (open !== lastOpen) {
+    setLastOpen(open)
+    if (open) {
+      setProvider((connection?.provider as ChannelProvider) ?? providerOptions[0].value)
+      setForm({
+        ...FORM_DEFAULTS,
+        displayName: connection?.display_name ?? '',
+        externalIdentity: connection?.external_identity ?? '',
+      })
+      setTakeover(false)
     }
-    setSaving(true);
+  }
+
+  function update(key: keyof typeof FORM_DEFAULTS, value: string) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const credentialsSupplied =
+    provider === 'twilio'
+      ? form.accountSid.trim() !== '' || form.authToken.trim() !== ''
+      : provider === 'meta'
+        ? form.accessToken.trim() !== ''
+        : provider === 'smtp'
+          ? form.username.trim() !== '' || form.password.trim() !== ''
+          : form.apiKey.trim() !== ''
+
+  async function save() {
+    if (!form.displayName.trim() || !form.externalIdentity.trim()) {
+      toast.error('Name and sender identity are required.')
+      return
+    }
+    if (!editing && !credentialsSupplied) {
+      toast.error('Credentials are required for a new connection.')
+      return
+    }
+    setSaving(true)
     try {
-      const res = await fetch("/api/admin/channels", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+      const credentials = !credentialsSupplied
+        ? undefined
+        : provider === 'twilio'
+          ? {
+              accountSid: form.accountSid.trim(),
+              authToken: form.authToken.trim(),
+              ...(form.messagingServiceSid.trim() ? { messagingServiceSid: form.messagingServiceSid.trim() } : {}),
+            }
+          : provider === 'meta'
+            ? { accessToken: form.accessToken.trim() }
+            : provider === 'smtp'
+              ? { username: form.username.trim(), password: form.password }
+              : { apiKey: form.apiKey.trim() }
+
+      const configuration =
+        provider === 'meta'
+          ? { phone_number_id: form.phoneNumberId.trim() }
+          : provider === 'smtp'
+            ? { host: form.host.trim(), port: Number(form.port), secure: Number(form.port) === 465 }
+            : {}
+
+      const res = await fetch('/api/admin/channels', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           account_id: accountId,
-          channel,
+          ...(connection ? { id: connection.id } : {}),
+          channel: targetChannel,
           provider,
-          credentials: {
-            credential_id: credentialId,
-            credential_secret: credentialSecret,
-            sender,
-          },
+          displayName: form.displayName.trim(),
+          externalIdentity: form.externalIdentity.trim(),
+          configuration,
+          ...(credentials ? { credentials } : {}),
+          ...(editing && !isPlatformManaged && takeover ? { takeover: true } : {}),
         }),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? "Failed to save credentials");
-      toast.success("Credentials stored (encrypted at rest)");
-      onSaved();
-      reset(false);
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? 'Failed to save connection')
+      toast.success(
+        editing
+          ? 'Connection updated. Run a test before enabling.'
+          : 'Connection provisioned. Run a test before enabling.',
+      )
+      onSaved()
+      onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
   }
 
-  function reset(next: boolean) {
-    onOpenChange(next);
-    if (!next) {
-      setCredentialId("");
-      setCredentialSecret("");
-      setSender("");
-      setProvider(currentProvider);
-    }
-  }
+  const isPlatformManaged = connection?.managed_by === 'platform'
 
   return (
-    <Dialog open={open} onOpenChange={reset}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="capitalize">
-            Configure {channel} channel
-          </DialogTitle>
-          <DialogDescription>
-            Secrets are encrypted server-side before storage and are never
-            shown again — only a masked preview remains visible.
-          </DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>
+            {editing ? `Edit ${CHANNEL_LABEL[targetChannel]} connection` : `Provision ${CHANNEL_LABEL[targetChannel]} connection`}
+          </SheetTitle>
+          <SheetDescription>
+            {editing
+              ? 'Update this connection on behalf of the client. Leave credential fields blank to keep the stored secrets.'
+              : 'Set up this channel for the client. They will see it in their Settings and can enable or disable it, but not edit it.'}
+          </SheetDescription>
+        </SheetHeader>
 
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit();
-          }}
-        >
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`${channel}-provider`}>Provider</Label>
-            <Select value={provider} onValueChange={setProvider}>
-              <SelectTrigger
-                id={`${channel}-provider`}
-                aria-label="Select provider"
-              >
-                <SelectValue placeholder="Select a provider…" />
-              </SelectTrigger>
-              <SelectContent>
-                {providers.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`${channel}-cred-id`}>
-              Account SID / API key ID
-            </Label>
-            <Input
-              id={`${channel}-cred-id`}
-              value={credentialId}
-              onChange={(e) => setCredentialId(e.target.value)}
-              autoComplete="off"
-              required
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`${channel}-cred-secret`}>
-              Auth token / API secret
-            </Label>
-            <Input
-              id={`${channel}-cred-secret`}
-              type="password"
-              value={credentialSecret}
-              onChange={(e) => setCredentialSecret(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`${channel}-sender`}>
-              Sender ID / phone number{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
+        <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
+          <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+            <span className="w-28 shrink-0 text-sm text-muted-foreground">Provider</span>
+            {editing ? (
+              <span className="text-sm font-medium text-foreground">
+                {providerOptions.find((option) => option.value === provider)?.label ?? provider}
               </span>
-            </Label>
+            ) : (
+              <Select value={provider} onValueChange={(value) => { if (value) setProvider(value as ChannelProvider) }}>
+                <SelectTrigger className="h-8 flex-1 bg-card"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {providerOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+            <span className="w-28 shrink-0 text-sm text-muted-foreground">Name</span>
             <Input
-              id={`${channel}-sender`}
-              value={sender}
-              onChange={(e) => setSender(e.target.value)}
-              autoComplete="off"
+              value={form.displayName}
+              onChange={(event) => update('displayName', event.target.value)}
+              placeholder="e.g. Acme Support Line"
+              className="h-8 flex-1 bg-card"
+              aria-label="Connection name"
             />
           </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => reset(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving && (
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              )}
-              Save credentials
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
+          <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+            <span className="w-28 shrink-0 text-sm text-muted-foreground">
+              {targetChannel === 'email' ? 'From address' : 'Phone number'}
+            </span>
+            <Input
+              value={form.externalIdentity}
+              onChange={(event) => update('externalIdentity', event.target.value)}
+              placeholder={targetChannel === 'email' ? 'support@client.com' : '+14155551234'}
+              className="h-8 flex-1 bg-card"
+              aria-label={targetChannel === 'email' ? 'From address' : 'Sender phone number'}
+            />
+          </div>
+
+          {provider === 'twilio' ? (
+            <>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">Account SID</span>
+                <Input
+                  value={form.accountSid}
+                  onChange={(event) => update('accountSid', event.target.value)}
+                  placeholder={editing ? 'Unchanged' : 'AC…'}
+                  className="h-8 flex-1 bg-card font-mono text-xs"
+                  aria-label="Twilio Account SID"
+                />
+              </div>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">Auth token</span>
+                <Input
+                  type="password"
+                  value={form.authToken}
+                  onChange={(event) => update('authToken', event.target.value)}
+                  placeholder={editing ? 'Unchanged' : 'Twilio auth token'}
+                  autoComplete="new-password"
+                  className="h-8 flex-1 bg-card"
+                  aria-label="Twilio auth token"
+                />
+              </div>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">
+                  Messaging Service <span className="block text-[11px]">(optional)</span>
+                </span>
+                <Input
+                  value={form.messagingServiceSid}
+                  onChange={(event) => update('messagingServiceSid', event.target.value)}
+                  placeholder="MG…"
+                  className="h-8 flex-1 bg-card font-mono text-xs"
+                  aria-label="Twilio Messaging Service SID"
+                />
+              </div>
+            </>
+          ) : null}
+
+          {provider === 'meta' ? (
+            <>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">Access token</span>
+                <Input
+                  type="password"
+                  value={form.accessToken}
+                  onChange={(event) => update('accessToken', event.target.value)}
+                  placeholder={editing ? 'Unchanged' : 'Permanent token (EAAG…)'}
+                  autoComplete="new-password"
+                  className="h-8 flex-1 bg-card"
+                  aria-label="Meta permanent access token"
+                />
+              </div>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">Phone number ID</span>
+                <Input
+                  value={form.phoneNumberId}
+                  onChange={(event) => update('phoneNumberId', event.target.value)}
+                  placeholder="e.g. 123456789012345"
+                  className="h-8 flex-1 bg-card font-mono text-xs"
+                  aria-label="WhatsApp phone number ID"
+                />
+              </div>
+            </>
+          ) : null}
+
+          {provider === 'smtp' ? (
+            <>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">Host</span>
+                <Input
+                  value={form.host}
+                  onChange={(event) => update('host', event.target.value)}
+                  placeholder="smtp.client.com"
+                  className="h-8 flex-1 bg-card"
+                  aria-label="SMTP host"
+                />
+              </div>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">Port</span>
+                <Input
+                  value={form.port}
+                  onChange={(event) => update('port', event.target.value)}
+                  placeholder="587"
+                  className="h-8 flex-1 bg-card"
+                  aria-label="SMTP port"
+                />
+              </div>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">Username</span>
+                <Input
+                  value={form.username}
+                  onChange={(event) => update('username', event.target.value)}
+                  placeholder={editing ? 'Unchanged' : 'SMTP username'}
+                  className="h-8 flex-1 bg-card"
+                  aria-label="SMTP username"
+                />
+              </div>
+              <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="w-28 shrink-0 text-sm text-muted-foreground">Password</span>
+                <Input
+                  type="password"
+                  value={form.password}
+                  onChange={(event) => update('password', event.target.value)}
+                  placeholder={editing ? 'Unchanged' : 'SMTP password'}
+                  autoComplete="new-password"
+                  className="h-8 flex-1 bg-card"
+                  aria-label="SMTP password"
+                />
+              </div>
+            </>
+          ) : null}
+
+          {provider === 'resend' ? (
+            <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+              <span className="w-28 shrink-0 text-sm text-muted-foreground">API key</span>
+              <Input
+                type="password"
+                value={form.apiKey}
+                onChange={(event) => update('apiKey', event.target.value)}
+                placeholder={editing ? 'Unchanged' : 're_…'}
+                autoComplete="new-password"
+                className="h-8 flex-1 bg-card"
+                aria-label="Resend API key"
+              />
+            </div>
+          ) : null}
+
+          {editing && !isPlatformManaged ? (
+            <label className="flex items-start gap-3 rounded-md border border-border bg-muted/40 px-4 py-3">
+              <Checkbox
+                checked={takeover}
+                onCheckedChange={(checked) => setTakeover(checked === true)}
+                aria-label="Convert to platform managed"
+                className="mt-0.5"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">Take over management</span>
+                <span className="text-xs leading-relaxed text-muted-foreground">
+                  Convert this client-connected channel to platform-managed. The client keeps enable/disable control
+                  but can no longer edit credentials.
+                </span>
+              </span>
+            </label>
+          ) : null}
+
+          <div className="flex items-start gap-2 rounded-md bg-primary-soft px-4 py-3">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Secrets are encrypted server-side and never shown again. New and updated connections start disabled —
+              run a connection test, then enable.
+            </p>
+          </div>
+        </div>
+
+        <SheetFooter className="flex-row justify-end gap-2 border-t border-border">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save()} disabled={saving}>
+            {saving ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : null}
+            {editing ? 'Save changes' : 'Provision connection'}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  )
 }
