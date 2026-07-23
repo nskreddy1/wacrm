@@ -31,7 +31,13 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
-import { hasMinRole, isAccountRole, type AccountRole } from "./roles";
+import { isAccountRole, type AccountRole } from "./roles";
+import {
+  deriveCapabilities,
+  hasPermission,
+  type MemberCapabilities,
+  type PermissionSlug,
+} from "./permissions";
 
 // ------------------------------------------------------------
 // Errors
@@ -91,6 +97,16 @@ export interface AccountContext {
   role: AccountRole;
   /** Lightweight account meta — id + name. */
   account: { id: string; name: string };
+  /** Permission slugs from the member's workspace profile. */
+  permissions: readonly string[];
+  /** Workspace owner — the "Super Admin"; implicitly holds every permission. */
+  isOwner: boolean;
+  /** Membership status — always 'active' when this resolves. */
+  status: string;
+  /** Assigned workspace profile (permission set), if any. */
+  workspaceProfile: { id: string; name: string } | null;
+  /** Derived capability flags for existing call sites. */
+  capabilities: MemberCapabilities;
 }
 
 /**
@@ -160,12 +176,32 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
     throw new ForbiddenError(`Unknown account role: ${row.account_role}`);
   }
 
+  // Membership status gate: deactivated or soft-deleted members are
+  // authenticated but must not reach any workspace data. RLS blocks
+  // them at the database too (is_account_member checks status);
+  // this throw gives them a clean 403 instead of empty responses.
+  const status = typeof row.status === "string" ? row.status : "active";
+  if (status !== "active") {
+    throw new ForbiddenError("This user account has been deactivated");
+  }
+
+  const permissions: string[] = Array.isArray(row.permissions) ? row.permissions : [];
+  const isOwner = row.is_owner === true;
+
   return {
     supabase,
     userId,
     accountId: row.account_id,
     role: row.account_role,
     account: { id: row.account_id, name: row.account_name },
+    permissions,
+    isOwner,
+    status,
+    workspaceProfile:
+      row.workspace_profile_id && row.workspace_profile_name
+        ? { id: row.workspace_profile_id, name: row.workspace_profile_name }
+        : null,
+    capabilities: deriveCapabilities(permissions, isOwner),
   };
 });
 
@@ -180,7 +216,7 @@ async function getCurrentAccountLegacy(
 ): Promise<AccountContext> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("account_id, account_role")
+    .select("account_id, account_role, status, workspace_profile_id")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -201,7 +237,7 @@ async function getCurrentAccountLegacy(
   // no relationship inference and is gated by the same accounts RLS.
   const { data: account, error: accountErr } = await supabase
     .from("accounts")
-    .select("id, name")
+    .select("id, name, owner_user_id")
     .eq("id", data.account_id)
     .maybeSingle();
 
@@ -213,12 +249,41 @@ async function getCurrentAccountLegacy(
     throw new ForbiddenError("Profile is not linked to an account");
   }
 
+  const status = typeof data.status === "string" ? data.status : "active";
+  if (status !== "active") {
+    throw new ForbiddenError("This user account has been deactivated");
+  }
+
+  const isOwner = account.owner_user_id === userId;
+
+  // Load the assigned workspace profile (permission set), if any.
+  // Pre-migration databases won't have the table — treat errors as
+  // "no profile" so the fallback stays functional during rollout.
+  let workspaceProfile: { id: string; name: string } | null = null;
+  let permissions: string[] = [];
+  if (data.workspace_profile_id) {
+    const { data: wp } = await supabase
+      .from("workspace_profiles")
+      .select("id, name, permissions")
+      .eq("id", data.workspace_profile_id)
+      .maybeSingle();
+    if (wp) {
+      workspaceProfile = { id: wp.id, name: wp.name };
+      permissions = Array.isArray(wp.permissions) ? wp.permissions : [];
+    }
+  }
+
   return {
     supabase,
     userId,
     accountId: data.account_id,
     role: data.account_role,
     account: { id: account.id, name: account.name },
+    permissions,
+    isOwner,
+    status,
+    workspaceProfile,
+    capabilities: deriveCapabilities(permissions, isOwner),
   };
 }
 
@@ -231,10 +296,43 @@ async function getCurrentAccountLegacy(
  */
 export async function requireRole(min: AccountRole): Promise<AccountContext> {
   const ctx = await getCurrentAccount();
-  if (!hasMinRole(ctx.role, min)) {
+
+  // Permission-model bridge: legacy min-role checks map onto the
+  // caller's derived capabilities (owner keeps everything). This
+  // mirrors the CASE mapping inside the redefined SQL
+  // `is_account_member(account_id, min_role)` shim, so TS guards
+  // and RLS agree.
+  const ok =
+    min === "viewer"
+      ? true
+      : min === "agent"
+        ? ctx.capabilities.canSendMessages
+        : min === "admin"
+          ? ctx.capabilities.canEditSettings
+          : ctx.isOwner;
+
+  if (!ok) {
     throw new ForbiddenError(
       `This action requires the '${min}' role or higher`,
     );
+  }
+  return ctx;
+}
+
+/**
+ * Resolve the caller's account context and enforce a specific
+ * permission slug. Preferred over `requireRole` for new routes:
+ *
+ *   const ctx = await requirePermission("broadcasts:send");
+ *
+ * Owners implicitly pass every check (Super Admin semantics).
+ */
+export async function requirePermission(
+  slug: PermissionSlug,
+): Promise<AccountContext> {
+  const ctx = await getCurrentAccount();
+  if (!hasPermission(ctx.permissions, slug, ctx.isOwner)) {
+    throw new ForbiddenError(`This action requires the '${slug}' permission`);
   }
   return ctx;
 }

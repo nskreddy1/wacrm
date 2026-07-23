@@ -5,6 +5,11 @@ import type { User } from "@supabase/supabase-js"
 import useSWR from "swr"
 import { DEFAULT_CURRENCY } from "@/lib/currency"
 import type { AccountRole } from "@/lib/auth/roles"
+import {
+  deriveCapabilities,
+  hasPermission,
+  type PermissionSlug,
+} from "@/lib/auth/permissions"
 // Type-only import: erased at build time, so the "server-only" guard
 // inside session-payload.ts never runs in this client module. Sharing
 // the type guarantees the SSR-provided fallback session and the
@@ -26,15 +31,22 @@ interface AuthContextValue {
   accountRole: AccountRole | null
   account: AccountSummary | null
   defaultCurrency: string
+  /** Workspace owner — the "Super Admin" profile; holds every permission. */
   isOwner: boolean
   isAdmin: boolean
-  /** Platform-level operator (profiles.is_super_admin). Orthogonal to workspace roles. */
+  /** Platform-level operator (profiles.is_super_admin). Orthogonal to workspace tiers. */
   isSuperAdmin: boolean
   isAgent: boolean
   isViewer: boolean
   canManageMembers: boolean
   canEditSettings: boolean
   canSendMessages: boolean
+  /** Permission slugs from the member's workspace profile. */
+  permissions: readonly string[]
+  /** Assigned workspace profile (permission set), if any. */
+  workspaceProfile: { id: string; name: string } | null
+  /** True iff the member holds `slug` (owners always pass). */
+  can: (slug: PermissionSlug) => boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -58,6 +70,9 @@ export function AuthProvider({
   )
   const session = data?.data
   const role = session?.profile.account_role ?? null
+  const permissions = session?.profile.permissions ?? []
+  const isOwner = session?.profile.is_owner === true
+  const caps = deriveCapabilities(permissions, isOwner)
 
   const value = useMemo<AuthContextValue>(() => ({
     user: (session?.user as User | undefined) ?? null,
