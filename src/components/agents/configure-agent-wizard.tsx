@@ -154,7 +154,7 @@ export function ConfigureAgentWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden rounded-xl p-0 shadow-2xl">
+      <DialogContent className="max-w-4xl gap-0 overflow-hidden rounded-xl p-0 shadow-2xl">
         <DialogHeader className="border-b border-border px-6 py-5">
           <DialogTitle className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
             <span className="block h-2.5 w-2.5 shrink-0 rounded-[2px] bg-primary" aria-hidden />
