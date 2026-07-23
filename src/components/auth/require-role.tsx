@@ -3,45 +3,70 @@
 import type { ReactNode } from "react";
 
 import { useAuth } from "@/hooks/use-auth";
-import { hasMinRole, type AccountRole } from "@/lib/auth/roles";
+import type { AccountRole } from "@/lib/auth/roles";
+import type { PermissionSlug } from "@/lib/auth/permissions";
 
 interface RequireRoleProps {
-  /** Minimum role to render `children`. Uses the standard hierarchy
-   *  owner > admin > agent > viewer. */
-  min: AccountRole;
-  /** What to render while the role is below `min` OR while we don't
-   *  yet know the role (`profileLoading` is true). Defaults to
-   *  `null` — most call sites just want the gated element to be
-   *  absent until we're sure. Pass a placeholder if a layout slot
-   *  would collapse and re-flow when the role resolves. */
+  /** Legacy minimum-tier gate. Maps onto permission-derived
+   *  capabilities: viewer → everyone, agent → can send messages,
+   *  admin → can edit settings, owner → workspace owner. Prefer
+   *  `permission` for new call sites. */
+  min?: AccountRole;
+  /** Permission-slug gate — `permission="broadcasts:send"` renders
+   *  children iff the member's workspace profile holds the slug
+   *  (owners always pass). Takes precedence over `min` when both
+   *  are provided. */
+  permission?: PermissionSlug;
+  /** What to render while access is below the gate OR while the
+   *  session is still loading. Defaults to `null` — most call sites
+   *  just want the gated element to be absent until we're sure. */
   fallback?: ReactNode;
   children: ReactNode;
 }
 
 /**
- * `<RequireRole min="admin">…</RequireRole>` — conditional render
- * helper for UI gated by account role.
+ * `<RequireRole permission="settings:manage">…</RequireRole>` —
+ * conditional render helper for UI gated by workspace-profile
+ * permissions.
  *
  * Three states:
- *   1. profileLoading → render `fallback` (we don't know the role
- *      yet; fail closed so we never flash the gated content to an
- *      under-privileged user).
- *   2. role ≥ min     → render `children`.
- *   3. role < min     → render `fallback`.
+ *   1. profileLoading → render `fallback` (fail closed so we never
+ *      flash gated content to an under-privileged user).
+ *   2. access ≥ gate  → render `children`.
+ *   3. access < gate  → render `fallback`.
  *
- * Mirrors the server-side `requireRole(min)` from `@/lib/auth/account`
- * so client and server gates stay aligned by construction.
+ * Mirrors the server-side `requirePermission(slug)` / `requireRole(min)`
+ * from `@/lib/auth/account` so client and server gates stay aligned.
  */
 export function RequireRole({
   min,
+  permission,
   fallback = null,
   children,
 }: RequireRoleProps) {
-  const { profileLoading, accountRole } = useAuth();
+  const {
+    profileLoading,
+    profile,
+    isOwner,
+    canEditSettings,
+    canSendMessages,
+    can,
+  } = useAuth();
 
-  if (profileLoading) return <>{fallback}</>;
-  if (!accountRole) return <>{fallback}</>;
-  if (!hasMinRole(accountRole, min)) return <>{fallback}</>;
+  if (profileLoading || !profile) return <>{fallback}</>;
 
-  return <>{children}</>;
+  if (permission) {
+    return can(permission) ? <>{children}</> : <>{fallback}</>;
+  }
+
+  const ok =
+    !min || min === "viewer"
+      ? true
+      : min === "agent"
+        ? canSendMessages
+        : min === "admin"
+          ? canEditSettings
+          : isOwner;
+
+  return ok ? <>{children}</> : <>{fallback}</>;
 }

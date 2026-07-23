@@ -36,11 +36,10 @@ export function SettingsOverview({
 }: {
   onSelect: (section: SettingsSection) => void;
 }) {
-  const { user, profile, accountId, accountRole, defaultCurrency, canManageMembers } =
+  const { user, profile, accountId, isOwner, workspaceProfile, defaultCurrency, canManageMembers } =
     useAuth();
   const { mode, theme } = useTheme();
   const t = useTranslations('Settings.overview');
-  const tRoles = useTranslations('Settings.roles');
   const tSections = useTranslations('Settings.sections');
 
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
@@ -143,7 +142,13 @@ export function SettingsOverview({
 
   const displayName = profile?.full_name || profile?.email || t('yourAccount');
   const initial = (profile?.full_name || profile?.email || 'U').charAt(0).toUpperCase();
-  const roleMeta = accountRole ? ROLE_META[accountRole] : null;
+  // Identity chip reflects the permission model: the workspace owner
+  // is "Super Admin" (crown); everyone else shows their assigned
+  // workspace profile (Administrator, Standard, custom, …).
+  const profileChipLabel = isOwner ? 'Super Admin' : (workspaceProfile?.name ?? null);
+  const roleMeta = profileChipLabel
+    ? (isOwner ? ROLE_META.owner : ROLE_META.admin)
+    : null;
   const RoleIcon = roleMeta?.icon;
 
   const currencyLabel =
@@ -232,7 +237,7 @@ export function SettingsOverview({
         {roleMeta && RoleIcon ? (
           <SettingsChip variant={roleMeta.variant}>
             <RoleIcon />
-            {tRoles(accountRole!)}
+            {profileChipLabel}
           </SettingsChip>
         ) : null}
       </Card>

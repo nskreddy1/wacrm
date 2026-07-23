@@ -11,7 +11,6 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { canEditSettings } from '@/lib/auth/roles';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,8 +56,8 @@ const PROVIDER_LABEL = Object.fromEntries(
 ) as Record<AiProvider, string>;
 
 export function AiConfig() {
-  const { accountId, accountRole, profileLoading } = useAuth();
-  const canEdit = accountRole ? canEditSettings(accountRole) : false;
+  const { accountId, profileLoading, can } = useAuth();
+  const canEdit = can('ai:manage');
   const t = useTranslations('Settings.aiConfig');
 
   const [loading, setLoading] = useState(true);
