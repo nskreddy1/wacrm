@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { ModuleCustomFieldsSection } from '@/components/shared/module-custom-fields-section';
 
 type CatalogResponse = { data: CatalogItem[] };
 type ContactsResponse = {
