@@ -1,33 +1,37 @@
 // ============================================================
 // /api/account/members/[userId]
 //
-//   PATCH  — change a member's role.   Admin+.
-//   DELETE — remove a member.          Admin+.
+//   PATCH  — change a member's workspace profile (permission set)
+//            and/or status (active | inactive | deleted).
+//            Requires members:manage.
+//   DELETE — remove a member entirely.  Requires members:manage.
 //
-// Both delegate to SECURITY DEFINER RPCs from migration 018:
-//   - set_member_role(p_user_id, p_new_role)
-//   - remove_account_member(p_user_id)
+// All mutations delegate to SECURITY DEFINER RPCs:
+//   - set_member_profile(p_user_id, p_profile_id)   (migration 2026-07-24)
+//   - set_member_status(p_user_id, p_status)        (migration 2026-07-24)
+//   - remove_account_member(p_user_id)              (migration 018)
 //
-// The RPCs do the *real* authorisation work — caller must be
-// admin+, target must be in caller's account, target can't be the
-// owner, can't be self. The TS layer here only forwards the call
-// and maps Postgres SQLSTATEs back to HTTP statuses.
+// The RPCs do the *real* authorisation work — caller must hold
+// members:manage in the same account, target can't be the owner,
+// can't be self (status). The TS layer forwards the call and maps
+// Postgres SQLSTATEs back to HTTP statuses.
 // ============================================================
 
 import { NextResponse } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 
-import { requireRole, toErrorResponse } from "@/lib/auth/account";
-import { isAccountRole } from "@/lib/auth/roles";
+import { requirePermission, toErrorResponse } from "@/lib/auth/account";
 import {
   checkRateLimit,
   rateLimitResponse,
   RATE_LIMITS,
 } from "@/lib/rate-limit";
 
-// Map known SQLSTATEs from the RPCs (see migration 018) onto HTTP
-// statuses. The `error.code` field is the SQLSTATE; the `message`
-// is the human-readable RAISE message we put in the migration.
+const MEMBER_STATUSES = ["active", "inactive", "deleted"] as const;
+
+// Map known SQLSTATEs from the RPCs onto HTTP statuses. The
+// `error.code` field is the SQLSTATE; the `message` is the
+// human-readable RAISE message from the migration.
 function rpcErrorToResponse(err: PostgrestError): NextResponse {
   if (err.code === "42501") {
     return NextResponse.json({ error: err.message }, { status: 403 });
@@ -47,10 +51,10 @@ export async function PATCH(
   { params }: { params: Promise<{ userId: string }> },
 ) {
   try {
-    const ctx = await requireRole("admin");
+    const ctx = await requirePermission("members:manage");
 
     const limit = checkRateLimit(
-      `admin:memberRole:${ctx.userId}`,
+      `admin:memberUpdate:${ctx.userId}`,
       RATE_LIMITS.adminAction,
     );
     if (!limit.success) return rateLimitResponse(limit);
@@ -58,35 +62,42 @@ export async function PATCH(
     const { userId } = await params;
 
     const body = (await request.json().catch(() => null)) as
-      | { role?: unknown }
+      | { profile_id?: unknown; status?: unknown }
       | null;
-    const role = body?.role;
 
-    if (!isAccountRole(role)) {
-      return NextResponse.json(
-        { error: "'role' must be one of owner, admin, agent, viewer" },
-        { status: 400 },
-      );
-    }
+    const profileId =
+      typeof body?.profile_id === "string" ? body.profile_id : undefined;
+    const status =
+      typeof body?.status === "string" &&
+      (MEMBER_STATUSES as readonly string[]).includes(body.status)
+        ? body.status
+        : undefined;
 
-    // The RPC blocks promotion to / demotion from owner, but
-    // surface the friendlier 400 before crossing the wire too.
-    if (role === "owner") {
+    if (!profileId && !status) {
       return NextResponse.json(
         {
           error:
-            "Use POST /api/account/transfer-ownership to promote a member to owner",
+            "Provide 'profile_id' (workspace profile) and/or 'status' (active | inactive | deleted)",
         },
         { status: 400 },
       );
     }
 
-    const { error } = await ctx.supabase.rpc("set_member_role", {
-      p_user_id: userId,
-      p_new_role: role,
-    });
+    if (profileId) {
+      const { error } = await ctx.supabase.rpc("set_member_profile", {
+        p_user_id: userId,
+        p_profile_id: profileId,
+      });
+      if (error) return rpcErrorToResponse(error);
+    }
 
-    if (error) return rpcErrorToResponse(error);
+    if (status) {
+      const { error } = await ctx.supabase.rpc("set_member_status", {
+        p_user_id: userId,
+        p_status: status,
+      });
+      if (error) return rpcErrorToResponse(error);
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -99,7 +110,7 @@ export async function DELETE(
   { params }: { params: Promise<{ userId: string }> },
 ) {
   try {
-    const ctx = await requireRole("admin");
+    const ctx = await requirePermission("members:manage");
 
     const limit = checkRateLimit(
       `admin:memberRemove:${ctx.userId}`,

@@ -143,12 +143,12 @@ const MAX_PENDING_INVITES = 20;
 
 export async function GET() {
   try {
-    const ctx = await requireRole("admin");
+    const ctx = await requirePermission("members:manage");
 
     const { data, error } = await ctx.supabase
       .from("account_invitations")
       .select(
-        "id, role, label, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id, invited_email, invited_first_name, invited_last_name",
+        "id, role, label, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id, invited_email, invited_first_name, invited_last_name, workspace_profile_id, workspace_profiles(id, name)",
       )
       .eq("account_id", ctx.accountId)
       .is("accepted_at", null)
@@ -171,7 +171,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const ctx = await requireRole("admin");
+    const ctx = await requirePermission("members:manage");
 
     // 30/min per user. The Members tab is a clicks-only UI so any
     // legitimate admin is far below this; the cap exists to keep
