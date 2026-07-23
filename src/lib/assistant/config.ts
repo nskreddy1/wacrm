@@ -114,18 +114,22 @@ export async function loadAssistantConfig(): Promise<AssistantConfig | null> {
   const v = data.value as StoredAssistantConfig
   if (v.enabled === false) return null
   if (!isAssistantProvider(v.provider)) return null
-  if (typeof v.api_key !== 'string' || v.api_key.length === 0) return null
 
-  let apiKey: string
-  try {
-    apiKey = decrypt(v.api_key)
-  } catch {
-    // Rotated/mismatched ENCRYPTION_KEY — surface in logs, treat as
-    // unconfigured rather than crashing every chat request.
-    console.error(
-      '[assistant config] platform key could not be decrypted — check ENCRYPTION_KEY; the helper agent is disabled until the key is re-entered.',
-    )
-    return null
+  const hasStoredKey = typeof v.api_key === 'string' && v.api_key.length > 0
+  if (!hasStoredKey && providerRequiresKey(v.provider)) return null
+
+  let apiKey = ''
+  if (hasStoredKey) {
+    try {
+      apiKey = decrypt(v.api_key as string)
+    } catch {
+      // Rotated/mismatched ENCRYPTION_KEY — surface in logs, treat as
+      // unconfigured rather than crashing every chat request.
+      console.error(
+        '[assistant config] platform key could not be decrypted — check ENCRYPTION_KEY; the helper agent is disabled until the key is re-entered.',
+      )
+      return null
+    }
   }
 
   return {
@@ -135,6 +139,10 @@ export async function loadAssistantConfig(): Promise<AssistantConfig | null> {
         ? v.model.trim()
         : ASSISTANT_DEFAULT_MODEL[v.provider],
     apiKey,
+    baseUrl:
+      typeof v.base_url === 'string' && v.base_url.trim().length > 0
+        ? v.base_url.trim()
+        : null,
     enabled: true,
   }
 }
@@ -148,5 +156,16 @@ export function resolveAssistantModel(config: AssistantConfig): LanguageModel {
       return createAnthropic({ apiKey: config.apiKey })(config.model)
     case 'gemini':
       return createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)
+    default: {
+      // OpenAI-compatible providers (NVIDIA NIM, Ollama, Groq,
+      // Mistral, DeepSeek, xAI): reuse the OpenAI SDK against the
+      // provider's endpoint, with optional admin-set base URL override.
+      const baseURL =
+        config.baseUrl ?? OPENAI_COMPATIBLE_BASE_URL[config.provider]
+      return createOpenAI({
+        apiKey: config.apiKey || 'ollama', // some servers reject empty keys
+        baseURL,
+      })(config.model)
+    }
   }
 }

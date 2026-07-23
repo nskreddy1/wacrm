@@ -76,19 +76,45 @@ export function AdminPlatform() {
 // metadata only.
 // ------------------------------------------------------------
 
-type AssistantProvider = "openai" | "anthropic" | "gemini";
+type AssistantProvider =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "nvidia"
+  | "ollama"
+  | "groq"
+  | "mistral"
+  | "deepseek"
+  | "xai";
 
 const ASSISTANT_PROVIDER_LABELS: Record<AssistantProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
   gemini: "Google Gemini",
+  nvidia: "NVIDIA (NIM)",
+  ollama: "Ollama (self-hosted)",
+  groq: "Groq",
+  mistral: "Mistral",
+  deepseek: "DeepSeek",
+  xai: "xAI (Grok)",
 };
+
+/** Ollama servers typically require no API key. */
+function providerNeedsKey(p: AssistantProvider): boolean {
+  return p !== "ollama";
+}
+
+/** Providers where a custom endpoint is common (self-hosted). */
+function providerSupportsBaseUrl(p: AssistantProvider): boolean {
+  return p === "ollama" || p === "nvidia";
+}
 
 interface AssistantConfigMeta {
   configured: boolean;
   enabled: boolean;
   provider: AssistantProvider | null;
   model: string | null;
+  base_url: string | null;
   updated_at: string | null;
 }
 
@@ -100,18 +126,20 @@ function AssistantConfigSection() {
   const [provider, setProvider] = useState<AssistantProvider>("openai");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
 
   // Hydrate form once per fetched snapshot (render-time, no effect).
   const snapshot = data
-    ? `${data.provider ?? ""}|${data.model ?? ""}|${data.enabled}`
+    ? `${data.provider ?? ""}|${data.model ?? ""}|${data.base_url ?? ""}|${data.enabled}`
     : null;
   if (data && snapshot && hydratedFor !== snapshot) {
     setHydratedFor(snapshot);
     if (data.provider) setProvider(data.provider);
     setModel(data.model ?? "");
+    setBaseUrl(data.base_url ?? "");
     setEnabled(data.enabled);
   }
 
@@ -126,6 +154,7 @@ function AssistantConfigSection() {
           model: model.trim() || undefined,
           // Write-only: omit when blank so the stored key is kept.
           api_key: apiKey.trim() || undefined,
+          base_url: baseUrl.trim() || undefined,
           enabled,
         }),
       });
@@ -169,8 +198,8 @@ function AssistantConfigSection() {
               <Select
                 value={provider}
                 onValueChange={(v) => {
-                  if (v === "openai" || v === "anthropic" || v === "gemini") {
-                    setProvider(v);
+                  if (v in ASSISTANT_PROVIDER_LABELS) {
+                    setProvider(v as AssistantProvider);
                   }
                 }}
               >
@@ -200,18 +229,51 @@ function AssistantConfigSection() {
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="assistant-key">API key</Label>
+              <Label htmlFor="assistant-key">
+                API key
+                {!providerNeedsKey(provider) && (
+                  <span className="ml-1 font-normal text-muted-foreground">
+                    (optional for Ollama)
+                  </span>
+                )}
+              </Label>
               <Input
                 id="assistant-key"
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder={
-                  data?.configured ? "•••••••• (stored)" : "sk-..."
+                  data?.configured
+                    ? "•••••••• (stored)"
+                    : providerNeedsKey(provider)
+                      ? "sk-..."
+                      : "Leave blank for open servers"
                 }
                 autoComplete="off"
               />
             </div>
+
+            {providerSupportsBaseUrl(provider) && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="assistant-base-url">
+                  Server URL
+                  <span className="ml-1 font-normal text-muted-foreground">
+                    (self-hosted endpoint)
+                  </span>
+                </Label>
+                <Input
+                  id="assistant-base-url"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder={
+                    provider === "ollama"
+                      ? "https://your-ollama-server.com/v1"
+                      : "https://integrate.api.nvidia.com/v1"
+                  }
+                  autoComplete="off"
+                />
+              </div>
+            )}
 
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="assistant-enabled" className="grid leading-tight">
@@ -230,7 +292,12 @@ function AssistantConfigSection() {
             <div className="flex justify-end">
               <Button
                 onClick={() => void save()}
-                disabled={saving || (!data?.configured && !apiKey.trim())}
+                disabled={
+                  saving ||
+                  (!data?.configured &&
+                    !apiKey.trim() &&
+                    providerNeedsKey(provider))
+                }
               >
                 {saving && (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
