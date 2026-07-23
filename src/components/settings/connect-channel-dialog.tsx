@@ -138,11 +138,6 @@ export function ConnectChannelDialog({ channel, open, onOpenChange, authorizeUrl
                     </SelectItem>
                   ) : null}
                   <SelectItem value="twilio-manual">Twilio — enter credentials manually</SelectItem>
-                  {channel === 'whatsapp' ? (
-                    <SelectItem value="meta-cloud" disabled>
-                      WhatsApp Cloud API (Meta) — coming soon
-                    </SelectItem>
-                  ) : null}
                 </SelectGroup>
               </SelectContent>
             </Select>
