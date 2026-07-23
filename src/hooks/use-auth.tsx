@@ -88,15 +88,19 @@ export function AuthProvider({
     accountRole: role,
     account: session?.account ?? null,
     defaultCurrency: session?.account.default_currency ?? DEFAULT_CURRENCY,
-    isOwner: role === "owner",
-    isAdmin: role === "admin",
+    isOwner,
+    isAdmin: caps.canEditSettings && !isOwner,
     isSuperAdmin: session?.profile.is_super_admin === true,
-    isAgent: role === "agent",
-    isViewer: role === "viewer",
-    canManageMembers: role === "owner" || role === "admin",
-    canEditSettings: role === "owner" || role === "admin",
-    canSendMessages: role !== null && role !== "viewer",
-  }), [isLoading, mutate, role, session])
+    isAgent: caps.canSendMessages && !caps.canEditSettings,
+    isViewer: session != null && !caps.canSendMessages && !caps.canEditSettings,
+    canManageMembers: caps.canManageMembers,
+    canEditSettings: caps.canEditSettings,
+    canSendMessages: caps.canSendMessages,
+    permissions,
+    workspaceProfile: session?.profile.workspace_profile ?? null,
+    can: (slug: PermissionSlug) => hasPermission(permissions, slug, isOwner),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [isLoading, mutate, role, session, isOwner, caps, permissions])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

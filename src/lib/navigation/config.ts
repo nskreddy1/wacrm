@@ -5,12 +5,12 @@
 // config stays serializable over the wire; the sidebar maps names
 // to lucide components.
 //
-// `minRole` gates items server-side per account role. Viewers see
-// engage/insights surfaces but not automation builders.
+// `permission` gates items server-side per workspace-profile
+// permission slug. Members without the slug see engage/insights
+// surfaces but not automation builders.
 // ============================================================
 
-import type { AccountRole } from "@/lib/auth/roles"
-import { hasMinRole } from "@/lib/auth/roles"
+import { hasPermission, type PermissionSlug } from "@/lib/auth/permissions"
 
 export type NavIconName =
   | "git-branch"
@@ -36,8 +36,18 @@ export interface NavItemConfig {
   icon: NavIconName
   /** Which live counter (if any) the client should attach as a badge. */
   counter?: "inbox-unread"
-  /** Minimum account role required to see this item. Defaults to viewer (everyone). */
-  minRole?: AccountRole
+  /** Permission slug required to see this item. Omit for everyone. */
+  permission?: PermissionSlug
+}
+
+/**
+ * Serializable access shape threaded from the server layout to the
+ * sidebar so the first paint renders the fully scoped nav. `null`
+ * means "session unknown" (loading / mock mode) → public subset.
+ */
+export interface NavAccess {
+  permissions: readonly string[]
+  isOwner: boolean
 }
 
 export interface NavGroupConfig {
@@ -63,11 +73,11 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     key: "automate",
     label: "Automate",
     items: [
-      { key: "broadcasts", href: "/broadcasts", label: "Broadcasts", shortLabel: "Campaigns", icon: "megaphone", minRole: "agent" },
-      { key: "templates", href: "/templates", label: "Templates", shortLabel: "Templates", icon: "layout-template", minRole: "agent" },
-      { key: "automations", href: "/automations", label: "Automations", shortLabel: "Rules", icon: "workflow", minRole: "agent" },
-      { key: "flows", href: "/flows", label: "Flows", shortLabel: "Flows", icon: "git-fork", minRole: "agent" },
-      { key: "agents", href: "/agents", label: "AI agents", shortLabel: "Agents", icon: "bot", minRole: "agent" },
+      { key: "broadcasts", href: "/broadcasts", label: "Broadcasts", shortLabel: "Campaigns", icon: "megaphone", permission: "broadcasts:send" },
+      { key: "templates", href: "/templates", label: "Templates", shortLabel: "Templates", icon: "layout-template", permission: "templates:manage" },
+      { key: "automations", href: "/automations", label: "Automations", shortLabel: "Rules", icon: "workflow", permission: "automations:manage" },
+      { key: "flows", href: "/flows", label: "Flows", shortLabel: "Flows", icon: "git-fork", permission: "flows:manage" },
+      { key: "agents", href: "/agents", label: "AI agents", shortLabel: "Agents", icon: "bot", permission: "ai:manage" },
     ],
   },
   {
@@ -78,13 +88,17 @@ export const NAV_GROUPS: NavGroupConfig[] = [
 ]
 
 /**
- * Filter the nav config down to what `role` may see. Groups that end
- * up empty are dropped entirely. A `null` role (session still
- * loading, mock mode) sees the viewer-safe subset.
+ * Filter the nav config down to what the member may see. Groups that
+ * end up empty are dropped entirely. A `null` access (session still
+ * loading, mock mode) sees the ungated subset.
  */
-export function navigationForRole(role: AccountRole | null): NavGroupConfig[] {
+export function navigationForAccess(access: NavAccess | null): NavGroupConfig[] {
   return NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.minRole || (role !== null && hasMinRole(role, item.minRole))),
+    items: group.items.filter(
+      (item) =>
+        !item.permission ||
+        (access !== null && hasPermission(access.permissions, item.permission, access.isOwner)),
+    ),
   })).filter((group) => group.items.length > 0)
 }
