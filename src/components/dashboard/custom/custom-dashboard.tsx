@@ -210,7 +210,12 @@ export function CustomDashboard({
             <Plus className="size-4" aria-hidden="true" /> Add component
           </Button>
         </div>
-        <AddWidgetDialog open={addOpen} onOpenChange={setAddOpen} onAdd={(w) => persist([...widgets, w])} />
+        <AddWidgetDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          overview={overview}
+          onAdd={(w) => persist([...widgets, w])}
+        />
       </>
     )
   }
@@ -245,7 +250,12 @@ export function CustomDashboard({
         </button>
       )}
 
-      <AddWidgetDialog open={addOpen} onOpenChange={setAddOpen} onAdd={(w) => persist([...widgets, w])} />
+      <AddWidgetDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        overview={overview}
+        onAdd={(w) => persist([...widgets, w])}
+      />
     </>
   )
 }

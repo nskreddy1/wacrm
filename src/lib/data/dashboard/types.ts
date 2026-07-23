@@ -87,6 +87,33 @@ export type TeamMemberSummary = {
   resolved7d: number
 }
 
+/** Monthly sales outcomes, oldest first (last 6 months incl. current). */
+export type SalesTrendPoint = {
+  /** ISO month (yyyy-mm). */
+  month: string
+  wonValue: number
+  wonCount: number
+  lostCount: number
+}
+
+/** Per-user sales leaderboard (last 30 days + current open book). */
+export type PerformerSummary = {
+  userId: string
+  name: string
+  wonValue30d: number
+  wonCount30d: number
+  openDeals: number
+  openValue: number
+}
+
+/** Workspace task workload counters (not limited to the tasks list). */
+export type TaskStats = {
+  open: number
+  overdue: number
+  dueToday: number
+  completed7d: number
+}
+
 export type GrowthPoint = {
   /** ISO date (yyyy-mm-dd), oldest first. */
   day: string
@@ -136,6 +163,11 @@ export type DashboardOverview = {
   broadcasts: BroadcastSummary
   pipeline: PipelineSummary
   team: TeamMemberSummary[]
+  /** 6 months of sales outcomes, oldest first. */
+  salesTrend: SalesTrendPoint[]
+  /** Top users by won value (30d), best first. */
+  performers: PerformerSummary[]
+  taskStats: TaskStats
   /** 30 days of contact growth, oldest first. */
   contactsGrowth: GrowthPoint[]
   activity: ActivityEntry[]
