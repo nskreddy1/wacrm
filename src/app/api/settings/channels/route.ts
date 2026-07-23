@@ -98,7 +98,22 @@ export async function GET() {
         available: Boolean(createChannelAdapter(provider, channel)),
       })),
     )
-    return NextResponse.json({ connections: (data ?? []).map(enrich), providers: offerings })
+    // Guided one-click connect availability. Twilio Connect needs a
+    // Connect App SID (Twilio Console → Settings → Connect apps).
+    // WhatsApp Embedded Signup additionally needs Meta Tech Provider
+    // approval — scaffolded so the button lights up once configured.
+    const guidedConnect = {
+      twilio: {
+        configured: Boolean(process.env.TWILIO_CONNECT_APP_SID),
+        authorizeUrl: process.env.TWILIO_CONNECT_APP_SID
+          ? `https://www.twilio.com/authorize/${process.env.TWILIO_CONNECT_APP_SID}`
+          : null,
+      },
+      whatsappEmbeddedSignup: {
+        configured: Boolean(process.env.META_APP_ID && process.env.META_SIGNUP_CONFIG_ID),
+      },
+    }
+    return NextResponse.json({ connections: (data ?? []).map(enrich), providers: offerings, guidedConnect })
   } catch (error) {
     return toErrorResponse(error)
   }
