@@ -155,7 +155,13 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
   )
 
   async function quickToggle(connection: Connection, enabled: boolean) {
-    setBusyToggle(connection.id)
+  // Support can lock the toggle (e.g. number under carrier review) —
+  // surface their notice instead of a failed request.
+  if (connection.managed_by === 'platform' && connection.client_can_toggle === false) {
+    toast.error(connection.platform_notice?.trim() || 'This connection is temporarily locked by our support team. Contact support for details.')
+    return
+  }
+  setBusyToggle(connection.id)
     try {
       const response = await fetch('/api/settings/channels', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: connection.id, isEnabled: enabled, isPrimary: enabled ? true : undefined }) })
       const payload = await response.json()
@@ -333,6 +339,9 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                           <span className="truncate text-sm font-medium text-foreground">{connection.display_name}</span>
                           <span className="truncate text-xs text-muted-foreground">{connection.external_identity} · {connection.providerLabel}{connection.is_primary ? ' · Primary' : ''}</span>
+                          {connection.platform_notice ? (
+                            <span className="truncate text-xs text-amber-600 dark:text-amber-500">{connection.platform_notice}</span>
+                          ) : null}
                         </div>
                         {connection.managed_by === 'platform' ? (
                           <Badge variant="outline" className="shrink-0 gap-1">

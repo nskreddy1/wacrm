@@ -11,7 +11,7 @@ import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
 
 const providers = ['meta', 'twilio', 'google', 'microsoft', 'resend', 'smtp'] as const
 const channels = ['whatsapp', 'sms', 'email'] as const
-const safeColumns = 'id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,last_connected_at,last_synced_at,last_error,created_at,updated_at'
+const safeColumns = 'id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,client_can_toggle,platform_notice,last_connected_at,last_synced_at,last_error,created_at,updated_at'
 
 const saveSchema = z.object({
   action: z.literal('save'),
@@ -238,9 +238,23 @@ export async function PATCH(request: Request) {
     const parsed = patchSchema.safeParse(await request.json())
     if (!parsed.success || (parsed.data.isEnabled === undefined && parsed.data.isPrimary === undefined)) return NextResponse.json({ error: 'Invalid channel connection update' }, { status: 400 })
     const admin = channelAdmin()
-    const { data: existing, error } = await admin.from('channel_connections').select('id,channel,status').eq('id', parsed.data.id).eq('account_id', accountId).maybeSingle()
+    const { data: existing, error } = await admin.from('channel_connections').select('id,channel,status,managed_by,client_can_toggle,platform_notice').eq('id', parsed.data.id).eq('account_id', accountId).maybeSingle()
     if (error) throw error
     if (!existing) return NextResponse.json({ error: 'Channel connection not found' }, { status: 404 })
+    // Platform governance: support can lock the enable/disable toggle
+    // (e.g. while a Twilio number is under carrier review). Surface
+    // their notice as the reason instead of a generic error.
+    if (parsed.data.isEnabled !== undefined && existing.managed_by === 'platform' && existing.client_can_toggle === false) {
+      return NextResponse.json(
+        {
+          error: existing.platform_notice?.trim()
+            ? existing.platform_notice
+            : 'This connection is temporarily locked by our support team. Contact support for details.',
+          locked: true,
+        },
+        { status: 403 },
+      )
+    }
     if (parsed.data.isEnabled && !['connected', 'degraded'].includes(existing.status)) return NextResponse.json({ error: 'Test this provider before enabling it' }, { status: 409 })
     if (parsed.data.isPrimary) await admin.from('channel_connections').update({ is_primary: false }).eq('account_id', accountId).eq('channel', existing.channel).neq('id', existing.id)
     const updates = { ...(parsed.data.isEnabled !== undefined ? { is_enabled: parsed.data.isEnabled } : {}), ...(parsed.data.isPrimary !== undefined ? { is_primary: parsed.data.isPrimary } : {}) }

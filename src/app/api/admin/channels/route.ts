@@ -53,7 +53,7 @@ const providers = ["meta", "twilio", "google", "microsoft", "resend", "smtp"] as
 const channels = ["whatsapp", "sms", "email"] as const;
 
 const SAFE_COLUMNS =
-  "id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,last_connected_at,last_synced_at,last_error,created_at,updated_at";
+  "id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,client_can_toggle,platform_notice,last_connected_at,last_synced_at,last_error,created_at,updated_at";
 
 const putSchema = z.object({
   account_id: z.string().uuid(),
@@ -66,6 +66,10 @@ const putSchema = z.object({
   credentials: z.record(z.string(), z.string()).optional(),
   /** Explicitly convert a client-managed row to platform-managed. */
   takeover: z.boolean().optional(),
+  /** Whether the client may enable/disable this connection themselves. */
+  clientCanToggle: z.boolean().optional(),
+  /** Support-authored message shown to the client (null clears it). */
+  platformNotice: z.string().trim().max(500).nullable().optional(),
 });
 
 const patchSchema = z.object({
@@ -73,6 +77,9 @@ const patchSchema = z.object({
   id: z.string().uuid(),
   action: z.literal("test").optional(),
   isEnabled: z.boolean().optional(),
+  /** Governance updates — no credentials required. */
+  clientCanToggle: z.boolean().optional(),
+  platformNotice: z.string().trim().max(500).nullable().optional(),
 });
 
 function enrich(connection: Record<string, unknown>) {
@@ -199,6 +206,15 @@ export async function PUT(request: Request) {
       configuration: parsed.data.configuration,
       credentials_encrypted: credentialsEncrypted,
       managed_by: managedBy,
+      // Governance: default new platform rows to client-toggleable
+      // with no notice; keep existing values unless explicitly set.
+      client_can_toggle:
+        parsed.data.clientCanToggle ??
+        ((existing?.client_can_toggle as boolean | undefined) ?? true),
+      platform_notice:
+        parsed.data.platformNotice !== undefined
+          ? parsed.data.platformNotice || null
+          : ((existing?.platform_notice as string | null | undefined) ?? null),
       status: "draft", // must pass a connection test before enabling
       is_enabled: false,
       last_error: null,
@@ -310,6 +326,36 @@ export async function PATCH(request: Request) {
       });
       if (!health.ok) return NextResponse.json({ health, connection: updated ? enrich(updated) : null }, { status: 422 });
       return NextResponse.json({ health, connection: updated ? enrich(updated) : null });
+    }
+
+    // --- Governance: lock/unlock client toggle, set/clear notice. ---
+    if (
+      typeof parsed.data.isEnabled !== "boolean" &&
+      (parsed.data.clientCanToggle !== undefined || parsed.data.platformNotice !== undefined)
+    ) {
+      const governance = {
+        ...(parsed.data.clientCanToggle !== undefined ? { client_can_toggle: parsed.data.clientCanToggle } : {}),
+        ...(parsed.data.platformNotice !== undefined ? { platform_notice: parsed.data.platformNotice || null } : {}),
+      };
+      const { data: updated, error: govError } = await admin
+        .from("channel_connections")
+        .update(governance)
+        .eq("id", row.id)
+        .select(SAFE_COLUMNS)
+        .single();
+      if (govError || !updated) {
+        console.error("[PATCH /api/admin/channels] governance error:", govError);
+        return NextResponse.json({ error: "Failed to update connection settings" }, { status: 500 });
+      }
+      await logPlatformAudit(admin, {
+        actorId: ctx.userId,
+        accountId,
+        action: "channel.governance_updated",
+        entity: `channel_connection:${row.id}`,
+        before: { client_can_toggle: row.client_can_toggle, platform_notice: row.platform_notice },
+        after: { client_can_toggle: updated.client_can_toggle, platform_notice: updated.platform_notice },
+      });
+      return NextResponse.json({ connection: enrich(updated) });
     }
 
     // --- Enable / disable toggle. ---

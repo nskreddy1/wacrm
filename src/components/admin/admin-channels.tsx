@@ -16,7 +16,7 @@
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { toast } from 'sonner'
-import { CheckCircle2, Loader2, Mail, MessageCircle, MoreHorizontal, PlugZap, Plus, ShieldCheck, Smartphone, Trash2, Wrench } from 'lucide-react'
+import { CheckCircle2, Loader2, Lock, Mail, Megaphone, MessageCircle, MoreHorizontal, PlugZap, Plus, ShieldCheck, Smartphone, Trash2, Wrench } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
 
@@ -257,9 +258,11 @@ function ConnectionRow({
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [governanceOpen, setGovernanceOpen] = useState(false)
   const Icon = CHANNEL_ICON[connection.channel]
   const status = STATUS_BADGE[connection.status] ?? STATUS_BADGE.draft
   const isPlatform = connection.managed_by === 'platform'
+  const toggleLocked = connection.client_can_toggle === false
 
   async function patch(payload: Record<string, unknown>, key: string) {
     setBusy(key)
@@ -321,11 +324,23 @@ function ConnectionRow({
             {isPlatform ? <ShieldCheck className="size-3" aria-hidden /> : null}
             {isPlatform ? 'Platform managed' : 'Client connected'}
           </Badge>
+          {toggleLocked ? (
+            <Badge variant="secondary" className="gap-1">
+              <Lock className="size-3" aria-hidden />
+              Toggle locked
+            </Badge>
+          ) : null}
         </div>
         <p className="truncate text-xs text-muted-foreground">
           {connection.providerLabel} · {connection.external_identity}
           {connection.last_error ? ` · ${connection.last_error}` : ''}
         </p>
+        {connection.platform_notice ? (
+          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-amber-600 dark:text-amber-500">
+            <Megaphone className="size-3 shrink-0" aria-hidden />
+            <span className="truncate">{connection.platform_notice}</span>
+          </p>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-2">
@@ -369,6 +384,10 @@ function ConnectionRow({
               <Wrench className="size-4" aria-hidden />
               {isPlatform ? 'Edit / rotate credentials' : 'Fix client configuration'}
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setGovernanceOpen(true)}>
+              <Megaphone className="size-4" aria-hidden />
+              Client access &amp; notice
+            </DropdownMenuItem>
             <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="size-4" aria-hidden />
               Remove connection
@@ -376,6 +395,14 @@ function ConnectionRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <GovernanceDialog
+        accountId={accountId}
+        connection={connection}
+        open={governanceOpen}
+        onOpenChange={setGovernanceOpen}
+        onSaved={onChanged}
+      />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
@@ -758,6 +785,128 @@ function ProvisionSheet({
           <Button onClick={() => void save()} disabled={saving}>
             {saving ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : null}
             {editing ? 'Save changes' : 'Provision connection'}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+// ------------------------------------------------------------------
+// Governance sheet — controls what the CLIENT can do with this
+// connection: enable/disable permission + a support-authored notice
+// (e.g. "Number under Twilio carrier review"). Same labeled-row
+// design as the create-field sheet.
+// ------------------------------------------------------------------
+
+function GovernanceDialog({
+  accountId,
+  connection,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  accountId: string
+  connection: Connection
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSaved: () => void
+}) {
+  const [canToggle, setCanToggle] = useState(true)
+  const [notice, setNotice] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [lastOpen, setLastOpen] = useState(false)
+
+  // Render-time reset each time the sheet opens.
+  if (open !== lastOpen) {
+    setLastOpen(open)
+    if (open) {
+      setCanToggle(connection.client_can_toggle !== false)
+      setNotice(connection.platform_notice ?? '')
+    }
+  }
+
+  async function save() {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/admin/channels', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_id: accountId,
+          id: connection.id,
+          clientCanToggle: canToggle,
+          platformNotice: notice.trim() || null,
+        }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? 'Failed to save settings')
+      toast.success('Client access settings saved')
+      onSaved()
+      onOpenChange(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Client access &amp; notice</SheetTitle>
+          <SheetDescription>
+            {`Control what the client can do with “${connection.display_name}” and post a status message they will see in their Settings.`}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
+          <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/40 px-4 py-3.5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium text-foreground">Client can enable / disable</span>
+              <span className="text-xs text-muted-foreground">
+                Turn off to lock the toggle — e.g. while the number is under carrier review.
+              </span>
+            </div>
+            <Switch
+              checked={canToggle}
+              onCheckedChange={setCanToggle}
+              aria-label="Client can enable or disable this connection"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 px-4 py-3.5">
+            <span className="text-sm font-medium text-foreground">Status notice for the client</span>
+            <Textarea
+              value={notice}
+              onChange={(event) => setNotice(event.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder="e.g. This number is pending Twilio verification — expected back online Friday. Contact support with questions."
+              aria-label="Status notice shown to the client"
+              className="bg-card"
+            />
+            <span className="text-xs text-muted-foreground">
+              Shown on the connection in the client&apos;s Settings{canToggle ? '.' : ' and as the reason the toggle is locked.'} Leave empty to clear.
+            </span>
+          </div>
+
+          {!canToggle && !notice.trim() ? (
+            <p className="rounded-md bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+              Locking without a notice shows the client a generic &quot;contact support&quot; message. Adding a short
+              reason avoids confusion and support tickets.
+            </p>
+          ) : null}
+        </div>
+
+        <SheetFooter className="flex-row justify-end gap-2 border-t border-border">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save()} disabled={saving}>
+            {saving ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : null}
+            Save settings
           </Button>
         </SheetFooter>
       </SheetContent>
