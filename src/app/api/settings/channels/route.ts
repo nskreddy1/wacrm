@@ -31,6 +31,19 @@ const saveSchema = z.object({
 })
 const testSchema = z.object({ action: z.literal('test'), id: z.string().uuid(), recipient: z.string().email().optional() })
 const patchSchema = z.object({ id: z.string().uuid(), isEnabled: z.boolean().optional(), isPrimary: z.boolean().optional() })
+/**
+ * "Validate & Pick": verify Twilio credentials and list the account's
+ * numbers/senders/services so the UI offers pickers instead of manual
+ * SID copying. Credentials come either fresh from the form or from an
+ * existing connection (decrypted server-side, never sent to browser).
+ */
+const discoverSchema = z.object({
+  action: z.literal('discover'),
+  provider: z.literal('twilio'),
+  accountSid: z.string().trim().optional(),
+  authToken: z.string().trim().optional(),
+  reuseCredentialsFromId: z.string().uuid().optional(),
+})
 
 function credentialsFor(provider: ChannelProvider, input?: Record<string, string>): ProviderCredentials | null {
   if (!input) return null

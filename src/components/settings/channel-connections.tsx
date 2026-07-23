@@ -31,26 +31,52 @@ const defaults = {
 }
 
 /**
- * Per-channel copy: WhatsApp is a policy-governed channel (Meta
- * template approval, 24h session window), SMS is carrier-based
- * pay-per-segment, Email is free-form. Splitting them keeps each
- * panel's guidance specific instead of lowest-common-denominator.
+ * Per-channel copy and requirements: WhatsApp is a policy-governed
+ * channel (Meta template approval, 24h session window), SMS is
+ * carrier-based pay-per-segment, Email is free-form. Splitting them
+ * keeps each panel's guidance specific instead of
+ * lowest-common-denominator. Rendered Bigin-style: a centered connect
+ * hero plus an amber "Requirements" callout.
  */
-const CHANNEL_HEAD: Record<ChannelKind, { title: string; description: string }> = {
+const CHANNEL_HEAD: Record<
+  ChannelKind,
+  { title: string; heroTitle: string; description: string; requirements: string[] }
+> = {
   whatsapp: {
     title: 'WhatsApp',
+    heroTitle: 'Connect your WhatsApp Business account',
     description:
-      'Connect your WhatsApp Business number. WhatsApp is policy-governed: outbound messages outside the 24-hour customer service window require Meta-approved templates, and opt-in is mandatory. Configure and test the provider here; manage templates in the Template studio.',
+      'Link your WhatsApp Business number to engage customers in conversations, broadcasts, and automations. Manage message templates in the Template studio.',
+    requirements: [
+      'You need a Twilio account with a WhatsApp-enabled sender number.',
+      'Outbound messages outside the 24-hour customer service window require Meta-approved templates.',
+      'Customer opt-in is mandatory under WhatsApp Business policy — collect consent before messaging.',
+      'Understand WhatsApp\u2019s conversation-based pricing before large sends.',
+    ],
   },
   sms: {
     title: 'SMS',
+    heroTitle: 'Connect your SMS provider',
     description:
-      'Connect an SMS provider. SMS is billed per segment by your carrier and needs no template pre-approval, but regional sender-ID and opt-out (STOP) rules apply. A Messaging Service is recommended for sender pooling and carrier-managed opt-outs.',
+      'Link an SMS provider to reach customers by text for conversations and broadcasts. No template pre-approval is needed.',
+    requirements: [
+      'You need a Twilio account with an SMS-capable phone number.',
+      'SMS is billed per segment — check regional pricing before large sends.',
+      'Regional sender-ID and opt-out (STOP) regulations apply to marketing texts.',
+      'A Messaging Service is recommended for sender pooling and carrier-managed opt-outs.',
+    ],
   },
   email: {
     title: 'Email',
+    heroTitle: 'Connect your email provider',
     description:
-      'Connect an email provider for conversations and broadcasts. Email is free-form — no external approval needed. Use a dedicated sender address and test deliverability before enabling.',
+      'Link an email provider for conversations and broadcasts. Email is free-form — no external approval is needed.',
+    requirements: [
+      'You need SMTP credentials or a Resend API key.',
+      'Use a dedicated sender address (e.g. support@yourdomain.com).',
+      'Set up SPF and DKIM on your domain for reliable deliverability.',
+      'Send a test message before enabling the connection.',
+    ],
   },
 }
 
@@ -122,19 +148,43 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
     catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not update provider') } finally { setBusy(null) }
   }
 
-  const head = fixedChannel
-    ? CHANNEL_HEAD[fixedChannel]
-    : { title: 'Channels', description: 'Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — a school can run SMS-only broadcasts without ever connecting WhatsApp. Providers are configured, tested, and enabled per channel, so future providers slot in beside the existing ones.' }
   const visibleChannels: ChannelKind[] = fixedChannel ? [fixedChannel] : ['email', 'whatsapp', 'sms']
+  const hero = fixedChannel ? CHANNEL_HEAD[fixedChannel] : null
+  const HeroIcon = fixedChannel === 'whatsapp' ? MessageCircle : fixedChannel === 'sms' ? Smartphone : Mail
 
   return (
     <section>
-      <SettingsPanelHead title={head.title} description={head.description} />
-      <Alert className="mb-5">
-        <ShieldCheck />
-        <AlertTitle>Provider-neutral and secret-safe</AlertTitle>
-        <AlertDescription>Credentials are encrypted at rest and never returned to this browser. Switching providers requires deliberate setup and a successful health check.</AlertDescription>
-      </Alert>
+      {hero ? (
+        /* Bigin-style connect hero: centered title, channel mark,
+           short description, then an amber Requirements callout. */
+        <div className="mb-6 flex flex-col items-center gap-4 pt-2 text-center">
+          <h2 className="text-2xl font-bold text-balance text-foreground">{hero.heroTitle}</h2>
+          <div className="flex size-14 items-center justify-center rounded-full bg-primary-soft">
+            <HeroIcon className="size-7 text-primary" aria-hidden />
+          </div>
+          <p className="max-w-xl text-sm leading-relaxed text-pretty text-muted-foreground">{hero.description}</p>
+          <div className="w-full max-w-2xl rounded-lg bg-amber-500/10 px-5 py-4 text-left">
+            <h3 className="mb-2 text-sm font-semibold text-foreground">Requirements</h3>
+            <ul className="flex flex-col gap-1.5">
+              {hero.requirements.map((requirement) => (
+                <li key={requirement} className="flex gap-2.5 text-sm leading-relaxed text-foreground/85">
+                  <span aria-hidden className="mt-2 size-1 shrink-0 rounded-full bg-foreground/60" />
+                  {requirement}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : (
+        <>
+          <SettingsPanelHead title="Channels" description="Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — a school can run SMS-only broadcasts without ever connecting WhatsApp. Providers are configured, tested, and enabled per channel, so future providers slot in beside the existing ones." />
+          <Alert className="mb-5">
+            <ShieldCheck />
+            <AlertTitle>Provider-neutral and secret-safe</AlertTitle>
+            <AlertDescription>Credentials are encrypted at rest and never returned to this browser. Switching providers requires deliberate setup and a successful health check.</AlertDescription>
+          </Alert>
+        </>
+      )}
       {/* Reset the draft form when switching channel tabs — each tab is
           an independent connection draft, so values typed for WhatsApp
           must not leak into the SMS form. */}
