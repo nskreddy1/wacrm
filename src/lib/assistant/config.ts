@@ -19,18 +19,58 @@ import { supabaseAdmin } from '@/lib/ai/admin-client'
 
 export const ASSISTANT_SETTING_KEY = 'assistant_config'
 
-export type AssistantProvider = 'openai' | 'anthropic' | 'gemini'
+export type AssistantProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'nvidia'
+  | 'ollama'
+  | 'groq'
+  | 'mistral'
+  | 'deepseek'
+  | 'xai'
 
 export const ASSISTANT_PROVIDERS: readonly AssistantProvider[] = [
   'openai',
   'anthropic',
   'gemini',
+  'nvidia',
+  'ollama',
+  'groq',
+  'mistral',
+  'deepseek',
+  'xai',
 ]
 
 export const ASSISTANT_DEFAULT_MODEL: Record<AssistantProvider, string> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-5-haiku-latest',
   gemini: 'gemini-2.0-flash',
+  nvidia: 'meta/llama-3.1-8b-instruct',
+  ollama: 'llama3.1',
+  groq: 'llama-3.3-70b-versatile',
+  mistral: 'mistral-small-latest',
+  deepseek: 'deepseek-chat',
+  xai: 'grok-3-mini',
+}
+
+/**
+ * OpenAI-compatible providers are served through `@ai-sdk/openai`
+ * pointed at their own base URL. Ollama's default targets a local
+ * server; admins override it with their hosted URL via `base_url`.
+ */
+const OPENAI_COMPATIBLE_BASE_URL: Partial<Record<AssistantProvider, string>> = {
+  nvidia: 'https://integrate.api.nvidia.com/v1',
+  ollama: 'http://localhost:11434/v1',
+  groq: 'https://api.groq.com/openai/v1',
+  mistral: 'https://api.mistral.ai/v1',
+  deepseek: 'https://api.deepseek.com/v1',
+  xai: 'https://api.x.ai/v1',
+}
+
+/** Ollama servers typically require no API key. */
+export function providerRequiresKey(p: AssistantProvider): boolean {
+  return p !== 'ollama'
 }
 
 export interface AssistantConfig {
@@ -38,6 +78,8 @@ export interface AssistantConfig {
   model: string
   /** Decrypted, ready to use. Never serialize back to the client. */
   apiKey: string
+  /** Custom endpoint override (mainly for self-hosted Ollama/NIM). */
+  baseUrl: string | null
   enabled: boolean
 }
 
@@ -45,11 +87,15 @@ interface StoredAssistantConfig {
   provider?: unknown
   model?: unknown
   api_key?: unknown
+  base_url?: unknown
   enabled?: unknown
 }
 
 export function isAssistantProvider(v: unknown): v is AssistantProvider {
-  return v === 'openai' || v === 'anthropic' || v === 'gemini'
+  return (
+    typeof v === 'string' &&
+    (ASSISTANT_PROVIDERS as readonly string[]).includes(v)
+  )
 }
 
 /**
