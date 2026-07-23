@@ -276,12 +276,17 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                           />
                         ))
                       )}
-                      <ProviderCard
-                        label="Custom"
-                        hint="Other providers & manual setup"
-                        icon={Settings2}
-                        onClick={() => openSetup(null)}
-                      />
+                      {tab !== 'sms' ? (
+                        /* SMS has exactly one provider (Twilio), so a
+                           "Custom" card would open the same form —
+                           show it only where real alternatives exist. */
+                        <ProviderCard
+                          label="Custom"
+                          hint="Other providers & manual setup"
+                          icon={Settings2}
+                          onClick={() => openSetup(null)}
+                        />
+                      ) : null}
                     </div>
                   </div>
                   <div className="w-full max-w-2xl rounded-lg bg-amber-500/10 px-5 py-4 text-left">
@@ -365,28 +370,30 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
         />
       ) : null}
 
+      {/* Concise enterprise-style prompt (Slack/Stripe pattern): brand
+          mark + one short sentence + two clear actions. Details about
+          billing/credentials live in the setup sheet, not here. */}
       <AlertDialog open={reusePromptOpen} onOpenChange={setReusePromptOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Twilio credentials already exist</AlertDialogTitle>
+            <div className="mb-1 flex size-10 items-center justify-center rounded-lg border border-border bg-card">
+              <img src="/icons/brands/twilio.svg" alt="" className="size-6" />
+            </div>
+            <AlertDialogTitle>Use your existing Twilio account?</AlertDialogTitle>
             <AlertDialogDescription>
-              {reusableTwilio
-                ? `Your ${reusableTwilio.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} connection “${reusableTwilio.display_name}” already uses a Twilio account. Reuse the same account for ${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} — one bill, one set of credentials — or connect a different Twilio account.`
-                : ''}
+              {reusableTwilio ? `“${reusableTwilio.display_name}” is already connected for ${reusableTwilio.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}.` : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => openSetup({ provider: 'twilio' })}
-            >
-              Use a different account
+            <AlertDialogCancel onClick={() => openSetup({ provider: 'twilio' })}>
+              Connect new account
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (reusableTwilio) openSetup({ provider: 'twilio', reuseFromId: reusableTwilio.id, reuseFromLabel: reusableTwilio.display_name })
               }}
             >
-              Reuse existing credentials
+              Use existing account
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
