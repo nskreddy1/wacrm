@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
-import { CheckCircle2, Loader2, Mail, MessageCircle, ShieldCheck, Smartphone } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Loader2, Mail, MessageCircle, ShieldCheck, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -13,12 +13,18 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { ConnectChannelDialog } from './connect-channel-dialog'
 import { SettingsPanelHead } from './settings-panel-head'
 import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
 
 type ProviderInfo = { provider: ChannelProvider; channel: ChannelKind; label: string; available: boolean }
 type Connection = ChannelConnection & { credentialsConfigured: boolean; providerLabel: string }
-type ResponseData = { connections: Connection[]; providers: ProviderInfo[] }
+type GuidedConnect = {
+  twilio: { configured: boolean; authorizeUrl: string | null }
+  whatsappEmbeddedSignup: { configured: boolean }
+}
+type ResponseData = { connections: Connection[]; providers: ProviderInfo[]; guidedConnect?: GuidedConnect }
 const fetcher = async (url: string) => {
   const response = await fetch(url)
   const payload = await response.json()
@@ -94,6 +100,9 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
   const [form, setForm] = useState(defaults)
   const [busy, setBusy] = useState<string | null>(null)
   const [reuseFromId, setReuseFromId] = useState<string | null>(null)
+  const [connectOpen, setConnectOpen] = useState(false)
+  /** "Custom configuration (advanced)" collapsible — manual credentials. */
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const connections = useMemo(() => data?.connections.filter((item) => item.channel === channel) ?? [], [data, channel])
   const providers = data?.providers.filter((item) => item.channel === channel) ?? []
   // An existing Twilio connection on ANOTHER channel whose credentials
@@ -197,6 +206,11 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
             <HeroIcon className="size-7 text-primary" aria-hidden />
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-pretty text-muted-foreground">{hero.description}</p>
+          {fixedChannel !== 'email' ? (
+            <Button size="lg" className="rounded-full px-8" onClick={() => setConnectOpen(true)}>
+              Connect now
+            </Button>
+          ) : null}
           <div className="w-full max-w-2xl rounded-lg bg-amber-500/10 px-5 py-4 text-left">
             <h3 className="mb-2 text-sm font-semibold text-foreground">Requirements</h3>
             <ul className="flex flex-col gap-1.5">
@@ -219,6 +233,23 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
           </Alert>
         </>
       )}
+      {fixedChannel ? (
+        <ConnectChannelDialog
+          channel={fixedChannel}
+          open={connectOpen}
+          onOpenChange={setConnectOpen}
+          authorizeUrl={data?.guidedConnect?.twilio.authorizeUrl ?? null}
+          onAuthorized={(accountSid) => {
+            // The customer authorized our Connect App: their Account
+            // SID arrives via the callback popup. Prefill it and open
+            // the configuration section to finish (pick number, name).
+            update('accountSid', accountSid)
+            setAdvancedOpen(true)
+            toast.success('Twilio account linked. Finish the configuration below — fetch your numbers to pick a sender.')
+          }}
+          onFallbackToManual={() => setAdvancedOpen(true)}
+        />
+      ) : null}
       {/* Reset the draft form when switching channel tabs — each tab is
           an independent connection draft, so values typed for WhatsApp
           must not leak into the SMS form. */}
@@ -253,6 +284,14 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                 </CardFooter>
               </Card>
             ))}
+            <Collapsible open={fixedChannel ? advancedOpen : true} onOpenChange={fixedChannel ? setAdvancedOpen : undefined}>
+              {fixedChannel ? (
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+                  <span>Custom configuration (advanced)</span>
+                  <ChevronDown className={`size-4 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} aria-hidden />
+                </CollapsibleTrigger>
+              ) : null}
+              <CollapsibleContent className="pt-3">
             <Card>
               <CardHeader><CardTitle>Add {tab === 'email' ? 'email' : tab === 'sms' ? 'SMS' : 'WhatsApp'} provider</CardTitle><CardDescription>Save credentials first. The provider stays disabled until its connection test succeeds.{tab === 'sms' ? ' SMS is billed per segment by your provider — check regional pricing (e.g. Twilio rates in India) before large sends.' : ''}</CardDescription></CardHeader>
               <CardContent className="flex flex-col gap-5">
@@ -329,6 +368,8 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
               </CardContent>
               <CardFooter><Button onClick={save} disabled={busy !== null || !providers.find((item) => item.provider === provider)?.available}>{busy === 'save' ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}Save securely</Button></CardFooter>
             </Card>
+              </CollapsibleContent>
+            </Collapsible>
           </TabsContent>
         ))}
       </Tabs>
