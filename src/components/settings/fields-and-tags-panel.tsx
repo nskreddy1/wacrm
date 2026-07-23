@@ -63,24 +63,22 @@ interface DisplayField {
 
 function FieldRow({ field }: { field: DisplayField }) {
   return (
-    <div
-      className={cn(
-        'relative flex min-h-9 items-center gap-1.5 overflow-hidden rounded-md border border-border bg-card px-3 py-1.5 text-sm',
-        field.required && 'pl-3.5',
-      )}
-    >
+    <div className="relative flex min-h-10 items-center gap-1.5 overflow-hidden rounded-md border border-border bg-card px-3.5 py-2 text-sm">
       {field.required && (
         <span
           aria-hidden
-          className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-destructive"
+          className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-destructive"
         />
       )}
       <span className="truncate text-foreground">{field.label}</span>
       {field.unique && (
-        <span className="shrink-0 text-xs text-muted-foreground">(Unique)</span>
+        <span className="shrink-0 text-sm text-muted-foreground">(Unique)</span>
       )}
       {field.custom && (
-        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
+        <span
+          aria-hidden
+          className="mb-1.5 size-1.5 shrink-0 self-center rounded-full bg-primary"
+        />
       )}
       {field.custom && <span className="sr-only">Custom field</span>}
     </div>
@@ -103,26 +101,25 @@ function ModuleCard({
   onCustomize: () => void;
 }) {
   return (
-    <article className="flex w-72 shrink-0 flex-col rounded-lg border border-border bg-card">
-      <header className="border-b border-border px-4 py-3">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+    <article className="flex h-[calc(100vh-16.5rem)] max-h-[640px] min-h-[420px] w-96 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+      <header className="border-b border-border bg-muted/60 px-4 py-3.5">
+        <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
       </header>
-      <div className="app-scrollbar max-h-96 flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="app-scrollbar flex-1 space-y-5 overflow-y-auto px-4 pb-4 pt-4">
         {loading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
+          <div className="space-y-2.5">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
           </div>
         ) : (
           sections
             .filter((section) => section.fields.length > 0)
             .map((section) => (
-              <section key={section.title} className="space-y-2">
-                <h4 className="text-xs font-semibold text-foreground">
-                  {section.title}
-                </h4>
-                <div className="space-y-2">
+              <section key={section.title} className="space-y-2.5">
+                <h4 className="text-sm font-bold text-foreground">{section.title}</h4>
+                <div className="space-y-2.5">
                   {section.fields.map((field) => (
                     <FieldRow key={field.id} field={field} />
                   ))}
@@ -131,23 +128,24 @@ function ModuleCard({
             ))
         )}
       </div>
-      <footer className="flex items-center justify-between gap-2 border-t border-border px-4 py-3">
+      <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3.5">
         {canEdit ? (
           <button
             type="button"
             onClick={onCustomize}
-            className="text-sm font-medium text-primary hover:underline"
+            className="text-sm font-semibold text-primary hover:underline"
           >
             Customize Fields
           </button>
         ) : (
           <span className="text-sm text-muted-foreground">View only</span>
         )}
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+        <span className="flex items-center gap-1.5 whitespace-nowrap text-[13px] text-muted-foreground">
+          <span aria-hidden className="size-1.5 rounded-full bg-primary/70" />
           Used Custom Fields
-          <span className="font-semibold text-foreground">
-            : {usedCustom}/{CUSTOM_FIELD_LIMIT}
+          <span className="font-bold text-foreground">
+            {'\u00A0'}:{'\u00A0'}
+            {usedCustom}/{CUSTOM_FIELD_LIMIT}
           </span>
         </span>
       </footer>
