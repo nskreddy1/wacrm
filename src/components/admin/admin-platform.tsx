@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -115,6 +116,8 @@ interface AssistantConfigMeta {
   provider: AssistantProvider | null;
   model: string | null;
   base_url: string | null;
+  system_prompt: string | null;
+  default_system_prompt: string | null;
   updated_at: string | null;
 }
 
@@ -127,19 +130,21 @@ function AssistantConfigSection() {
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
 
   // Hydrate form once per fetched snapshot (render-time, no effect).
   const snapshot = data
-    ? `${data.provider ?? ""}|${data.model ?? ""}|${data.base_url ?? ""}|${data.enabled}`
+    ? `${data.provider ?? ""}|${data.model ?? ""}|${data.base_url ?? ""}|${data.system_prompt ?? ""}|${data.enabled}`
     : null;
   if (data && snapshot && hydratedFor !== snapshot) {
     setHydratedFor(snapshot);
     if (data.provider) setProvider(data.provider);
     setModel(data.model ?? "");
     setBaseUrl(data.base_url ?? "");
+    setSystemPrompt(data.system_prompt ?? "");
     setEnabled(data.enabled);
   }
 
@@ -155,6 +160,7 @@ function AssistantConfigSection() {
           // Write-only: omit when blank so the stored key is kept.
           api_key: apiKey.trim() || undefined,
           base_url: baseUrl.trim() || undefined,
+          system_prompt: systemPrompt.trim() || undefined,
           enabled,
         }),
       });
@@ -274,6 +280,43 @@ function AssistantConfigSection() {
                 />
               </div>
             )}
+
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="assistant-system-prompt">
+                  System prompt
+                  <span className="ml-1 font-normal text-muted-foreground">
+                    (advanced)
+                  </span>
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() =>
+                    setSystemPrompt(data?.default_system_prompt ?? "")
+                  }
+                >
+                  Load default
+                </Button>
+              </div>
+              <Textarea
+                id="assistant-system-prompt"
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                placeholder="Leave blank to use the platform default persona."
+                rows={7}
+                className="max-h-64 min-h-32 font-mono text-xs leading-relaxed"
+                maxLength={8000}
+              />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Defines the agent&apos;s persona and behavior across every
+                workspace. Security rules (read-only by default,
+                approval-gated writes, workspace scoping) are enforced in
+                code and always appended — they cannot be overridden here.
+              </p>
+            </div>
 
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="assistant-enabled" className="grid leading-tight">
