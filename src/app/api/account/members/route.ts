@@ -44,6 +44,7 @@ interface ProfileRow {
   status: string | null;
   workspace_profile_id: string | null;
   workspace_profiles: { id: string; name: string } | null;
+  workspace_role: { id: string; name: string } | null;
 }
 
 const MEMBER_STATUSES = ["active", "inactive", "deleted"] as const;
@@ -54,7 +55,7 @@ const MAX_PAGE_SIZE = 100;
 const MAX_SEARCH_LEN = 120;
 
 const SELECT_COLUMNS =
-  "user_id, full_name, email, avatar_url, account_role, created_at, status, workspace_profile_id, workspace_profiles(id, name)";
+  "user_id, full_name, email, avatar_url, account_role, created_at, status, workspace_profile_id, workspace_profiles(id, name), workspace_role:workspace_roles(id, name)";
 
 /** Parse `<created_at>|<user_id>` keyset cursors. Returns null on garbage. */
 function parseCursor(
@@ -112,6 +113,9 @@ export async function GET(request: Request) {
       is_owner: row.user_id === ownerUserId,
       workspace_profile: row.workspace_profiles
         ? { id: row.workspace_profiles.id, name: row.workspace_profiles.name }
+        : null,
+      workspace_role: row.workspace_role
+        ? { id: row.workspace_role.id, name: row.workspace_role.name }
         : null,
     });
 
