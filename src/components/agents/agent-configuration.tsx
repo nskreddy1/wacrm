@@ -29,6 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { fetchAccountMembers, memberLabel } from '@/lib/account/members'
+import type { AccountMember } from '@/types'
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -52,13 +54,9 @@ const MORE_PROVIDERS = [
   { value: 'custom', label: 'Custom endpoint' },
 ] as const
 
-const LIMIT_MODES = [
-  { value: 'per_conversation', label: 'Cap per conversation' },
-  { value: 'per_day', label: 'Cap per day' },
-  { value: 'never', label: 'No cap — always reply' },
-] as const
-
-const MAX_REPLY_OPTIONS = ['1', '2', '3', '5', '10', '20'] as const
+// Sentinel for "route to the shared queue" in the handoff select —
+// Radix Select can't represent an empty-string value.
+const HANDOFF_QUEUE = '__queue__'
 
 interface AiConfigData {
   configured: boolean
@@ -75,6 +73,7 @@ interface AiConfigData {
   auto_reply_schedule_start?: string | null
   auto_reply_schedule_end?: string | null
   auto_reply_timezone?: string | null
+  handoff_agent_id?: string | null
 }
 
 export function AgentConfiguration() {
@@ -82,14 +81,24 @@ export function AgentConfiguration() {
     '/api/ai/config',
     fetcher,
   )
+  // Members populate the handoff-target picker. Best-effort — if the
+  // endpoint is unavailable the picker still offers the shared queue.
+  const { data: members } = useSWR<AccountMember[]>(
+    'account-members',
+    () => fetchAccountMembers(),
+    { revalidateOnFocus: false },
+  )
 
   const [provider, setProvider] = useState('openai')
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [systemPrompt, setSystemPrompt] = useState('')
-  const [maxReplies, setMaxReplies] = useState('3')
-  const [limitMode, setLimitMode] = useState('per_conversation')
+  const [scheduleStart, setScheduleStart] = useState('')
+  const [scheduleEnd, setScheduleEnd] = useState('')
+  const [timezone, setTimezone] = useState('')
+  // Empty string = route handoffs to the shared queue (round-robin).
+  const [handoffAgentId, setHandoffAgentId] = useState('')
   const [hydratedFor, setHydratedFor] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -97,7 +106,7 @@ export function AgentConfiguration() {
   // Render-time hydration once the config arrives (and re-hydration if
   // a different config object is fetched after save).
   const hydrationKey = config
-    ? `${config.provider}|${config.model}|${config.system_prompt ?? ''}|${config.auto_reply_max_per_conversation}|${config.auto_reply_limit_mode}`
+    ? `${config.provider}|${config.model}|${config.system_prompt ?? ''}|${config.auto_reply_schedule_start ?? ''}|${config.auto_reply_schedule_end ?? ''}|${config.handoff_agent_id ?? ''}`
     : null
   if (config?.configured && hydrationKey && hydratedFor !== hydrationKey) {
     setHydratedFor(hydrationKey)
@@ -105,8 +114,11 @@ export function AgentConfiguration() {
     setModel(config.model ?? '')
     setBaseUrl(config.base_url ?? '')
     setSystemPrompt(config.system_prompt ?? '')
-    setMaxReplies(String(config.auto_reply_max_per_conversation ?? 3))
-    setLimitMode(config.auto_reply_limit_mode ?? 'per_conversation')
+    // Postgres `time` serializes as 'HH:MM:SS'; the inputs use 'HH:MM'.
+    setScheduleStart((config.auto_reply_schedule_start ?? '').slice(0, 5))
+    setScheduleEnd((config.auto_reply_schedule_end ?? '').slice(0, 5))
+    setTimezone(config.auto_reply_timezone ?? '')
+    setHandoffAgentId(config.handoff_agent_id ?? '')
     setApiKey('')
   }
 
@@ -160,15 +172,16 @@ export function AgentConfiguration() {
           ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
           ...(needsBaseUrl && baseUrl.trim() ? { base_url: baseUrl.trim() } : {}),
           system_prompt: systemPrompt,
-          auto_reply_max_per_conversation: Number(maxReplies),
-          auto_reply_limit_mode: limitMode,
+          auto_reply_schedule_start: scheduleStart,
+          auto_reply_schedule_end: scheduleEnd,
+          auto_reply_timezone: timezone.trim(),
+          handoff_agent_id: handoffAgentId || null,
           // Pass-through: settings this tab doesn't show must survive a
           // save untouched.
           is_active: config?.is_active === true,
           auto_reply_enabled: config?.auto_reply_enabled === true,
-          auto_reply_schedule_start: config?.auto_reply_schedule_start ?? '',
-          auto_reply_schedule_end: config?.auto_reply_schedule_end ?? '',
-          auto_reply_timezone: config?.auto_reply_timezone ?? '',
+          auto_reply_max_per_conversation: config?.auto_reply_max_per_conversation ?? 3,
+          auto_reply_limit_mode: config?.auto_reply_limit_mode ?? 'per_conversation',
         }),
       })
       const body = await res.json().catch(() => null)
@@ -294,7 +307,7 @@ export function AgentConfiguration() {
           {/* Business hours — WhatsApp etiquette: auto-reply runs inside
               this window; after-hours messages wait for a human. Leave
               empty to reply around the clock. */}
-          <FieldGroup label="Active Hours (auto-reply window)" last>
+          <FieldGroup label="Active Hours (auto-reply window)">
             <div className="flex flex-wrap items-center gap-2">
               <Input
                 type="time"
@@ -321,6 +334,34 @@ export function AgentConfiguration() {
             </div>
             <span className="text-xs text-muted-foreground">
               Leave empty to reply around the clock. Outside these hours, conversations wait for your team.
+            </span>
+          </FieldGroup>
+
+          {/* Escalation & handoff — the "escape hatch". The agent
+              already detects when a human is needed (explicit request,
+              low confidence) and writes a conversation summary; this
+              picks WHO that conversation is routed to. */}
+          <FieldGroup label="Escalation Handoff" last>
+            <Select
+              value={handoffAgentId || HANDOFF_QUEUE}
+              onValueChange={(value) =>
+                value && setHandoffAgentId(value === HANDOFF_QUEUE ? '' : value)
+              }
+            >
+              <SelectTrigger aria-label="Escalation handoff target" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={HANDOFF_QUEUE}>Shared queue (round-robin)</SelectItem>
+                {(members ?? []).map((member) => (
+                  <SelectItem key={member.user_id} value={member.user_id}>
+                    {memberLabel(member)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">
+              When a customer asks for a human or the agent is unsure, the conversation is assigned here with an AI-written summary — the customer never repeats themselves.
             </span>
           </FieldGroup>
         </div>
