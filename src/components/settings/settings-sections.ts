@@ -4,10 +4,11 @@ import {
   KeyRound,
   LayoutGrid,
   LifeBuoy,
+  Mail,
+  MessageCircle,
   Palette,
-  PlugZap,
   Shield,
-  Sparkles,
+  Smartphone,
   Tags,
   User,
   UsersRound,
@@ -28,9 +29,10 @@ export const SETTINGS_SECTIONS = [
   'profile',
   'security',
   'appearance',
-  'channels',
+  'whatsapp',
+  'sms',
+  'email',
   'quick-replies',
-  'ai',
   'fields',
   'deals',
   'members',
@@ -65,9 +67,10 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   members: { id: 'members', label: 'Users and Controls', icon: UsersRound, group: 'general' },
   fields: { id: 'fields', label: 'Fields', icon: Tags, group: 'customization' },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'customization' },
-  channels: { id: 'channels', label: 'Channels', icon: PlugZap, group: 'channels' },
+  whatsapp: { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, group: 'channels' },
+  sms: { id: 'sms', label: 'SMS', icon: Smartphone, group: 'channels' },
+  email: { id: 'email', label: 'Email', icon: Mail, group: 'channels' },
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'channels' },
-  ai: { id: 'ai', label: 'AI Assist', icon: Sparkles, group: 'channels' },
   'external-sources': { id: 'external-sources', label: 'External sources', icon: Database, group: 'data' },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'data' },
   support: { id: 'support', label: 'Support', icon: LifeBuoy, group: 'help' },
@@ -94,7 +97,9 @@ function isSection(value: string | null): value is SettingsSection {
  * Overview landing.
  */
 export function resolveSection(raw: string | null): SettingsSection {
-  if (raw === 'whatsapp') return 'channels';
+  // Old merged "Channels" section → default to the WhatsApp panel
+  // (the primary channel for this CRM).
+  if (raw === 'channels') return 'whatsapp';
   if (raw === 'tags' || raw === 'custom-fields') return 'fields';
   // Template management moved to the dedicated /templates studio;
   // legacy deep links land on the Overview which points there.
