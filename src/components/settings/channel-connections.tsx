@@ -84,6 +84,13 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
   const { data, error, isLoading, mutate } = useSWR<ResponseData>('/api/settings/channels', fetcher)
   const [channel, setChannel] = useState<ChannelKind>(fixedChannel ?? 'email')
   const [provider, setProvider] = useState<ChannelProvider>(fixedChannel && fixedChannel !== 'email' ? 'twilio' : 'smtp')
+  /** Result of the "Validate & Pick" Twilio account discovery. */
+  const [discovery, setDiscovery] = useState<{
+    accountName: string
+    numbers: { phoneNumber: string; label: string; smsCapable: boolean }[]
+    whatsappSenders: string[]
+    messagingServices: { sid: string; name: string }[]
+  } | null>(null)
   const [form, setForm] = useState(defaults)
   const [busy, setBusy] = useState<string | null>(null)
   const [reuseFromId, setReuseFromId] = useState<string | null>(null)
@@ -142,6 +149,33 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
     } catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Connection test failed') } finally { setBusy(null) }
   }
 
+  async function discover() {
+    // Validate & Pick: verify credentials once, then fetch everything
+    // the Twilio account owns so users pick from lists instead of
+    // copying values out of the Twilio console.
+    if (!reuseFromId && (!form.accountSid.trim() || !form.authToken.trim())) {
+      toast.error('Enter the Twilio Account SID and Auth token first.')
+      return
+    }
+    setBusy('discover')
+    try {
+      const payload = await request({
+        action: 'discover',
+        provider: 'twilio',
+        ...(reuseFromId
+          ? { reuseCredentialsFromId: reuseFromId }
+          : { accountSid: form.accountSid.trim(), authToken: form.authToken.trim() }),
+      })
+      setDiscovery(payload.discovery)
+      toast.success(`Connected to Twilio account “${payload.discovery.accountName}”. Pick your sender below.`)
+    } catch (cause) {
+      setDiscovery(null)
+      toast.error(cause instanceof Error ? cause.message : 'Could not fetch account details')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function toggle(connection: Connection, enabled: boolean) {
     setBusy(`toggle-${connection.id}`)
     try { await request({ id: connection.id, isEnabled: enabled, isPrimary: enabled ? true : undefined }, 'PATCH'); toast.success(enabled ? 'Provider enabled.' : 'Provider disabled.') }
@@ -188,7 +222,7 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
       {/* Reset the draft form when switching channel tabs — each tab is
           an independent connection draft, so values typed for WhatsApp
           must not leak into the SMS form. */}
-      <Tabs value={channel} onValueChange={(value) => { const next = value as ChannelKind; setChannel(next); setProvider(next === 'email' ? 'smtp' : 'twilio'); setForm(defaults); setReuseFromId(null) }}>
+      <Tabs value={channel} onValueChange={(value) => { const next = value as ChannelKind; setChannel(next); setProvider(next === 'email' ? 'smtp' : 'twilio'); setForm(defaults); setReuseFromId(null); setDiscovery(null) }}>
         {fixedChannel ? null : (
           <TabsList>
             <TabsTrigger value="email"><Mail />Email</TabsTrigger>
@@ -241,6 +275,55 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                       </div>
                     ) : null}
                     {provider === 'twilio' && !reuseFromId ? <div className="grid gap-4 md:grid-cols-2"><div className="flex flex-col gap-2"><Label htmlFor="twilio-sid">Account SID</Label><Input id="twilio-sid" value={form.accountSid} onChange={(event) => update('accountSid', event.target.value)} /></div><div className="flex flex-col gap-2"><Label htmlFor="twilio-token">Auth token</Label><Input id="twilio-token" type="password" value={form.authToken} onChange={(event) => update('authToken', event.target.value)} /></div>{tab !== 'email' ? <div className="flex flex-col gap-2 md:col-span-2"><Label htmlFor="twilio-messaging-service">Messaging Service SID <span className="font-normal text-muted-foreground">(optional, recommended)</span></Label><Input id="twilio-messaging-service" value={form.messagingServiceSid} onChange={(event) => update('messagingServiceSid', event.target.value)} placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" /><p className="text-xs text-muted-foreground">{tab === 'sms' ? 'When set, sends use Twilio\u2019s Messaging Service for sender pooling, Sticky Sender, and carrier-managed STOP handling (Advanced Opt-Out). Leave blank to send from the number above.' : 'When set, sends route through the Messaging Service\u2019s sender pool — add your WhatsApp sender to the pool in the Twilio Console. Leave blank to send from the number above.'}</p></div> : null}</div> : null}
+                    {provider === 'twilio' ? (
+                      <div className="flex flex-col gap-4 rounded-md border border-dashed p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-col gap-0.5">
+                            <p className="text-sm font-medium">Validate &amp; pick from your account</p>
+                            <p className="text-xs text-muted-foreground">Verify the credentials and list your numbers{tab === 'sms' ? ' and Messaging Services' : ''} — no console copying.</p>
+                          </div>
+                          <Button type="button" variant="outline" onClick={discover} disabled={busy !== null}>
+                            {busy === 'discover' ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <CheckCircle2 data-icon="inline-start" />}
+                            Fetch from Twilio
+                          </Button>
+                        </div>
+                        {discovery ? (
+                          <div className="flex flex-col gap-4">
+                            <p className="text-xs text-muted-foreground">Account: <span className="font-medium text-foreground">{discovery.accountName}</span></p>
+                            {(() => {
+                              // WhatsApp: prefer registered WhatsApp senders; fall
+                              // back to all owned numbers. SMS: SMS-capable only.
+                              const senderOptions = tab === 'whatsapp' && discovery.whatsappSenders.length > 0
+                                ? discovery.whatsappSenders.map((num) => ({ value: num, label: num }))
+                                : discovery.numbers
+                                    .filter((num) => (tab === 'sms' ? num.smsCapable : true))
+                                    .map((num) => ({ value: num.phoneNumber, label: num.label === num.phoneNumber ? num.phoneNumber : `${num.label} — ${num.phoneNumber}` }))
+                              return senderOptions.length > 0 ? (
+                                <div className="flex flex-col gap-2">
+                                  <Label htmlFor={`${tab}-discovered-number`}>Pick sender number</Label>
+                                  <Select value={form.externalIdentity || undefined} onValueChange={(value) => update('externalIdentity', value ?? '')}>
+                                    <SelectTrigger id={`${tab}-discovered-number`}><SelectValue placeholder="Choose a number from your account" /></SelectTrigger>
+                                    <SelectContent><SelectGroup>{senderOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectGroup></SelectContent>
+                                  </Select>
+                                  {tab === 'whatsapp' && discovery.whatsappSenders.length === 0 ? <p className="text-xs text-muted-foreground">No registered WhatsApp senders found — showing all account numbers. Register the number for WhatsApp in the Twilio Console if sends fail.</p> : null}
+                                </div>
+                              ) : (
+                                <Alert><AlertTitle>No usable numbers found</AlertTitle><AlertDescription>This Twilio account owns no {tab === 'sms' ? 'SMS-capable' : ''} phone numbers. Buy a number in the Twilio Console, then fetch again.</AlertDescription></Alert>
+                              )
+                            })()}
+                            {tab !== 'email' && discovery.messagingServices.length > 0 ? (
+                              <div className="flex flex-col gap-2">
+                                <Label htmlFor={`${tab}-discovered-service`}>Messaging Service <span className="font-normal text-muted-foreground">(optional, recommended)</span></Label>
+                                <Select value={form.messagingServiceSid || 'none'} onValueChange={(value) => update('messagingServiceSid', !value || value === 'none' ? '' : value)}>
+                                  <SelectTrigger id={`${tab}-discovered-service`}><SelectValue /></SelectTrigger>
+                                  <SelectContent><SelectGroup><SelectItem value="none">None — send from the number directly</SelectItem>{discovery.messagingServices.map((service) => <SelectItem key={service.sid} value={service.sid}>{service.name}</SelectItem>)}</SelectGroup></SelectContent>
+                                </Select>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </>
                 )}
               </CardContent>
