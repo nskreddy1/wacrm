@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import type { AccountRole } from "@/lib/auth/roles";
+import type { NavAccess } from "@/lib/navigation/config";
 import { getSessionPayload, type SessionPayload } from "@/lib/auth/session-payload";
 import { DashboardShell } from "./dashboard-shell";
 
@@ -37,17 +37,20 @@ export default async function DashboardLayout({
   // Falls back to null (viewer-safe subset + client fetch) if
   // resolution fails; proxy redirects unauthenticated visitors anyway.
   let initialSession: SessionPayload | null = null;
-  let initialRole: AccountRole | null = null;
+  let initialAccess: NavAccess | null = null;
   try {
     initialSession = await getSessionPayload();
-    initialRole = initialSession.data.profile.account_role;
+    initialAccess = {
+      permissions: initialSession.data.profile.permissions ?? [],
+      isOwner: initialSession.data.profile.is_owner === true,
+    };
   } catch {
     initialSession = null;
-    initialRole = null;
+    initialAccess = null;
   }
 
   return (
-    <DashboardShell initialRole={initialRole} initialSession={initialSession}>
+    <DashboardShell initialAccess={initialAccess} initialSession={initialSession}>
       {children}
     </DashboardShell>
   );

@@ -57,8 +57,7 @@ import { useTotalUnread } from "@/hooks/use-total-unread"
 import { personDisplayName, workspaceDisplayName } from "@/lib/display-name"
 import { routes } from "@/lib/routing/routes"
 import { cn } from "@/lib/utils"
-import type { NavIconName } from "@/lib/navigation/config"
-import type { AccountRole } from "@/lib/auth/roles"
+import type { NavAccess, NavIconName } from "@/lib/navigation/config"
 
 /** Maps serializable icon names from the navigation API to lucide components. */
 const navIcons: Record<NavIconName, ComponentType<{ className?: string }>> = {
@@ -75,13 +74,6 @@ const navIcons: Record<NavIconName, ComponentType<{ className?: string }>> = {
   "layout-dashboard": LayoutDashboard,
   "layout-template": LayoutTemplate,
   settings: Settings,
-}
-
-const roleLabels: Record<AccountRole, string> = {
-  owner: "Workspace owner",
-  admin: "Admin",
-  agent: "Agent",
-  viewer: "Viewer",
 }
 
 function initialsOf(name: string | null | undefined, email: string | null | undefined): string {
@@ -165,10 +157,10 @@ function CollapseToggle() {
   )
 }
 
-function NavGroups({ initialRole }: { initialRole: AccountRole | null }) {
+function NavGroups({ initialAccess }: { initialAccess: NavAccess | null }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { groups } = useNavigation(initialRole)
+  const { groups } = useNavigation(initialAccess)
   const { isMobile, setOpenMobile } = useSidebar()
   const unreadCount = useTotalUnread()
   const unreadBadge = unreadCount > 0 ? (unreadCount > 99 ? "99+" : String(unreadCount)) : undefined
@@ -264,7 +256,7 @@ function PlatformGroup() {
 function FooterMenu() {
   const router = useRouter()
   const { mode, setMode } = useTheme()
-  const { signOut, profile, accountRole } = useAuth()
+  const { signOut, profile, isOwner, canEditSettings, workspaceProfile } = useAuth()
   const { isMobile, setOpenMobile, state } = useSidebar()
 
   // In icon-collapsed mode the rail shows only the avatar, so the
@@ -278,7 +270,10 @@ function FooterMenu() {
   const displayName = personDisplayName(profile?.full_name, profile?.email)
   const displayEmail = profile?.email ?? ""
   const initials = initialsOf(profile?.full_name, profile?.email)
-  const roleLabel = accountRole ? roleLabels[accountRole] : ""
+  // Identity line shows the workspace-profile assignment: the owner
+  // is the account "Super Admin"; everyone else shows their assigned
+  // permission profile (Administrator, Standard, custom, …).
+  const roleLabel = isOwner ? "Super Admin" : (workspaceProfile?.name ?? "")
 
   const handleSignOut = async () => {
     await signOut()
