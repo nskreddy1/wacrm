@@ -62,19 +62,26 @@ export interface Account {
 }
 
 /**
- * Hydrated member row for the Settings → Members tab. Combines
- * the profile and its account_role for a single member of the
- * caller's account. Sensitive fields (email) are populated only
- * when the caller has admin+ — agents and viewers see name +
- * avatar + role only.
+ * Hydrated member row for the Settings → Users tab. Combines the
+ * profile, its workspace profile (permission set), status, and
+ * owner flag for a single member of the caller's account.
+ * Sensitive fields (email) are populated only when the caller
+ * holds members:manage — others see name + avatar + role only.
  */
 export interface AccountMember {
   user_id: string;
   full_name: string;
   email: string | null;
   avatar_url: string | null;
+  /** @deprecated Legacy enum kept for old consumers; prefer workspace_profile. */
   role: AccountRole;
   joined_at: string;
+  /** Membership lifecycle: active | inactive | deleted. */
+  status: "active" | "inactive" | "deleted";
+  /** Workspace owner — rendered as the "Super Admin" profile. */
+  is_owner: boolean;
+  /** Assigned workspace profile (permission set), if any. */
+  workspace_profile: { id: string; name: string } | null;
 }
 
 /**
