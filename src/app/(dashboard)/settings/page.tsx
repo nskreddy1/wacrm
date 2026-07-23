@@ -70,14 +70,14 @@ export default function SettingsPage() {
   };
 
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Bigin-style: no page-level heading/blurb — the rail says
           "Settings" and each panel carries its own title. */}
       <h1 className="sr-only">{t('pageTitle')}</h1>
 
-      <div className="grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
+      <div className="grid flex-1 gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
         <SettingsRail active={section} onSelect={go} hints={hints} />
-        <div className="min-w-0">{panel[section]}</div>
+        <div className="flex min-w-0 flex-col lg:self-stretch">{panel[section]}</div>
       </div>
     </div>
   );
