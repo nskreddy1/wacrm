@@ -160,12 +160,15 @@ export function resolveAssistantModel(config: AssistantConfig): LanguageModel {
       // OpenAI-compatible providers (NVIDIA NIM, Ollama, Groq,
       // Mistral, DeepSeek, xAI): reuse the OpenAI SDK against the
       // provider's endpoint, with optional admin-set base URL override.
+      // IMPORTANT: use .chat() — the default callable targets OpenAI's
+      // Responses API (/v1/responses), which these servers don't
+      // implement (NVIDIA returns "404 page not found" for it).
       const baseURL =
         config.baseUrl ?? OPENAI_COMPATIBLE_BASE_URL[config.provider]
       return createOpenAI({
         apiKey: config.apiKey || 'ollama', // some servers reject empty keys
         baseURL,
-      })(config.model)
+      }).chat(config.model)
     }
   }
 }
