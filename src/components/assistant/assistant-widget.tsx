@@ -33,16 +33,41 @@ import { cn } from '@/lib/utils'
 // ============================================================
 
 const TOOL_LABELS: Record<string, string> = {
+  get_workspace_overview: 'Reading workspace overview',
+  list_contacts: 'Listing contacts',
+  get_contact_details: 'Reading contact details',
   search_contacts: 'Searching contacts',
-  list_recent_conversations: 'Reading recent conversations',
+  get_pipeline_summary: 'Reading pipeline summary',
   list_deals: 'Reading deals',
+  list_recent_conversations: 'Reading recent conversations',
+  get_conversation_messages: 'Reading conversation messages',
   list_upcoming_appointments: 'Reading appointments',
+  list_broadcasts: 'Reading broadcasts',
+  list_templates: 'Reading templates',
+  list_automations: 'Reading automations',
+  list_tasks: 'Reading tasks',
+  list_support_tickets: 'Reading support tickets',
   get_ai_agent_status: 'Checking AI agent status',
+  create_contact: 'Create a contact',
+  create_task: 'Create a task',
   create_support_ticket: 'Create a support ticket',
   add_contact_note: 'Add a contact note',
 }
 
-const WRITE_TOOLS = new Set(['create_support_ticket', 'add_contact_note'])
+const WRITE_TOOLS = new Set([
+  'create_contact',
+  'create_task',
+  'create_support_ticket',
+  'add_contact_note',
+])
+
+/** Notion-style quick suggestions shown on the empty state. */
+const SUGGESTIONS = [
+  'How many contacts do I have?',
+  'Summarize my pipeline',
+  'What appointments are coming up?',
+  'Any open support tickets?',
+]
 
 function toolNameFromPart(type: string): string | null {
   return type.startsWith('tool-') ? type.slice(5) : null
@@ -133,12 +158,38 @@ export function AssistantWidget() {
             className="app-scrollbar flex-1 overflow-y-auto px-4 py-3"
           >
             {messages.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                <Search className="size-6 text-muted-foreground" aria-hidden />
-                <p className="max-w-[26ch] text-sm leading-relaxed text-muted-foreground">
-                  Ask me anything about your inbox, contacts, deals,
-                  appointments, or how to use the platform.
-                </p>
+              <div className="flex h-full flex-col justify-center gap-4 px-1">
+                <div className="flex flex-col gap-2">
+                  <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+                    <Sparkles className="size-4.5 text-primary" aria-hidden />
+                  </span>
+                  <h2 className="text-base font-semibold text-balance">
+                    How can I help you today?
+                  </h2>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    I can read your whole workspace — contacts, deals,
+                    conversations, appointments, campaigns and more. Write
+                    actions always ask for your approval first.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        if (!busy) void sendMessage({ text: s })
+                      }}
+                      className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                    >
+                      <Search
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
