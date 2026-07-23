@@ -8,8 +8,8 @@ import { useTranslations } from 'next-intl';
 import { useCan } from '@/hooks/use-can';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SettingsPanelHead } from './settings-panel-head';
 import { TagManager } from './tag-manager';
+import { EditFieldSheet, type EditFieldTarget } from './edit-field-sheet';
 import { EditContactFieldsSheet } from '@/components/contacts/edit-contact-fields-sheet';
 import {
   DealFieldsEditor,
@@ -59,11 +59,39 @@ interface DisplayField {
   required?: boolean;
   unique?: boolean;
   custom?: boolean;
+  /** Broad type for the Edit Field sheet (e.g. "Text"). */
+  typeLabel?: string;
+  /** Specific variant for the Edit Field sheet (e.g. "Single Line"). */
+  subTypeLabel?: string;
+  /** Whether the label can be renamed in the Edit Field sheet. */
+  editable?: boolean;
+  canToggleRequired?: boolean;
+  canToggleUnique?: boolean;
 }
 
-function FieldRow({ field }: { field: DisplayField }) {
+function toEditTarget(field: DisplayField): EditFieldTarget {
+  return {
+    id: field.id,
+    label: field.label,
+    typeLabel: field.typeLabel ?? 'Text',
+    subTypeLabel: field.subTypeLabel ?? 'Single Line',
+    required: field.required === true,
+    unique: field.unique === true,
+    editable: field.editable === true,
+    canToggleRequired: field.canToggleRequired,
+    canToggleUnique: field.canToggleUnique,
+  };
+}
+
+function FieldRow({
+  field,
+  onEdit,
+}: {
+  field: DisplayField;
+  onEdit?: (field: DisplayField) => void;
+}) {
   return (
-    <div className="relative flex min-h-10 items-center gap-1.5 overflow-hidden rounded-md border border-border bg-card px-3.5 py-2 text-sm">
+    <div className="group/field relative flex min-h-10 items-center gap-1.5 overflow-hidden rounded-md border border-border bg-card px-3.5 py-2 text-sm transition-colors hover:border-primary/40">
       {field.required && (
         <span
           aria-hidden
@@ -81,6 +109,27 @@ function FieldRow({ field }: { field: DisplayField }) {
         />
       )}
       {field.custom && <span className="sr-only">Custom field</span>}
+      {onEdit && (
+        <button
+          type="button"
+          onClick={() => onEdit(field)}
+          aria-label={`Edit ${field.label}`}
+          className="absolute inset-y-0 right-0 hidden items-center bg-card pl-2 pr-3 text-muted-foreground hover:text-primary group-hover/field:flex"
+        >
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-3.5"
+          >
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -92,6 +141,7 @@ function ModuleCard({
   loading,
   canEdit,
   onCustomize,
+  onEditField,
 }: {
   title: string;
   sections: { title: string; fields: DisplayField[] }[];
@@ -99,9 +149,10 @@ function ModuleCard({
   loading?: boolean;
   canEdit: boolean;
   onCustomize: () => void;
+  onEditField?: (field: DisplayField) => void;
 }) {
   return (
-    <article className="flex h-[calc(100vh-16.5rem)] max-h-[640px] min-h-[420px] w-96 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+    <article className="flex h-full min-h-[440px] w-96 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
       <header className="border-b border-border bg-muted/60 px-4 py-3.5">
         <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
       </header>
@@ -121,7 +172,11 @@ function ModuleCard({
                 <h4 className="text-sm font-bold text-foreground">{section.title}</h4>
                 <div className="space-y-2.5">
                   {section.fields.map((field) => (
-                    <FieldRow key={field.id} field={field} />
+                    <FieldRow
+                      key={field.id}
+                      field={field}
+                      onEdit={canEdit ? onEditField : undefined}
+                    />
                   ))}
                 </div>
               </section>
@@ -162,22 +217,51 @@ interface ContactWorkspacePayload {
   preferences: ContactPreferences;
 }
 
+/** Broad + specific type labels for simple custom field types. */
+const SIMPLE_TYPE_META: Record<string, { type: string; sub: string }> = {
+  text: { type: 'Text', sub: 'Single Line' },
+  number: { type: 'Number', sub: 'Number' },
+  date: { type: 'Date', sub: 'Date' },
+  email: { type: 'Text', sub: 'Email' },
+  phone: { type: 'Text', sub: 'Phone' },
+  url: { type: 'Text', sub: 'URL' },
+  single_select: { type: 'Pick List', sub: 'Single Select' },
+  multi_select: { type: 'Pick List', sub: 'Multi Select' },
+  checkbox: { type: 'Checkbox', sub: 'Checkbox' },
+  currency: { type: 'Number', sub: 'Currency' },
+};
+
 function moduleSections(module: ModuleKey, layout: ModuleFieldLayout) {
   const registry = MODULE_FIELD_REGISTRY[module];
   const hidden = new Set(layout.hidden);
+  const standard = (f: { id: string; label: string; typeLabel?: string }, required: boolean): DisplayField => ({
+    id: f.id,
+    label: f.label,
+    required,
+    typeLabel: 'Text',
+    subTypeLabel: f.typeLabel ?? 'Single Line',
+    editable: false,
+  });
   return [
     {
       title: registry.sectionTitle,
       fields: [
-        ...registry.required.map((f) => ({ id: f.id, label: f.label, required: true })),
-        ...registry.optional
-          .filter((f) => !hidden.has(f.id))
-          .map((f) => ({ id: f.id, label: f.label })),
+        ...registry.required.map((f) => standard(f, true)),
+        ...registry.optional.filter((f) => !hidden.has(f.id)).map((f) => standard(f, false)),
       ],
     },
     {
       title: 'Additional Information',
-      fields: layout.custom.map((f) => ({ id: f.id, label: f.label, custom: true })),
+      fields: layout.custom.map(
+        (f): DisplayField => ({
+          id: f.id,
+          label: f.label,
+          custom: true,
+          typeLabel: SIMPLE_TYPE_META[f.type]?.type ?? 'Text',
+          subTypeLabel: SIMPLE_TYPE_META[f.type]?.sub ?? 'Single Line',
+          editable: true,
+        }),
+      ),
     },
   ];
 }
@@ -193,6 +277,7 @@ function ModuleFieldsCard({
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<DisplayField | null>(null);
   const { data, isLoading, mutate } = useSWR(`module-fields:${module}`, async () => {
     const result = await getModuleFieldLayoutAction(module);
     if (!result.ok) throw new Error(result.error);
@@ -210,7 +295,40 @@ function ModuleFieldsCard({
         loading={isLoading}
         canEdit={canEdit}
         onCustomize={() => setOpen(true)}
+        onEditField={setEditing}
       />
+      {editing && (
+        <EditFieldSheet
+          key={editing.id}
+          open
+          module={title}
+          saving={saving}
+          field={toEditTarget(editing)}
+          onOpenChange={(next) => {
+            if (!next) setEditing(null);
+          }}
+          onSave={async ({ label }) => {
+            setSaving(true);
+            try {
+              const next: ModuleFieldLayout = {
+                ...layout,
+                custom: layout.custom.map((f) =>
+                  f.id === editing.id ? { ...f, label } : f,
+                ),
+              };
+              const result = await saveModuleFieldLayoutAction(module, next);
+              if (!result.ok) throw new Error(result.error);
+              await mutate(result.data, { revalidate: false });
+              toast.success('Field updated');
+              setEditing(null);
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : 'Unable to save field');
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
+      )}
       {open && (
         <ModuleFieldsEditor
           key={`${module}:${JSON.stringify(layout)}`}
@@ -241,6 +359,8 @@ function ModuleFieldsCard({
 
 function ContactFieldsCard({ canEdit }: { canEdit: boolean }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<DisplayField | null>(null);
+  const [saving, setSaving] = useState(false);
   const { data, isLoading, mutate } = useSWR<ContactWorkspacePayload>(
     '/api/v1/workspace/contacts',
     fetchJson,
@@ -265,23 +385,43 @@ function ContactFieldsCard({ canEdit }: { canEdit: boolean }) {
       .filter((field): field is ContactField => field !== undefined);
     const isCustom = (field: ContactField) =>
       field.custom && !isReservedContactField(field.label);
+    const meta = (field: ContactField) => ({
+      typeLabel: SIMPLE_TYPE_META[field.type]?.type ?? 'Text',
+      subTypeLabel: SIMPLE_TYPE_META[field.type]?.sub ?? 'Single Line',
+    });
     return [
       {
         title: 'Contact Information',
         fields: shown
           .filter((field) => !isCustom(field))
-          .map((field) => ({
-            id: field.id,
-            label: field.label,
-            required: field.required,
-            unique: field.unique,
-          })),
+          .map(
+            (field): DisplayField => ({
+              id: field.id,
+              label: field.label,
+              required: field.required,
+              unique: field.unique,
+              editable: false,
+              ...meta(field),
+            }),
+          ),
       },
       {
         title: 'Additional Information',
         fields: shown
           .filter((field) => isCustom(field))
-          .map((field) => ({ id: field.id, label: field.label, custom: true })),
+          .map(
+            (field): DisplayField => ({
+              id: field.id,
+              label: field.label,
+              custom: true,
+              required: field.required,
+              unique: field.unique,
+              editable: true,
+              canToggleRequired: true,
+              canToggleUnique: true,
+              ...meta(field),
+            }),
+          ),
       },
     ];
   }, [fields, preferences]);
@@ -302,7 +442,52 @@ function ContactFieldsCard({ canEdit }: { canEdit: boolean }) {
         loading={isLoading}
         canEdit={canEdit}
         onCustomize={() => setOpen(true)}
+        onEditField={setEditing}
       />
+      {editing && (
+        <EditFieldSheet
+          key={editing.id}
+          open
+          module="Contacts"
+          saving={saving}
+          field={toEditTarget(editing)}
+          onOpenChange={(next) => {
+            if (!next) setEditing(null);
+          }}
+          onSave={async ({ label, required, unique }) => {
+            setSaving(true);
+            try {
+              const source = fields.find((f) => f.id === editing.id);
+              if (!source) throw new Error('Field not found');
+              const response = await fetch('/api/v1/workspace/contacts', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  kind: 'field',
+                  id: editing.id,
+                  field: {
+                    label,
+                    type: source.type,
+                    options: source.options ?? [],
+                    required,
+                    unique,
+                  },
+                }),
+              });
+              const payload = await response.json();
+              if (!response.ok)
+                throw new Error(payload.error?.message ?? 'Request failed');
+              await mutate();
+              toast.success('Field updated');
+              setEditing(null);
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : 'Unable to save field');
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
+      )}
       {open && data && (
         <EditContactFieldsSheet
           open={open}
@@ -329,6 +514,7 @@ function PipelineFieldsCard({
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<DisplayField | null>(null);
   const { data, isLoading, mutate } = useSWR(`deal-fields:${pipeline.id}`, async () => {
     const result = await getDealFieldLayoutAction(pipeline.id);
     if (!result.ok) throw new Error(result.error ?? 'Unable to load layout');
@@ -338,20 +524,40 @@ function PipelineFieldsCard({
   const layout: DealFieldLayout = data ?? EMPTY_DEAL_FIELD_LAYOUT;
   const hidden = new Set(layout.hidden);
 
+  const standard = (
+    f: { id: string; label: string; typeLabel?: string },
+    required: boolean,
+  ): DisplayField => ({
+    id: f.id,
+    label: f.label,
+    required,
+    typeLabel: 'Text',
+    subTypeLabel: f.typeLabel ?? 'Single Line',
+    editable: false,
+  });
+
   const sections = [
     {
       title: 'Deal Information',
       fields: [
-        ...DEAL_REQUIRED_FIELDS.map((f) => ({ id: f.id, label: f.label, required: true })),
-        ...DEAL_OPTIONAL_FIELDS.filter((f) => !hidden.has(f.id)).map((f) => ({
-          id: f.id,
-          label: f.label,
-        })),
+        ...DEAL_REQUIRED_FIELDS.map((f) => standard(f, true)),
+        ...DEAL_OPTIONAL_FIELDS.filter((f) => !hidden.has(f.id)).map((f) =>
+          standard(f, false),
+        ),
       ],
     },
     {
       title: 'Additional Information',
-      fields: layout.custom.map((f) => ({ id: f.id, label: f.label, custom: true })),
+      fields: layout.custom.map(
+        (f): DisplayField => ({
+          id: f.id,
+          label: f.label,
+          custom: true,
+          typeLabel: SIMPLE_TYPE_META[f.type]?.type ?? 'Text',
+          subTypeLabel: SIMPLE_TYPE_META[f.type]?.sub ?? 'Single Line',
+          editable: true,
+        }),
+      ),
     },
   ];
 
@@ -364,7 +570,40 @@ function PipelineFieldsCard({
         loading={isLoading}
         canEdit={canEdit}
         onCustomize={() => setOpen(true)}
+        onEditField={setEditing}
       />
+      {editing && (
+        <EditFieldSheet
+          key={editing.id}
+          open
+          module={pipeline.name}
+          saving={saving}
+          field={toEditTarget(editing)}
+          onOpenChange={(next) => {
+            if (!next) setEditing(null);
+          }}
+          onSave={async ({ label }) => {
+            setSaving(true);
+            try {
+              const next: DealFieldLayout = {
+                ...layout,
+                custom: layout.custom.map((f) =>
+                  f.id === editing.id ? { ...f, label } : f,
+                ),
+              };
+              const result = await saveDealFieldLayoutAction(pipeline.id, next);
+              if (!result.ok) throw new Error(result.error ?? 'Unable to save field');
+              await mutate(result.data ?? next, { revalidate: false });
+              toast.success('Field updated');
+              setEditing(null);
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : 'Unable to save field');
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
+      )}
       {open && (
         <DealFieldsEditor
           key={`${pipeline.id}:${JSON.stringify(layout)}`}
@@ -423,8 +662,8 @@ export function FieldsAndTagsPanel() {
   }>(tab === 'pipelines' ? '/api/v1/workspace/automation-resources' : null, fetchJson);
 
   return (
-    <section className="animate-in fade-in-50 space-y-4 duration-200">
-      <SettingsPanelHead title={t('title')} description={t('description')} />
+    <section className="animate-in fade-in-50 flex min-h-0 flex-1 flex-col gap-4 duration-200">
+      <h2 className="sr-only">{t('title')}</h2>
 
       <div role="tablist" aria-label={t('title')} className="flex gap-6 border-b border-border">
         {TABS.map((item) => (
@@ -446,7 +685,7 @@ export function FieldsAndTagsPanel() {
       </div>
 
       {tab === 'modules' && (
-        <div className="app-scrollbar flex gap-4 overflow-x-auto pb-2">
+        <div className="app-scrollbar flex min-h-0 flex-1 items-stretch gap-4 overflow-x-auto pb-1">
           <ContactFieldsCard canEdit={canEditSettings} />
           <ModuleFieldsCard
             module="appointments"
@@ -468,7 +707,7 @@ export function FieldsAndTagsPanel() {
             No pipelines yet. Create a pipeline to customize its deal fields.
           </p>
         ) : (
-          <div className="app-scrollbar flex gap-4 overflow-x-auto pb-2">
+          <div className="app-scrollbar flex min-h-0 flex-1 items-stretch gap-4 overflow-x-auto pb-1">
             {resources?.pipelines?.map((pipeline) => (
               <PipelineFieldsCard
                 key={pipeline.id}
