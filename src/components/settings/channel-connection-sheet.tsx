@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { CheckCircle2, Loader2, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -109,6 +109,18 @@ export function ChannelConnectionSheet({
             <span className="w-28 shrink-0 text-sm text-muted-foreground">Role</span>
             <span className="text-sm font-medium text-foreground">{connection.is_primary ? 'Primary connection' : 'Secondary'}</span>
           </div>
+          {connection.managed_by === 'platform' ? (
+            <div className="flex items-start gap-3 rounded-md bg-primary-soft px-4 py-3.5">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">Managed by our support team</span>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  This connection is configured and maintained for you. You can enable, disable, and test it — contact
+                  support to change credentials or the sender number.
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           {connection.last_error ? (
             <Alert variant="destructive">

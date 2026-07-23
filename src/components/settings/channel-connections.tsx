@@ -334,6 +334,12 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                           <span className="truncate text-sm font-medium text-foreground">{connection.display_name}</span>
                           <span className="truncate text-xs text-muted-foreground">{connection.external_identity} · {connection.providerLabel}{connection.is_primary ? ' · Primary' : ''}</span>
                         </div>
+                        {connection.managed_by === 'platform' ? (
+                          <Badge variant="outline" className="shrink-0 gap-1">
+                            <ShieldCheck className="size-3" aria-hidden />
+                            Managed
+                          </Badge>
+                        ) : null}
                         <Badge variant={connection.status === 'connected' ? 'default' : 'secondary'} className="shrink-0">{connection.status}</Badge>
                         <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                           <Switch
