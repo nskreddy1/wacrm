@@ -5,6 +5,16 @@ import useSWR from 'swr'
 import { ChevronRight, Loader2, Mail, MessageCircle, Plus, Settings2, ShieldCheck, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -49,7 +59,7 @@ const CHANNEL_HEAD: Record<
     description:
       'Link your WhatsApp Business number to engage customers in conversations, broadcasts, and automations. Manage message templates in the Template studio.',
     requirements: [
-      'You need a Twilio account with a WhatsApp-enabled sender number.',
+      'Connect via Meta (Facebook) with a WhatsApp Cloud API access token, or via Twilio with a WhatsApp-enabled number.',
       'Outbound messages outside the 24-hour customer service window require Meta-approved templates.',
       'Customer opt-in is mandatory under WhatsApp Business policy — collect consent before messaging.',
       'Understand WhatsApp\u2019s conversation-based pricing before large sends.',
@@ -128,6 +138,8 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
   const [setupInit, setSetupInit] = useState<ChannelSetupInit | null>(null)
   const [detailsConnection, setDetailsConnection] = useState<Connection | null>(null)
   const [busyToggle, setBusyToggle] = useState<string | null>(null)
+  /** "Twilio already connected — reuse credentials?" prompt. */
+  const [reusePromptOpen, setReusePromptOpen] = useState(false)
 
   const connections = useMemo(() => data?.connections.filter((item) => item.channel === channel) ?? [], [data, channel])
   const providers = useMemo(
@@ -162,12 +174,22 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
     setSetupOpen(true)
   }
 
+  /**
+   * Twilio entry point with duplicate-credential handling: one Twilio
+   * account usually serves both WhatsApp and SMS. If Twilio is already
+   * connected on the sibling channel, ask "reuse those credentials?"
+   * before opening the setup sheet, instead of silently duplicating
+   * secrets.
+   */
+  function startTwilio() {
+    if (reusableTwilio) setReusePromptOpen(true)
+    else if (data?.guidedConnect?.twilio.configured) setConnectOpen(true)
+    else openSetup({ provider: 'twilio' })
+  }
+
   function startConnect(target: ChannelKind) {
-    // Guided popup only when Twilio Connect is actually configured —
-    // otherwise straight to the setup sheet (works with any account,
-    // including trial). Email never has a popup.
-    if (target !== 'email' && data?.guidedConnect?.twilio.configured) setConnectOpen(true)
-    else openSetup(target === 'email' ? null : { provider: 'twilio' })
+    if (target === 'email') openSetup(null)
+    else startTwilio()
   }
 
   const visibleChannels: ChannelKind[] = fixedChannel ? [fixedChannel] : ['email', 'whatsapp', 'sms']
@@ -228,34 +250,20 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                     <div className="flex flex-wrap gap-4">
                       {tab !== 'email' ? (
                         <>
+                          {tab === 'whatsapp' ? (
+                            <ProviderCard
+                              label="WhatsApp Cloud API"
+                              hint="Direct Meta (Facebook) connection"
+                              iconSrc="/icons/brands/whatsapp.svg"
+                              onClick={() => openSetup({ provider: 'meta' })}
+                            />
+                          ) : null}
                           <ProviderCard
                             label="Twilio"
                             hint={tab === 'whatsapp' ? 'WhatsApp Business via Twilio' : 'SMS via Twilio'}
                             iconSrc="/icons/brands/twilio.svg"
-                            onClick={() => {
-                              // Guided one-click popup only when a
-                              // Twilio Connect App is configured;
-                              // otherwise straight to credentials.
-                              if (data?.guidedConnect?.twilio.configured) setConnectOpen(true)
-                              else openSetup({ provider: 'twilio' })
-                            }}
+                            onClick={() => startTwilio()}
                           />
-                          {tab === 'whatsapp' && data?.guidedConnect?.whatsappEmbeddedSignup.configured ? (
-                            <ProviderCard
-                              label="WhatsApp Cloud API"
-                              hint="Direct Meta connection"
-                              iconSrc="/icons/brands/whatsapp.svg"
-                              onClick={() => setConnectOpen(true)}
-                            />
-                          ) : null}
-                          {reusableTwilio ? (
-                            <ProviderCard
-                              label="Existing Twilio"
-                              hint={`Reuse “${reusableTwilio.display_name}”`}
-                              iconSrc="/icons/brands/twilio.svg"
-                              onClick={() => openSetup({ provider: 'twilio', reuseFromId: reusableTwilio.id, reuseFromLabel: reusableTwilio.display_name })}
-                            />
-                          ) : null}
                         </>
                       ) : (
                         providers.filter((item) => item.available).map((item) => (
@@ -356,6 +364,33 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
           }}
         />
       ) : null}
+
+      <AlertDialog open={reusePromptOpen} onOpenChange={setReusePromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Twilio credentials already exist</AlertDialogTitle>
+            <AlertDialogDescription>
+              {reusableTwilio
+                ? `Your ${reusableTwilio.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} connection “${reusableTwilio.display_name}” already uses a Twilio account. Reuse the same account for ${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} — one bill, one set of credentials — or connect a different Twilio account.`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => openSetup({ provider: 'twilio' })}
+            >
+              Use a different account
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (reusableTwilio) openSetup({ provider: 'twilio', reuseFromId: reusableTwilio.id, reuseFromLabel: reusableTwilio.display_name })
+              }}
+            >
+              Reuse existing credentials
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ChannelSetupSheet
         channel={channel}

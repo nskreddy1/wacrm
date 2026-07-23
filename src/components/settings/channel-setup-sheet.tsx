@@ -40,6 +40,8 @@ const CHANNEL_LABEL: Record<ChannelKind, string> = { whatsapp: 'WhatsApp', sms: 
 
 const defaults = {
   displayName: '', externalIdentity: '', host: '', port: '587', username: '', password: '', apiKey: '', accountSid: '', authToken: '', messagingServiceSid: '',
+  // WhatsApp Cloud API (Meta) — token + IDs from Meta for Developers.
+  accessToken: '', phoneNumberId: '', appSecret: '', verifyToken: '',
 }
 
 /**
@@ -122,12 +124,25 @@ export function ChannelSetupSheet({
     if (!form.displayName.trim()) { toast.error('Connection name is required.'); return }
     if (!form.externalIdentity.trim()) { toast.error(`The ${identityLabel} is required.`); return }
     if (provider === 'twilio' && !reusing && (!form.accountSid.trim() || !form.authToken.trim())) { toast.error('Twilio Account SID and Auth token are required.'); return }
+    if (provider === 'meta' && (!form.accessToken.trim() || !form.phoneNumberId.trim())) { toast.error('Meta access token and phone number ID are required.'); return }
     if (provider === 'smtp' && (!form.host.trim() || !form.username.trim() || !form.password.trim())) { toast.error('SMTP host, username, and password are required.'); return }
     if (provider === 'resend' && !form.apiKey.trim()) { toast.error('Resend API key is required.'); return }
     setBusy('save')
     try {
-      const configuration = provider === 'smtp' ? { host: form.host, port: Number(form.port), secure: Number(form.port) === 465, requireTls: Number(form.port) === 587 } : {}
-      const credentials = reusing ? undefined : provider === 'smtp' ? { username: form.username, password: form.password } : provider === 'resend' ? { apiKey: form.apiKey } : { accountSid: form.accountSid, authToken: form.authToken, ...(form.messagingServiceSid.trim() ? { messagingServiceSid: form.messagingServiceSid.trim() } : {}) }
+      const configuration = provider === 'smtp'
+        ? { host: form.host, port: Number(form.port), secure: Number(form.port) === 465, requireTls: Number(form.port) === 587 }
+        : provider === 'meta'
+          ? { phone_number_id: form.phoneNumberId.trim() }
+          : {}
+      const credentials = reusing
+        ? undefined
+        : provider === 'smtp'
+          ? { username: form.username, password: form.password }
+          : provider === 'resend'
+            ? { apiKey: form.apiKey }
+            : provider === 'meta'
+              ? { accessToken: form.accessToken.trim(), ...(form.appSecret.trim() ? { appSecret: form.appSecret.trim() } : {}), ...(form.verifyToken.trim() ? { verifyToken: form.verifyToken.trim() } : {}) }
+              : { accountSid: form.accountSid, authToken: form.authToken, ...(form.messagingServiceSid.trim() ? { messagingServiceSid: form.messagingServiceSid.trim() } : {}) }
       await request({ action: 'save', channel, provider, displayName: form.displayName.trim(), externalIdentity: form.externalIdentity.trim(), configuration, credentials, ...(reusing ? { reuseCredentialsFromId: init?.reuseFromId } : {}) })
       toast.success('Connection saved securely. Test it before enabling.')
       onSaved()
@@ -169,6 +184,21 @@ export function ChannelSetupSheet({
                 <SelectContent><SelectGroup>{providers.map((item) => <SelectItem key={item.provider} value={item.provider}>{item.label}{item.available ? '' : ' — coming later'}</SelectItem>)}</SelectGroup></SelectContent>
               </Select>
             </div>
+          ) : channel === 'whatsapp' ? (
+            /* WhatsApp has two real paths: Twilio (BSP) or a direct
+               Meta Cloud API connection. */
+            <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+              <span className="w-28 shrink-0 text-sm text-muted-foreground">Provider</span>
+              <Select value={provider} onValueChange={(value) => { if (value) setProvider(value as ChannelProvider) }}>
+                <SelectTrigger className="h-8 flex-1 bg-card"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="twilio">Twilio</SelectItem>
+                    <SelectItem value="meta">WhatsApp Cloud API (Meta)</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
           ) : (
             <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3.5">
               <span className="w-28 shrink-0 text-sm text-muted-foreground">Provider</span>
@@ -205,6 +235,30 @@ export function ChannelSetupSheet({
                     <span className="w-28 shrink-0 text-sm text-muted-foreground">Auth token</span>
                     <Input type="password" value={form.authToken} onChange={(event) => update('authToken', event.target.value)} className="h-8 flex-1 bg-card" aria-label="Twilio Auth token" />
                   </div>
+                </>
+              ) : null}
+
+              {provider === 'meta' ? (
+                <>
+                  <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                    <span className="w-28 shrink-0 text-sm text-muted-foreground">Access token</span>
+                    <Input type="password" value={form.accessToken} onChange={(event) => update('accessToken', event.target.value)} placeholder="Permanent token (EAAG…)" className="h-8 flex-1 bg-card" aria-label="Meta permanent access token" />
+                  </div>
+                  <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                    <span className="w-28 shrink-0 text-sm text-muted-foreground">Phone number ID</span>
+                    <Input value={form.phoneNumberId} onChange={(event) => update('phoneNumberId', event.target.value)} placeholder="e.g. 123456789012345" className="h-8 flex-1 bg-card font-mono text-xs" aria-label="WhatsApp phone number ID" />
+                  </div>
+                  <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                    <span className="w-28 shrink-0 text-sm text-muted-foreground">App secret <span className="block text-[11px]">(optional)</span></span>
+                    <Input type="password" value={form.appSecret} onChange={(event) => update('appSecret', event.target.value)} placeholder="For webhook signatures" className="h-8 flex-1 bg-card" aria-label="Meta app secret" />
+                  </div>
+                  <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+                    <span className="w-28 shrink-0 text-sm text-muted-foreground">Verify token <span className="block text-[11px]">(optional)</span></span>
+                    <Input value={form.verifyToken} onChange={(event) => update('verifyToken', event.target.value)} placeholder="For webhook setup" className="h-8 flex-1 bg-card" aria-label="Webhook verify token" />
+                  </div>
+                  <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+                    Find these in Meta for Developers → your app → WhatsApp → API Setup. The phone number ID is shown under the sender number.
+                  </p>
                 </>
               ) : null}
 
