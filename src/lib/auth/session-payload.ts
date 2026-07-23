@@ -14,6 +14,14 @@ export type SessionProfile = {
   account_id: string;
   account_role: AccountRole;
   is_super_admin: boolean;
+  /** Permission slugs from the member's workspace profile. */
+  permissions: string[];
+  /** Workspace owner — rendered as the "Super Admin" profile. */
+  is_owner: boolean;
+  /** Membership status; sessions only resolve for 'active'. */
+  status: string;
+  /** Assigned workspace profile (permission set), if any. */
+  workspace_profile: { id: string; name: string } | null;
 };
 
 export type SessionAccount = {
@@ -86,7 +94,14 @@ export async function getSessionPayload(): Promise<SessionPayload> {
         email: profile.email,
         created_at: profile.created_at,
       },
-      profile: { ...profile, id: profile.user_id },
+      profile: {
+        ...profile,
+        id: profile.user_id,
+        permissions: [...context.permissions],
+        is_owner: context.isOwner,
+        status: context.status,
+        workspace_profile: context.workspaceProfile,
+      },
       account,
     },
     meta: { source },
