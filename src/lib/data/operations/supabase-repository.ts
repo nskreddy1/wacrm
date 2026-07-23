@@ -35,6 +35,15 @@ function relationName(value: unknown): string | null {
   return null
 }
 
+function mapCustomValues(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const result: Record<string, string> = {}
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry === "string") result[key] = entry
+  }
+  return result
+}
+
 function mapCatalogItem(row: Row): CatalogItem {
   return {
     id: String(row.id),
@@ -44,6 +53,7 @@ function mapCatalogItem(row: Row): CatalogItem {
     price: Number(row.price ?? 0),
     currency: String(row.currency ?? "USD"),
     isActive: Boolean(row.is_active),
+    customValues: mapCustomValues(row.custom_values),
     createdAt: String(row.created_at),
   }
 }
@@ -63,6 +73,7 @@ function mapAppointment(row: Row): Appointment {
     catalogItemName: relationName(row.catalog_item),
     assignedTo: (row.assigned_to as string | null) ?? null,
     dealId: (row.deal_id as string | null) ?? null,
+    customValues: mapCustomValues(row.custom_values),
     createdAt: String(row.created_at),
   }
 }
@@ -85,13 +96,13 @@ function mapTask(row: Row): TaskItem {
 }
 
 const APPOINTMENT_SELECT =
-  "id, title, notes, location, starts_at, ends_at, status, contact_id, catalog_item_id, assigned_to, deal_id, created_at, contact:contacts(name), catalog_item:catalog_items(name)"
+  "id, title, notes, location, starts_at, ends_at, status, contact_id, catalog_item_id, assigned_to, deal_id, custom_values, created_at, contact:contacts(name), catalog_item:catalog_items(name)"
 
 const TASK_SELECT =
   "id, title, notes, due_at, priority, status, contact_id, deal_id, assigned_to, completed_at, created_at, contact:contacts(name)"
 
 const CATALOG_SELECT =
-  "id, name, description, category, price, currency, is_active, created_at"
+  "id, name, description, category, price, currency, is_active, custom_values, created_at"
 
 class OperationsError extends Error {
   constructor(message: string, cause?: unknown) {
@@ -137,6 +148,7 @@ export async function createCatalogItem(
       price: input.price ?? 0,
       currency: input.currency ?? "USD",
       is_active: input.isActive ?? true,
+      custom_values: input.customValues ?? {},
     })
     .select(CATALOG_SELECT)
     .single()
@@ -157,6 +169,7 @@ export async function updateCatalogItem(
   if (input.price !== undefined) patch.price = input.price
   if (input.currency !== undefined) patch.currency = input.currency
   if (input.isActive !== undefined) patch.is_active = input.isActive
+  if (input.customValues !== undefined) patch.custom_values = input.customValues ?? {}
 
   const { data, error } = await ctx.supabase
     .from("catalog_items")
@@ -226,6 +239,7 @@ export async function createAppointment(
       catalog_item_id: input.catalogItemId ?? null,
       assigned_to: input.assignedTo ?? null,
       deal_id: input.dealId ?? null,
+      custom_values: input.customValues ?? {},
     })
     .select(APPOINTMENT_SELECT)
     .single()
@@ -249,6 +263,7 @@ export async function updateAppointment(
   if (input.catalogItemId !== undefined) patch.catalog_item_id = input.catalogItemId
   if (input.assignedTo !== undefined) patch.assigned_to = input.assignedTo
   if (input.dealId !== undefined) patch.deal_id = input.dealId
+  if (input.customValues !== undefined) patch.custom_values = input.customValues ?? {}
 
   const { data, error } = await ctx.supabase
     .from("appointments")

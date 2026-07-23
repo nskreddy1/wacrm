@@ -89,6 +89,7 @@ export function AppointmentCreateDialog({
   const [duration, setDuration] = useState('30');
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -137,6 +138,7 @@ export function AppointmentCreateDialog({
     setDuration('30');
     setLocation('');
     setNotes('');
+    setCustomValues({});
     setErrors({});
   }
 
@@ -185,6 +187,7 @@ export function AppointmentCreateDialog({
           catalogItemId: catalogItemId || null,
           location: location.trim() || null,
           notes: notes.trim() || null,
+          customValues,
         }),
       });
       if (!res.ok) {
@@ -503,6 +506,13 @@ export function AppointmentCreateDialog({
                 </div>
               </div>
             </section>
+
+            <ModuleCustomFieldsSection
+              module="appointments"
+              values={customValues}
+              onChange={setCustomValues}
+              disabled={submitting}
+            />
           </div>
         </div>
 
