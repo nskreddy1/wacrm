@@ -27,6 +27,8 @@ type Discovery = {
 }
 
 export interface ChannelSetupInit {
+  /** Preselected provider (from the provider card grid). */
+  provider?: ChannelProvider
   /** Prefilled Account SID (from Twilio Connect popup authorization). */
   accountSid?: string
   /** Reuse credentials from this existing connection (dedup). */
@@ -71,7 +73,7 @@ export function ChannelSetupSheet({
   // Re-seed the draft each time the sheet opens with a fresh intent.
   useEffect(() => {
     if (open) {
-      setProvider(channel === 'email' ? 'smtp' : 'twilio')
+      setProvider(init?.provider ?? (channel === 'email' ? 'smtp' : 'twilio'))
       setForm({ ...defaults, accountSid: init?.accountSid ?? '' })
       setDiscovery(null)
       setBusy(null)

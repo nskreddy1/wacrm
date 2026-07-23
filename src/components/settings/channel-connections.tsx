@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
-import { ChevronRight, Loader2, Mail, MessageCircle, Plus, ShieldCheck, Smartphone } from 'lucide-react'
+import { ChevronRight, Loader2, Mail, MessageCircle, Plus, Settings2, ShieldCheck, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -83,6 +83,43 @@ const CHANNEL_HEAD: Record<
 
 const CHANNEL_ICON: Record<ChannelKind, typeof Mail> = { whatsapp: MessageCircle, sms: Smartphone, email: Mail }
 
+/**
+ * Bigin-style provider card ("Popular Email Services" pattern): a
+ * bordered card with the brand mark and name. Brand SVGs are served
+ * from /public (sourced from theSVG.org — review trademark policies).
+ */
+function ProviderCard({
+  label,
+  hint,
+  iconSrc,
+  icon: IconCmp,
+  onClick,
+}: {
+  label: string
+  hint?: string
+  iconSrc?: string
+  icon?: typeof Mail
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-40 flex-col items-center gap-3 rounded-lg border border-border bg-card px-4 py-6 text-center transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      {iconSrc ? (
+        <img src={iconSrc || "/placeholder.svg"} alt="" className="size-10" />
+      ) : IconCmp ? (
+        <IconCmp className="size-10 text-muted-foreground" strokeWidth={1.25} aria-hidden />
+      ) : null}
+      <span className="flex flex-col gap-0.5">
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        {hint ? <span className="text-xs leading-snug text-muted-foreground">{hint}</span> : null}
+      </span>
+    </button>
+  )
+}
+
 export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKind }) {
   const { data, error, isLoading, mutate } = useSWR<ResponseData>('/api/settings/channels', fetcher)
   const [channel, setChannel] = useState<ChannelKind>(fixedChannel ?? 'email')
@@ -126,9 +163,11 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
   }
 
   function startConnect(target: ChannelKind) {
-    // Email has no OAuth-style popup — go straight to the setup sheet.
-    if (target === 'email') openSetup(null)
-    else setConnectOpen(true)
+    // Guided popup only when Twilio Connect is actually configured —
+    // otherwise straight to the setup sheet (works with any account,
+    // including trial). Email never has a popup.
+    if (target !== 'email' && data?.guidedConnect?.twilio.configured) setConnectOpen(true)
+    else openSetup(target === 'email' ? null : { provider: 'twilio' })
   }
 
   const visibleChannels: ChannelKind[] = fixedChannel ? [fixedChannel] : ['email', 'whatsapp', 'sms']
@@ -167,16 +206,76 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
 
               {empty ? (
                 /* Bigin-style connect hero — shown until the first
-                   connection exists. */
+                   connection exists. Providers are presented as brand
+                   cards (like Bigin's "Popular Email Services"); only
+                   paths that actually work are visible — guided
+                   one-click options appear when their env config
+                   exists. */
                 <div className="flex flex-col items-center gap-4 pt-4 text-center">
                   <h2 className="text-2xl font-bold text-balance text-foreground">{head.heroTitle}</h2>
-                  <div className="flex size-14 items-center justify-center rounded-full bg-primary-soft">
-                    <Icon className="size-7 text-primary" aria-hidden />
-                  </div>
+                  {tab === 'whatsapp' ? (
+                    <img src="/icons/brands/whatsapp.svg" alt="WhatsApp" className="size-12" />
+                  ) : (
+                    <div className="flex size-14 items-center justify-center rounded-full bg-primary-soft">
+                      <Icon className="size-7 text-primary" aria-hidden />
+                    </div>
+                  )}
                   <p className="max-w-xl text-sm leading-relaxed text-pretty text-muted-foreground">{head.description}</p>
-                  <Button size="lg" className="rounded-full px-8" onClick={() => startConnect(tab)}>
-                    Connect now
-                  </Button>
+                  <div className="flex w-full max-w-2xl flex-col gap-3 pt-2">
+                    <h3 className="text-left text-sm font-semibold text-foreground">
+                      {tab === 'email' ? 'Popular email services:' : `Popular ${tab === 'sms' ? 'SMS' : 'WhatsApp'} services:`}
+                    </h3>
+                    <div className="flex flex-wrap gap-4">
+                      {tab !== 'email' ? (
+                        <>
+                          <ProviderCard
+                            label="Twilio"
+                            hint={tab === 'whatsapp' ? 'WhatsApp Business via Twilio' : 'SMS via Twilio'}
+                            iconSrc="/icons/brands/twilio.svg"
+                            onClick={() => {
+                              // Guided one-click popup only when a
+                              // Twilio Connect App is configured;
+                              // otherwise straight to credentials.
+                              if (data?.guidedConnect?.twilio.configured) setConnectOpen(true)
+                              else openSetup({ provider: 'twilio' })
+                            }}
+                          />
+                          {tab === 'whatsapp' && data?.guidedConnect?.whatsappEmbeddedSignup.configured ? (
+                            <ProviderCard
+                              label="WhatsApp Cloud API"
+                              hint="Direct Meta connection"
+                              iconSrc="/icons/brands/whatsapp.svg"
+                              onClick={() => setConnectOpen(true)}
+                            />
+                          ) : null}
+                          {reusableTwilio ? (
+                            <ProviderCard
+                              label="Existing Twilio"
+                              hint={`Reuse “${reusableTwilio.display_name}”`}
+                              iconSrc="/icons/brands/twilio.svg"
+                              onClick={() => openSetup({ provider: 'twilio', reuseFromId: reusableTwilio.id, reuseFromLabel: reusableTwilio.display_name })}
+                            />
+                          ) : null}
+                        </>
+                      ) : (
+                        providers.filter((item) => item.available).map((item) => (
+                          <ProviderCard
+                            key={item.provider}
+                            label={item.label}
+                            hint={item.provider === 'smtp' ? 'Any SMTP mailbox' : 'Transactional email API'}
+                            icon={Mail}
+                            onClick={() => openSetup({ provider: item.provider })}
+                          />
+                        ))
+                      )}
+                      <ProviderCard
+                        label="Custom"
+                        hint="Other providers & manual setup"
+                        icon={Settings2}
+                        onClick={() => openSetup(null)}
+                      />
+                    </div>
+                  </div>
                   <div className="w-full max-w-2xl rounded-lg bg-amber-500/10 px-5 py-4 text-left">
                     <h3 className="mb-2 text-sm font-semibold text-foreground">Requirements</h3>
                     <ul className="flex flex-col gap-1.5">
@@ -242,7 +341,7 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
         })}
       </Tabs>
 
-      {channel !== 'email' ? (
+      {channel !== 'email' && data?.guidedConnect?.twilio.configured ? (
         <ConnectChannelDialog
           channel={channel}
           open={connectOpen}
