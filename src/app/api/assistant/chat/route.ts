@@ -11,21 +11,12 @@ import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account'
 import {
   loadAssistantConfig,
   resolveAssistantModel,
+  resolveAssistantSystemPrompt,
 } from '@/lib/assistant/config'
 import { buildAssistantTools, WRITE_TOOL_NAMES } from '@/lib/assistant/tools'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
-
-const SYSTEM_PROMPT = `You are the in-app helper agent for a WhatsApp CRM platform. You help signed-in workspace users understand and use the product: WhatsApp inbox, contacts, deals/pipelines, appointments, broadcasts, automations, AI agents, and settings.
-
-Access rules you MUST follow:
-- You have READ access to the user's workspace data through your read tools. Use them freely to answer questions, and always base answers on tool results rather than guessing.
-- WRITE actions (creating support tickets, adding contact notes) require the user's explicit approval in the chat. When you call a write tool, briefly tell the user what you are about to do and why, so their approve/deny decision is informed.
-- Never invent data. If a tool returns an error or nothing, say so.
-- If the user needs human help, wants to report a bug, or you cannot answer, offer to create a support ticket for the founder support team.
-- Keep replies short and practical. Use plain text, no markdown tables.
-- Politely decline anything unrelated to this product or the user's workspace.`
 
 export async function POST(req: Request) {
   try {
@@ -54,7 +45,7 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model: resolveAssistantModel(config),
-      system: SYSTEM_PROMPT,
+      system: resolveAssistantSystemPrompt(config),
       messages: await convertToModelMessages(recent),
       tools: buildAssistantTools(ctx),
       // Read tools run freely; every write tool pauses the loop and

@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/ai/admin-client'
 import { encrypt } from '@/lib/whatsapp/encryption'
 import {
   ASSISTANT_DEFAULT_MODEL,
+  ASSISTANT_DEFAULT_SYSTEM_PROMPT,
   ASSISTANT_PROVIDERS,
   ASSISTANT_SETTING_KEY,
   isAssistantProvider,
@@ -27,6 +28,7 @@ interface StoredShape {
   model?: unknown
   api_key?: unknown
   base_url?: unknown
+  system_prompt?: unknown
   enabled?: unknown
 }
 
@@ -60,6 +62,9 @@ export async function GET() {
     provider: storedProvider,
     model: typeof v?.model === 'string' ? v.model : null,
     base_url: typeof v?.base_url === 'string' ? v.base_url : null,
+    system_prompt:
+      typeof v?.system_prompt === 'string' ? v.system_prompt : null,
+    default_system_prompt: ASSISTANT_DEFAULT_SYSTEM_PROMPT,
     updated_at: data?.updated_at ?? null,
   })
 }
@@ -83,6 +88,7 @@ export async function PATCH(request: Request) {
     model?: unknown
     api_key?: unknown
     base_url?: unknown
+    system_prompt?: unknown
     enabled?: unknown
   } | null
 
@@ -101,6 +107,13 @@ export async function PATCH(request: Request) {
   const baseUrl =
     typeof body.base_url === 'string' && body.base_url.trim().length > 0
       ? body.base_url.trim()
+      : null
+  // Blank/omitted prompt = use the platform default. Capped so a
+  // pasted novel can't blow up every request's token budget.
+  const systemPrompt =
+    typeof body.system_prompt === 'string' &&
+    body.system_prompt.trim().length > 0
+      ? body.system_prompt.trim().slice(0, 8000)
       : null
 
   // Reject junk endpoints early (mainly for self-hosted Ollama/NIM).
@@ -144,6 +157,7 @@ export async function PATCH(request: Request) {
         model,
         api_key: encryptedKey ?? '',
         base_url: baseUrl,
+        system_prompt: systemPrompt,
         enabled,
       },
       updated_at: new Date().toISOString(),
