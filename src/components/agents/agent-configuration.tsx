@@ -291,36 +291,37 @@ export function AgentConfiguration() {
             </FieldGroup>
           ) : null}
 
-          {/* Max replies */}
-          <FieldGroup label="Max Auto-Replies">
-            <Select value={maxReplies} onValueChange={(value) => value && setMaxReplies(value)}>
-              <SelectTrigger aria-label="Maximum auto-replies" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MAX_REPLY_OPTIONS.map((n) => (
-                  <SelectItem key={n} value={n}>
-                    {n} {n === '1' ? 'reply' : 'replies'}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldGroup>
-
-          {/* Fallback behaviour */}
-          <FieldGroup label="Reply Limit Behavior" last>
-            <Select value={limitMode} onValueChange={(value) => value && setLimitMode(value)}>
-              <SelectTrigger aria-label="Reply limit behavior" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LIMIT_MODES.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Business hours — WhatsApp etiquette: auto-reply runs inside
+              this window; after-hours messages wait for a human. Leave
+              empty to reply around the clock. */}
+          <FieldGroup label="Active Hours (auto-reply window)" last>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="time"
+                value={scheduleStart}
+                onChange={(event) => setScheduleStart(event.target.value)}
+                aria-label="Auto-reply start time"
+                className="w-32"
+              />
+              <span className="text-sm text-muted-foreground">to</span>
+              <Input
+                type="time"
+                value={scheduleEnd}
+                onChange={(event) => setScheduleEnd(event.target.value)}
+                aria-label="Auto-reply end time"
+                className="w-32"
+              />
+              <Input
+                value={timezone}
+                onChange={(event) => setTimezone(event.target.value)}
+                placeholder="e.g. Asia/Kolkata"
+                aria-label="Timezone"
+                className="w-44"
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Leave empty to reply around the clock. Outside these hours, conversations wait for your team.
+            </span>
           </FieldGroup>
         </div>
 
