@@ -198,7 +198,7 @@ function AssistantConfigSection() {
               <Select
                 value={provider}
                 onValueChange={(v) => {
-                  if (v in ASSISTANT_PROVIDER_LABELS) {
+                  if (typeof v === "string" && v in ASSISTANT_PROVIDER_LABELS) {
                     setProvider(v as AssistantProvider);
                   }
                 }}
