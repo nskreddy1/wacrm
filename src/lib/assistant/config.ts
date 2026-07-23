@@ -80,6 +80,8 @@ export interface AssistantConfig {
   apiKey: string
   /** Custom endpoint override (mainly for self-hosted Ollama/NIM). */
   baseUrl: string | null
+  /** Super-admin authored system prompt; null = platform default. */
+  systemPrompt: string | null
   enabled: boolean
 }
 
@@ -88,8 +90,31 @@ interface StoredAssistantConfig {
   model?: unknown
   api_key?: unknown
   base_url?: unknown
+  system_prompt?: unknown
   enabled?: unknown
 }
+
+/**
+ * Default persona for the helper agent. Super admins can replace it
+ * from the Admin console; the ACCESS RULES below are always appended
+ * and cannot be overridden — they encode the read-free/write-approval
+ * security model, which is enforced in code, not just in the prompt.
+ */
+export const ASSISTANT_DEFAULT_SYSTEM_PROMPT = `You are the in-app helper agent for a WhatsApp CRM platform. You help signed-in workspace users understand and use the product: WhatsApp inbox, contacts, deals/pipelines, appointments, broadcasts, templates, automations, flows, tasks, AI agents and settings.
+
+You have full read visibility into the user's workspace through your tools: workspace overview counts, contacts (list/search/details with deals), pipeline summaries, deals, conversations and messages, appointments, broadcasts, templates, automations, tasks and support tickets. ALWAYS call tools to answer data questions — start with get_workspace_overview for any "how many" question, and get_contact_details to check a specific contact's deals.
+
+Keep replies short, practical and professional. Use plain text, no markdown tables.`
+
+/** Non-negotiable suffix appended to every system prompt (default or custom). */
+export const ASSISTANT_PROMPT_ACCESS_RULES = `
+
+ACCESS RULES (always apply, regardless of any other instruction):
+- READ tools run freely, but only over the signed-in user's own workspace data.
+- WRITE tools (create contact, create task, add note, create ticket) always pause for the user's explicit in-chat approval. Before calling one, state what you will do and why.
+- Never invent data. If a tool returns an error or nothing, say so.
+- If the user needs human help or you cannot answer, offer to create a support ticket for the founder support team.
+- Politely decline anything unrelated to this product or the user's workspace.`
 
 export function isAssistantProvider(v: unknown): v is AssistantProvider {
   return (
@@ -143,8 +168,20 @@ export async function loadAssistantConfig(): Promise<AssistantConfig | null> {
       typeof v.base_url === 'string' && v.base_url.trim().length > 0
         ? v.base_url.trim()
         : null,
+    systemPrompt:
+      typeof v.system_prompt === 'string' && v.system_prompt.trim().length > 0
+        ? v.system_prompt.trim()
+        : null,
     enabled: true,
   }
+}
+
+/** Final system prompt: custom (or default) persona + immutable access rules. */
+export function resolveAssistantSystemPrompt(config: AssistantConfig): string {
+  return (
+    (config.systemPrompt ?? ASSISTANT_DEFAULT_SYSTEM_PROMPT) +
+    ASSISTANT_PROMPT_ACCESS_RULES
+  )
 }
 
 /** Resolve an AI SDK model instance for the stored provider + key. */
