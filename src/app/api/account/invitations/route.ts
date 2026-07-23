@@ -19,7 +19,7 @@
 
 import { NextResponse } from "next/server";
 
-import { requireRole, toErrorResponse } from "@/lib/auth/account";
+import { requirePermission, toErrorResponse } from "@/lib/auth/account";
 import {
   clampExpiryDays,
   generateInviteToken,
@@ -192,6 +192,7 @@ export async function POST(request: Request) {
           firstName?: unknown;
           lastName?: unknown;
           workspaceRoleId?: unknown;
+          workspaceProfileId?: unknown;
         }
       | null;
 
@@ -278,6 +279,33 @@ export async function POST(request: Request) {
       workspaceRoleId = wsRole.id;
     }
 
+    // Workspace profile (permission set) — optional, validated
+    // against this account's profiles so a crafted ID can't attach
+    // a foreign account's permission set. When omitted, the join
+    // flow falls back to the account's "Standard" system profile.
+    let workspaceProfileId: string | null = null;
+    if (
+      typeof body?.workspaceProfileId === "string" &&
+      body.workspaceProfileId.trim() !== ""
+    ) {
+      const { data: wsProfile } = await ctx.supabase
+        .from("workspace_profiles")
+        .select("id")
+        .eq("id", body.workspaceProfileId.trim())
+        .eq("account_id", ctx.accountId)
+        .maybeSingle();
+      if (!wsProfile) {
+        return NextResponse.json(
+          {
+            error:
+              "'workspaceProfileId' does not match a profile in this workspace",
+          },
+          { status: 400 },
+        );
+      }
+      workspaceProfileId = wsProfile.id;
+    }
+
     // Bound outstanding invites per account. Unlike the per-user
     // rate limit above (which resets each minute), this caps the
     // steady-state number of live single-use links an account can
@@ -324,6 +352,7 @@ export async function POST(request: Request) {
         invited_first_name: invitedFirstName,
         invited_last_name: invitedLastName,
         workspace_role_id: workspaceRoleId,
+        workspace_profile_id: workspaceProfileId,
       })
       .select("id, role, label, expires_at, created_at, invited_email")
       .single();

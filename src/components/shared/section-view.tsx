@@ -18,6 +18,7 @@ import { useId, type ReactNode } from "react"
 import { Search } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
+import { sheetTable } from "@/components/shared/sheet-table"
 import { cn } from "@/lib/utils"
 
 /* ----------------------------------------------------------------
@@ -166,12 +167,12 @@ export function DataTable<Row>({ columns, rows, rowKey, empty, onRowClick, class
   className?: string
 }) {
   return (
-    <div className={cn("overflow-x-auto rounded-lg border", className)}>
-      <table className="w-full min-w-[640px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b bg-muted/40 text-left text-muted-foreground">
+    <div className={cn(sheetTable.frame, className)}>
+      <table className={cn(sheetTable.table, "w-full min-w-[640px]")}>
+        <thead className={sheetTable.thead}>
+          <tr>
             {columns.map((column) => (
-              <th key={column.id} scope="col" className={cn("px-4 py-2.5 font-medium", column.className)}>
+              <th key={column.id} scope="col" className={cn(sheetTable.th, column.className)}>
                 {column.header}
               </th>
             ))}
@@ -189,10 +190,10 @@ export function DataTable<Row>({ columns, rows, rowKey, empty, onRowClick, class
               <tr
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={cn("border-b last:border-b-0", onRowClick && "cursor-pointer transition-colors hover:bg-muted/50")}
+                className={cn(sheetTable.row, onRowClick && sheetTable.rowClickable)}
               >
                 {columns.map((column) => (
-                  <td key={column.id} className={cn("px-4 py-3 align-middle", column.className)}>
+                  <td key={column.id} className={cn(sheetTable.td, "py-3", column.className)}>
                     {column.cell(row)}
                   </td>
                 ))}
