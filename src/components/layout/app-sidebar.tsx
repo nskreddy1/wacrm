@@ -331,7 +331,7 @@ function FooterMenu() {
               {/* Deep link into the Workspace name card so renaming is
                   one click from anywhere — the form itself stays in
                   Settings as the single source of truth. */}
-              {(accountRole === "owner" || accountRole === "admin") && (
+              {canEditSettings && (
                 <DropdownMenuItem
                   onClick={() => {
                     router.push(`${routes.app.settings}?tab=members`)
@@ -375,7 +375,7 @@ function FooterMenu() {
   )
 }
 
-export function AppSidebar({ initialRole = null }: { initialRole?: AccountRole | null }) {
+export function AppSidebar({ initialAccess = null }: { initialAccess?: NavAccess | null }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -383,7 +383,7 @@ export function AppSidebar({ initialRole = null }: { initialRole?: AccountRole |
         <CollapseToggle />
       </SidebarHeader>
       <SidebarContent>
-        <NavGroups initialRole={initialRole} />
+        <NavGroups initialAccess={initialAccess} />
         <PlatformGroup />
       </SidebarContent>
       <SidebarFooter>

@@ -54,8 +54,8 @@ const WINDOWS = [7, 30, 90] as const;
  * `GET /api/ai/usage` route. Renders nothing for non-admins.
  */
 export function AiUsageCard() {
-  const { accountId, accountRole, profileLoading } = useAuth();
-  const canView = accountRole ? canEditSettings(accountRole) : false;
+  const { accountId, profileLoading, can } = useAuth();
+  const canView = can('ai:manage');
 
   const [days, setDays] = useState<number>(30);
   const [loading, setLoading] = useState(true);

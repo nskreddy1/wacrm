@@ -1,20 +1,13 @@
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";
-import {
-  canDeleteAccount,
-  canEditSettings,
-  canManageMembers,
-  canSendMessages,
-  canTransferOwnership,
-  canViewOnly,
-} from "@/lib/auth/roles";
+import type { PermissionSlug } from "@/lib/auth/permissions";
 
 /**
- * Typed action keys for `useCan`. Adding a capability = one new
- * entry here + one new case in the switch below + (usually) one
- * new predicate in `@/lib/auth/roles`. Keeping the list closed
- * lets the compiler catch typos at every call site.
+ * Typed action keys for `useCan`. These map onto capability flags
+ * derived from the member's workspace-profile permissions (see
+ * `deriveCapabilities` in `@/lib/auth/permissions`). Keeping the
+ * list closed lets the compiler catch typos at every call site.
  */
 export type CanAction =
   | "manage-members"
@@ -38,30 +31,47 @@ export type CanAction =
  *   <Button disabled={!canEdit} title={canEdit ? "Save" : "Read-only"} />
  */
 export function useCan(action: CanAction): boolean {
-  const { profileLoading, accountRole } = useAuth();
-  if (profileLoading || !accountRole) return false;
+  const {
+    profileLoading,
+    profile,
+    isOwner,
+    canManageMembers,
+    canEditSettings,
+    canSendMessages,
+  } = useAuth();
+  if (profileLoading || !profile) return false;
 
   switch (action) {
     case "manage-members":
-      return canManageMembers(accountRole);
+      return canManageMembers;
     case "edit-settings":
-      return canEditSettings(accountRole);
+      return canEditSettings;
     case "send-messages":
-      return canSendMessages(accountRole);
+      return canSendMessages;
     case "view-only":
-      return canViewOnly(accountRole);
+      return !canSendMessages && !canEditSettings;
     case "delete-account":
-      return canDeleteAccount(accountRole);
     case "transfer-ownership":
-      return canTransferOwnership(accountRole);
+      // Destructive account-level actions stay owner-only ("Super
+      // Admin" semantics) — no permission slug can grant these.
+      return isOwner;
     default: {
       // Exhaustiveness check — adding a new `CanAction` without a
       // case here fails the typecheck because TS narrows `action`
-      // to `never` in this branch. The runtime throw is unreachable
-      // for valid inputs; it only fires if someone bypasses the
-      // type system at the call site (e.g. with a wrong-typed cast).
+      // to `never` in this branch.
       const _exhaustive: never = action;
       throw new Error(`Unknown CanAction: ${String(_exhaustive)}`);
     }
   }
+}
+
+/**
+ * Permission-slug variant of `useCan` — preferred for new call
+ * sites. `usePermission("broadcasts:send")` is `true` iff the
+ * member's workspace profile holds the slug (owners always pass).
+ */
+export function usePermission(slug: PermissionSlug): boolean {
+  const { profileLoading, profile, can } = useAuth();
+  if (profileLoading || !profile) return false;
+  return can(slug);
 }

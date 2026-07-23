@@ -14,8 +14,8 @@ import { Badge } from '@/components/ui/badge';
 type Tab = 'playground' | 'setup' | 'usage';
 
 export default function AgentsPage() {
-  const { accountRole } = useAuth();
-  const canViewUsage = accountRole ? canEditSettings(accountRole) : false;
+  const { can } = useAuth();
+  const canViewUsage = can('ai:manage');
   const [tab, setTab] = useState<Tab>('playground');
   const [decided, setDecided] = useState(false);
 
