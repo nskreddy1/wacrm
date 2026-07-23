@@ -56,6 +56,20 @@ function credentialsFor(provider: ChannelProvider, input?: Record<string, string
     if (!input.apiKey) throw new Error('Resend API key is required')
     return { provider, value: { apiKey: input.apiKey } }
   }
+  if (provider === 'meta') {
+    // WhatsApp Cloud API (direct Meta connection). Only the access
+    // token is required to send; app secret + verify token power
+    // webhook signature validation and can be added later.
+    if (!input.accessToken) throw new Error('Meta permanent access token is required')
+    return {
+      provider,
+      value: {
+        accessToken: input.accessToken,
+        appSecret: input.appSecret ?? '',
+        verifyToken: input.verifyToken ?? '',
+      },
+    }
+  }
   if (provider === 'twilio') {
     if (!input.accountSid || !input.authToken) throw new Error('Twilio Account SID and Auth Token are required')
     // Optional Messaging Service SID (MG…) — enables Twilio-managed
