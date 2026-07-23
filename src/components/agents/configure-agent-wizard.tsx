@@ -154,10 +154,10 @@ export function ConfigureAgentWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg gap-0 p-0">
-        <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <span className="size-1.5 shrink-0 bg-foreground" aria-hidden />
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden rounded-xl p-0 shadow-2xl">
+        <DialogHeader className="border-b border-border px-6 py-5">
+          <DialogTitle className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
+            <span className="block h-2.5 w-2.5 shrink-0 rounded-[2px] bg-primary" aria-hidden />
             Configure New Agent
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -165,25 +165,31 @@ export function ConfigureAgentWizard({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Stepper */}
-        <div className="flex items-center gap-4 border-b border-border px-5 py-3" role="list" aria-label="Wizard steps">
+        {/* Stepper — elevated strip for clearer visual layering */}
+        <div
+          className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-6 py-3.5"
+          role="list"
+          aria-label="Wizard steps"
+        >
           {STEPS.map((label, i) => (
             <div key={label} role="listitem" className="flex items-center gap-2">
               <span
                 aria-current={i === step ? 'step' : undefined}
                 className={cn(
-                  'flex size-5 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums',
+                  'flex size-6 items-center justify-center rounded-full text-xs font-semibold tabular-nums transition-colors',
                   i === step
-                    ? 'bg-foreground text-background'
-                    : 'border border-border text-muted-foreground',
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : i < step
+                      ? 'bg-foreground text-background'
+                      : 'border border-border bg-background text-muted-foreground',
                 )}
               >
                 {i + 1}
               </span>
               <span
                 className={cn(
-                  'text-sm',
-                  i === step ? 'font-medium text-foreground' : 'text-muted-foreground',
+                  'whitespace-nowrap text-sm leading-relaxed',
+                  i === step ? 'font-semibold text-foreground' : 'text-muted-foreground',
                 )}
               >
                 {label}
@@ -192,7 +198,7 @@ export function ConfigureAgentWizard({
           ))}
         </div>
 
-        <div className="flex max-h-[55vh] flex-col gap-4 overflow-y-auto px-5 py-4">
+        <div className="flex max-h-[55vh] flex-col gap-5 overflow-y-auto px-6 py-5">
           {step === 0 ? (
             <>
               <div className="flex flex-col gap-1.5">
@@ -224,16 +230,16 @@ export function ConfigureAgentWizard({
                       onClick={() => setAgentType(t.value)}
                       aria-pressed={agentType === t.value}
                       className={cn(
-                        'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors',
+                        'flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm leading-relaxed transition-all',
                         agentType === t.value
-                          ? 'border-foreground bg-foreground text-background'
-                          : 'border-border bg-card text-foreground hover:bg-muted',
+                          ? 'border-primary bg-primary text-primary-foreground shadow-md'
+                          : 'border-border bg-card text-foreground shadow-xs hover:bg-muted hover:shadow-sm',
                       )}
                     >
                       <span
                         className={cn(
-                          'size-1.5 shrink-0',
-                          agentType === t.value ? 'bg-background' : 'bg-foreground',
+                          'size-1.5 shrink-0 rounded-[1px]',
+                          agentType === t.value ? 'bg-primary-foreground' : 'bg-foreground',
                         )}
                         aria-hidden
                       />
@@ -257,10 +263,10 @@ export function ConfigureAgentWizard({
                       onClick={() => setProvider(p.value)}
                       aria-pressed={provider === p.value}
                       className={cn(
-                        'rounded-md border px-3.5 py-1.5 text-sm font-medium transition-colors',
+                        'rounded-lg border px-4 py-2 text-sm font-medium leading-relaxed transition-all',
                         provider === p.value
-                          ? 'border-foreground bg-foreground text-background'
-                          : 'border-border bg-card text-foreground hover:bg-muted',
+                          ? 'border-primary bg-primary text-primary-foreground shadow-md'
+                          : 'border-border bg-card text-foreground shadow-xs hover:bg-muted hover:shadow-sm',
                       )}
                     >
                       {p.label}
@@ -327,7 +333,7 @@ export function ConfigureAgentWizard({
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border px-5 py-3.5">
+        <div className="flex items-center justify-between border-t border-border bg-muted/40 px-6 py-4">
           {step === 0 ? (
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
@@ -369,9 +375,9 @@ function ToggleRow({
   onCheckedChange: (v: boolean) => void
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-card px-4 py-3">
-      <div className="flex flex-col gap-0.5">
-        <Label htmlFor={id} className="text-sm font-medium text-foreground">
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3.5 shadow-xs">
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={id} className="text-sm font-semibold text-foreground">
           {title}
         </Label>
         <span className="text-xs leading-relaxed text-muted-foreground">{description}</span>
