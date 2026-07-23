@@ -3,6 +3,7 @@
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { DashboardCacheProvider } from "@/components/providers/dashboard-cache-provider"
 import { TeamChatWidget } from "@/components/team-chat/team-chat-widget"
+import { AssistantWidget } from "@/components/assistant/assistant-widget"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AuthProvider } from "@/hooks/use-auth"
 import type { NavAccess } from "@/lib/navigation/config"
@@ -27,6 +28,9 @@ function DashboardShellInner({
       </SidebarInset>
       {/* Workspace-wide team chat (floating launcher, bottom-right). */}
       <TeamChatWidget />
+      {/* Platform helper agent (floating launcher, bottom-left):
+          read-only tools by default, write actions approved in-chat. */}
+      <AssistantWidget />
     </SidebarProvider>
   )
 }

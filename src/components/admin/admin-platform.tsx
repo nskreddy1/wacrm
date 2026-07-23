@@ -14,13 +14,22 @@ import { useState } from "react";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import { toast } from "sonner";
-import { Loader2, ScrollText, SlidersHorizontal } from "lucide-react";
+import { Bot, Loader2, ScrollText, SlidersHorizontal } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -54,8 +63,185 @@ export function AdminPlatform() {
   return (
     <div className="flex flex-col gap-8">
       <EngineFlagSection />
+      <AssistantConfigSection />
       <AuditTrailSection />
     </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Platform assistant — the in-app helper agent's key + model.
+// The API key belongs to the founder/support team (never tenants);
+// it is sent write-only and stored encrypted. GET returns presence
+// metadata only.
+// ------------------------------------------------------------
+
+type AssistantProvider = "openai" | "anthropic" | "gemini";
+
+const ASSISTANT_PROVIDER_LABELS: Record<AssistantProvider, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  gemini: "Google Gemini",
+};
+
+interface AssistantConfigMeta {
+  configured: boolean;
+  enabled: boolean;
+  provider: AssistantProvider | null;
+  model: string | null;
+  updated_at: string | null;
+}
+
+function AssistantConfigSection() {
+  const { data, isLoading, mutate } = useSWR<AssistantConfigMeta>(
+    "/api/admin/assistant-config",
+    jsonFetcher,
+  );
+  const [provider, setProvider] = useState<AssistantProvider>("openai");
+  const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [enabled, setEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+
+  // Hydrate form once per fetched snapshot (render-time, no effect).
+  const snapshot = data
+    ? `${data.provider ?? ""}|${data.model ?? ""}|${data.enabled}`
+    : null;
+  if (data && snapshot && hydratedFor !== snapshot) {
+    setHydratedFor(snapshot);
+    if (data.provider) setProvider(data.provider);
+    setModel(data.model ?? "");
+    setEnabled(data.enabled);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/assistant-config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          model: model.trim() || undefined,
+          // Write-only: omit when blank so the stored key is kept.
+          api_key: apiKey.trim() || undefined,
+          enabled,
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Failed to save");
+      setApiKey("");
+      await mutate();
+      toast.success("Platform assistant saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section aria-label="Platform assistant" className="flex flex-col gap-3">
+      <header className="flex items-center gap-2">
+        <Bot className="size-4 text-muted-foreground" aria-hidden="true" />
+        <h2 className="text-sm font-semibold">Platform assistant</h2>
+        {data?.configured ? (
+          <Badge variant="secondary" className="text-xs">
+            {data.enabled ? "Active" : "Disabled"}
+          </Badge>
+        ) : null}
+      </header>
+
+      <div className="flex flex-col gap-4 rounded-lg border p-4 sm:max-w-lg">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Powers the in-app helper agent for every workspace. The key is owned
+          by the founder/support team, stored encrypted, and never shown again
+          after saving. Leave the key blank to keep the current one.
+        </p>
+
+        {isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          <>
+            <div className="grid gap-1.5">
+              <Label htmlFor="assistant-provider">Provider</Label>
+              <Select
+                value={provider}
+                onValueChange={(v) => {
+                  if (v === "openai" || v === "anthropic" || v === "gemini") {
+                    setProvider(v);
+                  }
+                }}
+              >
+                <SelectTrigger id="assistant-provider" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(
+                    Object.keys(ASSISTANT_PROVIDER_LABELS) as AssistantProvider[]
+                  ).map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {ASSISTANT_PROVIDER_LABELS[p]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="assistant-model">Model</Label>
+              <Input
+                id="assistant-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="Provider default if blank"
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="assistant-key">API key</Label>
+              <Input
+                id="assistant-key"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={
+                  data?.configured ? "•••••••• (stored)" : "sk-..."
+                }
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="assistant-enabled" className="grid leading-tight">
+                <span>Enabled</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  Turn the helper agent on for all workspaces.
+                </span>
+              </Label>
+              <Switch
+                id="assistant-enabled"
+                checked={enabled}
+                onCheckedChange={setEnabled}
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                onClick={() => void save()}
+                disabled={saving || (!data?.configured && !apiKey.trim())}
+              >
+                {saving && (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                )}
+                Save assistant
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
