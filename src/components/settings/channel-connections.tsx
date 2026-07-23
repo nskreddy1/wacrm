@@ -30,10 +30,34 @@ const defaults = {
   displayName: '', externalIdentity: '', host: '', port: '587', username: '', password: '', apiKey: '', accountSid: '', authToken: '', messagingServiceSid: '', recipient: '',
 }
 
-export function ChannelConnections() {
+/**
+ * Per-channel copy: WhatsApp is a policy-governed channel (Meta
+ * template approval, 24h session window), SMS is carrier-based
+ * pay-per-segment, Email is free-form. Splitting them keeps each
+ * panel's guidance specific instead of lowest-common-denominator.
+ */
+const CHANNEL_HEAD: Record<ChannelKind, { title: string; description: string }> = {
+  whatsapp: {
+    title: 'WhatsApp',
+    description:
+      'Connect your WhatsApp Business number. WhatsApp is policy-governed: outbound messages outside the 24-hour customer service window require Meta-approved templates, and opt-in is mandatory. Configure and test the provider here; manage templates in the Template studio.',
+  },
+  sms: {
+    title: 'SMS',
+    description:
+      'Connect an SMS provider. SMS is billed per segment by your carrier and needs no template pre-approval, but regional sender-ID and opt-out (STOP) rules apply. A Messaging Service is recommended for sender pooling and carrier-managed opt-outs.',
+  },
+  email: {
+    title: 'Email',
+    description:
+      'Connect an email provider for conversations and broadcasts. Email is free-form — no external approval needed. Use a dedicated sender address and test deliverability before enabling.',
+  },
+}
+
+export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKind }) {
   const { data, error, isLoading, mutate } = useSWR<ResponseData>('/api/settings/channels', fetcher)
-  const [channel, setChannel] = useState<ChannelKind>('email')
-  const [provider, setProvider] = useState<ChannelProvider>('smtp')
+  const [channel, setChannel] = useState<ChannelKind>(fixedChannel ?? 'email')
+  const [provider, setProvider] = useState<ChannelProvider>(fixedChannel && fixedChannel !== 'email' ? 'twilio' : 'smtp')
   const [form, setForm] = useState(defaults)
   const [busy, setBusy] = useState<string | null>(null)
   const [reuseFromId, setReuseFromId] = useState<string | null>(null)
@@ -98,9 +122,14 @@ export function ChannelConnections() {
     catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not update provider') } finally { setBusy(null) }
   }
 
+  const head = fixedChannel
+    ? CHANNEL_HEAD[fixedChannel]
+    : { title: 'Channels', description: 'Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — a school can run SMS-only broadcasts without ever connecting WhatsApp. Providers are configured, tested, and enabled per channel, so future providers slot in beside the existing ones.' }
+  const visibleChannels: ChannelKind[] = fixedChannel ? [fixedChannel] : ['email', 'whatsapp', 'sms']
+
   return (
     <section>
-      <SettingsPanelHead title="Channels" description="Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — a school can run SMS-only broadcasts without ever connecting WhatsApp. Providers are configured, tested, and enabled per channel, so future providers slot in beside the existing ones." />
+      <SettingsPanelHead title={head.title} description={head.description} />
       <Alert className="mb-5">
         <ShieldCheck />
         <AlertTitle>Provider-neutral and secret-safe</AlertTitle>
@@ -110,12 +139,14 @@ export function ChannelConnections() {
           an independent connection draft, so values typed for WhatsApp
           must not leak into the SMS form. */}
       <Tabs value={channel} onValueChange={(value) => { const next = value as ChannelKind; setChannel(next); setProvider(next === 'email' ? 'smtp' : 'twilio'); setForm(defaults); setReuseFromId(null) }}>
-        <TabsList>
-          <TabsTrigger value="email"><Mail />Email</TabsTrigger>
-          <TabsTrigger value="whatsapp"><MessageCircle />WhatsApp</TabsTrigger>
-          <TabsTrigger value="sms"><Smartphone />SMS</TabsTrigger>
-        </TabsList>
-        {(['email', 'whatsapp', 'sms'] as const).map((tab) => (
+        {fixedChannel ? null : (
+          <TabsList>
+            <TabsTrigger value="email"><Mail />Email</TabsTrigger>
+            <TabsTrigger value="whatsapp"><MessageCircle />WhatsApp</TabsTrigger>
+            <TabsTrigger value="sms"><Smartphone />SMS</TabsTrigger>
+          </TabsList>
+        )}
+        {visibleChannels.map((tab) => (
           <TabsContent key={tab} value={tab} className="flex flex-col gap-5 pt-4">
             {isLoading ? <Card><CardContent className="flex items-center justify-center py-12"><Loader2 className="animate-spin" /><span className="sr-only">Loading connections</span></CardContent></Card> : null}
             {error ? <Alert variant="destructive"><AlertTitle>Connections unavailable</AlertTitle><AlertDescription>{error.message}</AlertDescription></Alert> : null}
