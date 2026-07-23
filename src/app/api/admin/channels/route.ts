@@ -1,41 +1,89 @@
 // ============================================================
-// /api/admin/channels — per-tenant channel provider credentials.
+// /api/admin/channels — platform (founder/support) console for
+// client channel connections. Operates on the SAME
+// channel_connections table the client's Settings → WhatsApp/SMS
+// pages use, so what support provisions here is exactly what the
+// client sees and what message sending uses. No parallel tables.
 //
-//   GET  ?account_id=…  — configuration status for one workspace
-//                         (masked previews only, NEVER ciphertext).
-//   PUT                 — upsert a channel config. Credentials are
-//                         AES-256-GCM encrypted server-side before
-//                         they touch the database; the response
-//                         echoes only the masked preview.
-//   PATCH               — flip is_active / run a decrypt round-trip
-//                         "test" without resupplying secrets.
+//   GET    ?account_id=…   — all connections for one workspace.
+//   PUT                    — provision a new platform-managed
+//                            connection OR update any existing one
+//                            (client- or platform-managed): support
+//                            can fix a client's broken config.
+//   PATCH                  — enable/disable, or action:'test' → runs
+//                            the real provider adapter health check.
+//   DELETE ?id=…&account_id=… — remove a connection.
 //
-// Every mutation writes platform_audit_log (no secret material in
-// the before/after payloads — masked previews only).
+// Rules of engagement:
+//   • New rows provisioned here get managed_by='platform' — clients
+//     can enable/disable them but not edit credentials (enforced in
+//     /api/settings/channels).
+//   • Editing an existing client row keeps managed_by='workspace'
+//     unless takeover=true is passed explicitly.
+//   • Credentials are AES-256-GCM encrypted with the same helper the
+//     workspace route uses; secrets never round-trip to the browser.
+//   • Every mutation writes platform_audit_log (masked, no secrets).
 // ============================================================
 
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { toErrorResponse } from "@/lib/auth/account";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { logPlatformAudit } from "@/lib/platform/audit";
 import { platformAdmin } from "@/lib/platform/admin-client";
+import { createChannelAdapter } from "@/lib/channels/adapters";
 import {
-  decryptCredentials,
-  encryptCredentials,
-  hasCredentialsKey,
-  maskPreview,
-} from "@/lib/platform/channel-crypto";
+  buildProviderCredentials,
+  encryptProviderCredentials,
+} from "@/lib/channels/credentials";
+import {
+  getProviderCapabilities,
+  isProviderCompatible,
+  PROVIDER_CHANNELS,
+  PROVIDER_LABEL,
+} from "@/lib/channels/provider-registry";
+import type {
+  ChannelConnection,
+  ChannelKind,
+  ChannelProvider,
+} from "@/types";
 
-const CHANNELS = ["whatsapp", "sms", "email", "voice"] as const;
-type Channel = (typeof CHANNELS)[number];
-
-function isChannel(v: unknown): v is Channel {
-  return typeof v === "string" && (CHANNELS as readonly string[]).includes(v);
-}
+const providers = ["meta", "twilio", "google", "microsoft", "resend", "smtp"] as const;
+const channels = ["whatsapp", "sms", "email"] as const;
 
 const SAFE_COLUMNS =
-  "id, account_id, channel, provider, masked_preview, is_active, verified_at, updated_at";
+  "id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,last_connected_at,last_synced_at,last_error,created_at,updated_at";
+
+const putSchema = z.object({
+  account_id: z.string().uuid(),
+  id: z.string().uuid().optional(),
+  channel: z.enum(channels),
+  provider: z.enum(providers),
+  displayName: z.string().trim().min(1).max(120),
+  externalIdentity: z.string().trim().min(1).max(320),
+  configuration: z.record(z.string(), z.unknown()).default({}),
+  credentials: z.record(z.string(), z.string()).optional(),
+  /** Explicitly convert a client-managed row to platform-managed. */
+  takeover: z.boolean().optional(),
+});
+
+const patchSchema = z.object({
+  account_id: z.string().uuid(),
+  id: z.string().uuid(),
+  action: z.literal("test").optional(),
+  isEnabled: z.boolean().optional(),
+});
+
+function enrich(connection: Record<string, unknown>) {
+  const provider = connection.provider as ChannelProvider;
+  const channel = connection.channel as ChannelKind;
+  return {
+    ...connection,
+    providerLabel: PROVIDER_LABEL[provider],
+    capabilities: getProviderCapabilities(provider, channel),
+  };
+}
 
 export async function GET(request: Request) {
   try {
@@ -44,28 +92,34 @@ export async function GET(request: Request) {
 
     const accountId = new URL(request.url).searchParams.get("account_id");
     if (!accountId) {
-      return NextResponse.json(
-        { error: "account_id is required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "account_id is required" }, { status: 400 });
     }
 
     const { data, error } = await admin
-      .from("channel_configurations")
+      .from("channel_connections")
       .select(SAFE_COLUMNS)
-      .eq("account_id", accountId);
-
+      .eq("account_id", accountId)
+      .order("channel")
+      .order("created_at");
     if (error) {
       console.error("[GET /api/admin/channels] fetch error:", error);
-      return NextResponse.json(
-        { error: "Failed to load channel configurations" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "Failed to load channel connections" }, { status: 500 });
     }
 
+    // Provider offerings mirror the workspace settings page so the
+    // provision dialog only offers providers that actually work.
+    const offerings = providers.flatMap((provider) =>
+      PROVIDER_CHANNELS[provider].map((channel) => ({
+        provider,
+        channel,
+        label: PROVIDER_LABEL[provider],
+        available: Boolean(createChannelAdapter(provider, channel)),
+      })),
+    );
+
     return NextResponse.json({
-      channels: data ?? [],
-      encryption_ready: hasCredentialsKey(),
+      connections: (data ?? []).map(enrich),
+      providers: offerings.filter((o) => o.available),
     });
   } catch (err) {
     return toErrorResponse(err);
@@ -77,108 +131,132 @@ export async function PUT(request: Request) {
     const ctx = await requireSuperAdmin();
     const admin = platformAdmin();
 
-    const body = (await request.json().catch(() => null)) as {
-      account_id?: unknown;
-      channel?: unknown;
-      provider?: unknown;
-      credentials?: unknown; // Record<string, string> of secret fields
-    } | null;
-
-    const accountId =
-      typeof body?.account_id === "string" ? body.account_id : "";
-    const provider =
-      typeof body?.provider === "string" ? body.provider.trim() : "";
-
-    if (!accountId || !isChannel(body?.channel) || !provider) {
+    const parsed = putSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "account_id, channel and provider are required" },
+        { error: "Invalid channel connection payload", details: parsed.error.flatten() },
         { status: 400 },
       );
     }
-    const channel = body.channel;
+    const { account_id: accountId, channel, provider } = parsed.data;
 
-    const credentials =
-      body?.credentials && typeof body.credentials === "object"
-        ? (body.credentials as Record<string, unknown>)
-        : null;
-    const entries = Object.entries(credentials ?? {}).filter(
-      (e): e is [string, string] =>
-        typeof e[1] === "string" && e[1].trim().length > 0,
-    );
-    if (entries.length === 0) {
-      return NextResponse.json(
-        { error: "At least one credential field is required" },
-        { status: 400 },
-      );
+    if (!isProviderCompatible(channel as ChannelKind, provider as ChannelProvider)) {
+      return NextResponse.json({ error: `${provider} is not compatible with ${channel}` }, { status: 400 });
     }
-    if (!hasCredentialsKey()) {
+    if (!createChannelAdapter(provider as ChannelProvider, channel as ChannelKind)) {
       return NextResponse.json(
-        {
-          error:
-            "CHANNEL_CREDENTIALS_KEY is not configured on the server — set it before storing credentials",
-        },
-        { status: 503 },
+        { error: `${PROVIDER_LABEL[provider as ChannelProvider]} setup is not available in this release` },
+        { status: 409 },
       );
     }
 
-    // Mask off the FIRST credential value (conventionally the account
-    // SID / API key id) — a recognisable, non-secret hint.
-    const masked = maskPreview(entries[0][1]);
-    const ciphertext = encryptCredentials(
-      JSON.stringify(Object.fromEntries(entries)),
-    );
+    const suppliedCredentials = buildProviderCredentials(provider, parsed.data.credentials);
 
-    const { data: before } = await admin
-      .from("channel_configurations")
-      .select("id, provider, masked_preview, is_active")
-      .eq("account_id", accountId)
-      .eq("channel", channel)
-      .maybeSingle();
+    let existing: Record<string, unknown> | null = null;
+    if (parsed.data.id) {
+      const result = await admin
+        .from("channel_connections")
+        .select("*")
+        .eq("id", parsed.data.id)
+        .eq("account_id", accountId)
+        .maybeSingle();
+      if (result.error) throw result.error;
+      existing = result.data;
+      if (!existing) {
+        return NextResponse.json({ error: "Channel connection not found" }, { status: 404 });
+      }
+      if (existing.provider !== provider && !suppliedCredentials) {
+        return NextResponse.json(
+          { error: "New credentials are required when switching providers" },
+          { status: 400 },
+        );
+      }
+    }
 
-    const { data: saved, error } = await admin
-      .from("channel_configurations")
-      .upsert(
-        {
-          account_id: accountId,
-          channel,
-          provider,
-          encrypted_credentials: ciphertext,
-          masked_preview: masked,
-          configured_by: ctx.userId,
-          verified_at: null, // new secrets are unverified until tested
-        },
-        { onConflict: "account_id,channel" },
-      )
-      .select(SAFE_COLUMNS)
-      .single();
+    const credentialsEncrypted = suppliedCredentials
+      ? encryptProviderCredentials(suppliedCredentials)
+      : (existing?.credentials_encrypted as string | undefined);
+    if (!credentialsEncrypted) {
+      return NextResponse.json({ error: "Provider credentials are required" }, { status: 400 });
+    }
 
+    // managed_by semantics: new rows here are platform-provisioned;
+    // existing rows keep their origin unless support explicitly takes
+    // the connection over.
+    const managedBy = existing
+      ? parsed.data.takeover
+        ? "platform"
+        : (existing.managed_by as string)
+      : "platform";
+
+    const values = {
+      account_id: accountId,
+      created_by_user_id: (existing?.created_by_user_id as string | undefined) ?? ctx.userId,
+      channel,
+      provider,
+      display_name: parsed.data.displayName,
+      external_identity: parsed.data.externalIdentity,
+      configuration: parsed.data.configuration,
+      credentials_encrypted: credentialsEncrypted,
+      managed_by: managedBy,
+      status: "draft", // must pass a connection test before enabling
+      is_enabled: false,
+      last_error: null,
+    };
+
+    const query = parsed.data.id
+      ? admin.from("channel_connections").update(values).eq("id", parsed.data.id).eq("account_id", accountId)
+      : admin.from("channel_connections").insert(values);
+    const { data: saved, error } = await query.select(SAFE_COLUMNS).single();
     if (error || !saved) {
-      console.error("[PUT /api/admin/channels] upsert error:", error);
-      return NextResponse.json(
-        { error: "Failed to save channel configuration" },
-        { status: 500 },
-      );
+      // Unique violation: same sender already connected on this channel.
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+        return NextResponse.json(
+          { error: "A connection with this sender identity already exists for this channel." },
+          { status: 409 },
+        );
+      }
+      console.error("[PUT /api/admin/channels] save error:", error);
+      return NextResponse.json({ error: "Failed to save channel connection" }, { status: 500 });
     }
 
     await logPlatformAudit(admin, {
       actorId: ctx.userId,
       accountId,
-      action: before
-        ? "channel.credentials_rotated"
-        : "channel.credentials_configured",
-      entity: `channel_configuration:${saved.id}`,
-      before: before
+      action: existing
+        ? suppliedCredentials
+          ? "channel.credentials_rotated"
+          : "channel.updated"
+        : "channel.provisioned",
+      entity: `channel_connection:${saved.id}`,
+      before: existing
         ? {
-            provider: before.provider,
-            masked_preview: before.masked_preview,
-            is_active: before.is_active,
+            provider: existing.provider,
+            display_name: existing.display_name,
+            external_identity: existing.external_identity,
+            managed_by: existing.managed_by,
           }
         : null,
-      after: { provider, masked_preview: masked },
+      after: {
+        provider,
+        display_name: parsed.data.displayName,
+        external_identity: parsed.data.externalIdentity,
+        managed_by: managedBy,
+      },
     });
 
-    return NextResponse.json({ channel: saved });
+    return NextResponse.json({ connection: enrich(saved) }, { status: parsed.data.id ? 200 : 201 });
   } catch (err) {
+    if (err instanceof Error && err.message.includes("ENCRYPTION_KEY")) {
+      console.error("[admin/channels] ENCRYPTION_KEY misconfigured:", err.message);
+      return NextResponse.json(
+        { error: "Server is missing the ENCRYPTION_KEY environment variable (64-char hex)." },
+        { status: 503 },
+      );
+    }
+    if (err instanceof Error && /required|Messaging Service SID/.test(err.message)) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     return toErrorResponse(err);
   }
 }
@@ -188,105 +266,127 @@ export async function PATCH(request: Request) {
     const ctx = await requireSuperAdmin();
     const admin = platformAdmin();
 
-    const body = (await request.json().catch(() => null)) as {
-      account_id?: unknown;
-      channel?: unknown;
-      is_active?: unknown;
-      action?: unknown; // 'test'
-    } | null;
-
-    const accountId =
-      typeof body?.account_id === "string" ? body.account_id : "";
-    if (!accountId || !isChannel(body?.channel)) {
-      return NextResponse.json(
-        { error: "account_id and channel are required" },
-        { status: 400 },
-      );
+    const parsed = patchSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid channel update" }, { status: 400 });
     }
-    const channel = body.channel;
+    const { account_id: accountId, id } = parsed.data;
 
-    // --- Test connection: decrypt round-trip + shape validation. ---
-    if (body?.action === "test") {
-      const { data: row } = await admin
-        .from("channel_configurations")
-        .select("id, encrypted_credentials")
-        .eq("account_id", accountId)
-        .eq("channel", channel)
-        .maybeSingle();
+    const { data: row, error } = await admin
+      .from("channel_connections")
+      .select("*")
+      .eq("id", id)
+      .eq("account_id", accountId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!row) return NextResponse.json({ error: "Channel connection not found" }, { status: 404 });
 
-      if (!row?.encrypted_credentials) {
+    // --- Test connection via the real provider adapter. ---
+    if (parsed.data.action === "test") {
+      const adapter = createChannelAdapter(row.provider as ChannelProvider, row.channel as ChannelKind);
+      if (!adapter) {
         return NextResponse.json(
-          { error: "No credentials stored for this channel" },
-          { status: 404 },
+          { error: `${PROVIDER_LABEL[row.provider as ChannelProvider]} testing is not available` },
+          { status: 409 },
         );
       }
-      try {
-        const json = decryptCredentials(String(row.encrypted_credentials));
-        const parsed = JSON.parse(json) as Record<string, unknown>;
-        if (Object.keys(parsed).length === 0) throw new Error("empty");
-      } catch {
-        return NextResponse.json(
-          { error: "Stored credentials failed integrity verification" },
-          { status: 422 },
-        );
-      }
-
-      const { data: verified } = await admin
-        .from("channel_configurations")
-        .update({ verified_at: new Date().toISOString() })
+      const health = await adapter.checkHealth(row as ChannelConnection);
+      const update = health.ok
+        ? { status: "connected", last_connected_at: health.checkedAt, last_error: null }
+        : { status: "degraded", is_enabled: false, last_error: health.error };
+      const { data: updated } = await admin
+        .from("channel_connections")
+        .update(update)
         .eq("id", row.id)
         .select(SAFE_COLUMNS)
         .single();
-
-      return NextResponse.json({ ok: true, channel: verified });
+      await logPlatformAudit(admin, {
+        actorId: ctx.userId,
+        accountId,
+        action: health.ok ? "channel.test_passed" : "channel.test_failed",
+        entity: `channel_connection:${row.id}`,
+        before: null,
+        after: { ok: health.ok, ...(health.ok ? {} : { error: health.error }) },
+      });
+      if (!health.ok) return NextResponse.json({ health, connection: updated ? enrich(updated) : null }, { status: 422 });
+      return NextResponse.json({ health, connection: updated ? enrich(updated) : null });
     }
 
-    // --- Activation toggle. ---
-    if (typeof body?.is_active !== "boolean") {
-      return NextResponse.json(
-        { error: "is_active boolean or action:'test' is required" },
-        { status: 400 },
-      );
+    // --- Enable / disable toggle. ---
+    if (typeof parsed.data.isEnabled !== "boolean") {
+      return NextResponse.json({ error: "isEnabled boolean or action:'test' is required" }, { status: 400 });
     }
-
-    const { data: before } = await admin
-      .from("channel_configurations")
-      .select("id, is_active")
-      .eq("account_id", accountId)
-      .eq("channel", channel)
-      .maybeSingle();
-    if (!before) {
-      return NextResponse.json(
-        { error: "Channel is not configured yet" },
-        { status: 404 },
-      );
+    if (parsed.data.isEnabled && !["connected", "degraded"].includes(row.status as string)) {
+      return NextResponse.json({ error: "Run a connection test before enabling" }, { status: 409 });
     }
-
-    const { data: updated, error } = await admin
-      .from("channel_configurations")
-      .update({ is_active: body.is_active })
-      .eq("id", before.id)
+    const { data: updated, error: updateError } = await admin
+      .from("channel_connections")
+      .update({ is_enabled: parsed.data.isEnabled })
+      .eq("id", row.id)
       .select(SAFE_COLUMNS)
       .single();
-
-    if (error || !updated) {
-      console.error("[PATCH /api/admin/channels] toggle error:", error);
-      return NextResponse.json(
-        { error: "Failed to update channel" },
-        { status: 500 },
-      );
+    if (updateError || !updated) {
+      console.error("[PATCH /api/admin/channels] toggle error:", updateError);
+      return NextResponse.json({ error: "Failed to update channel connection" }, { status: 500 });
     }
 
     await logPlatformAudit(admin, {
       actorId: ctx.userId,
       accountId,
-      action: body.is_active ? "channel.activated" : "channel.deactivated",
-      entity: `channel_configuration:${before.id}`,
-      before: { is_active: before.is_active },
-      after: { is_active: updated.is_active },
+      action: parsed.data.isEnabled ? "channel.activated" : "channel.deactivated",
+      entity: `channel_connection:${row.id}`,
+      before: { is_enabled: row.is_enabled },
+      after: { is_enabled: updated.is_enabled },
     });
 
-    return NextResponse.json({ channel: updated });
+    return NextResponse.json({ connection: enrich(updated) });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const ctx = await requireSuperAdmin();
+    const admin = platformAdmin();
+
+    const url = new URL(request.url);
+    const id = url.searchParams.get("id");
+    const accountId = url.searchParams.get("account_id");
+    if (!id || !accountId) {
+      return NextResponse.json({ error: "id and account_id are required" }, { status: 400 });
+    }
+
+    const { data: row } = await admin
+      .from("channel_connections")
+      .select("id, channel, provider, display_name, external_identity, managed_by")
+      .eq("id", id)
+      .eq("account_id", accountId)
+      .maybeSingle();
+    if (!row) return NextResponse.json({ error: "Channel connection not found" }, { status: 404 });
+
+    const { error } = await admin.from("channel_connections").delete().eq("id", row.id);
+    if (error) {
+      console.error("[DELETE /api/admin/channels] delete error:", error);
+      return NextResponse.json({ error: "Failed to delete channel connection" }, { status: 500 });
+    }
+
+    await logPlatformAudit(admin, {
+      actorId: ctx.userId,
+      accountId,
+      action: "channel.deleted",
+      entity: `channel_connection:${row.id}`,
+      before: {
+        channel: row.channel,
+        provider: row.provider,
+        display_name: row.display_name,
+        external_identity: row.external_identity,
+        managed_by: row.managed_by,
+      },
+      after: null,
+    });
+
+    return NextResponse.json({ ok: true });
   } catch (err) {
     return toErrorResponse(err);
   }

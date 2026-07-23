@@ -4,7 +4,7 @@ import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { channelAdmin } from '@/lib/channels/admin-client'
 import { createChannelAdapter } from '@/lib/channels/adapters'
-import { decryptProviderCredentials, encryptProviderCredentials, type ProviderCredentials } from '@/lib/channels/credentials'
+import { buildProviderCredentials, decryptProviderCredentials, encryptProviderCredentials } from '@/lib/channels/credentials'
 import { discoverTwilioAccount, isDiscoveryError } from '@/lib/channels/discovery'
 import { getProviderCapabilities, isProviderCompatible, PROVIDER_CHANNELS, PROVIDER_LABEL } from '@/lib/channels/provider-registry'
 import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
@@ -45,50 +45,6 @@ const discoverSchema = z.object({
   authToken: z.string().trim().optional(),
   reuseCredentialsFromId: z.string().uuid().optional(),
 })
-
-function credentialsFor(provider: ChannelProvider, input?: Record<string, string>): ProviderCredentials | null {
-  if (!input) return null
-  if (provider === 'smtp') {
-    if (!input.username || !input.password) throw new Error('SMTP username and password are required')
-    return { provider, value: { username: input.username, password: input.password } }
-  }
-  if (provider === 'resend') {
-    if (!input.apiKey) throw new Error('Resend API key is required')
-    return { provider, value: { apiKey: input.apiKey } }
-  }
-  if (provider === 'meta') {
-    // WhatsApp Cloud API (direct Meta connection). Only the access
-    // token is required to send; app secret + verify token power
-    // webhook signature validation and can be added later.
-    if (!input.accessToken) throw new Error('Meta permanent access token is required')
-    return {
-      provider,
-      value: {
-        accessToken: input.accessToken,
-        appSecret: input.appSecret ?? '',
-        verifyToken: input.verifyToken ?? '',
-      },
-    }
-  }
-  if (provider === 'twilio') {
-    if (!input.accountSid || !input.authToken) throw new Error('Twilio Account SID and Auth Token are required')
-    // Optional Messaging Service SID (MG…) — enables Twilio-managed
-    // sender pooling, Sticky Sender, and Advanced Opt-Out for SMS.
-    const messagingServiceSid = input.messagingServiceSid?.trim()
-    if (messagingServiceSid && !/^MG[0-9a-fA-F]{32}$/.test(messagingServiceSid)) {
-      throw new Error('Messaging Service SID must look like MG… (34 characters)')
-    }
-    return {
-      provider,
-      value: {
-        accountSid: input.accountSid,
-        authToken: input.authToken,
-        ...(messagingServiceSid ? { messagingServiceSid } : {}),
-      },
-    }
-  }
-  return null
-}
 
 function enrich(connection: Record<string, unknown>) {
   const provider = connection.provider as ChannelProvider
@@ -195,7 +151,7 @@ export async function POST(request: Request) {
     if (!isProviderCompatible(channel as ChannelKind, provider as ChannelProvider)) return NextResponse.json({ error: `${provider} is not compatible with ${channel}` }, { status: 400 })
     if (!createChannelAdapter(provider as ChannelProvider, channel as ChannelKind)) return NextResponse.json({ error: `${PROVIDER_LABEL[provider as ChannelProvider]} setup is not available in this release` }, { status: 409 })
 
-    const suppliedCredentials = credentialsFor(provider as ChannelProvider, parsed.data.credentials)
+    const suppliedCredentials = buildProviderCredentials(provider, parsed.data.credentials)
     let existing: Record<string, unknown> | null = null
     if (parsed.data.id) {
       const result = await channelAdmin().from('channel_connections').select('*').eq('id', parsed.data.id).eq('account_id', accountId).maybeSingle()
