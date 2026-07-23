@@ -264,6 +264,13 @@ export interface ChannelConnection {
   status: ChannelConnectionStatus;
   is_enabled: boolean;
   is_primary: boolean;
+  /**
+   * 'workspace' — client connected their own provider account (BYO).
+   * 'platform'  — provisioned by the founder from the admin console;
+   *               workspace admins can enable/disable but not edit
+   *               credentials or delete the connection.
+   */
+  managed_by?: 'workspace' | 'platform';
   last_connected_at?: string;
   last_synced_at?: string;
   last_error?: string;
