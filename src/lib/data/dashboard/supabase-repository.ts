@@ -82,9 +82,12 @@ type DealRow = {
   currency: string | null
   status: string
   stage_id: string | null
+  user_id: string | null
   updated_at: string
   closed_at: string | null
 }
+
+type TaskStatRow = { id: string; status: string; due_at: string | null; updated_at: string }
 
 type StageRow = { id: string; name: string; position: number }
 
@@ -117,6 +120,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     contactsTotalRes,
     contactsRecentRes,
     dealsRes,
+    taskStatsRes,
     stagesRes,
     messagesRes,
     profilesRes,
@@ -141,7 +145,13 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
       .order("created_at", { ascending: false }),
     ctx.supabase
       .from("deals")
-      .select("id, title, value, currency, status, stage_id, updated_at, closed_at")
+      .select("id, title, value, currency, status, stage_id, user_id, updated_at, closed_at")
+      .eq("account_id", ctx.accountId),
+    // Aggregate task workload — separate from the open-task list so
+    // counters reflect the whole workspace, not the first 8 rows.
+    ctx.supabase
+      .from("tasks")
+      .select("id, status, due_at, updated_at")
       .eq("account_id", ctx.accountId),
     ctx.supabase.from("pipeline_stages").select("id, name, position"),
     // messages has no account_id — scope through the conversations FK
@@ -173,6 +183,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     contactsTotalRes.error,
     contactsRecentRes.error,
     dealsRes.error,
+    taskStatsRes.error,
     stagesRes.error,
     messagesRes.error,
     profilesRes.error,
@@ -325,6 +336,97 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     wonValue30d: won30d.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0),
     wonCount30d: won30d.length,
     lostCount30d: closed30d.filter((deal) => deal.status === "lost").length,
+  }
+
+  // ---- Sales trend (6 months) ------------------------------
+  const monthKeys: string[] = []
+  {
+    const cursor = new Date()
+    cursor.setDate(1)
+    cursor.setHours(0, 0, 0, 0)
+    cursor.setMonth(cursor.getMonth() - 5)
+    for (let i = 0; i < 6; i++) {
+      monthKeys.push(cursor.toISOString().slice(0, 7))
+      cursor.setMonth(cursor.getMonth() + 1)
+    }
+  }
+  const trendByMonth = new Map(
+    monthKeys.map((month) => [month, { month, wonValue: 0, wonCount: 0, lostCount: 0 }]),
+  )
+  for (const deal of deals) {
+    if (!deal.closed_at) continue
+    const month = deal.closed_at.slice(0, 7)
+    const bucket = trendByMonth.get(month)
+    if (!bucket) continue
+    if (deal.status === "won") {
+      bucket.wonValue += Number(deal.value ?? 0)
+      bucket.wonCount += 1
+    } else if (deal.status === "lost") {
+      bucket.lostCount += 1
+    }
+  }
+  const salesTrend = monthKeys.map((month) => trendByMonth.get(month)!)
+
+  // ---- Performers leaderboard (30d wins + open book) --------
+  const profileNames = new Map(
+    (profilesRes.data ?? []).map((profile) => [
+      String(profile.user_id),
+      (profile.full_name as string | null) || "Team member",
+    ]),
+  )
+  const performerMap = new Map<
+    string,
+    { wonValue30d: number; wonCount30d: number; openDeals: number; openValue: number }
+  >()
+  const ensurePerformer = (userId: string) => {
+    let p = performerMap.get(userId)
+    if (!p) {
+      p = { wonValue30d: 0, wonCount30d: 0, openDeals: 0, openValue: 0 }
+      performerMap.set(userId, p)
+    }
+    return p
+  }
+  for (const deal of deals) {
+    if (!deal.user_id) continue
+    if (deal.status === "open") {
+      const p = ensurePerformer(deal.user_id)
+      p.openDeals += 1
+      p.openValue += Number(deal.value ?? 0)
+    } else if (
+      deal.status === "won" &&
+      deal.closed_at &&
+      new Date(deal.closed_at).getTime() >= cutoff30d
+    ) {
+      const p = ensurePerformer(deal.user_id)
+      p.wonCount30d += 1
+      p.wonValue30d += Number(deal.value ?? 0)
+    }
+  }
+  const performers = Array.from(performerMap.entries())
+    .map(([userId, stats]) => ({
+      userId,
+      name: profileNames.get(userId) ?? "Team member",
+      ...stats,
+    }))
+    .sort((a, b) => b.wonValue30d - a.wonValue30d || b.openValue - a.openValue)
+    .slice(0, 5)
+
+  // ---- Task workload stats ----------------------------------
+  const taskRows = (taskStatsRes.data ?? []) as TaskStatRow[]
+  const todayStart = startOfDayAgo(0).getTime()
+  const todayEnd = todayStart + DAY_MS
+  const openTaskRows = taskRows.filter((t) => t.status === "open")
+  const taskStats = {
+    open: openTaskRows.length,
+    overdue: openTaskRows.filter((t) => t.due_at && new Date(t.due_at).getTime() < now).length,
+    dueToday: openTaskRows.filter((t) => {
+      if (!t.due_at) return false
+      const due = new Date(t.due_at).getTime()
+      return due >= todayStart && due < todayEnd
+    }).length,
+    completed7d: taskRows.filter(
+      (t) => t.status === "done" && new Date(t.updated_at).getTime() >= cutoff7d,
+    ).length,
   }
 
   // ---- Team -------------------------------------------------
