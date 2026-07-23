@@ -19,7 +19,21 @@ export async function fetchAccountMembers(): Promise<AccountMember[]> {
   }
 }
 
-/** Display label for a member: full name → email → raw id. */
+/**
+ * Display label for a member: full name → prettified email ("Admin
+ * (admin@gmail.com)") → short id ("Member 1a2b3c4d"). Raw UUIDs and
+ * bare emails never surface in pickers.
+ */
 export function memberLabel(m: AccountMember): string {
-  return m.full_name || m.email || m.user_id;
+  if (m.full_name) return m.full_name;
+  if (m.email) {
+    const local = m.email.split('@')[0] ?? '';
+    const pretty = local
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+    return pretty ? `${pretty} (${m.email})` : m.email;
+  }
+  return `Member ${m.user_id.slice(0, 8)}`;
 }

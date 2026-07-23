@@ -2,6 +2,7 @@ import { supabaseAdmin } from './admin-client'
 import { loadAiConfig } from './config'
 import { buildConversationContext } from './context'
 import { retrieveKnowledge } from './knowledge'
+import { buildCrmContext } from './crm-context'
 import { generateReply } from './generate'
 import { buildPromptParts } from './defaults'
 import { buildHandoffSummary } from './handoff'
@@ -132,13 +133,12 @@ export async function dispatchInboundToAiReply(
       return
     }
 
-    // Ground the reply in the account's knowledge base (best-effort).
-    const knowledge = await retrieveKnowledge(
-      db,
-      accountId,
-      config,
-      latestUserMessage(messages),
-    )
+    // Ground the reply in the account's knowledge base and the
+    // contact's live CRM record (both best-effort, fetched in parallel).
+    const [knowledge, crmContext] = await Promise.all([
+      retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
+      buildCrmContext(db, contactId),
+    ])
 
     // Cache-aligned prompt (the only path — benchmarked at ~70% fewer
     // full-price input tokens than the legacy single-string prompt):
@@ -153,6 +153,7 @@ export async function dispatchInboundToAiReply(
           userPrompt: config.systemPrompt,
           mode: 'auto_reply',
           knowledge,
+          crmContext,
         }),
         cacheKey: conversationId,
       })

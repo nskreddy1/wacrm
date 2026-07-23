@@ -215,16 +215,26 @@ export function buildPromptParts(args: {
   userPrompt: string | null
   mode: 'draft' | 'auto_reply'
   knowledge?: string[]
+  /**
+   * Live CRM snapshot for the contact (agentic context awareness).
+   * Rides in the volatile tail with the knowledge block so CRM edits
+   * never invalidate the cached system prefix.
+   */
+  crmContext?: string | null
 }): { systemBlocks: string[]; volatileContext: string | null } {
-  const { userPrompt, mode, knowledge } = args
+  const { userPrompt, mode, knowledge, crmContext } = args
   const systemBlocks = [platformScaffold(mode).join('\n\n')]
   const biz = businessBlock(userPrompt)
   if (biz) systemBlocks.push(biz)
 
   const kb = knowledgeBlock(knowledge, mode)
-  const volatileContext = kb
-    ? `[Internal reference — not from the customer. Retrieved for their latest message.]\n\n${kb}`
-    : null
+  const volatileParts = [crmContext ?? null, kb].filter(
+    (p): p is string => typeof p === 'string' && p.length > 0,
+  )
+  const volatileContext =
+    volatileParts.length > 0
+      ? `[Internal reference — not from the customer. Retrieved for their latest message.]\n\n${volatileParts.join('\n\n---\n\n')}`
+      : null
 
   return { systemBlocks, volatileContext }
 }

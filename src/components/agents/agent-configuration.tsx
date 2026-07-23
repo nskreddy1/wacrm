@@ -58,6 +58,27 @@ const MORE_PROVIDERS = [
 // Radix Select can't represent an empty-string value.
 const HANDOFF_QUEUE = '__queue__'
 
+// Location-based timezone list (IANA zones from the runtime). Same
+// source Settings uses — the browser's resolved zone is the default so
+// the picker "just works" for the user's location, and every global
+// zone stays selectable for teams operating elsewhere.
+function supportedTimezones(): string[] {
+  try {
+    return Intl.supportedValuesOf('timeZone')
+  } catch {
+    // Older runtimes: minimal useful fallback.
+    return ['UTC', 'Asia/Kolkata', 'America/New_York', 'Europe/London']
+  }
+}
+
+function detectedTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
 interface AiConfigData {
   configured: boolean
   has_key?: boolean
@@ -174,7 +195,10 @@ export function AgentConfiguration() {
           system_prompt: systemPrompt,
           auto_reply_schedule_start: scheduleStart,
           auto_reply_schedule_end: scheduleEnd,
-          auto_reply_timezone: timezone.trim(),
+          // Location-based default: if the user never picked a zone,
+          // persist the browser-detected one so the schedule matches
+          // their local hours.
+          auto_reply_timezone: timezone.trim() || detectedTimezone(),
           handoff_agent_id: handoffAgentId || null,
           // Pass-through: settings this tab doesn't show must survive a
           // save untouched.
@@ -324,13 +348,21 @@ export function AgentConfiguration() {
                 aria-label="Auto-reply end time"
                 className="w-32"
               />
-              <Input
-                value={timezone}
-                onChange={(event) => setTimezone(event.target.value)}
-                placeholder="e.g. Asia/Kolkata"
-                aria-label="Timezone"
-                className="w-44"
-              />
+              <Select
+                value={timezone || detectedTimezone()}
+                onValueChange={(value) => value && setTimezone(value)}
+              >
+                <SelectTrigger aria-label="Timezone" className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {supportedTimezones().map((zone) => (
+                    <SelectItem key={zone} value={zone}>
+                      {zone.replace(/_/g, ' ')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <span className="text-xs text-muted-foreground">
               Leave empty to reply around the clock. Outside these hours, conversations wait for your team.
