@@ -167,36 +167,38 @@ export function DashboardRoot() {
   const switcher = (
     <div className="flex flex-wrap items-center gap-2">
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <LayoutDashboard className="size-4 text-primary" aria-hidden="true" />
-            <span className="max-w-[180px] truncate">{isOverview ? "Overview" : selected.name}</span>
-            <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
-          </Button>
+        <DropdownMenuTrigger
+          render={<Button variant="outline" size="sm" className="gap-1.5" />}
+        >
+          <LayoutDashboard className="size-4 text-primary" aria-hidden="true" />
+          <span className="max-w-[180px] truncate">{isOverview ? "Overview" : selected.name}</span>
+          <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>Dashboards</DropdownMenuLabel>
-          <DropdownMenuItem
-            onClick={() => {
-              setSelectedId(OVERVIEW_ID)
-              setEditing(false)
-            }}
-          >
-            <span className="flex-1 truncate">Overview</span>
-            {isOverview && <Check className="size-4" aria-hidden="true" />}
-          </DropdownMenuItem>
-          {dashboards.map((d) => (
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Dashboards</DropdownMenuLabel>
             <DropdownMenuItem
-              key={d.id}
               onClick={() => {
-                setSelectedId(d.id)
+                setSelectedId(OVERVIEW_ID)
                 setEditing(false)
               }}
             >
-              <span className="flex-1 truncate">{d.name}</span>
-              {selectedId === d.id && <Check className="size-4" aria-hidden="true" />}
+              <span className="flex-1 truncate">Overview</span>
+              {isOverview && <Check className="size-4" aria-hidden="true" />}
             </DropdownMenuItem>
-          ))}
+            {dashboards.map((d) => (
+              <DropdownMenuItem
+                key={d.id}
+                onClick={() => {
+                  setSelectedId(d.id)
+                  setEditing(false)
+                }}
+              >
+                <span className="flex-1 truncate">{d.name}</span>
+                {selectedId === d.id && <Check className="size-4" aria-hidden="true" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
@@ -232,10 +234,17 @@ export function DashboardRoot() {
             <span className="sr-only">Refresh data</span>
           </Button>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8" aria-label="Dashboard actions">
-                <MoreHorizontal className="size-4" aria-hidden="true" />
-              </Button>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Dashboard actions"
+                />
+              }
+            >
+              <MoreHorizontal className="size-4" aria-hidden="true" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem

@@ -1,5 +1,5 @@
-import { DashboardWorkspace } from "@/components/dashboard/dashboard-workspace"
+import { DashboardRoot } from "@/components/dashboard/custom/dashboard-root"
 
 export default function DashboardPage() {
-  return <DashboardWorkspace />
+  return <DashboardRoot />
 }
