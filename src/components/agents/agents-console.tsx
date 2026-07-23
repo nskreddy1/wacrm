@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AiPlayground } from '@/components/agents/ai-playground'
 import { AiUsageCard } from '@/components/agents/ai-usage'
 import { AgentConfiguration } from '@/components/agents/agent-configuration'
+import { ConfigureAgentWizard } from '@/components/agents/configure-agent-wizard'
 import { AiKnowledgeCard } from '@/components/settings/ai-knowledge'
 import { useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
@@ -116,6 +117,7 @@ export function AgentsConsole() {
   const [selected, setSelected] = useState<AgentKey>('copilot')
   const [tab, setTab] = useState<TabKey>('overview')
   const [busyToggle, setBusyToggle] = useState<AgentKey | null>(null)
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   const configured = config?.configured === true
   const copilotActive = configured && config?.is_active === true
@@ -201,12 +203,23 @@ export function AgentsConsole() {
           </span>
         </div>
         {canManage ? (
-          <Button onClick={() => setTab('configuration')}>
+          <Button onClick={() => setWizardOpen(true)}>
             <Plus data-icon="inline-start" aria-hidden />
-            Configure Agent
+            Configure New Agent
           </Button>
         ) : null}
       </div>
+
+      {canManage ? (
+        <ConfigureAgentWizard
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          onSaved={() => {
+            void mutate()
+            setTab('overview')
+          }}
+        />
+      ) : null}
 
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
         {/* ---- Left rail: agent list ---- */}
