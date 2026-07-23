@@ -63,7 +63,19 @@ interface UsageData {
 }
 
 type AgentKey = 'copilot' | 'autoreply'
-type TabKey = 'overview' | 'configuration' | 'playground' | 'usage'
+type TabKey = 'overview' | 'configuration' | 'playground' | 'runs' | 'usage'
+
+interface RunRow {
+  id: string
+  conversation_id: string | null
+  mode: 'auto_reply' | 'draft'
+  provider: string
+  model: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  created_at: string
+}
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -269,7 +281,12 @@ export function AgentsConsole() {
                 { key: 'overview' as const, label: 'Overview' },
                 { key: 'configuration' as const, label: 'Configuration' },
                 { key: 'playground' as const, label: 'Playground' },
-                ...(canManage ? [{ key: 'usage' as const, label: 'Usage' }] : []),
+                ...(canManage
+                  ? [
+                      { key: 'runs' as const, label: 'Run History' },
+                      { key: 'usage' as const, label: 'Usage' },
+                    ]
+                  : []),
               ]
             ).map((t) => (
               <button
@@ -306,6 +323,7 @@ export function AgentsConsole() {
             {tab === 'playground' ? (
               <AiPlayground onGoToSetup={() => setTab('configuration')} />
             ) : null}
+            {tab === 'runs' && canManage ? <RunHistoryTab /> : null}
             {tab === 'usage' && canManage ? <AiUsageCard /> : null}
           </div>
         </section>
@@ -512,11 +530,10 @@ function OverviewTab({
                       fontSize: 12,
                       color: 'var(--popover-foreground)',
                     }}
-                    formatter={(value: number | string, name: string) => [
-                      value,
+                    formatter={(value, name) => [
+                      String(value ?? ''),
                       name === 'calls' ? 'Requests' : 'Tokens',
                     ]}
-                    labelFormatter={(label: string) => label}
                   />
                   <Area
                     type="monotone"
@@ -539,6 +556,94 @@ function OverviewTab({
       ) : null}
     </div>
   )
+}
+
+// ---- Run history tab -------------------------------------------------
+// Matches the reference "Recent Runs" table: run id, triggered date,
+// surface, input/output tokens, status. Every logged row is a
+// completed provider call, so status is always "Success" — failures
+// never reach the usage log.
+
+function RunHistoryTab() {
+  const { data, isLoading } = useSWR<{ runs: RunRow[] }>(
+    '/api/ai/runs?limit=25',
+    fetcher,
+  )
+  const runs = data?.runs ?? []
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-10 w-full rounded-md" />
+        <Skeleton className="h-64 w-full rounded-lg" />
+      </div>
+    )
+  }
+
+  if (runs.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center">
+        <p className="text-sm font-medium text-foreground">No runs yet</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Runs appear here when the assistant drafts a reply or auto-reply answers a customer.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 p-4">
+      <CardLabel>Recent runs</CardLabel>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[640px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th scope="col" className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">Run ID</th>
+              <th scope="col" className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">Triggered</th>
+              <th scope="col" className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">Surface</th>
+              <th scope="col" className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">Model</th>
+              <th scope="col" className="pb-2 pr-4 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">Input tkns</th>
+              <th scope="col" className="pb-2 pr-4 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">Output tkns</th>
+              <th scope="col" className="pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.map((run) => (
+              <tr key={run.id} className="border-b border-dashed border-border last:border-0">
+                <td className="py-2.5 pr-4 font-mono text-xs text-foreground">
+                  RUN-{run.id.slice(0, 4).toUpperCase()}
+                </td>
+                <td className="py-2.5 pr-4 text-muted-foreground">{formatRunDate(run.created_at)}</td>
+                <td className="py-2.5 pr-4">
+                  <Badge variant="outline">
+                    {run.mode === 'auto_reply' ? 'Auto-reply' : 'Draft'}
+                  </Badge>
+                </td>
+                <td className="max-w-36 truncate py-2.5 pr-4 text-muted-foreground">{run.model}</td>
+                <td className="py-2.5 pr-4 text-right tabular-nums text-foreground">{run.prompt_tokens.toLocaleString()}</td>
+                <td className="py-2.5 pr-4 text-right tabular-nums text-foreground">{run.completion_tokens.toLocaleString()}</td>
+                <td className="py-2.5">
+                  <Badge className="border-emerald-600/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Success</Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function formatRunDate(iso: string) {
+  const d = new Date(iso)
+  const now = new Date()
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  const sameDay = d.toDateString() === now.toDateString()
+  if (sameDay) return `${time} Today`
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return `${time} Yesterday`
+  return `${time} ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
 }
 
 // ---- Small building blocks -------------------------------------------
