@@ -55,7 +55,10 @@ const PROVIDER_LABEL = Object.fromEntries(
   AI_PROVIDER_OPTIONS.map(({ value, label }) => [value, label])
 ) as Record<AiProvider, string>;
 
-export function AiConfig() {
+export function AiConfig({ embedded = false }: { embedded?: boolean }) {
+  // `embedded` — rendered inside the AI Agents console: the console
+  // provides its own header and a dedicated Knowledge tab, so the
+  // settings panel head and the inline knowledge card are omitted.
   const { accountId, profileLoading, can } = useAuth();
   const canEdit = can('ai:manage');
   const t = useTranslations('Settings.aiConfig');
@@ -339,7 +342,9 @@ export function AiConfig() {
 
   return (
     <div>
-      <SettingsPanelHead title={t('title')} description={t('description')} />
+      {!embedded ? (
+        <SettingsPanelHead title={t('title')} description={t('description')} />
+      ) : null}
 
       {!canEdit && (
         <p className="border-border bg-muted/40 text-muted-foreground mb-4 rounded-md border px-3 py-2 text-sm">
@@ -735,15 +740,17 @@ export function AiConfig() {
           </CardContent>
         </Card>
 
-        <AiKnowledgeCard
-          accountId={accountId}
-          canEdit={canEdit}
-          hasEmbeddingsKey={
-            embeddingsKeyEdited
-              ? embeddingsKey.trim().length > 0
-              : hasStoredEmbeddingsKey
-          }
-        />
+        {!embedded ? (
+          <AiKnowledgeCard
+            accountId={accountId}
+            canEdit={canEdit}
+            hasEmbeddingsKey={
+              embeddingsKeyEdited
+                ? embeddingsKey.trim().length > 0
+                : hasStoredEmbeddingsKey
+            }
+          />
+        ) : null}
 
         <div className="flex items-center justify-between">
           {configured ? (
