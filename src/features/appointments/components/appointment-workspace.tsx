@@ -19,7 +19,7 @@ import type {
   AppointmentStatus,
   CatalogItem,
 } from '@/lib/data/operations/types';
-import { AppointmentCreateDialog } from '@/features/appointments/components/appointment-create-dialog';
+import { AppointmentRecordSheet } from '@/features/appointments/components/appointment-record-sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -512,7 +512,7 @@ export function AppointmentWorkspace() {
           </div>
         )}
       </section>
-      <AppointmentCreateDialog
+      <AppointmentRecordSheet
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={() => void mutate()}

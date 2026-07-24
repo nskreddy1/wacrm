@@ -42,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { CatalogItemDialog } from "@/features/catalog/components/catalog-item-dialog"
+import { CatalogRecordSheet } from "@/features/catalog/components/catalog-record-sheet"
 import { cn } from "@/lib/utils"
 
 type CatalogResponse = { data: CatalogItem[] }
@@ -317,7 +317,7 @@ export function CatalogWorkspace() {
         </CardContent>
       </Card>
 
-      <CatalogItemDialog
+      <CatalogRecordSheet
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         item={editing}
