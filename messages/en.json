@@ -992,9 +992,9 @@
   },
   "Flows": {
     "list": {
-      "title": "Flows",
+      "title": "Workflows",
       "beta": "Beta",
-      "description": "Build branching, button-driven WhatsApp conversations. Useful for menus, FAQs, and triage before a human steps in.",
+      "description": "One place for every automation — visual conversation flows and event-driven rules. Trigger on messages, contacts, tags, or schedules; act inside the app or call external systems.",
       "newFlow": "New flow",
       "statusDraft": "Draft",
       "statusActive": "Active",
@@ -1027,7 +1027,7 @@
       "statusPaused": "Paused",
       "filterAll": "All",
       "filterFlows": "Flows",
-      "filterRules": "Classic rules",
+      "filterRules": "Rules",
       "lastRunLabel": "Last run {time}",
       "activateRule": "Activate rule",
       "deactivateRule": "Pause rule",
@@ -1036,14 +1036,16 @@
       "ruleActivated": "Rule activated",
       "rulePaused": "Rule paused",
       "ruleUpdateError": "Could not update rule",
-      "ruleDuplicated": "Rule duplicated",
-      "ruleDuplicateError": "Could not duplicate rule",
+      "ruleDuplicated": "Rule duplicated.",
+      "ruleDuplicateError": "Couldn't duplicate the rule.",
       "ruleDeleted": "Rule deleted",
       "ruleDeleteError": "Could not delete rule",
       "deleteRuleTitle": "Delete rule?",
       "deleteRuleDesc": "This permanently deletes \"{name}\" and its history. This cannot be undone.",
       "startClassic": "Prefer a simple trigger-action rule?",
-      "createClassic": "Create classic automation"
+      "createClassic": "Create classic automation",
+      "filterLabel": "Filter workflows",
+      "ruleToggleError": "Couldn't update the rule."
     },
     "edit": {
       "notFound": "Flow not found.",
