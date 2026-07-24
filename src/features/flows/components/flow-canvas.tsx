@@ -623,7 +623,6 @@ function NodeEditSheet({
       </Sheet>
     );
   }
-  const meta = NODE_META[node.node_type];
   const c = nodeColors(node.node_type);
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -756,7 +755,6 @@ function CanvasAddNodeButton({ t }: { t: ReturnType<typeof useTranslations> }) {
                 {t(`categories.${group.id}`)}
               </DropdownMenuLabel>
               {group.types.map((t_type) => {
-                const meta = NODE_META[t_type];
                 return (
                   <DropdownMenuItem
                     key={t_type}
