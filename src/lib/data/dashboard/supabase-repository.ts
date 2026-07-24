@@ -565,6 +565,9 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     broadcasts: { totals: broadcastTotals, recent: recentBroadcasts },
     pipeline,
     team,
+    salesTrend,
+    performers,
+    taskStats,
     contactsGrowth,
     activity,
     appointments: appointments.map((appointment) => ({

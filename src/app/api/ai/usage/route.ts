@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
-import { daysAgoStart, lastNDayKeys, localDayKey } from '@/lib/dashboard/date-utils'
+import { daysAgoStart, lastNDayKeys, localDayKey } from '@/lib/dashboards/date-utils'
 
 // Rows are aggregated in-process over a bounded window. An active
 // account writes a handful of rows per conversation, so 30 days sits
