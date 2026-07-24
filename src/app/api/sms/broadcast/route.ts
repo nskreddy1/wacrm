@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@/lib/supabase/server'
-import { channelAdmin } from '@/lib/channels/admin-client'
-import { TwilioSmsAdapter } from '@/lib/channels/adapters/twilio-sms'
-import { isValidE164, sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils'
+import { channelAdmin } from '@/features/channels/lib/admin-client'
+import { TwilioSmsAdapter } from '@/features/channels/lib/adapters/twilio-sms'
+import { isValidE164, sanitizePhoneForMeta } from '@/features/whatsapp/lib/phone-utils'
 import {
   checkRateLimit,
   rateLimitResponse,

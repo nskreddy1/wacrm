@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { decrypt } from '@/lib/whatsapp/encryption'
-import { submitMessageTemplate } from '@/lib/whatsapp/meta-api'
+import { decrypt } from '@/features/whatsapp/lib/encryption'
+import { submitMessageTemplate } from '@/features/whatsapp/lib/meta-api'
 import {
   validateTemplatePayload,
   type TemplatePayload,
-} from '@/lib/whatsapp/template-validators'
-import { buildMetaTemplatePayload } from '@/lib/whatsapp/template-components'
-import { ensureImageHeaderHandle } from '@/lib/whatsapp/template-header-handle'
-import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
+} from '@/features/whatsapp/lib/template-validators'
+import { buildMetaTemplatePayload } from '@/features/whatsapp/lib/template-components'
+import { ensureImageHeaderHandle } from '@/features/whatsapp/lib/template-header-handle'
+import { normalizeStatus } from '@/features/whatsapp/lib/template-status-normalize'
 
 /**
  * Shared upsert payload builder — both the Meta-failure path and the

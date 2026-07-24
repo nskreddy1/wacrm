@@ -13,18 +13,18 @@
 
 import { NextResponse } from 'next/server';
 
-import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account';
-import { decrypt } from '@/lib/whatsapp/encryption';
+import { getCurrentAccount, toErrorResponse } from '@/features/auth/lib/account';
+import { decrypt } from '@/features/whatsapp/lib/encryption';
 import {
   ExternalSourceError,
   fetchRecipients,
-} from '@/lib/external-sources/fetch-recipients';
+} from '@/features/external-sources/lib/fetch-recipients';
 import {
   EXTERNAL_FETCH_CAP,
   type ExternalSourceType,
   type FieldMap,
   type SourceConfig,
-} from '@/lib/external-sources/types';
+} from '@/features/external-sources/lib/types';
 import {
   checkRateLimit,
   rateLimitResponse,

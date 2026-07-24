@@ -1,6 +1,6 @@
 import "server-only"
 
-import type { AccountContext } from "@/lib/auth/account"
+import type { AccountContext } from "@/features/auth/lib/account"
 import type { ContactField, ContactPreferences, ContactValue, ContactWorkspaceData, FieldType, WorkspaceContact } from "./types"
 import { validateContactIdentity, validateContactValue, validateFieldDefinition } from "./validation"
 

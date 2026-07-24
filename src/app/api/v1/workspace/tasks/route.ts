@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
+import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account"
 import {
   createTask,
   deleteTasks,

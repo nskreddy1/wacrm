@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { NavAccess } from "@/lib/navigation/config";
-import { getSessionPayload, type SessionPayload } from "@/lib/auth/session-payload";
+import { getSessionPayload, type SessionPayload } from "@/features/auth/lib/session-payload";
 import { DashboardShell } from "./dashboard-shell";
 
 // Server layout whose only job is to declare "do not index" metadata

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
-import { channelAdmin } from '@/lib/channels/admin-client'
-import { createChannelAdapter } from '@/lib/channels/adapters'
-import { buildProviderCredentials, decryptProviderCredentials, encryptProviderCredentials } from '@/lib/channels/credentials'
-import { discoverTwilioAccount, isDiscoveryError } from '@/lib/channels/discovery'
-import { getProviderCapabilities, isProviderCompatible, PROVIDER_CHANNELS, PROVIDER_LABEL } from '@/lib/channels/provider-registry'
+import { channelAdmin } from '@/features/channels/lib/admin-client'
+import { createChannelAdapter } from '@/features/channels/lib/adapters'
+import { buildProviderCredentials, decryptProviderCredentials, encryptProviderCredentials } from '@/features/channels/lib/credentials'
+import { discoverTwilioAccount, isDiscoveryError } from '@/features/channels/lib/discovery'
+import { getProviderCapabilities, isProviderCompatible, PROVIDER_CHANNELS, PROVIDER_LABEL } from '@/features/channels/lib/provider-registry'
 import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
 
 const providers = ['meta', 'twilio', 'google', 'microsoft', 'resend', 'smtp'] as const

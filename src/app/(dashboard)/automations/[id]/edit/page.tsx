@@ -10,7 +10,7 @@ import {
   fromServerSteps,
   type BuilderInitial,
   type ServerStepNode,
-} from "@/components/automations/automation-builder"
+} from "@/features/automations/components/automation-builder"
 import type { AutomationTriggerType } from "@/types"
 
 export default function EditAutomationPage({

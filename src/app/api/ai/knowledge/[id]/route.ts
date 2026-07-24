@@ -3,11 +3,11 @@ import {
   getCurrentAccount,
   requireRole,
   toErrorResponse,
-} from '@/lib/auth/account'
+} from '@/features/auth/lib/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
-import { loadEmbeddingsKey } from '@/lib/ai/config'
-import { ingestDocument } from '@/lib/ai/knowledge'
-import { AiError } from '@/lib/ai/types'
+import { loadEmbeddingsKey } from '@/features/assistant/lib/ai/config'
+import { ingestDocument } from '@/features/assistant/lib/ai/knowledge'
+import { AiError } from '@/features/assistant/lib/ai/types'
 
 type Params = { params: Promise<{ id: string }> }
 

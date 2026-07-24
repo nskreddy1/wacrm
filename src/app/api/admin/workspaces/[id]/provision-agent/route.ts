@@ -21,10 +21,10 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 
-import { toErrorResponse } from "@/lib/auth/account";
-import { requireSuperAdmin } from "@/lib/auth/super-admin";
-import { logPlatformAudit } from "@/lib/platform/audit";
-import { platformAdmin } from "@/lib/platform/admin-client";
+import { toErrorResponse } from "@/features/auth/lib/account";
+import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
+import { logPlatformAudit } from "@/features/admin/lib/platform/audit";
+import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

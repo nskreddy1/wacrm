@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
-import { decrypt } from '@/lib/whatsapp/encryption'
-import { validateAiCredentials } from '@/lib/ai/validate'
+import { decrypt } from '@/features/whatsapp/lib/encryption'
+import { validateAiCredentials } from '@/features/assistant/lib/ai/validate'
 import {
   AiError,
   AI_PROVIDERS,
   isAiProvider,
   type AiProvider,
-} from '@/lib/ai/types'
-import { createValidationProof } from '@/lib/ai/validation-proof'
-import { OLLAMA_PLACEHOLDER_KEY } from '@/lib/ai/defaults'
+} from '@/features/assistant/lib/ai/types'
+import { createValidationProof } from '@/features/assistant/lib/ai/validation-proof'
+import { OLLAMA_PLACEHOLDER_KEY } from '@/features/assistant/lib/ai/defaults'
 
 /**
  * POST /api/ai/test  (admin+)

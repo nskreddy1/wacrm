@@ -4,25 +4,25 @@ import { useMemo, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
-import { SettingsRail } from '@/components/settings/settings-rail';
-import { SettingsOverview } from '@/components/settings/settings-overview';
-import { ProfileForm } from '@/components/settings/profile-form';
-import { SecurityPanel } from '@/components/settings/security-panel';
-import { AppearancePanel } from '@/components/settings/appearance-panel';
-import { ChannelConnections } from '@/components/settings/channel-connections';
-import { QuickRepliesManager } from '@/components/settings/quick-replies-manager';
-import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
-import { DealsSettings } from '@/components/settings/deals-settings';
-import { MembersTab } from '@/components/settings/members-tab';
-import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
-import { ExternalSourcesSettings } from '@/components/settings/external-sources-settings';
-import { SupportTab } from '@/components/settings/support-tab';
+import { SettingsRail } from '@/features/settings/components/settings-rail';
+import { SettingsOverview } from '@/features/settings/components/settings-overview';
+import { ProfileForm } from '@/features/settings/components/profile-form';
+import { SecurityPanel } from '@/features/settings/components/security-panel';
+import { AppearancePanel } from '@/features/settings/components/appearance-panel';
+import { ChannelConnections } from '@/features/settings/components/channel-connections';
+import { QuickRepliesManager } from '@/features/settings/components/quick-replies-manager';
+import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-tags-panel';
+import { DealsSettings } from '@/features/settings/components/deals-settings';
+import { MembersTab } from '@/features/settings/components/members-tab';
+import { ApiKeysSettings } from '@/features/settings/components/api-keys-settings';
+import { ExternalSourcesSettings } from '@/features/settings/components/external-sources-settings';
+import { SupportTab } from '@/features/settings/components/support-tab';
 import {
   resolveSection,
   type SettingsSection,
-} from '@/components/settings/settings-sections';
+} from '@/features/settings/components/settings-sections';
 
 export default function SettingsPage() {
   const router = useRouter();

@@ -1,4 +1,4 @@
-import type { PipelineMode } from "@/lib/pipelines/domain"
+import type { PipelineMode } from "@/features/pipelines/lib/domain"
 
 export type ContactViewMode = "list" | "sheet" | "cards"
 

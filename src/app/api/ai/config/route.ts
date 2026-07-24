@@ -3,20 +3,20 @@ import {
   getCurrentAccount,
   requireRole,
   toErrorResponse,
-} from '@/lib/auth/account'
+} from '@/features/auth/lib/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
-import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
-import { validateAiCredentials } from '@/lib/ai/validate'
-import { embedTexts } from '@/lib/ai/embeddings'
+import { encrypt, decrypt } from '@/features/whatsapp/lib/encryption'
+import { validateAiCredentials } from '@/features/assistant/lib/ai/validate'
+import { embedTexts } from '@/features/assistant/lib/ai/embeddings'
 import {
   AiError,
   AI_PROVIDERS,
   isAiProvider,
   isAutoReplyLimitMode,
   type AiProvider,
-} from '@/lib/ai/types'
-import { verifyValidationProof } from '@/lib/ai/validation-proof'
-import { OLLAMA_PLACEHOLDER_KEY } from '@/lib/ai/defaults'
+} from '@/features/assistant/lib/ai/types'
+import { verifyValidationProof } from '@/features/assistant/lib/ai/validation-proof'
+import { OLLAMA_PLACEHOLDER_KEY } from '@/features/assistant/lib/ai/defaults'
 
 function bad(message: string) {
   return NextResponse.json({ error: message }, { status: 400 })

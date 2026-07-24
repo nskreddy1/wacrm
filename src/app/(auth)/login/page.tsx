@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { LoginSplit } from "@/components/auth/login-split";
+import { LoginSplit } from "@/features/auth/components/login-split";
 
 export default function LoginPage() {
   return (

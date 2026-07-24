@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
-import { loadEmbeddingsKey } from '@/lib/ai/config'
-import { ingestDocument } from '@/lib/ai/knowledge'
-import { AiError } from '@/lib/ai/types'
+import { loadEmbeddingsKey } from '@/features/assistant/lib/ai/config'
+import { ingestDocument } from '@/features/assistant/lib/ai/knowledge'
+import { AiError } from '@/features/assistant/lib/ai/types'
 
 /**
  * POST /api/ai/knowledge/reindex  (admin+)

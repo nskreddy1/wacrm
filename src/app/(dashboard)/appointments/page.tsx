@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { AppointmentWorkspace } from "@/components/appointments/appointment-workspace"
+import { AppointmentWorkspace } from "@/features/appointments/components/appointment-workspace"
 
 export const metadata: Metadata = {
   title: "Appointments | WhatsApp CRM",

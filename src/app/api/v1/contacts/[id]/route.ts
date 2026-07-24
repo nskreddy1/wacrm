@@ -8,7 +8,7 @@
 // array of tag names) to replace the contact's tags.
 // ============================================================
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 import { ok, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 import {
   getContactById,

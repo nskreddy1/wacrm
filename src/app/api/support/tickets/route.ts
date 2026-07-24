@@ -15,15 +15,15 @@
 
 import { NextResponse } from "next/server";
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
-import { platformAdmin } from "@/lib/platform/admin-client";
+import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account";
+import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
 import {
   BODY_MAX,
   SUBJECT_MAX,
   SUBJECT_MIN,
   isTicketCategory,
   isTicketPriority,
-} from "@/lib/support/tickets";
+} from "@/features/support/lib/tickets";
 import {
   checkRateLimit,
   rateLimitResponse,

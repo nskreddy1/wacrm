@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { AdminWorkspaces } from "@/components/admin/admin-workspaces";
+import { AdminWorkspaces } from "@/features/admin/components/admin-workspaces";
 
 export const metadata: Metadata = { title: "Workspaces · Admin console" };
 

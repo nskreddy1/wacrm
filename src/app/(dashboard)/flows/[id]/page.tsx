@@ -7,8 +7,8 @@ import { toast } from "sonner";
 
 import { useTranslations } from "next-intl";
 
-import { FlowEditorShell } from "@/components/flows/flow-editor-shell";
-import type { FlowRow, FlowNodeRow } from "@/lib/flows/types";
+import { FlowEditorShell } from "@/features/flows/components/flow-editor-shell";
+import type { FlowRow, FlowNodeRow } from "@/features/flows/lib/types";
 
 /**
  * Flow editor shell.

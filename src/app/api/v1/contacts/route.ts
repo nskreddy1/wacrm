@@ -8,7 +8,7 @@
 // `created: false`; a new row returns 201 with `created: true`.
 // ============================================================
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 import { ok, okList, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 import {
   parseListParams,

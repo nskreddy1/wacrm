@@ -10,8 +10,8 @@
 
 import { NextResponse } from 'next/server'
 
-import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account'
-import { sanitizeWidgets } from '@/lib/dashboards/widgets'
+import { getCurrentAccount, toErrorResponse } from '@/features/auth/lib/account'
+import { sanitizeWidgets } from '@/features/dashboards/lib/widgets'
 
 const COLUMNS = 'id, name, widgets, position, created_at, updated_at'
 const MAX_NAME_LEN = 60

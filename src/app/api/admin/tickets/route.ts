@@ -11,14 +11,14 @@
 
 import { NextResponse } from "next/server";
 
-import { toErrorResponse } from "@/lib/auth/account";
-import { requireSuperAdmin } from "@/lib/auth/super-admin";
-import { platformAdmin } from "@/lib/platform/admin-client";
+import { toErrorResponse } from "@/features/auth/lib/account";
+import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
+import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
 import {
   isTicketCategory,
   isTicketPriority,
   isTicketStatus,
-} from "@/lib/support/tickets";
+} from "@/features/support/lib/tickets";
 
 const PAGE_SIZE = 50;
 

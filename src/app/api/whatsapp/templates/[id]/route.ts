@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { decrypt } from '@/lib/whatsapp/encryption'
+import { decrypt } from '@/features/whatsapp/lib/encryption'
 import {
   deleteMessageTemplate,
   editMessageTemplate,
-} from '@/lib/whatsapp/meta-api'
+} from '@/features/whatsapp/lib/meta-api'
 import {
   validateTemplatePayload,
   type TemplatePayload,
-} from '@/lib/whatsapp/template-validators'
-import { buildMetaTemplatePayload } from '@/lib/whatsapp/template-components'
-import { ensureImageHeaderHandle } from '@/lib/whatsapp/template-header-handle'
+} from '@/features/whatsapp/lib/template-validators'
+import { buildMetaTemplatePayload } from '@/features/whatsapp/lib/template-components'
+import { ensureImageHeaderHandle } from '@/features/whatsapp/lib/template-header-handle'
 
 /**
  * Per-template lifecycle endpoint.

@@ -1,6 +1,6 @@
 import "server-only"
 
-import type { AccountContext } from "@/lib/auth/account"
+import type { AccountContext } from "@/features/auth/lib/account"
 import type { Notification } from "@/types"
 
 const selection = "id, account_id, user_id, type, title, body, conversation_id, contact_id, actor_user_id, metadata, email_status, email_sent_at, read_at, created_at"

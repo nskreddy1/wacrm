@@ -15,8 +15,8 @@
 
 import { NextResponse } from "next/server";
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
-import type { SupportTicketMessage } from "@/lib/support/tickets";
+import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account";
+import type { SupportTicketMessage } from "@/features/support/lib/tickets";
 
 export async function GET(
   _request: Request,

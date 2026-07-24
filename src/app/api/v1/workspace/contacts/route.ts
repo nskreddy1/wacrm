@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
+import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account"
 import {
   createSupabaseContact,
   createSupabaseContactField,

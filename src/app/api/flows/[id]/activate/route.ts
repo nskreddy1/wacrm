@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
-import { supabaseAdmin } from '@/lib/flows/admin-client'
-import { validateFlowForActivation } from '@/lib/flows/validate'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
+import { supabaseAdmin } from '@/features/flows/lib/admin-client'
+import { validateFlowForActivation } from '@/features/flows/lib/validate'
 
 /**
  * POST /api/flows/[id]/activate

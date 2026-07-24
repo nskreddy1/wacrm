@@ -1,18 +1,18 @@
 import { NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
-import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
-import { normalizePhone } from '@/lib/whatsapp/phone-utils'
-import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe'
-import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
-import { runAutomationsForTrigger } from '@/lib/automations/engine'
-import { dispatchInboundToFlows } from '@/lib/flows/engine'
-import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
-import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
+import { decrypt, encrypt, isLegacyFormat } from '@/features/whatsapp/lib/encryption'
+import { getMediaUrl, downloadMedia } from '@/features/whatsapp/lib/meta-api'
+import { normalizePhone } from '@/features/whatsapp/lib/phone-utils'
+import { findExistingContact, isUniqueViolation } from '@/features/contacts/lib/dedupe'
+import { verifyMetaWebhookSignature } from '@/features/whatsapp/lib/webhook-signature'
+import { runAutomationsForTrigger } from '@/features/automations/lib/engine'
+import { dispatchInboundToFlows } from '@/features/flows/lib/engine'
+import { dispatchInboundToAiReply } from '@/features/assistant/lib/ai/auto-reply'
+import { dispatchWebhookEvent } from '@/features/webhooks/lib/deliver'
 import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
-} from '@/lib/whatsapp/template-webhook'
+} from '@/features/whatsapp/lib/template-webhook'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so

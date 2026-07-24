@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { requireSuperAdmin } from '@/lib/auth/super-admin'
-import { toErrorResponse } from '@/lib/auth/account'
-import { supabaseAdmin } from '@/lib/ai/admin-client'
-import { encrypt } from '@/lib/whatsapp/encryption'
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin'
+import { toErrorResponse } from '@/features/auth/lib/account'
+import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client'
+import { encrypt } from '@/features/whatsapp/lib/encryption'
 import {
   ASSISTANT_DEFAULT_MODEL,
   ASSISTANT_DEFAULT_SYSTEM_PROMPT,
@@ -10,7 +10,7 @@ import {
   ASSISTANT_SETTING_KEY,
   isAssistantProvider,
   providerRequiresKey,
-} from '@/lib/assistant/config'
+} from '@/features/assistant/lib/config'
 
 // ============================================================
 // Platform assistant key management — super-admin only.

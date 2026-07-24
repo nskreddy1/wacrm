@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
+import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account"
 import { getDataSource } from "@/lib/data/runtime"
 
 export const dynamic = "force-dynamic"

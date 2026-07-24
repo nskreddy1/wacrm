@@ -6,12 +6,12 @@ import {
   registerPhoneNumber,
   subscribeWabaToApp,
   verifyPhoneNumber,
-} from '@/lib/whatsapp/meta-api'
-import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
+} from '@/features/whatsapp/lib/meta-api'
+import { encrypt, decrypt } from '@/features/whatsapp/lib/encryption'
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
- * (rather than going through `@/lib/auth/account.getCurrentAccount`)
+ * (rather than going through `@/features/auth/lib/account.getCurrentAccount`)
  * because the GET handler wants to return shaped 200s for every
  * non-auth failure mode, not throw — keeping the helper minimal lets
  * the existing response branches stay as-is.

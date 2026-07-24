@@ -6,7 +6,7 @@
 // any message is returned — a foreign or unknown id → 404.
 // ============================================================
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 import { okList, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 import {
   parseListParams,

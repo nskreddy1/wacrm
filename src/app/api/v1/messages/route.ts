@@ -31,15 +31,15 @@
 //               "contact_id", "contact_created" } }
 // ============================================================
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 import { ok, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
-import { resolveConversationByPhone } from '@/lib/whatsapp/resolve-conversation';
+import { resolveConversationByPhone } from '@/features/whatsapp/lib/resolve-conversation';
 import {
   sendMessageToConversation,
   validateSendMessageParams,
   SendMessageError,
-} from '@/lib/whatsapp/send-message';
-import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive';
+} from '@/features/whatsapp/lib/send-message';
+import type { InteractiveMessagePayload } from '@/features/whatsapp/lib/interactive';
 
 export async function POST(request: Request) {
   try {

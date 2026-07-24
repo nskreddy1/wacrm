@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 
 import { PageContainer } from "@/components/layout/page-container"
-import { TemplateStudio } from "@/components/templates/template-studio"
+import { TemplateStudio } from "@/features/templates/components/template-studio"
 
 export const metadata: Metadata = {
   title: "Template Studio",

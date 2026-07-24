@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
-import { getSessionPayload } from "@/lib/auth/session-payload"
+import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account"
+import { getSessionPayload } from "@/features/auth/lib/session-payload"
 import { getDataSource } from "@/lib/data/runtime"
 
 export const dynamic = "force-dynamic"

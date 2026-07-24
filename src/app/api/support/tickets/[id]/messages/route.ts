@@ -11,8 +11,8 @@
 
 import { NextResponse } from "next/server";
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
-import { BODY_MAX } from "@/lib/support/tickets";
+import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account";
+import { BODY_MAX } from "@/features/support/lib/tickets";
 import {
   checkRateLimit,
   rateLimitResponse,

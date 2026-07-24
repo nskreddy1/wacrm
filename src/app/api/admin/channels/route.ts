@@ -28,21 +28,21 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { toErrorResponse } from "@/lib/auth/account";
-import { requireSuperAdmin } from "@/lib/auth/super-admin";
-import { logPlatformAudit } from "@/lib/platform/audit";
-import { platformAdmin } from "@/lib/platform/admin-client";
-import { createChannelAdapter } from "@/lib/channels/adapters";
+import { toErrorResponse } from "@/features/auth/lib/account";
+import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
+import { logPlatformAudit } from "@/features/admin/lib/platform/audit";
+import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
+import { createChannelAdapter } from "@/features/channels/lib/adapters";
 import {
   buildProviderCredentials,
   encryptProviderCredentials,
-} from "@/lib/channels/credentials";
+} from "@/features/channels/lib/credentials";
 import {
   getProviderCapabilities,
   isProviderCompatible,
   PROVIDER_CHANNELS,
   PROVIDER_LABEL,
-} from "@/lib/channels/provider-registry";
+} from "@/features/channels/lib/provider-registry";
 import type {
   ChannelConnection,
   ChannelKind,

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AxonLogo, AxonMark, type AxonVariant } from "@/components/brand/axon-logo";
+import { AxonLogo, AxonMark, type AxonVariant } from "@/features/brand/components/axon-logo";
 
 export const metadata: Metadata = {
   title: "Axon — Brand Preview",

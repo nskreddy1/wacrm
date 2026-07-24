@@ -1,4 +1,4 @@
-import { AgentsConsole } from '@/components/agents/agents-console';
+import { AgentsConsole } from '@/features/agents/components/agents-console';
 
 export default function AgentsPage() {
   return <AgentsConsole />;

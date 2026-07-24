@@ -8,7 +8,7 @@ import "server-only"
 // DashboardOverview contract consumed by the dashboard UI.
 // ============================================================
 
-import type { AccountContext } from "@/lib/auth/account"
+import type { AccountContext } from "@/features/auth/lib/account"
 import {
   listAppointments,
   listTasks,

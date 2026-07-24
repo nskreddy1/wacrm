@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireSuperAdmin } from '@/lib/auth/super-admin'
-import { toErrorResponse } from '@/lib/auth/account'
-import { supabaseAdmin } from '@/lib/ai/admin-client'
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin'
+import { toErrorResponse } from '@/features/auth/lib/account'
+import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client'
 import {
   getAiEngine,
   resetEngineCache,
   type AiEngine,
-} from '@/lib/ai/engine-flag'
+} from '@/features/assistant/lib/ai/engine-flag'
 
 // ============================================================
 // Platform settings — super-admin control surface.

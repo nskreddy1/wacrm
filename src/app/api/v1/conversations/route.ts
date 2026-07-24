@@ -6,7 +6,7 @@
 // tags via the shared CONVERSATION_SELECT.
 // ============================================================
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 import { okList, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 import {
   parseListParams,
@@ -16,7 +16,7 @@ import {
 import {
   CONVERSATION_SELECT,
   normalizeConversation,
-} from '@/lib/inbox/conversations';
+} from '@/features/inbox/lib/conversations';
 import { serializeConversation } from '@/lib/api/v1/conversations';
 import type { Conversation } from '@/types';
 

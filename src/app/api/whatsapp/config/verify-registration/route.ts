@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { decrypt } from '@/lib/whatsapp/encryption'
+import { decrypt } from '@/features/whatsapp/lib/encryption'
 import {
   getSubscribedApps,
   verifyPhoneNumber,
-} from '@/lib/whatsapp/meta-api'
+} from '@/features/whatsapp/lib/meta-api'
 
 /**
  * GET /api/whatsapp/config/verify-registration

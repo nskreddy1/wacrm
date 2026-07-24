@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ArrowLeft, CheckCheck, ChevronDown, Download, Eye, Filter, Loader2, MessageCircle, MessageSquare, Send, Trash2, Users, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { getBroadcastStatus, getRecipientStatus } from '@/lib/broadcast-status';
+import { getBroadcastStatus, getRecipientStatus } from '@/features/broadcasts/lib/broadcast-status';
 import { PageContainer } from '@/components/layout/page-container';
 
 const RECIPIENT_STATUSES: readonly RecipientStatus[] = ['pending', 'sent', 'delivered', 'read', 'replied', 'failed'];
