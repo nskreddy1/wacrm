@@ -1,9 +1,9 @@
 import { NextResponse, after } from 'next/server'
-import { supabaseAdmin } from '@/lib/automations/admin-client'
-import { decryptProviderCredentials } from '@/lib/channels/credentials'
-import { persistInboundChannelMessage } from '@/lib/channels/inbound'
-import { orchestrateInboundChannelMessage } from '@/lib/channels/orchestrate-inbound'
-import { verifyMetaSignatureWithSecret } from '@/lib/whatsapp/webhook-signature'
+import { supabaseAdmin } from '@/features/automations/lib/admin-client'
+import { decryptProviderCredentials } from '@/features/channels/lib/credentials'
+import { persistInboundChannelMessage } from '@/features/channels/lib/inbound'
+import { orchestrateInboundChannelMessage } from '@/features/channels/lib/orchestrate-inbound'
+import { verifyMetaSignatureWithSecret } from '@/features/whatsapp/lib/webhook-signature'
 
 export const maxDuration = 30
 

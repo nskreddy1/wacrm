@@ -25,11 +25,11 @@ import {
   filterUnifiedItems,
   type FlowRow,
   type UnifiedFilter,
-} from "@/components/flows/unified-items";
-import { AutomationRuleCard } from "@/components/flows/automation-rule-card";
+} from "@/features/flows/components/unified-items";
+import { AutomationRuleCard } from "@/features/flows/components/automation-rule-card";
 
 import { useTranslations } from "next-intl";
-import { useCan } from "@/hooks/use-can";
+import { useCan } from "@/features/auth/hooks/use-can";
 import { Button } from "@/components/ui/button";
 import { GatedButton } from "@/components/ui/gated-button";
 import {

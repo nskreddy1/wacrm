@@ -1,4 +1,4 @@
-import { ContactWorkspace } from "@/components/contacts/contact-workspace"
+import { ContactWorkspace } from "@/features/contacts/components/contact-workspace"
 import { isOpaqueId, type ContactViewMode } from "@/lib/routes/dashboard-routes"
 
 const modes = new Set<ContactViewMode>(["list", "sheet", "cards"])

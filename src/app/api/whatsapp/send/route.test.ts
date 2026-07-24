@@ -124,7 +124,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => supabaseMock),
 }))
 
-vi.mock('@/lib/flows/admin-client', () => ({
+vi.mock('@/features/flows/lib/admin-client', () => ({
   supabaseAdmin: () => ({
     from: () => {
       const b: Record<string, unknown> = {}
@@ -137,7 +137,7 @@ vi.mock('@/lib/flows/admin-client', () => ({
   }),
 }))
 
-vi.mock('@/lib/whatsapp/encryption', () => ({
+vi.mock('@/features/whatsapp/lib/encryption', () => ({
   decrypt: vi.fn(() => 'plaintext-token'),
   encrypt: vi.fn(() => 'enc-token'),
   isLegacyFormat: vi.fn(() => false),
@@ -154,7 +154,7 @@ const { sendChannelMessage } = vi.hoisted(() => ({
     dbMessageId: 'msg-1',
   })),
 }))
-vi.mock('@/lib/orchestration/outbound', () => ({ sendChannelMessage }))
+vi.mock('@/features/admin/lib/orchestration/outbound', () => ({ sendChannelMessage }))
 
 import { POST } from './route'
 

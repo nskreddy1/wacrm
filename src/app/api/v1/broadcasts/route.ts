@@ -24,7 +24,7 @@
 
 import { after } from 'next/server';
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 
 // The `after()` fan-out below sends to every recipient sequentially and
 // runs within this route's max duration (the same constraint the
@@ -41,7 +41,7 @@ import {
   createBroadcast,
   deliverBroadcast,
   BroadcastError,
-} from '@/lib/whatsapp/broadcast-core';
+} from '@/features/whatsapp/lib/broadcast-core';
 
 export async function POST(request: Request) {
   try {

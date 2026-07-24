@@ -15,11 +15,11 @@ import useSWR from 'swr';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getModuleFieldLayoutAction } from '@/lib/module-fields/actions';
+import { getModuleFieldLayoutAction } from '@/features/module-fields/lib/actions';
 import {
   EMPTY_MODULE_FIELD_LAYOUT,
   type ModuleKey,
-} from '@/lib/module-fields/validation';
+} from '@/features/module-fields/lib/validation';
 
 const INPUT_TYPE: Record<string, string> = {
   text: 'text',

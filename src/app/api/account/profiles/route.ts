@@ -20,8 +20,8 @@ import {
   getCurrentAccount,
   requirePermission,
   toErrorResponse,
-} from "@/lib/auth/account";
-import { isPermissionSlug } from "@/lib/auth/permissions";
+} from "@/features/auth/lib/account";
+import { isPermissionSlug } from "@/features/auth/lib/permissions";
 import {
   checkRateLimit,
   rateLimitResponse,

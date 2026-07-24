@@ -16,13 +16,13 @@ import { createMcpHandler, withMcpAuth } from 'mcp-handler'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { z } from 'zod'
 
-import { requireApiKey } from '@/lib/auth/api-context'
-import { hasScope } from '@/lib/api-keys/scopes'
+import { requireApiKey } from '@/features/auth/lib/api-context'
+import { hasScope } from '@/features/api-keys/lib/scopes'
 import {
   buildAssistantTools,
   WRITE_TOOL_NAMES,
   type AssistantToolContext,
-} from '@/lib/assistant/tools'
+} from '@/features/assistant/lib/tools'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60

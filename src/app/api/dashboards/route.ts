@@ -12,11 +12,11 @@
 
 import { NextResponse } from 'next/server'
 
-import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account'
+import { getCurrentAccount, toErrorResponse } from '@/features/auth/lib/account'
 import {
   MAX_DASHBOARDS_PER_USER,
   sanitizeWidgets,
-} from '@/lib/dashboards/widgets'
+} from '@/features/dashboards/lib/widgets'
 
 const COLUMNS = 'id, name, widgets, position, created_at, updated_at'
 const MAX_NAME_LEN = 60

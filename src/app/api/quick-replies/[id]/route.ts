@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
-import { supabaseAdmin } from '@/lib/automations/admin-client'
-import { validateInteractivePayload } from '@/lib/whatsapp/interactive'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
+import { supabaseAdmin } from '@/features/automations/lib/admin-client'
+import { validateInteractivePayload } from '@/features/whatsapp/lib/interactive'
 
 // Update / delete a single quick reply. Quick replies are account-
 // shared, so every mutation is scoped by `account_id` (the service-role

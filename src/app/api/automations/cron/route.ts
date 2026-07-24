@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/automations/admin-client'
-import { resumePendingExecution } from '@/lib/automations/engine'
-import type { AutomationContext } from '@/lib/automations/engine'
+import { supabaseAdmin } from '@/features/automations/lib/admin-client'
+import { resumePendingExecution } from '@/features/automations/lib/engine'
+import type { AutomationContext } from '@/features/automations/lib/engine'
 
 /**
  * Drain due `automation_pending_executions` rows. Meant to be hit

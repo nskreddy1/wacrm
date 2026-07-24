@@ -20,7 +20,7 @@
 import { NextResponse } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 
-import { requirePermission, toErrorResponse } from "@/lib/auth/account";
+import { requirePermission, toErrorResponse } from "@/features/auth/lib/account";
 import {
   checkRateLimit,
   rateLimitResponse,

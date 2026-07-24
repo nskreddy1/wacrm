@@ -7,14 +7,14 @@
 // secret is never returned here — it's shown once at creation only.
 // ============================================================
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 import { ok, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
-import { normalizeEvents } from '@/lib/webhooks/events';
+import { normalizeEvents } from '@/features/webhooks/lib/events';
 import {
   WEBHOOK_PUBLIC_COLUMNS,
   serializeWebhookEndpoint,
   normalizeWebhookUrl,
-} from '@/lib/webhooks/endpoints';
+} from '@/features/webhooks/lib/endpoints';
 
 export async function GET(
   request: Request,

@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 
-import { requireSuperAdmin } from "@/lib/auth/super-admin";
+import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
 import { routes } from "@/lib/routing/routes";
-import { AdminNav } from "@/components/admin/admin-nav";
+import { AdminNav } from "@/features/admin/components/admin-nav";
 
 // ============================================================
 // /admin — platform operator console (server-gated layout).

@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
-import { getCurrentAccount, requireRole, toErrorResponse } from '@/lib/auth/account'
-import { supabaseAdmin } from '@/lib/automations/admin-client'
+import { getCurrentAccount, requireRole, toErrorResponse } from '@/features/auth/lib/account'
+import { supabaseAdmin } from '@/features/automations/lib/admin-client'
 import {
   loadStepsTree,
   replaceSteps,
   type BuilderStepInput,
-} from '@/lib/automations/steps-tree'
+} from '@/features/automations/lib/steps-tree'
 import {
   validateStepsForActivation,
   validateTriggerForActivation,
-} from '@/lib/automations/validate'
+} from '@/features/automations/lib/validate'
 
 export async function GET(
   _request: Request,

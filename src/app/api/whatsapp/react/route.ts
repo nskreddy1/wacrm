@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { sendReactionMessage } from '@/lib/whatsapp/meta-api';
-import { decrypt } from '@/lib/whatsapp/encryption';
-import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
+import { sendReactionMessage } from '@/features/whatsapp/lib/meta-api';
+import { decrypt } from '@/features/whatsapp/lib/encryption';
+import { sanitizePhoneForMeta } from '@/features/whatsapp/lib/phone-utils';
 import {
   checkRateLimit,
   rateLimitResponse,

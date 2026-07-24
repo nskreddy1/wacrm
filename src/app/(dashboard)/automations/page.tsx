@@ -19,7 +19,7 @@ import {
   RefreshCw,
 } from "lucide-react"
 
-import { useCan } from "@/hooks/use-can"
+import { useCan } from "@/features/auth/hooks/use-can"
 import { useTranslations } from "next-intl"
 import type { Automation } from "@/types"
 import { Button } from "@/components/ui/button"
@@ -40,8 +40,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/lib/automations/templates"
-import { triggerMeta, formatRelative } from "@/lib/automations/trigger-meta"
+import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/features/automations/lib/templates"
+import { triggerMeta, formatRelative } from "@/features/automations/lib/trigger-meta"
 import { cn } from "@/lib/utils"
 import { pageContainerClassName } from "@/components/layout/page-container"
 import { FeatureLoading, FeatureState } from "@/components/ui/feature-state"

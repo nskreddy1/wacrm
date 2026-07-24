@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
-import { channelAdmin } from '@/lib/channels/admin-client'
-import { decryptProviderCredentials } from '@/lib/channels/credentials'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
+import { channelAdmin } from '@/features/channels/lib/admin-client'
+import { decryptProviderCredentials } from '@/features/channels/lib/credentials'
 import {
   createTwilioContent,
   listTwilioContentAndApprovals,
   normalizeTwilioContent,
   submitTwilioApproval,
-} from '@/lib/whatsapp/twilio-content'
+} from '@/features/whatsapp/lib/twilio-content'
 import type { ChannelConnection, TemplateButton } from '@/types'
 
 const createSchema = z.object({

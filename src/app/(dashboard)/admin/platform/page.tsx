@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { AdminPlatform } from "@/components/admin/admin-platform";
+import { AdminPlatform } from "@/features/admin/components/admin-platform";
 
 export const metadata: Metadata = { title: "Platform · Admin console" };
 

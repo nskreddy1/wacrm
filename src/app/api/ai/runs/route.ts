@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
 
 /**
  * GET /api/ai/runs?limit=25  (admin+)

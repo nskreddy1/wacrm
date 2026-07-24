@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/flows/admin-client'
-import { resolveFallbackPolicy } from '@/lib/flows/fallback'
+import { supabaseAdmin } from '@/features/flows/lib/admin-client'
+import { resolveFallbackPolicy } from '@/features/flows/lib/fallback'
 
 /**
  * Sweep abandoned active flow runs.

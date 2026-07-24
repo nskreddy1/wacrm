@@ -8,7 +8,7 @@
 // Account-scoped: a foreign id → 404.
 // ============================================================
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 import { ok, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 
 export async function GET(

@@ -2,12 +2,12 @@
 
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { DashboardCacheProvider } from "@/components/providers/dashboard-cache-provider"
-import { TeamChatWidget } from "@/components/team-chat/team-chat-widget"
-import { AssistantWidget } from "@/components/assistant/assistant-widget"
+import { TeamChatWidget } from "@/features/team-chat/components/team-chat-widget"
+import { AssistantWidget } from "@/features/assistant/components/assistant-widget"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { AuthProvider } from "@/hooks/use-auth"
+import { AuthProvider } from "@/features/auth/hooks/use-auth"
 import type { NavAccess } from "@/lib/navigation/config"
-import type { SessionPayload } from "@/lib/auth/session-payload"
+import type { SessionPayload } from "@/features/auth/lib/session-payload"
 
 function DashboardShellInner({
   children,

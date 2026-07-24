@@ -23,9 +23,9 @@ import {
   getCurrentAccount,
   requireRole,
   toErrorResponse,
-} from '@/lib/auth/account';
-import { generateApiKey } from '@/lib/api-keys/keys';
-import { normalizeScopes } from '@/lib/api-keys/scopes';
+} from '@/features/auth/lib/account';
+import { generateApiKey } from '@/features/api-keys/lib/keys';
+import { normalizeScopes } from '@/features/api-keys/lib/scopes';
 import {
   checkRateLimit,
   rateLimitResponse,

@@ -1,10 +1,10 @@
 import crypto from 'node:crypto'
 import { NextResponse, after } from 'next/server'
-import { supabaseAdmin } from '@/lib/automations/admin-client'
-import { decryptProviderCredentials } from '@/lib/channels/credentials'
-import { persistInboundChannelMessage } from '@/lib/channels/inbound'
-import { orchestrateInboundChannelMessage } from '@/lib/channels/orchestrate-inbound'
-import { applyMessageDeliveryStatus, mapTwilioStatus } from '@/lib/orchestration/status'
+import { supabaseAdmin } from '@/features/automations/lib/admin-client'
+import { decryptProviderCredentials } from '@/features/channels/lib/credentials'
+import { persistInboundChannelMessage } from '@/features/channels/lib/inbound'
+import { orchestrateInboundChannelMessage } from '@/features/channels/lib/orchestrate-inbound'
+import { applyMessageDeliveryStatus, mapTwilioStatus } from '@/features/admin/lib/orchestration/status'
 
 export const maxDuration = 30
 

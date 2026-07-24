@@ -21,7 +21,7 @@ import type {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { pageContainerClassName } from "@/components/layout/page-container"
-import { formatRelative } from "@/lib/automations/trigger-meta"
+import { formatRelative } from "@/features/automations/lib/trigger-meta"
 
 export default function AutomationLogsPage({
   params,

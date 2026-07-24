@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server"
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account"
+import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account"
 import { getDataSource } from "@/lib/data/runtime"
 import { navigationForAccess } from "@/lib/navigation/config"
 

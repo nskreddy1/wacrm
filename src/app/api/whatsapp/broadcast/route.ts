@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendTemplateMessage } from '@/lib/whatsapp/meta-api'
-import { decrypt } from '@/lib/whatsapp/encryption'
-import type { SendTimeParams } from '@/lib/whatsapp/template-send-builder'
-import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
+import { sendTemplateMessage } from '@/features/whatsapp/lib/meta-api'
+import { decrypt } from '@/features/whatsapp/lib/encryption'
+import type { SendTimeParams } from '@/features/whatsapp/lib/template-send-builder'
+import { isMessageTemplate } from '@/features/whatsapp/lib/template-row-guard'
 import {
   sanitizePhoneForMeta,
   isValidE164,
   phoneVariants,
   isRecipientNotAllowedError,
-} from '@/lib/whatsapp/phone-utils'
+} from '@/features/whatsapp/lib/phone-utils'
 import {
   checkRateLimit,
   rateLimitResponse,

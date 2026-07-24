@@ -7,13 +7,13 @@ import {
   type UIMessage,
 } from 'ai'
 import { NextResponse } from 'next/server'
-import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account'
+import { getCurrentAccount, toErrorResponse } from '@/features/auth/lib/account'
 import {
   loadAssistantConfig,
   resolveAssistantModel,
   resolveAssistantSystemPrompt,
-} from '@/lib/assistant/config'
-import { buildAssistantTools, WRITE_TOOL_NAMES } from '@/lib/assistant/tools'
+} from '@/features/assistant/lib/config'
+import { buildAssistantTools, WRITE_TOOL_NAMES } from '@/features/assistant/lib/tools'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60

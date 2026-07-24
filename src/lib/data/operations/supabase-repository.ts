@@ -7,7 +7,7 @@
 // used by contacts/dashboard.
 // ============================================================
 
-import type { AccountContext } from "@/lib/auth/account"
+import type { AccountContext } from "@/features/auth/lib/account"
 
 import type {
   Appointment,

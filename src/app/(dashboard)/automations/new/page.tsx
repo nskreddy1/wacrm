@@ -7,8 +7,8 @@ import {
   AutomationBuilder,
   type BuilderInitial,
   type BuilderStep,
-} from "@/components/automations/automation-builder"
-import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/lib/automations/templates"
+} from "@/features/automations/components/automation-builder"
+import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/features/automations/lib/templates"
 import type { AutomationStepType, AutomationTriggerType } from "@/types"
 
 export default function NewAutomationPage() {

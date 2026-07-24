@@ -1,5 +1,5 @@
-import type { AccountRole } from "@/lib/auth/roles";
-import type { InteractiveMessagePayload } from "@/lib/whatsapp/interactive";
+import type { AccountRole } from "@/features/auth/lib/roles";
+import type { InteractiveMessagePayload } from "@/features/whatsapp/lib/interactive";
 
 export type {
   InteractiveMessagePayload,
@@ -8,7 +8,7 @@ export type {
   InteractiveButton,
   InteractiveListRow,
   InteractiveListSection,
-} from "@/lib/whatsapp/interactive";
+} from "@/features/whatsapp/lib/interactive";
 
 export interface Profile {
   id: string;
@@ -42,7 +42,7 @@ export interface Profile {
   /**
    * Caller's role within their account. Source of truth for every
    * role-gated UI / API check — call `hasMinRole` from
-   * `@/lib/auth/roles` rather than comparing this string directly.
+   * `@/features/auth/lib/roles` rather than comparing this string directly.
    */
   account_role?: AccountRole;
   created_at: string;

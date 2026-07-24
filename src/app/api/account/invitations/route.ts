@@ -19,14 +19,14 @@
 
 import { NextResponse } from "next/server";
 
-import { requirePermission, toErrorResponse } from "@/lib/auth/account";
+import { requirePermission, toErrorResponse } from "@/features/auth/lib/account";
 import {
   clampExpiryDays,
   generateInviteToken,
   inviteExpiresAt,
   inviteUrl,
-} from "@/lib/auth/invitations";
-import { isAccountRole } from "@/lib/auth/roles";
+} from "@/features/auth/lib/invitations";
+import { isAccountRole } from "@/features/auth/lib/roles";
 import { sendInviteEmail } from "@/lib/email/invite-email";
 import {
   checkRateLimit,

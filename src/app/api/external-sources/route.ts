@@ -17,14 +17,14 @@ import {
   getCurrentAccount,
   requireRole,
   toErrorResponse,
-} from '@/lib/auth/account';
-import { encrypt } from '@/lib/whatsapp/encryption';
+} from '@/features/auth/lib/account';
+import { encrypt } from '@/features/whatsapp/lib/encryption';
 import {
   isSourceType,
   validateConfig,
   validateFieldMap,
   validateName,
-} from '@/lib/external-sources/validate';
+} from '@/features/external-sources/lib/validate';
 import {
   checkRateLimit,
   rateLimitResponse,

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
-import { loadAiConfig } from '@/lib/ai/config'
-import { retrieveKnowledge } from '@/lib/ai/knowledge'
-import { generateReply } from '@/lib/ai/generate'
-import { buildPromptParts } from '@/lib/ai/defaults'
-import { latestUserMessage } from '@/lib/ai/query'
-import { AiError, type ChatMessage } from '@/lib/ai/types'
+import { loadAiConfig } from '@/features/assistant/lib/ai/config'
+import { retrieveKnowledge } from '@/features/assistant/lib/ai/knowledge'
+import { generateReply } from '@/features/assistant/lib/ai/generate'
+import { buildPromptParts } from '@/features/assistant/lib/ai/defaults'
+import { latestUserMessage } from '@/features/assistant/lib/ai/query'
+import { AiError, type ChatMessage } from '@/features/assistant/lib/ai/types'
 
 // Keep the tested transcript bounded, mirroring the live context window.
 const MAX_TURNS = 20

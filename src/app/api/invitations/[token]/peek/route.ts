@@ -23,7 +23,7 @@
 
 import { NextResponse } from "next/server";
 
-import { hashInviteToken } from "@/lib/auth/invitations";
+import { hashInviteToken } from "@/features/auth/lib/invitations";
 import {
   checkRateLimit,
   rateLimitResponse,

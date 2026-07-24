@@ -11,8 +11,8 @@
 
 import { NextResponse } from "next/server";
 
-import { requirePermission, toErrorResponse } from "@/lib/auth/account";
-import { isPermissionSlug } from "@/lib/auth/permissions";
+import { requirePermission, toErrorResponse } from "@/features/auth/lib/account";
+import { isPermissionSlug } from "@/features/auth/lib/permissions";
 import {
   checkRateLimit,
   rateLimitResponse,

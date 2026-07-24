@@ -24,7 +24,7 @@ import {
   Workflow,
 } from "lucide-react"
 
-import { AxonMark } from "@/components/brand/axon-logo"
+import { AxonMark } from "@/features/brand/components/axon-logo"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -50,10 +50,10 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useAuth } from "@/hooks/use-auth"
+import { useAuth } from "@/features/auth/hooks/use-auth"
 import { useNavigation } from "@/hooks/use-navigation"
 import { useTheme } from "@/hooks/use-theme"
-import { useTotalUnread } from "@/hooks/use-total-unread"
+import { useTotalUnread } from "@/features/inbox/hooks/use-total-unread"
 import { personDisplayName, workspaceDisplayName } from "@/lib/display-name"
 import { routes } from "@/lib/routing/routes"
 import { cn } from "@/lib/utils"

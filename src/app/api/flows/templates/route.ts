@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { listFlowTemplates } from '@/lib/flows/templates'
+import { listFlowTemplates } from '@/features/flows/lib/templates'
 
 /**
  * GET /api/flows/templates

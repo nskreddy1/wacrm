@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
-import { checkCompliance } from '@/lib/templates/compliance'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
+import { checkCompliance } from '@/features/templates/lib/compliance'
 
 /**
  * Unified template surface for the Template Studio.

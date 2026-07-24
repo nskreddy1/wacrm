@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { AdminChannels } from "@/components/admin/admin-channels";
+import { AdminChannels } from "@/features/admin/components/admin-channels";
 
 export const metadata: Metadata = { title: "Channels · Admin console" };
 

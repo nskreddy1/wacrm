@@ -24,19 +24,19 @@
 
 import { NextResponse } from "next/server";
 
-import { toErrorResponse } from "@/lib/auth/account";
-import { requireSuperAdmin } from "@/lib/auth/super-admin";
-import { logPlatformAudit } from "@/lib/platform/audit";
-import { platformAdmin } from "@/lib/platform/admin-client";
-import { encrypt, decrypt } from "@/lib/whatsapp/encryption";
-import { validateAiCredentials } from "@/lib/ai/validate";
-import { OLLAMA_PLACEHOLDER_KEY } from "@/lib/ai/defaults";
+import { toErrorResponse } from "@/features/auth/lib/account";
+import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
+import { logPlatformAudit } from "@/features/admin/lib/platform/audit";
+import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
+import { encrypt, decrypt } from "@/features/whatsapp/lib/encryption";
+import { validateAiCredentials } from "@/features/assistant/lib/ai/validate";
+import { OLLAMA_PLACEHOLDER_KEY } from "@/features/assistant/lib/ai/defaults";
 import {
   AiError,
   AI_PROVIDERS,
   isAiProvider,
   type AiProvider,
-} from "@/lib/ai/types";
+} from "@/features/assistant/lib/ai/types";
 
 function bad(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });

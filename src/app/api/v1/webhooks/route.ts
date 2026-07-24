@@ -7,16 +7,16 @@
 // an encrypted copy and can never show it again.
 // ============================================================
 
-import { requireApiKey } from '@/lib/auth/api-context';
+import { requireApiKey } from '@/features/auth/lib/api-context';
 import { ok, okList, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
-import { encrypt } from '@/lib/whatsapp/encryption';
-import { normalizeEvents } from '@/lib/webhooks/events';
+import { encrypt } from '@/features/whatsapp/lib/encryption';
+import { normalizeEvents } from '@/features/webhooks/lib/events';
 import {
   WEBHOOK_PUBLIC_COLUMNS,
   serializeWebhookEndpoint,
   generateWebhookSecret,
   normalizeWebhookUrl,
-} from '@/lib/webhooks/endpoints';
+} from '@/features/webhooks/lib/endpoints';
 
 export async function GET(request: Request) {
   try {

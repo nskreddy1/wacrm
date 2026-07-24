@@ -1,6 +1,6 @@
 import { Suspense } from "react"
-import { PipelineWorkspace } from "@/components/pipelines/pipeline-workspace"
-import { getPipelineRuntime } from "@/lib/pipelines/pipeline-runtime"
+import { PipelineWorkspace } from "@/features/pipelines/components/pipeline-workspace"
+import { getPipelineRuntime } from "@/features/pipelines/lib/pipeline-runtime"
 
 type PipelineSearchParams = Promise<{ view?: string; subPipeline?: string; savedView?: string }>
 

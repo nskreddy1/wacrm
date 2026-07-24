@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
-import { runAutomationsForTrigger } from '@/lib/automations/engine'
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
+import { runAutomationsForTrigger } from '@/features/automations/lib/engine'
 import type { AutomationTriggerType } from '@/types'
 
 /**

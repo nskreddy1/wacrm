@@ -17,7 +17,7 @@ import {
   requireRole,
   getCurrentAccount,
   toErrorResponse,
-} from "@/lib/auth/account";
+} from "@/features/auth/lib/account";
 import {
   checkRateLimit,
   rateLimitResponse,

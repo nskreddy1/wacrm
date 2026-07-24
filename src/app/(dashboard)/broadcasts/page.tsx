@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { FeatureLoading, FeatureState } from '@/components/ui/feature-state';
-import { useCan } from '@/hooks/use-can';
+import { useCan } from '@/features/auth/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
-import { getBroadcastStatus } from '@/lib/broadcast-status';
+import { getBroadcastStatus } from '@/features/broadcasts/lib/broadcast-status';
 import { useTranslations } from 'next-intl';
 import { PageContainer } from '@/components/layout/page-container';
 import {

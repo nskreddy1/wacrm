@@ -10,7 +10,7 @@
 // surfaces but not automation builders.
 // ============================================================
 
-import { hasPermission, type PermissionSlug } from "@/lib/auth/permissions"
+import { hasPermission, type PermissionSlug } from "@/features/auth/lib/permissions"
 
 export type NavIconName =
   | "git-branch"

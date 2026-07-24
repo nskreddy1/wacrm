@@ -14,15 +14,15 @@
 
 import { NextResponse } from 'next/server';
 
-import { requireRole, toErrorResponse } from '@/lib/auth/account';
-import { encrypt } from '@/lib/whatsapp/encryption';
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
+import { encrypt } from '@/features/whatsapp/lib/encryption';
 import {
   isSourceType,
   validateConfig,
   validateFieldMap,
   validateName,
-} from '@/lib/external-sources/validate';
-import type { ExternalSourceType } from '@/lib/external-sources/types';
+} from '@/features/external-sources/lib/validate';
+import type { ExternalSourceType } from '@/features/external-sources/lib/types';
 import {
   checkRateLimit,
   rateLimitResponse,
