@@ -58,11 +58,6 @@ function mapContact(row: Record<string, unknown>, customValues: Record<string, C
   }
 }
 
-function contactColumns(values: Partial<Record<string, ContactValue>>) {
-  const allowed = ["name", "phone", "email", "company"] as const
-  return Object.fromEntries(allowed.filter((key) => values[key] !== undefined).map((key) => [key, values[key]]))
-}
-
 // Extra form fields (no dedicated columns on `contacts`) persisted as
 // auto-provisioned custom fields so the full Create Contact form round-trips.
 const EXTENDED_CONTACT_FIELDS: Record<string, string> = {
