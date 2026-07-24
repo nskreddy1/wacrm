@@ -54,7 +54,13 @@ export class TwilioSmsAdapter implements ChannelAdapter {
     // handles sender selection, Sticky Sender, Advanced Opt-Out, and
     // queue pacing (docs: /docs/messaging/services). Otherwise fall
     // back to the connection's dedicated From number.
-    const messagingServiceSid = credentials.value.messagingServiceSid?.trim();
+    // Precedence: plain configuration (editable in the connection
+    // sheet without retyping secrets) > encrypted credentials blob.
+    const configSid = (
+      message.connection.configuration as { messaging_service_sid?: string }
+    )?.messaging_service_sid?.trim();
+    const messagingServiceSid =
+      configSid || credentials.value.messagingServiceSid?.trim();
     const from = message.connection.external_identity;
     if (!messagingServiceSid && !from) {
       throw new Error(

@@ -41,6 +41,16 @@ export interface ChannelSetupInit {
   /** Reuse credentials from this existing connection (dedup). */
   reuseFromId?: string;
   reuseFromLabel?: string;
+  /**
+   * Edit mode: update this existing connection in place. Stored
+   * credentials are kept server-side unless new ones are typed, so
+   * users can change the name, sender number, or Messaging Service
+   * without re-entering secrets.
+   */
+  editId?: string;
+  displayName?: string;
+  externalIdentity?: string;
+  messagingServiceSid?: string;
 }
 
 const CHANNEL_LABEL: Record<ChannelKind, string> = {
@@ -126,10 +136,16 @@ function ChannelSetupSheetBody({
   const [form, setForm] = useState(() => ({
     ...defaults,
     accountSid: init?.accountSid ?? '',
+    displayName: init?.displayName ?? '',
+    externalIdentity: init?.externalIdentity ?? '',
+    messagingServiceSid: init?.messagingServiceSid ?? '',
   }));
   const [busy, setBusy] = useState<string | null>(null);
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
-  const reusing = Boolean(init?.reuseFromId);
+  const editing = Boolean(init?.editId);
+  // Edit mode implicitly reuses the row's own stored credentials —
+  // secrets never round-trip to the browser (see the save route).
+  const reusing = Boolean(init?.reuseFromId) || editing;
 
   function update(name: keyof typeof defaults, value: string) {
     setForm((current) => ({ ...current, [name]: value }));
