@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/features/flows/lib/admin-client';
 import { resolveFallbackPolicy } from '@/features/flows/lib/fallback';
+import { resumeWaitingRuns } from '@/features/flows/lib/engine';
 
 /**
  * Sweep abandoned active flow runs.
@@ -45,6 +46,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Wake `wait`-parked runs first — a run that both woke late AND
+  // aged past the stale cutoff should get its chance to advance
+  // before the stale sweep times it out.
+  const { resumed } = await resumeWaitingRuns();
+
   const admin = supabaseAdmin();
   const now = new Date();
 
@@ -62,7 +68,7 @@ export async function GET(request: Request) {
     console.error('[flows-cron] active-run scan failed:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  if (!runs?.length) return NextResponse.json({ swept: 0 });
+  if (!runs?.length) return NextResponse.json({ swept: 0, resumed });
 
   type Row = {
     id: string;
@@ -109,5 +115,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ swept });
+  return NextResponse.json({ swept, resumed });
 }
