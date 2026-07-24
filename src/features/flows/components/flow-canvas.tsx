@@ -78,7 +78,6 @@ import {
 } from '@/features/flows/lib/edges';
 import { autoLayout, shouldAutoLayout } from '@/features/flows/lib/layout';
 import {
-  NODE_META,
   NodeIconChip,
   groupNodeTypesByCategory,
   nodeColors,

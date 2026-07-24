@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { ArrowLeft, ArrowRight, Check, Download, FileSpreadsheet, Loader2, Plus, Sparkles, Upload, XCircle } from "lucide-react"
 import { toast } from "sonner"
@@ -72,6 +72,12 @@ export function ImportModal({ open, onOpenChange, onImported }: { open: boolean;
   const duplicateTargets = new Set(mappedTargets.filter((value, index) => mappedTargets.indexOf(value) !== index))
   const hasIdentity = mappedTargets.includes("name") && (mappedTargets.includes("phone") || mappedTargets.includes("email"))
   const preview = csv.rows.slice(0, 8)
+  const valuesForRow = useCallback((row: string[]) => {
+    const values: Record<string, ContactValue> = {}
+    csv.headers.forEach((header, index) => { const target = mapping[header]; if (target && target !== IGNORE) values[target] = row[index] ?? "" })
+    return values
+  }, [csv.headers, mapping])
+
   const errors = useMemo(() => csv.rows.flatMap((row, index) => {
     const values = valuesForRow(row)
     const issues: string[] = []
@@ -80,13 +86,7 @@ export function ImportModal({ open, onOpenChange, onImported }: { open: boolean;
     if (values.phone && !validInternationalPhone(String(values.phone))) issues.push("phone must include a valid country code")
     if (values.email && !/^\S+@\S+\.\S+$/.test(String(values.email))) issues.push("email is invalid")
     return issues.length ? [{ row: index + 2, message: issues.join("; "), source: row }] : []
-  }), [csv.rows, mapping])
-
-  function valuesForRow(row: string[]) {
-    const values: Record<string, ContactValue> = {}
-    csv.headers.forEach((header, index) => { const target = mapping[header]; if (target && target !== IGNORE) values[target] = row[index] ?? "" })
-    return values
-  }
+  }), [csv.rows, valuesForRow])
 
   async function chooseFile(file?: File) {
     if (!file) return

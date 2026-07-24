@@ -70,9 +70,17 @@ export function AuthProvider({
   )
   const session = data?.data
   const role = session?.profile.account_role ?? null
-  const permissions = session?.profile.permissions ?? []
   const isOwner = session?.profile.is_owner === true
-  const caps = deriveCapabilities(permissions, isOwner)
+  // Memoized so the `?? []` fallback doesn't mint a new array every
+  // render, which would invalidate the context value's useMemo below.
+  const permissions = useMemo(
+    () => session?.profile.permissions ?? [],
+    [session?.profile.permissions],
+  )
+  const caps = useMemo(
+    () => deriveCapabilities(permissions, isOwner),
+    [permissions, isOwner],
+  )
 
   const value = useMemo<AuthContextValue>(() => ({
     user: (session?.user as User | undefined) ?? null,
@@ -99,7 +107,6 @@ export function AuthProvider({
     permissions,
     workspaceProfile: session?.profile.workspace_profile ?? null,
     can: (slug: PermissionSlug) => hasPermission(permissions, slug, isOwner),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [isLoading, mutate, role, session, isOwner, caps, permissions])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
