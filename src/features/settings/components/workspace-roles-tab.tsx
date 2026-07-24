@@ -43,6 +43,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
@@ -63,6 +70,14 @@ interface WorkspaceRole {
   is_system: boolean;
 }
 
+interface RoleMember {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  workspace_role_id: string | null;
+  workspace_profiles: { name: string } | null;
+}
+
 export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
   const t = useTranslations('Settings.members');
   const { profile } = useAuth();
@@ -71,6 +86,8 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [deleting, setDeleting] = useState<WorkspaceRole | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [viewingRole, setViewingRole] = useState<WorkspaceRole | null>(null);
+  const [peerBusy, setPeerBusy] = useState(false);
 
   // Create-sheet fields (Bigin: Role Name / Reports to / Peer Data
   // Visibility / Description).
@@ -103,6 +120,38 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
     }
   );
   const load = useCallback(() => mutate(), [mutate]);
+
+  // Members per role — powers the count chip on each tree row and
+  // the "Users In Role" dialog (Bigin pattern).
+  const { data: members = [] } = useSWR(
+    profile?.account_id
+      ? (['workspace-role-members', profile.account_id] as const)
+      : null,
+    async ([, accountId]) => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('profiles')
+        .select(
+          'id, full_name, email, workspace_role_id, workspace_profiles(name)'
+        )
+        .eq('account_id', accountId)
+        .eq('status', 'active');
+      // Supabase types to-one FK joins as arrays; runtime shape is a
+      // single object for this relationship, so cast through unknown.
+      return (data ?? []) as unknown as RoleMember[];
+    }
+  );
+
+  const membersOfRole = useMemo(() => {
+    const map = new Map<string, RoleMember[]>();
+    for (const m of members) {
+      if (!m.workspace_role_id) continue;
+      const list = map.get(m.workspace_role_id) ?? [];
+      list.push(m);
+      map.set(m.workspace_role_id, list);
+    }
+    return map;
+  }, [members]);
 
   // Children lookup for the tree render. Roles whose parent was
   // deleted (SET NULL) surface as roots so nothing disappears.
@@ -189,6 +238,28 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
     }
   }
 
+  async function handlePeerVisibility(role: WorkspaceRole, next: boolean) {
+    setPeerBusy(true);
+    try {
+      const supabase = createClient();
+      // RLS: only owner/admin may update workspace_roles.
+      const { error } = await supabase
+        .from('workspace_roles')
+        .update({ peer_visibility: next })
+        .eq('id', role.id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setViewingRole((prev) =>
+        prev && prev.id === role.id ? { ...prev, peer_visibility: next } : prev
+      );
+      void load();
+    } finally {
+      setPeerBusy(false);
+    }
+  }
+
   function renderNode(role: WorkspaceRole, depth: number) {
     const children = childrenOf.get(role.id) ?? [];
     const isCollapsed = collapsed.has(role.id);
@@ -225,9 +296,21 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
             />
           )}
 
-          <span className="text-foreground text-sm font-medium">
+          <button
+            type="button"
+            className="text-foreground hover:text-primary text-sm font-medium hover:underline"
+            onClick={() => setViewingRole(role)}
+          >
             {role.name}
-          </span>
+          </button>
+          {(membersOfRole.get(role.id)?.length ?? 0) > 0 && (
+            <Badge
+              variant="outline"
+              className="text-muted-foreground h-5 min-w-5 justify-center px-1.5 text-[10px] tabular-nums"
+            >
+              {membersOfRole.get(role.id)?.length}
+            </Badge>
+          )}
           {role.is_system && (
             <Badge variant="secondary" className="text-[10px]">
               {t('roleSystemBadge')}
@@ -375,6 +458,86 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
           />
         </RecordField>
       </RecordSheet>
+
+      {/* Users In Role — Bigin-style dialog: count, peer data
+          visibility toggle, and the member list for this role. */}
+      <Dialog
+        open={viewingRole !== null}
+        onOpenChange={(next) => !next && setViewingRole(null)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {t('roleUsersTitle', { name: viewingRole?.name ?? '' })}
+            </DialogTitle>
+            <DialogDescription>
+              {viewingRole?.description || t('roleUsersDesc')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <span className="text-muted-foreground flex items-center gap-2">
+              {t('roleUserCount')}
+              <Badge
+                variant="secondary"
+                className="h-5 min-w-5 justify-center px-1.5 tabular-nums"
+              >
+                {viewingRole
+                  ? (membersOfRole.get(viewingRole.id)?.length ?? 0)
+                  : 0}
+              </Badge>
+            </span>
+            <span className="text-muted-foreground flex items-center gap-2">
+              {t('peerVisibilityLabel')}
+              <Switch
+                checked={viewingRole?.peer_visibility ?? false}
+                disabled={!canManage || peerBusy}
+                onCheckedChange={(next) =>
+                  viewingRole && void handlePeerVisibility(viewingRole, next)
+                }
+                aria-label={t('peerVisibilityLabel')}
+              />
+            </span>
+          </div>
+
+          <div className="max-h-72 space-y-1 overflow-y-auto">
+            {viewingRole &&
+            (membersOfRole.get(viewingRole.id)?.length ?? 0) > 0 ? (
+              membersOfRole.get(viewingRole.id)?.map((m) => {
+                const displayName = m.full_name || m.email || t('unnamed');
+                const initials = displayName
+                  .split(/\s+/)
+                  .map((part) => part[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase();
+                return (
+                  <div
+                    key={m.id}
+                    className="hover:bg-muted/60 flex items-center gap-3 rounded-md border-b px-2 py-2.5 last:border-b-0"
+                  >
+                    <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
+                      {initials}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-foreground block truncate text-sm font-medium">
+                        {displayName}
+                      </span>
+                      <span className="text-muted-foreground block truncate text-xs">
+                        {m.workspace_profiles?.name || m.email || '—'}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-muted-foreground px-2 py-6 text-center text-sm">
+                {t('roleNoUsers')}
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation */}
       <AlertDialog

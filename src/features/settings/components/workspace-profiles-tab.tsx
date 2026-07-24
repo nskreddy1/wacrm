@@ -28,7 +28,6 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -54,10 +53,8 @@ import {
   RecordSheet,
 } from '@/components/shared/record-sheet';
 import { useCan } from '@/features/auth/hooks/use-can';
-import {
-  PERMISSION_GROUPS,
-  type PermissionSlug,
-} from '@/features/auth/lib/permissions';
+import type { PermissionSlug } from '@/features/auth/lib/permissions';
+import { ProfilePermissionEditor } from './profile-permission-editor';
 
 interface WorkspaceProfile {
   id: string;
@@ -126,28 +123,6 @@ export function WorkspaceProfilesTab({
       name: profile.name,
       description: profile.description ?? '',
       permissions: new Set(profile.permissions as PermissionSlug[]),
-    });
-  };
-
-  const togglePermission = (slug: PermissionSlug) => {
-    setEditor((prev) => {
-      if (!prev) return prev;
-      const next = new Set(prev.permissions);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return { ...prev, permissions: next };
-    });
-  };
-
-  const toggleGroup = (slugs: PermissionSlug[], allOn: boolean) => {
-    setEditor((prev) => {
-      if (!prev) return prev;
-      const next = new Set(prev.permissions);
-      for (const slug of slugs) {
-        if (allOn) next.delete(slug);
-        else next.add(slug);
-      }
-      return { ...prev, permissions: next };
     });
   };
 
