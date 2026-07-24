@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
+import useSWR from "swr"
 import { toast } from "sonner"
 import {
   Zap,
@@ -60,51 +61,51 @@ const TEMPLATE_ICON: Record<TemplateSlug, typeof Zap> = {
   follow_up_reminder: PhoneCall,
 }
 
+async function fetchAutomations(url: string): Promise<Automation[]> {
+  const response = await fetch(url, { cache: "no-store" })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload?.error ?? "Failed to load automations")
+  return (payload.automations ?? []) as Automation[]
+}
+
 export default function AutomationsPage() {
   const router = useRouter()
   const canCreate = useCan("send-messages")
   const t = useTranslations("Automations.list")
-  const [automations, setAutomations] = useState<Automation[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // SWR owns fetch/error/revalidate state — no manual effect needed.
+  const {
+    data: automations,
+    error: loadError,
+    mutate,
+  } = useSWR("/api/automations", fetchAutomations)
+  const error = loadError instanceof Error ? loadError.message : loadError ? String(loadError) : null
   const [pendingDelete, setPendingDelete] = useState<Automation | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  async function load() {
-    try {
-      const response = await fetch("/api/automations", { cache: "no-store" })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload?.error ?? "Failed to load automations")
-      setAutomations((payload.automations ?? []) as Automation[])
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load automations")
-    }
-  }
-
-  useEffect(() => {
-    load()
-  }, [])
-
   async function toggleActive(a: Automation, next: boolean) {
-    // Optimistic flip so the switch feels instant.
-    setAutomations((prev) =>
-      prev?.map((x) => (x.id === a.id ? { ...x, is_active: next } : x)) ?? prev,
-    )
-    const res = await fetch(`/api/automations/${a.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ is_active: next }),
-    })
-    if (!res.ok) {
-      // Roll back on error.
-      setAutomations((prev) =>
-        prev?.map((x) => (x.id === a.id ? { ...x, is_active: !next } : x)) ?? prev,
-      )
-      const body = await res.json().catch(() => ({}))
-      toast.error(body?.error ?? t("toasts.updateError"))
-      return
-    }
-    toast.success(next ? t("toasts.activated") : t("toasts.paused"))
+    // Optimistic flip so the switch feels instant; SWR rolls back on error.
+    await mutate(
+      async (prev) => {
+        const res = await fetch(`/api/automations/${a.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ is_active: next }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          toast.error(body?.error ?? t("toasts.updateError"))
+          throw new Error("toggle failed")
+        }
+        toast.success(next ? t("toasts.activated") : t("toasts.paused"))
+        return prev?.map((x) => (x.id === a.id ? { ...x, is_active: next } : x))
+      },
+      {
+        optimisticData: (prev) =>
+          prev?.map((x) => (x.id === a.id ? { ...x, is_active: next } : x)) ?? [],
+        rollbackOnError: true,
+        revalidate: false,
+      },
+    ).catch(() => {})
   }
 
   async function duplicate(a: Automation) {
@@ -115,7 +116,7 @@ export default function AutomationsPage() {
       return
     }
     toast.success(t("toasts.duplicated"))
-    load()
+    mutate()
   }
 
   async function confirmDelete() {
@@ -130,7 +131,7 @@ export default function AutomationsPage() {
     }
     toast.success(t("toasts.deleted"))
     setPendingDelete(null)
-    load()
+    mutate()
   }
 
   async function startFromTemplate(slug: TemplateSlug) {
@@ -144,13 +145,13 @@ export default function AutomationsPage() {
           icon={RefreshCw}
           title="Automation workspace unavailable"
           description={`${error} Your rules have not been changed. Retry the secure connection to continue.`}
-          action={{ label: t("retry"), onClick: load }}
+          action={{ label: t("retry"), onClick: () => mutate() }}
         />
       </div>
     )
   }
 
-  if (automations === null) return <FeatureLoading label="Loading automation rules" />
+  if (automations === undefined) return <FeatureLoading label="Loading automation rules" />
 
   const showTemplates = automations.length < 3
 
