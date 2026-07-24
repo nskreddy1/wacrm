@@ -12,7 +12,6 @@ import {
   Archive,
   ArchiveRestore,
   CircleDollarSign,
-  Loader2,
   Package,
   Pencil,
   Plus,
@@ -35,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { ListRowsSkeleton } from '@/components/ui/loading-skeletons';
 import {
   Select,
   SelectContent,
@@ -279,10 +279,9 @@ export function CatalogWorkspace() {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="text-muted-foreground flex items-center justify-center gap-2 p-16 text-sm">
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />{' '}
-              Loading catalog
-            </div>
+            // Row-shaped skeleton mirrors the item list layout so the
+            // card doesn't jump when catalog data lands (CLS ~0).
+            <ListRowsSkeleton count={8} withAvatar={false} className="px-4" />
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center gap-3 p-16 text-center">
               <div className="bg-muted text-muted-foreground rounded-xl p-3">
