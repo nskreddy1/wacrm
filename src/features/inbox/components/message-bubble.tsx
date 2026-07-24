@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { cn } from "@/lib/utils";
 import { RemoteImage } from "@/components/shared/remote-image";
 import type { Message, MessageReaction } from "@/types";
@@ -57,42 +58,33 @@ function MediaUnavailable({ label, t }: { label: string, t: ReturnType<typeof us
   );
 }
 
+/**
+ * Resolves a media URL to something an <img> can render. Proxy URLs
+ * need an authenticated fetch converted to a blob URL; everything else
+ * passes through. SWR owns the async state and caches blob URLs per
+ * media URL, so scrolling a thread never refetches the same image
+ * (blob URLs stay alive with the cache — deliberate, they're tiny).
+ */
+async function resolveMediaSrc(url: string): Promise<string> {
+  if (url.startsWith("/api/whatsapp/media/")) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to load media");
+    return URL.createObjectURL(await res.blob());
+  }
+  return url;
+}
+
 function MediaImage({ url, alt }: { url: string; alt: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const loadImage = useCallback(async () => {
-    if (!url) return;
-
-    // Proxy URLs need auth fetch to create blob URL
-    if (url.startsWith("/api/whatsapp/media/")) {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to load media");
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        setSrc(blobUrl);
-      } catch {
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      setSrc(url);
-      setLoading(false);
-    }
-  }, [url]);
-
-  useEffect(() => {
-    loadImage();
-    return () => {
-      if (src?.startsWith("blob:")) {
-        URL.revokeObjectURL(src);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadImage]);
+  const {
+    data: src,
+    error: fetchError,
+    isLoading: loading,
+  } = useSWR(url ? (["media-image", url] as const) : null, ([, u]) => resolveMediaSrc(u), {
+    revalidateOnFocus: false,
+  });
+  // Decode failures surface from the <img> itself, not the fetch.
+  const [renderError, setRenderError] = useState(false);
+  const error = Boolean(fetchError) || renderError;
 
   if (error) {
     return (
@@ -115,7 +107,7 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
       src={src ?? ""}
       alt={alt}
       className="max-h-64 max-w-60 rounded-lg object-cover"
-      onError={() => setError(true)}
+      onError={() => setRenderError(true)}
     />
   );
 }
