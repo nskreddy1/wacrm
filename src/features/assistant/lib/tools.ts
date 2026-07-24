@@ -72,7 +72,6 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           upcomingAppointments,
           broadcasts,
           templates,
-          automations,
           flows,
           openTasks,
           openTickets,
@@ -87,7 +86,6 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           ),
           countRows(db, 'broadcasts', ctx.accountId),
           countRows(db, 'message_templates', ctx.accountId),
-          countRows(db, 'automations', ctx.accountId),
           countRows(db, 'flows', ctx.accountId),
           countRows(db, 'tasks', ctx.accountId, (q) => q.eq('status', 'open')),
           countRows(db, 'support_tickets', ctx.accountId, (q) =>
@@ -101,7 +99,7 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           upcoming_appointments: upcomingAppointments,
           broadcasts,
           message_templates: templates,
-          automations: (automations ?? 0) + (flows ?? 0),
+          workflows: flows,
           open_tasks: openTasks,
           open_support_tickets: openTickets,
         };
@@ -474,25 +472,17 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
 
     list_automations: tool({
       description:
-        'List automations and flows with their active status. Read-only.',
+        'List workflows (flows) with their trigger and status. Read-only.',
       inputSchema: z.object({}),
       execute: async () => {
-        const [autos, flows] = await Promise.all([
-          db
-            .from('automations')
-            .select('id, name, is_active')
-            .eq('account_id', ctx.accountId)
-            .limit(20),
-          db
-            .from('flows')
-            .select('id, name, status')
-            .eq('account_id', ctx.accountId)
-            .limit(20),
-        ]);
-        return {
-          automations: autos.data ?? [],
-          flows: flows.data ?? [],
-        };
+        const { data, error } = await db
+          .from('flows')
+          .select('id, name, status, trigger_type')
+          .eq('account_id', ctx.accountId)
+          .order('updated_at', { ascending: false })
+          .limit(30);
+        if (error) return { error: 'Could not load workflows.' };
+        return { workflows: data ?? [] };
       },
     }),
 
@@ -678,6 +668,214 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
       },
     }),
 
+    create_workflow: tool({
+      description:
+        'Create a complete WhatsApp workflow (flow) end-to-end: trigger + a linear sequence of steps, saved as a draft the user can open, edit and activate in the visual builder. Use when the user asks to "create a workflow/flow/automation" like a welcome message, keyword auto-reply, follow-up sequence, or office-hours responder. WRITE action — requires user approval.',
+      inputSchema: z.object({
+        name: z.string().min(2).max(120).describe('Workflow name'),
+        description: z.string().max(300).optional(),
+        trigger: z
+          .enum([
+            'keyword',
+            'first_inbound_message',
+            'new_message_received',
+            'new_contact_created',
+            'manual',
+          ])
+          .describe('What starts the workflow'),
+        keywords: z
+          .array(z.string().min(1).max(50))
+          .max(10)
+          .optional()
+          .describe('Required when trigger is "keyword"'),
+        steps: z
+          .array(
+            z.discriminatedUnion('type', [
+              z.object({
+                type: z.literal('send_message'),
+                text: z
+                  .string()
+                  .min(1)
+                  .max(1000)
+                  .describe(
+                    'Message text. Supports {{vars.x}} interpolation.'
+                  ),
+              }),
+              z.object({
+                type: z.literal('send_template'),
+                template_name: z.string().min(1).max(120),
+                language: z.string().max(10).default('en_US'),
+              }),
+              z.object({
+                type: z.literal('collect_input'),
+                question: z.string().min(1).max(500),
+                save_key: z
+                  .string()
+                  .min(1)
+                  .max(40)
+                  .describe('Variable name the reply is saved under'),
+              }),
+              z.object({
+                type: z.literal('wait'),
+                amount: z.number().int().min(1).max(720),
+                unit: z.enum(['minutes', 'hours', 'days']),
+              }),
+              z.object({
+                type: z.literal('close_conversation'),
+              }),
+              z.object({
+                type: z.literal('handoff'),
+                note: z.string().max(300).optional(),
+              }),
+            ])
+          )
+          .min(1)
+          .max(15)
+          .describe('Linear step sequence, executed in order'),
+      }),
+      execute: async ({ name, description, trigger, keywords, steps }) => {
+        if (trigger === 'keyword' && (!keywords || keywords.length === 0)) {
+          return { error: 'Keyword trigger requires at least one keyword.' };
+        }
+
+        // Build the node chain: step-1 → step-2 → … → end. Keys are
+        // deterministic so the summary reads cleanly in the builder.
+        const nodeKeys = steps.map((s, i) => `step-${i + 1}-${s.type}`);
+        const nodes: {
+          node_key: string;
+          node_type: string;
+          config: Record<string, unknown>;
+        }[] = steps.map((step, i) => {
+          const next = nodeKeys[i + 1] ?? 'end';
+          let config: Record<string, unknown>;
+          switch (step.type) {
+            case 'send_message':
+              config = { text: step.text, next_node_key: next };
+              break;
+            case 'send_template':
+              config = {
+                template_name: step.template_name,
+                language: step.language,
+                variables: {},
+                next_node_key: next,
+              };
+              break;
+            case 'collect_input':
+              config = {
+                question: step.question,
+                save_key: step.save_key,
+                next_node_key: next,
+              };
+              break;
+            case 'wait':
+              config = {
+                amount: step.amount,
+                unit: step.unit,
+                next_node_key: next,
+              };
+              break;
+            case 'close_conversation':
+              config = { next_node_key: next };
+              break;
+            case 'handoff':
+              config = { note: step.note ?? '' };
+              break;
+          }
+          return { node_key: nodeKeys[i], node_type: step.type, config };
+        });
+        nodes.push({ node_key: 'end', node_type: 'end', config: {} });
+
+        const trigger_config: Record<string, unknown> =
+          trigger === 'keyword'
+            ? { keywords: keywords!.map((k) => k.trim().toLowerCase()) }
+            : {};
+
+        const { data: flow, error: flowErr } = await db
+          .from('flows')
+          .insert({
+            account_id: ctx.accountId,
+            user_id: ctx.userId,
+            name: name.trim(),
+            description: description ?? null,
+            status: 'draft',
+            trigger_type: trigger,
+            trigger_config,
+            entry_node_id: nodeKeys[0],
+          })
+          .select('id')
+          .single();
+        if (flowErr || !flow) {
+          return { error: 'Could not create the workflow.' };
+        }
+
+        const { error: nodesErr } = await db.from('flow_nodes').insert(
+          nodes.map((n) => ({
+            flow_id: flow.id,
+            node_key: n.node_key,
+            node_type: n.node_type,
+            config: n.config,
+          }))
+        );
+        if (nodesErr) {
+          // Roll back so a half-created workflow doesn't linger.
+          await db.from('flows').delete().eq('id', flow.id);
+          return { error: 'Could not save the workflow steps.' };
+        }
+
+        return {
+          created: true,
+          flow_id: flow.id,
+          name,
+          status: 'draft',
+          steps: nodes.length,
+          open_url: `/flows/${flow.id}`,
+          message:
+            'Workflow created as a draft. Open it in the builder to review and activate.',
+        };
+      },
+    }),
+
+    activate_workflow: tool({
+      description:
+        'Activate (or pause) an existing workflow by id or name so it starts (or stops) running. WRITE action — requires user approval.',
+      inputSchema: z.object({
+        flow_id: z.string().uuid().optional(),
+        name: z
+          .string()
+          .max(120)
+          .optional()
+          .describe('Workflow name if the id is unknown'),
+        action: z.enum(['activate', 'pause']).default('activate'),
+      }),
+      execute: async ({ flow_id, name, action }) => {
+        let q = db
+          .from('flows')
+          .select('id, name, status, entry_node_id')
+          .eq('account_id', ctx.accountId)
+          .limit(1);
+        if (flow_id) q = q.eq('id', flow_id);
+        else if (name) q = q.ilike('name', `%${name}%`);
+        else return { error: 'Provide flow_id or name.' };
+
+        const { data: flow } = await q.maybeSingle();
+        if (!flow) return { error: 'Workflow not found in this workspace.' };
+        if (action === 'activate' && !flow.entry_node_id) {
+          return {
+            error:
+              'This workflow has no entry step yet — open it in the builder first.',
+          };
+        }
+        const nextStatus = action === 'activate' ? 'active' : 'paused';
+        const { error } = await db
+          .from('flows')
+          .update({ status: nextStatus })
+          .eq('id', flow.id)
+          .eq('account_id', ctx.accountId);
+        if (error) return { error: 'Could not update the workflow status.' };
+        return { updated: true, name: flow.name, status: nextStatus };
+      },
+    }),
+
     create_support_ticket: tool({
       description:
         'Create a support ticket for the founder/support team. Use when the user asks for human help, reports a bug, or the question cannot be answered. WRITE action — requires user approval.',
@@ -744,6 +942,8 @@ export const WRITE_TOOL_NAMES = [
   'create_contact',
   'create_task',
   'add_contact_note',
+  'create_workflow',
+  'activate_workflow',
   'create_support_ticket',
 ] as const;
 
