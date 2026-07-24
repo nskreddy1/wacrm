@@ -7,71 +7,39 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from 'ai';
 import {
-  Bot,
-  Check,
-  ChevronDown,
+  ArrowUp,
   Loader2,
-  Search,
-  SendHorizonal,
   Sparkles,
-  Wrench,
+  Workflow,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import {
+  ApprovalCard,
+  MessageText,
+  ToolStep,
+  toolNameFromPart,
+} from './agent-parts';
 
 // ============================================================
-// Platform helper agent — floating widget.
+// Platform helper agent — floating copilot panel.
 //
 // Transparency model (user requirement):
-//   - Every tool the agent uses is shown inline in the transcript
-//     ("tools used" chips with live state).
+//   - Every tool the agent uses renders inline as a quiet step
+//     row with live state.
 //   - Read tools run without asking. Write tools surface an
 //     Approve / Deny card — nothing is written until the user
 //     explicitly grants access in the chat.
 // ============================================================
 
-const TOOL_LABELS: Record<string, string> = {
-  get_workspace_overview: 'Reading workspace overview',
-  list_contacts: 'Listing contacts',
-  get_contact_details: 'Reading contact details',
-  search_contacts: 'Searching contacts',
-  get_pipeline_summary: 'Reading pipeline summary',
-  list_deals: 'Reading deals',
-  list_recent_conversations: 'Reading recent conversations',
-  get_conversation_messages: 'Reading conversation messages',
-  list_upcoming_appointments: 'Reading appointments',
-  list_broadcasts: 'Reading broadcasts',
-  list_templates: 'Reading templates',
-  list_automations: 'Reading automations',
-  list_tasks: 'Reading tasks',
-  list_support_tickets: 'Reading support tickets',
-  get_ai_agent_status: 'Checking AI agent status',
-  create_contact: 'Create a contact',
-  create_task: 'Create a task',
-  create_support_ticket: 'Create a support ticket',
-  add_contact_note: 'Add a contact note',
-};
-
-const WRITE_TOOLS = new Set([
-  'create_contact',
-  'create_task',
-  'create_support_ticket',
-  'add_contact_note',
-]);
-
-/** Notion-style quick suggestions shown on the empty state. */
-const SUGGESTIONS = [
-  'How many contacts do I have?',
-  'Summarize my pipeline',
-  'What appointments are coming up?',
-  'Any open support tickets?',
+/** Quick-start prompts shown on the empty state. */
+const SUGGESTIONS: { label: string; icon?: 'workflow' }[] = [
+  { label: 'Create a welcome workflow for new contacts', icon: 'workflow' },
+  { label: 'Summarize my pipeline' },
+  { label: 'How many contacts do I have?' },
+  { label: 'What appointments are coming up?' },
 ];
-
-function toolNameFromPart(type: string): string | null {
-  return type.startsWith('tool-') ? type.slice(5) : null;
-}
 
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
@@ -125,79 +93,87 @@ export function AssistantWidget() {
         <div
           role="dialog"
           aria-label="Helper agent chat"
-          className="border-border bg-background fixed right-4 bottom-20 z-50 flex h-[min(540px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border shadow-2xl"
+          className="border-border bg-background fixed right-4 bottom-20 z-50 flex h-[min(600px,calc(100dvh-7rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_64px_-16px_rgba(0,0,0,0.4)]"
         >
           {/* Header */}
-          <div className="border-border bg-muted/40 flex items-center gap-2.5 border-b px-4 py-3">
-            <span className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-full">
-              <Bot className="size-4" />
+          <div className="border-border flex items-center gap-2.5 border-b px-4 py-3">
+            <span className="bg-primary/10 relative flex size-8 items-center justify-center rounded-lg">
+              <Sparkles className="text-primary size-4" aria-hidden />
+              <span
+                className="border-background absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 bg-emerald-500"
+                aria-hidden
+              />
             </span>
             <div className="flex min-w-0 flex-col">
               <span className="text-sm leading-tight font-semibold">
-                Helper Agent
+                Copilot
               </span>
-              <span className="text-muted-foreground text-xs">
-                Read access to your workspace - writes need your approval
+              <span className="text-muted-foreground text-[11px]">
+                Reads freely · writes need your approval
               </span>
             </div>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              aria-label="Minimize"
+              aria-label="Close"
               className="ml-auto size-7"
               onClick={() => setOpen(false)}
             >
-              <ChevronDown className="size-4" />
+              <X className="size-4" />
             </Button>
           </div>
 
           {/* Transcript */}
           <div
             ref={scrollRef}
-            className="app-scrollbar flex-1 overflow-y-auto px-4 py-3"
+            className="app-scrollbar flex-1 overflow-y-auto px-4 py-4"
           >
             {messages.length === 0 ? (
-              <div className="flex h-full flex-col justify-center gap-4 px-1">
+              <div className="flex h-full flex-col justify-end gap-5 px-1 pb-2">
                 <div className="flex flex-col gap-2">
-                  <span className="bg-primary/10 flex size-9 items-center justify-center rounded-lg">
-                    <Sparkles className="text-primary size-4.5" aria-hidden />
-                  </span>
-                  <h2 className="text-base font-semibold text-balance">
-                    How can I help you today?
+                  <h2 className="text-lg font-semibold text-balance">
+                    How can I help?
                   </h2>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    I can read your whole workspace — contacts, deals,
-                    conversations, appointments, campaigns and more. Write
-                    actions always ask for your approval first.
+                    I can read your whole workspace and build workflows for
+                    you end to end. Anything that changes data asks for your
+                    approval first.
                   </p>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   {SUGGESTIONS.map((s) => (
                     <button
-                      key={s}
+                      key={s.label}
                       type="button"
                       onClick={() => {
-                        if (!busy) void sendMessage({ text: s });
+                        if (!busy) void sendMessage({ text: s.label });
                       }}
-                      className="border-border bg-card text-foreground hover:bg-muted flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors"
+                      className="border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted/60 flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left text-[13px] transition-colors"
                     >
-                      <Search
-                        className="text-muted-foreground size-3.5 shrink-0"
-                        aria-hidden
-                      />
-                      {s}
+                      {s.icon === 'workflow' ? (
+                        <Workflow
+                          className="text-primary size-3.5 shrink-0"
+                          aria-hidden
+                        />
+                      ) : (
+                        <Sparkles
+                          className="text-muted-foreground size-3.5 shrink-0"
+                          aria-hidden
+                        />
+                      )}
+                      {s.label}
                     </button>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-4">
                 {messages.map((message) => (
                   <div
                     key={message.id}
                     className={cn(
-                      'flex flex-col gap-2',
+                      'flex flex-col gap-2.5',
                       message.role === 'user' ? 'items-end' : 'items-start'
                     )}
                   >
@@ -205,24 +181,16 @@ export function AssistantWidget() {
                       if (part.type === 'text') {
                         if (!part.text) return null;
                         return (
-                          <div
+                          <MessageText
                             key={`${message.id}-${i}`}
-                            className={cn(
-                              'max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap',
-                              message.role === 'user'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground'
-                            )}
-                          >
-                            {part.text}
-                          </div>
+                            role={message.role}
+                            text={part.text}
+                          />
                         );
                       }
 
                       const toolName = toolNameFromPart(part.type);
                       if (!toolName || !('state' in part)) return null;
-                      const label = TOOL_LABELS[toolName] ?? toolName;
-                      const isWrite = WRITE_TOOLS.has(toolName);
                       const key = `${message.id}-${i}`;
 
                       // Approval card for write tools
@@ -232,91 +200,29 @@ export function AssistantWidget() {
                         part.approval &&
                         !part.approval.isAutomatic
                       ) {
+                        const approvalId = part.approval.id;
                         return (
-                          <div
+                          <ApprovalCard
                             key={key}
-                            className="border-border bg-card w-full max-w-[95%] rounded-lg border p-3 shadow-xs"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Wrench
-                                className="text-muted-foreground size-3.5"
-                                aria-hidden
-                              />
-                              <span className="text-sm font-semibold">
-                                {label}
-                              </span>
-                            </div>
-                            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                              This is a write action. Allow the agent to
-                              proceed?
-                            </p>
-                            {'input' in part && part.input ? (
-                              <pre className="app-scrollbar bg-muted mt-2 max-h-24 overflow-auto rounded-md px-2 py-1.5 text-xs">
-                                {JSON.stringify(part.input, null, 2)}
-                              </pre>
-                            ) : null}
-                            <div className="mt-2.5 flex gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() =>
-                                  addToolApprovalResponse({
-                                    id: part.approval.id,
-                                    approved: true,
-                                  })
-                                }
-                              >
-                                <Check data-icon="inline-start" aria-hidden />
-                                Allow
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  addToolApprovalResponse({
-                                    id: part.approval.id,
-                                    approved: false,
-                                  })
-                                }
-                              >
-                                Deny
-                              </Button>
-                            </div>
-                          </div>
+                            toolName={toolName}
+                            input={'input' in part ? part.input : null}
+                            onRespond={(approved) =>
+                              addToolApprovalResponse({
+                                id: approvalId,
+                                approved,
+                              })
+                            }
+                          />
                         );
                       }
 
-                      // Tool-usage chip (visible for every tool the agent uses)
-                      const running =
-                        part.state === 'input-streaming' ||
-                        part.state === 'input-available' ||
-                        part.state === 'approval-responded';
-                      const denied = part.state === 'output-denied';
                       return (
-                        <div
+                        <ToolStep
                           key={key}
-                          className="border-border bg-muted/60 text-muted-foreground flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"
-                        >
-                          {running ? (
-                            <Loader2
-                              className="size-3 animate-spin"
-                              aria-hidden
-                            />
-                          ) : (
-                            <Wrench className="size-3" aria-hidden />
-                          )}
-                          <span>
-                            {label}
-                            {denied
-                              ? ' - denied'
-                              : part.state === 'output-available'
-                                ? ' - done'
-                                : isWrite && running
-                                  ? ' - awaiting approval'
-                                  : '...'}
-                          </span>
-                        </div>
+                          toolName={toolName}
+                          state={part.state}
+                          output={'output' in part ? part.output : undefined}
+                        />
                       );
                     })}
                   </div>
@@ -324,7 +230,7 @@ export function AssistantWidget() {
                 {busy && messages[messages.length - 1]?.role !== 'assistant' ? (
                   <div className="text-muted-foreground flex items-center gap-2 text-xs">
                     <Loader2 className="size-3 animate-spin" aria-hidden />
-                    Thinking...
+                    Thinking…
                   </div>
                 ) : null}
               </div>
@@ -342,40 +248,45 @@ export function AssistantWidget() {
             ) : null}
           </div>
 
-          {/* Composer */}
+          {/* Composer — pill input with inline send, copilot style */}
           <form
-            className="border-border flex items-center gap-2 border-t px-3 py-2.5"
+            className="px-3 pt-1 pb-3"
             onSubmit={(e) => {
               e.preventDefault();
               submit();
             }}
           >
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (
-                  e.key === 'Enter' &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing &&
-                  e.keyCode !== 229
-                ) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-              placeholder="Ask the helper agent..."
-              aria-label="Message the helper agent"
-              disabled={busy && messages.length === 0}
-            />
-            <Button
-              type="submit"
-              size="icon"
-              aria-label="Send"
-              disabled={!input.trim() || busy}
-            >
-              <SendHorizonal className="size-4" />
-            </Button>
+            <div className="border-border bg-card focus-within:border-primary/50 flex items-end gap-1.5 rounded-2xl border px-3 py-2 transition-colors">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === 'Enter' &&
+                    !e.shiftKey &&
+                    !e.nativeEvent.isComposing &&
+                    e.keyCode !== 229
+                  ) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
+                placeholder="Ask or build anything…"
+                aria-label="Message the helper agent"
+                rows={1}
+                className="text-foreground placeholder:text-muted-foreground max-h-28 min-h-6 flex-1 resize-none bg-transparent text-sm leading-6 outline-none"
+                disabled={busy && messages.length === 0}
+              />
+              <Button
+                type="submit"
+                size="icon"
+                aria-label="Send"
+                disabled={!input.trim() || busy}
+                className="size-7 shrink-0 rounded-full"
+              >
+                <ArrowUp className="size-3.5" />
+              </Button>
+            </div>
           </form>
         </div>
       ) : null}
