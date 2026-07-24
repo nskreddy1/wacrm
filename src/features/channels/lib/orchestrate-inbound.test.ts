@@ -2,15 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   dispatchInboundToFlows: vi.fn(),
-  runAutomationsForTrigger: vi.fn(),
+  dispatchEventToFlows: vi.fn(),
   dispatchInboundToAiReply: vi.fn(),
 }));
 
 vi.mock('@/features/flows/lib/engine', () => ({
   dispatchInboundToFlows: mocks.dispatchInboundToFlows,
-}));
-vi.mock('@/features/automations/lib/engine', () => ({
-  runAutomationsForTrigger: mocks.runAutomationsForTrigger,
+  dispatchEventToFlows: mocks.dispatchEventToFlows,
 }));
 vi.mock('@/features/assistant/lib/ai/auto-reply', () => ({
   dispatchInboundToAiReply: mocks.dispatchInboundToAiReply,
@@ -36,7 +34,7 @@ beforeEach(() => {
     consumed: false,
     outcome: 'no_match',
   });
-  mocks.runAutomationsForTrigger.mockResolvedValue(undefined);
+  mocks.dispatchEventToFlows.mockResolvedValue({ started: 0 });
   mocks.dispatchInboundToAiReply.mockResolvedValue(undefined);
 });
 
@@ -61,11 +59,11 @@ describe('orchestrateInboundChannelMessage', () => {
         meta_message_id: 'provider-message-1',
       },
     });
-    expect(mocks.runAutomationsForTrigger).not.toHaveBeenCalled();
+    expect(mocks.dispatchEventToFlows).not.toHaveBeenCalled();
     expect(mocks.dispatchInboundToAiReply).not.toHaveBeenCalled();
   });
 
-  it('runs content and lifecycle automations before AI when unconsumed', async () => {
+  it('raises new_contact_created to flows before AI when unconsumed', async () => {
     const input = {
       ...baseInput,
       contactCreated: true,
@@ -74,38 +72,13 @@ describe('orchestrateInboundChannelMessage', () => {
 
     await orchestrateInboundChannelMessage(input);
 
-    const context = {
-      message_text: 'Hello there',
-      conversation_id: 'conversation-1',
-    };
-    expect(
-      mocks.runAutomationsForTrigger.mock.calls.map(([call]) => call)
-    ).toEqual([
-      {
-        accountId: 'account-1',
-        triggerType: 'new_message_received',
-        contactId: 'contact-1',
-        context,
-      },
-      {
-        accountId: 'account-1',
-        triggerType: 'keyword_match',
-        contactId: 'contact-1',
-        context,
-      },
-      {
-        accountId: 'account-1',
-        triggerType: 'new_contact_created',
-        contactId: 'contact-1',
-        context,
-      },
-      {
-        accountId: 'account-1',
-        triggerType: 'first_inbound_message',
-        contactId: 'contact-1',
-        context,
-      },
-    ]);
+    expect(mocks.dispatchEventToFlows).toHaveBeenCalledWith({
+      accountId: 'account-1',
+      contactId: 'contact-1',
+      conversationId: 'conversation-1',
+      event: { type: 'new_contact_created' },
+      messageText: 'Hello there',
+    });
     expect(mocks.dispatchInboundToAiReply).toHaveBeenCalledWith({
       accountId: 'account-1',
       conversationId: 'conversation-1',
@@ -113,8 +86,15 @@ describe('orchestrateInboundChannelMessage', () => {
       configOwnerUserId: 'user-1',
     });
     expect(
-      mocks.runAutomationsForTrigger.mock.invocationCallOrder.at(-1)
+      mocks.dispatchEventToFlows.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.dispatchInboundToAiReply.mock.invocationCallOrder[0]);
+  });
+
+  it('skips the contact-created event for existing contacts', async () => {
+    await orchestrateInboundChannelMessage(baseInput);
+
+    expect(mocks.dispatchEventToFlows).not.toHaveBeenCalled();
+    expect(mocks.dispatchInboundToAiReply).toHaveBeenCalled();
   });
 
   it('does not invoke AI for non-text or blank text messages', async () => {
@@ -139,7 +119,7 @@ describe('orchestrateInboundChannelMessage', () => {
       orchestrateInboundChannelMessage(baseInput)
     ).resolves.toBeUndefined();
 
-    expect(mocks.runAutomationsForTrigger).not.toHaveBeenCalled();
+    expect(mocks.dispatchEventToFlows).not.toHaveBeenCalled();
     expect(mocks.dispatchInboundToAiReply).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
