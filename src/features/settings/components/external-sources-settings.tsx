@@ -127,10 +127,9 @@ export function ExternalSourcesSettings() {
       }
       toast.success(`Deleted "${source.name}"`);
       // Reflect the delete locally without a refetch.
-      void mutate(
-        (prev) => prev?.filter((s) => s.id !== source.id),
-        { revalidate: false },
-      );
+      void mutate((prev) => prev?.filter((s) => s.id !== source.id), {
+        revalidate: false,
+      });
     } catch (err) {
       console.error('[ExternalSourcesSettings] delete error:', err);
       toast.error('Network error');

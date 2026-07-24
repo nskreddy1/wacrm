@@ -14,11 +14,11 @@ If you're new to wacrm, this is the surface you'll spend most of your day on.
 
 Three panes on desktop:
 
-| Pane | What's in it |
-| --- | --- |
-| Left — Conversation list | All conversations, newest reply first. Search, status filter (Open / Pending / Closed), unread badges. |
-| Middle — Message thread | Selected conversation's messages, oldest at top. Composer at the bottom. Manual refresh icon next to the status dropdown. |
-| Right — Contact sidebar | Phone, tags, notes, deal cards, recent conversation history. Edit-in-place fields. |
+| Pane                     | What's in it                                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Left — Conversation list | All conversations, newest reply first. Search, status filter (Open / Pending / Closed), unread badges.                    |
+| Middle — Message thread  | Selected conversation's messages, oldest at top. Composer at the bottom. Manual refresh icon next to the status dropdown. |
+| Right — Contact sidebar  | Phone, tags, notes, deal cards, recent conversation history. Edit-in-place fields.                                        |
 
 On mobile the right pane collapses into a "Contact" button at the top of the thread; the conversation list becomes a back arrow once you open a thread.
 
@@ -26,11 +26,11 @@ Deep-links work: `/inbox?c=<conversation_id>` opens straight to a specific threa
 
 ## Conversation statuses
 
-| Status | When to use | Visible badge |
-| --- | --- | --- |
-| Open | Active back-and-forth. Default for any new inbound. | Green dot |
-| Pending | Customer is waiting on you / handed off to an agent. The agent who picks it up changes it back to Open. | Amber dot |
-| Closed | Resolved. Hidden from the default filter; still searchable. | Slate dot |
+| Status  | When to use                                                                                             | Visible badge |
+| ------- | ------------------------------------------------------------------------------------------------------- | ------------- |
+| Open    | Active back-and-forth. Default for any new inbound.                                                     | Green dot     |
+| Pending | Customer is waiting on you / handed off to an agent. The agent who picks it up changes it back to Open. | Amber dot     |
+| Closed  | Resolved. Hidden from the default filter; still searchable.                                             | Slate dot     |
 
 Changing status is a one-tap action in the thread header. A Flow's `handoff` node sets status to Pending automatically.
 
@@ -50,12 +50,12 @@ Within the 24-hour customer-service window WhatsApp accepts free-form text and m
 
 Click the paperclip in the composer to attach a photo, video, or document, or to record a voice note. The file uploads to Supabase Storage (the `chat-media` bucket, scoped to your account) and WhatsApp fetches it from there when the message sends.
 
-| Type | Formats | Size limit | Caption |
-| --- | --- | --- | --- |
-| Photo | PNG, JPEG, WebP | 5 MB | Yes |
-| Video | MP4, 3GP | 16 MB | Yes |
-| Document | PDF, Word, Excel, PowerPoint, TXT | 16 MB | Yes |
-| Voice note | recorded in-app | 16 MB | — |
+| Type       | Formats                           | Size limit | Caption |
+| ---------- | --------------------------------- | ---------- | ------- |
+| Photo      | PNG, JPEG, WebP                   | 5 MB       | Yes     |
+| Video      | MP4, 3GP                          | 16 MB      | Yes     |
+| Document   | PDF, Word, Excel, PowerPoint, TXT | 16 MB      | Yes     |
+| Voice note | recorded in-app                   | 16 MB      | —       |
 
 - Captions are optional on photo/video/document (Meta caps them at 1024 characters). Voice notes carry no caption.
 - Voice notes are recorded straight in the browser and encoded to Ogg/Opus locally — no server-side conversion — so WhatsApp renders them as a true voice note. Recording auto-stops at 5 minutes; mic access is requested the first time you record.
@@ -75,13 +75,13 @@ The page also runs a resync token that bumps when the tab regains focus or the w
 
 Each bubble shows: the text (or media affordance), the timestamp, and a delivery status icon on outbound messages:
 
-| Icon | Meaning |
-| --- | --- |
-| ◦ | Sending — request queued, no Meta ack yet |
-| ✓ | Sent — Meta accepted the message |
-| ✓✓ | Delivered — phone confirmed receipt |
-| ✓✓ (filled) | Read — customer opened the chat |
-| ! | Failed — see the error tooltip; tap to retry |
+| Icon        | Meaning                                      |
+| ----------- | -------------------------------------------- |
+| ◦           | Sending — request queued, no Meta ack yet    |
+| ✓           | Sent — Meta accepted the message             |
+| ✓✓          | Delivered — phone confirmed receipt          |
+| ✓✓ (filled) | Read — customer opened the chat              |
+| !           | Failed — see the error tooltip; tap to retry |
 
 Reactions appear as small chips at the bottom-right of a bubble. Quote-replies show a left-bordered quote tile above the reply text (scroll-into-view if you tap the quote to find the original).
 

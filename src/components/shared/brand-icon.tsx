@@ -1,6 +1,6 @@
-import Image from "next/image";
+import Image from 'next/image';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 /**
  * Local brand/provider icon (SVGs under /public/icons/brands).
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  */
 export function BrandIcon({
   src,
-  alt = "",
+  alt = '',
   size = 20,
   className,
 }: {
@@ -23,11 +23,11 @@ export function BrandIcon({
 }) {
   return (
     <Image
-      src={src || "/placeholder.svg"}
+      src={src || '/placeholder.svg'}
       alt={alt}
       width={size}
       height={size}
-      className={cn("shrink-0", className)}
+      className={cn('shrink-0', className)}
     />
   );
 }

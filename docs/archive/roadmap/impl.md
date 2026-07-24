@@ -13,28 +13,27 @@ Part 1 — DB architecture: template catalog + provisioning engine
 New migration supabase/migrations/042_workspace_provisioning.sql:
 1a. workspace_templates (global catalog — the dynamic part)
 workspace_templates
-  id            UUID PK
-  slug          TEXT UNIQUE            -- 'sales-pipeline', 'customer-support', 'default-tags', 'starter-quick-replies'
-  kind          TEXT CHECK IN ('pipeline','tags','quick_replies')   -- extensible; add kinds later
-  name          TEXT
-  description   TEXT
-  definition    JSONB                  -- full payload (stages w/ colors, tag list, reply list)
-  version       INTEGER DEFAULT 1      -- bump when a template changes
-  is_default    BOOLEAN DEFAULT FALSE  -- auto-provision to every new account
-  is_active     BOOLEAN DEFAULT TRUE
-  created_at / updated_at
-
+id UUID PK
+slug TEXT UNIQUE -- 'sales-pipeline', 'customer-support', 'default-tags', 'starter-quick-replies'
+kind TEXT CHECK IN ('pipeline','tags','quick_replies') -- extensible; add kinds later
+name TEXT
+description TEXT
+definition JSONB -- full payload (stages w/ colors, tag list, reply list)
+version INTEGER DEFAULT 1 -- bump when a template changes
+is_default BOOLEAN DEFAULT FALSE -- auto-provision to every new account
+is_active BOOLEAN DEFAULT TRUE
+created_at / updated_at
 
 RLS: SELECT for any authenticated user (so a future "Browse templates" UI can read the catalog); writes only via service role. No per-account rows — this is a platform-level catalog.
 Adding a future template (e.g. "Recruiting") = one INSERT, zero code changes.
 
 1b. account_provisioned_templates (idempotency + audit log)
 account_provisioned_templates
-  account_id   UUID FK accounts
-  template_id  UUID FK workspace_templates
-  version      INTEGER          -- version that was applied
-  provisioned_at TIMESTAMPTZ
-  PRIMARY KEY (account_id, template_id)
+account_id UUID FK accounts
+template_id UUID FK workspace_templates
+version INTEGER -- version that was applied
+provisioned_at TIMESTAMPTZ
+PRIMARY KEY (account_id, template_id)
 
 Guarantees a template is applied at most once per account, even if the trigger and the backfill script both run. RLS: members can read their own rows; writes via the SECURITY DEFINER function only.
 1c. provision_account_defaults(p_account_id, p_owner_user_id) function
@@ -46,7 +45,6 @@ Materializes by kind:
 pipeline → insert pipelines row + pipeline_stages from definition->'stages' (name, color, position).
 tags → insert tags rows for p_owner_user_id (tags are user-scoped today; seed against the owner).
 quick_replies → insert account-scoped quick_replies (author = owner).
-
 
 Records each application in account_provisioned_templates.
 Wrapped so a failure in one template logs a WARNING and continues — provisioning must never block signup.

@@ -33,7 +33,7 @@ export interface PlatformAuditEntry {
 
 export async function logPlatformAudit(
   supabase: SupabaseClient,
-  entry: PlatformAuditEntry,
+  entry: PlatformAuditEntry
 ): Promise<void> {
   const { error } = await supabase.from('platform_audit_log').insert({
     actor_id: entry.actorId,
@@ -47,7 +47,7 @@ export async function logPlatformAudit(
     // Loud but non-fatal — see module comment.
     console.error(
       `[platform-audit] failed to record ${entry.action} on ${entry.entity}:`,
-      error,
+      error
     );
   }
 }

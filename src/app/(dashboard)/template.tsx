@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 /**
  * Structural wrapper for dashboard pages. Intentionally has NO enter
@@ -8,6 +8,10 @@ import type { ReactNode } from "react";
  * on screen during transitions. The sidebar and chrome live in
  * layout.tsx and do not re-render.
  */
-export default function DashboardTemplate({ children }: { children: ReactNode }) {
+export default function DashboardTemplate({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return <div className="flex min-h-0 flex-1 flex-col">{children}</div>;
 }

@@ -1,63 +1,70 @@
-import { NextResponse } from 'next/server'
-import { getCurrentAccount, requireRole, toErrorResponse } from '@/features/auth/lib/account'
-import { supabaseAdmin } from '@/features/automations/lib/admin-client'
+import { NextResponse } from 'next/server';
+import {
+  getCurrentAccount,
+  requireRole,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
+import { supabaseAdmin } from '@/features/automations/lib/admin-client';
 import {
   loadStepsTree,
   replaceSteps,
   type BuilderStepInput,
-} from '@/features/automations/lib/steps-tree'
+} from '@/features/automations/lib/steps-tree';
 import {
   validateStepsForActivation,
   validateTriggerForActivation,
-} from '@/features/automations/lib/validate'
+} from '@/features/automations/lib/validate';
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params
-  let accountId: string
+  const { id } = await params;
+  let accountId: string;
   try {
-    accountId = (await getCurrentAccount()).accountId
+    accountId = (await getCurrentAccount()).accountId;
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 
-  const admin = supabaseAdmin()
+  const admin = supabaseAdmin();
   const { data: automation, error } = await admin
     .from('automations')
     .select('*')
     .eq('id', id)
     .eq('account_id', accountId)
-    .maybeSingle()
+    .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!automation) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (error)
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!automation)
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const steps = await loadStepsTree(id)
-  return NextResponse.json({ automation, steps })
+  const steps = await loadStepsTree(id);
+  return NextResponse.json({ automation, steps });
 }
 
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params
+  const { id } = await params;
 
   // Editing an automation is a write. The service-role client bypasses
   // RLS, so retain the account id from the role check and scope every
   // subsequent read/write with it.
-  let accountId: string
+  let accountId: string;
   try {
-    accountId = (await requireRole('agent')).accountId
+    accountId = (await requireRole('agent')).accountId;
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 
-  const body = await request.json().catch(() => null)
-  if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  const body = await request.json().catch(() => null);
+  if (!body)
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
 
-  const admin = supabaseAdmin()
+  const admin = supabaseAdmin();
 
   // Ownership check before we touch anything. Load the fields we need
   // to compute the post-patch "effective" state for validation.
@@ -66,12 +73,12 @@ export async function PATCH(
     .select('id, account_id, is_active, trigger_type, trigger_config')
     .eq('id', id)
     .eq('account_id', accountId)
-    .maybeSingle()
+    .maybeSingle();
   if (!existing) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const update: Record<string, unknown> = {}
+  const update: Record<string, unknown> = {};
   for (const k of [
     'name',
     'description',
@@ -79,7 +86,7 @@ export async function PATCH(
     'trigger_config',
     'is_active',
   ] as const) {
-    if (k in body) update[k] = body[k]
+    if (k in body) update[k] = body[k];
   }
 
   // If this PATCH leaves the automation active (either explicitly
@@ -87,25 +94,32 @@ export async function PATCH(
   // merged configuration first. Activation is the natural gate — drafts
   // are still allowed to be incomplete.
   const willBeActive =
-    typeof update.is_active === 'boolean' ? update.is_active : existing.is_active
+    typeof update.is_active === 'boolean'
+      ? update.is_active
+      : existing.is_active;
   if (willBeActive) {
-    const mergedTriggerType = (update.trigger_type ?? existing.trigger_type) as string
-    const mergedTriggerConfig = update.trigger_config ?? existing.trigger_config
+    const mergedTriggerType = (update.trigger_type ??
+      existing.trigger_type) as string;
+    const mergedTriggerConfig =
+      update.trigger_config ?? existing.trigger_config;
     const mergedSteps = Array.isArray(body.steps)
-      ? (body.steps as { step_type: string; step_config: Record<string, unknown> }[])
-      : await loadStepsTree(id)
+      ? (body.steps as {
+          step_type: string;
+          step_config: Record<string, unknown>;
+        }[])
+      : await loadStepsTree(id);
     const issues = [
       ...validateTriggerForActivation(mergedTriggerType, mergedTriggerConfig),
       ...validateStepsForActivation(mergedSteps),
-    ]
+    ];
     if (issues.length > 0) {
       return NextResponse.json(
         {
           error: 'Cannot keep automation active with invalid configuration',
           issues,
         },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
   }
 
@@ -114,38 +128,44 @@ export async function PATCH(
       .from('automations')
       .update(update)
       .eq('id', id)
-      .eq('account_id', accountId)
-    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
+      .eq('account_id', accountId);
+    if (updErr)
+      return NextResponse.json({ error: updErr.message }, { status: 500 });
   }
 
   if (Array.isArray(body.steps)) {
-    const err = await replaceSteps(id, accountId, body.steps as BuilderStepInput[])
-    if (err) return NextResponse.json({ error: err }, { status: 500 })
+    const err = await replaceSteps(
+      id,
+      accountId,
+      body.steps as BuilderStepInput[]
+    );
+    if (err) return NextResponse.json({ error: err }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params
+  const { id } = await params;
 
   // Deleting an automation is a write. Scope the service-role mutation
   // to the caller's account because RLS is bypassed below.
-  let accountId: string
+  let accountId: string;
   try {
-    accountId = (await requireRole('agent')).accountId
+    accountId = (await requireRole('agent')).accountId;
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 
   const { error } = await supabaseAdmin()
     .from('automations')
     .delete()
     .eq('id', id)
-    .eq('account_id', accountId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+    .eq('account_id', accountId);
+  if (error)
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }

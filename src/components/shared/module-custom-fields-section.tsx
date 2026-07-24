@@ -56,7 +56,7 @@ export function ModuleCustomFieldsSection({
 
   if (layout.custom.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         No custom fields have been configured.
       </p>
     );

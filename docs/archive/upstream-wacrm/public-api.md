@@ -34,15 +34,15 @@ Revoke under Settings → API keys → Revoke; revocation takes effect on the ke
 
 A key can do only what its scopes allow. Grant the minimum.
 
-| Scope | Allows |
-| --- | --- |
-| `messages:send` | Send WhatsApp messages |
-| `messages:read` | Read messages and delivery status |
-| `contacts:read` | List and read contacts |
-| `contacts:write` | Create and update contacts |
-| `conversations:read` | List and read conversations |
-| `broadcasts:send` | Launch broadcast campaigns |
-| `webhooks:manage` | Register and manage outbound webhooks |
+| Scope                | Allows                                |
+| -------------------- | ------------------------------------- |
+| `messages:send`      | Send WhatsApp messages                |
+| `messages:read`      | Read messages and delivery status     |
+| `contacts:read`      | List and read contacts                |
+| `contacts:write`     | Create and update contacts            |
+| `conversations:read` | List and read conversations           |
+| `broadcasts:send`    | Launch broadcast campaigns            |
+| `webhooks:manage`    | Register and manage outbound webhooks |
 
 A key with no scopes still authenticates and can call `GET /api/v1/me` — handy for verifying a key works.
 

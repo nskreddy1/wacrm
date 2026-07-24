@@ -25,35 +25,38 @@
 //   • Every mutation writes platform_audit_log (masked, no secrets).
 // ============================================================
 
-import { NextResponse } from "next/server";
-import { z } from "zod";
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
-import { toErrorResponse } from "@/features/auth/lib/account";
-import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
-import { logPlatformAudit } from "@/features/admin/lib/platform/audit";
-import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
-import { createChannelAdapter } from "@/features/channels/lib/adapters";
+import { toErrorResponse } from '@/features/auth/lib/account';
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
+import { logPlatformAudit } from '@/features/admin/lib/platform/audit';
+import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
+import { createChannelAdapter } from '@/features/channels/lib/adapters';
 import {
   buildProviderCredentials,
   encryptProviderCredentials,
-} from "@/features/channels/lib/credentials";
+} from '@/features/channels/lib/credentials';
 import {
   getProviderCapabilities,
   isProviderCompatible,
   PROVIDER_CHANNELS,
   PROVIDER_LABEL,
-} from "@/features/channels/lib/provider-registry";
-import type {
-  ChannelConnection,
-  ChannelKind,
-  ChannelProvider,
-} from "@/types";
+} from '@/features/channels/lib/provider-registry';
+import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types';
 
-const providers = ["meta", "twilio", "google", "microsoft", "resend", "smtp"] as const;
-const channels = ["whatsapp", "sms", "email"] as const;
+const providers = [
+  'meta',
+  'twilio',
+  'google',
+  'microsoft',
+  'resend',
+  'smtp',
+] as const;
+const channels = ['whatsapp', 'sms', 'email'] as const;
 
 const SAFE_COLUMNS =
-  "id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,client_can_toggle,platform_notice,last_connected_at,last_synced_at,last_error,created_at,updated_at";
+  'id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,client_can_toggle,platform_notice,last_connected_at,last_synced_at,last_error,created_at,updated_at';
 
 const putSchema = z.object({
   account_id: z.string().uuid(),
@@ -75,7 +78,7 @@ const putSchema = z.object({
 const patchSchema = z.object({
   account_id: z.string().uuid(),
   id: z.string().uuid(),
-  action: z.literal("test").optional(),
+  action: z.literal('test').optional(),
   isEnabled: z.boolean().optional(),
   /** Governance updates — no credentials required. */
   clientCanToggle: z.boolean().optional(),
@@ -97,20 +100,26 @@ export async function GET(request: Request) {
     await requireSuperAdmin();
     const admin = platformAdmin();
 
-    const accountId = new URL(request.url).searchParams.get("account_id");
+    const accountId = new URL(request.url).searchParams.get('account_id');
     if (!accountId) {
-      return NextResponse.json({ error: "account_id is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: 'account_id is required' },
+        { status: 400 }
+      );
     }
 
     const { data, error } = await admin
-      .from("channel_connections")
+      .from('channel_connections')
       .select(SAFE_COLUMNS)
-      .eq("account_id", accountId)
-      .order("channel")
-      .order("created_at");
+      .eq('account_id', accountId)
+      .order('channel')
+      .order('created_at');
     if (error) {
-      console.error("[GET /api/admin/channels] fetch error:", error);
-      return NextResponse.json({ error: "Failed to load channel connections" }, { status: 500 });
+      console.error('[GET /api/admin/channels] fetch error:', error);
+      return NextResponse.json(
+        { error: 'Failed to load channel connections' },
+        { status: 500 }
+      );
     }
 
     // Provider offerings mirror the workspace settings page so the
@@ -121,7 +130,7 @@ export async function GET(request: Request) {
         channel,
         label: PROVIDER_LABEL[provider],
         available: Boolean(createChannelAdapter(provider, channel)),
-      })),
+      }))
     );
 
     return NextResponse.json({
@@ -141,41 +150,59 @@ export async function PUT(request: Request) {
     const parsed = putSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid channel connection payload", details: parsed.error.flatten() },
-        { status: 400 },
+        {
+          error: 'Invalid channel connection payload',
+          details: parsed.error.flatten(),
+        },
+        { status: 400 }
       );
     }
     const { account_id: accountId, channel, provider } = parsed.data;
 
-    if (!isProviderCompatible(channel as ChannelKind, provider as ChannelProvider)) {
-      return NextResponse.json({ error: `${provider} is not compatible with ${channel}` }, { status: 400 });
-    }
-    if (!createChannelAdapter(provider as ChannelProvider, channel as ChannelKind)) {
+    if (
+      !isProviderCompatible(channel as ChannelKind, provider as ChannelProvider)
+    ) {
       return NextResponse.json(
-        { error: `${PROVIDER_LABEL[provider as ChannelProvider]} setup is not available in this release` },
-        { status: 409 },
+        { error: `${provider} is not compatible with ${channel}` },
+        { status: 400 }
+      );
+    }
+    if (
+      !createChannelAdapter(provider as ChannelProvider, channel as ChannelKind)
+    ) {
+      return NextResponse.json(
+        {
+          error: `${PROVIDER_LABEL[provider as ChannelProvider]} setup is not available in this release`,
+        },
+        { status: 409 }
       );
     }
 
-    const suppliedCredentials = buildProviderCredentials(provider, parsed.data.credentials);
+    const suppliedCredentials = buildProviderCredentials(
+      provider,
+      parsed.data.credentials
+    );
 
     let existing: Record<string, unknown> | null = null;
     if (parsed.data.id) {
       const result = await admin
-        .from("channel_connections")
-        .select("*")
-        .eq("id", parsed.data.id)
-        .eq("account_id", accountId)
+        .from('channel_connections')
+        .select('*')
+        .eq('id', parsed.data.id)
+        .eq('account_id', accountId)
         .maybeSingle();
       if (result.error) throw result.error;
       existing = result.data;
       if (!existing) {
-        return NextResponse.json({ error: "Channel connection not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: 'Channel connection not found' },
+          { status: 404 }
+        );
       }
       if (existing.provider !== provider && !suppliedCredentials) {
         return NextResponse.json(
-          { error: "New credentials are required when switching providers" },
-          { status: 400 },
+          { error: 'New credentials are required when switching providers' },
+          { status: 400 }
         );
       }
     }
@@ -184,7 +211,10 @@ export async function PUT(request: Request) {
       ? encryptProviderCredentials(suppliedCredentials)
       : (existing?.credentials_encrypted as string | undefined);
     if (!credentialsEncrypted) {
-      return NextResponse.json({ error: "Provider credentials are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Provider credentials are required' },
+        { status: 400 }
+      );
     }
 
     // managed_by semantics: new rows here are platform-provisioned;
@@ -192,13 +222,14 @@ export async function PUT(request: Request) {
     // the connection over.
     const managedBy = existing
       ? parsed.data.takeover
-        ? "platform"
+        ? 'platform'
         : (existing.managed_by as string)
-      : "platform";
+      : 'platform';
 
     const values = {
       account_id: accountId,
-      created_by_user_id: (existing?.created_by_user_id as string | undefined) ?? ctx.userId,
+      created_by_user_id:
+        (existing?.created_by_user_id as string | undefined) ?? ctx.userId,
       channel,
       provider,
       display_name: parsed.data.displayName,
@@ -210,30 +241,46 @@ export async function PUT(request: Request) {
       // with no notice; keep existing values unless explicitly set.
       client_can_toggle:
         parsed.data.clientCanToggle ??
-        ((existing?.client_can_toggle as boolean | undefined) ?? true),
+        (existing?.client_can_toggle as boolean | undefined) ??
+        true,
       platform_notice:
         parsed.data.platformNotice !== undefined
           ? parsed.data.platformNotice || null
           : ((existing?.platform_notice as string | null | undefined) ?? null),
-      status: "draft", // must pass a connection test before enabling
+      status: 'draft', // must pass a connection test before enabling
       is_enabled: false,
       last_error: null,
     };
 
     const query = parsed.data.id
-      ? admin.from("channel_connections").update(values).eq("id", parsed.data.id).eq("account_id", accountId)
-      : admin.from("channel_connections").insert(values);
+      ? admin
+          .from('channel_connections')
+          .update(values)
+          .eq('id', parsed.data.id)
+          .eq('account_id', accountId)
+      : admin.from('channel_connections').insert(values);
     const { data: saved, error } = await query.select(SAFE_COLUMNS).single();
     if (error || !saved) {
       // Unique violation: same sender already connected on this channel.
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === '23505'
+      ) {
         return NextResponse.json(
-          { error: "A connection with this sender identity already exists for this channel." },
-          { status: 409 },
+          {
+            error:
+              'A connection with this sender identity already exists for this channel.',
+          },
+          { status: 409 }
         );
       }
-      console.error("[PUT /api/admin/channels] save error:", error);
-      return NextResponse.json({ error: "Failed to save channel connection" }, { status: 500 });
+      console.error('[PUT /api/admin/channels] save error:', error);
+      return NextResponse.json(
+        { error: 'Failed to save channel connection' },
+        { status: 500 }
+      );
     }
 
     await logPlatformAudit(admin, {
@@ -241,9 +288,9 @@ export async function PUT(request: Request) {
       accountId,
       action: existing
         ? suppliedCredentials
-          ? "channel.credentials_rotated"
-          : "channel.updated"
-        : "channel.provisioned",
+          ? 'channel.credentials_rotated'
+          : 'channel.updated'
+        : 'channel.provisioned',
       entity: `channel_connection:${saved.id}`,
       before: existing
         ? {
@@ -261,16 +308,28 @@ export async function PUT(request: Request) {
       },
     });
 
-    return NextResponse.json({ connection: enrich(saved) }, { status: parsed.data.id ? 200 : 201 });
+    return NextResponse.json(
+      { connection: enrich(saved) },
+      { status: parsed.data.id ? 200 : 201 }
+    );
   } catch (err) {
-    if (err instanceof Error && err.message.includes("ENCRYPTION_KEY")) {
-      console.error("[admin/channels] ENCRYPTION_KEY misconfigured:", err.message);
+    if (err instanceof Error && err.message.includes('ENCRYPTION_KEY')) {
+      console.error(
+        '[admin/channels] ENCRYPTION_KEY misconfigured:',
+        err.message
+      );
       return NextResponse.json(
-        { error: "Server is missing the ENCRYPTION_KEY environment variable (64-char hex)." },
-        { status: 503 },
+        {
+          error:
+            'Server is missing the ENCRYPTION_KEY environment variable (64-char hex).',
+        },
+        { status: 503 }
       );
     }
-    if (err instanceof Error && /required|Messaging Service SID/.test(err.message)) {
+    if (
+      err instanceof Error &&
+      /required|Messaging Service SID/.test(err.message)
+    ) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     return toErrorResponse(err);
@@ -282,104 +341,160 @@ export async function PATCH(request: Request) {
     const ctx = await requireSuperAdmin();
     const admin = platformAdmin();
 
-    const parsed = patchSchema.safeParse(await request.json().catch(() => null));
+    const parsed = patchSchema.safeParse(
+      await request.json().catch(() => null)
+    );
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid channel update" }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Invalid channel update' },
+        { status: 400 }
+      );
     }
     const { account_id: accountId, id } = parsed.data;
 
     const { data: row, error } = await admin
-      .from("channel_connections")
-      .select("*")
-      .eq("id", id)
-      .eq("account_id", accountId)
+      .from('channel_connections')
+      .select('*')
+      .eq('id', id)
+      .eq('account_id', accountId)
       .maybeSingle();
     if (error) throw error;
-    if (!row) return NextResponse.json({ error: "Channel connection not found" }, { status: 404 });
+    if (!row)
+      return NextResponse.json(
+        { error: 'Channel connection not found' },
+        { status: 404 }
+      );
 
     // --- Test connection via the real provider adapter. ---
-    if (parsed.data.action === "test") {
-      const adapter = createChannelAdapter(row.provider as ChannelProvider, row.channel as ChannelKind);
+    if (parsed.data.action === 'test') {
+      const adapter = createChannelAdapter(
+        row.provider as ChannelProvider,
+        row.channel as ChannelKind
+      );
       if (!adapter) {
         return NextResponse.json(
-          { error: `${PROVIDER_LABEL[row.provider as ChannelProvider]} testing is not available` },
-          { status: 409 },
+          {
+            error: `${PROVIDER_LABEL[row.provider as ChannelProvider]} testing is not available`,
+          },
+          { status: 409 }
         );
       }
       const health = await adapter.checkHealth(row as ChannelConnection);
       const update = health.ok
-        ? { status: "connected", last_connected_at: health.checkedAt, last_error: null }
-        : { status: "degraded", is_enabled: false, last_error: health.error };
+        ? {
+            status: 'connected',
+            last_connected_at: health.checkedAt,
+            last_error: null,
+          }
+        : { status: 'degraded', is_enabled: false, last_error: health.error };
       const { data: updated } = await admin
-        .from("channel_connections")
+        .from('channel_connections')
         .update(update)
-        .eq("id", row.id)
+        .eq('id', row.id)
         .select(SAFE_COLUMNS)
         .single();
       await logPlatformAudit(admin, {
         actorId: ctx.userId,
         accountId,
-        action: health.ok ? "channel.test_passed" : "channel.test_failed",
+        action: health.ok ? 'channel.test_passed' : 'channel.test_failed',
         entity: `channel_connection:${row.id}`,
         before: null,
         after: { ok: health.ok, ...(health.ok ? {} : { error: health.error }) },
       });
-      if (!health.ok) return NextResponse.json({ health, connection: updated ? enrich(updated) : null }, { status: 422 });
-      return NextResponse.json({ health, connection: updated ? enrich(updated) : null });
+      if (!health.ok)
+        return NextResponse.json(
+          { health, connection: updated ? enrich(updated) : null },
+          { status: 422 }
+        );
+      return NextResponse.json({
+        health,
+        connection: updated ? enrich(updated) : null,
+      });
     }
 
     // --- Governance: lock/unlock client toggle, set/clear notice. ---
     if (
-      typeof parsed.data.isEnabled !== "boolean" &&
-      (parsed.data.clientCanToggle !== undefined || parsed.data.platformNotice !== undefined)
+      typeof parsed.data.isEnabled !== 'boolean' &&
+      (parsed.data.clientCanToggle !== undefined ||
+        parsed.data.platformNotice !== undefined)
     ) {
       const governance = {
-        ...(parsed.data.clientCanToggle !== undefined ? { client_can_toggle: parsed.data.clientCanToggle } : {}),
-        ...(parsed.data.platformNotice !== undefined ? { platform_notice: parsed.data.platformNotice || null } : {}),
+        ...(parsed.data.clientCanToggle !== undefined
+          ? { client_can_toggle: parsed.data.clientCanToggle }
+          : {}),
+        ...(parsed.data.platformNotice !== undefined
+          ? { platform_notice: parsed.data.platformNotice || null }
+          : {}),
       };
       const { data: updated, error: govError } = await admin
-        .from("channel_connections")
+        .from('channel_connections')
         .update(governance)
-        .eq("id", row.id)
+        .eq('id', row.id)
         .select(SAFE_COLUMNS)
         .single();
       if (govError || !updated) {
-        console.error("[PATCH /api/admin/channels] governance error:", govError);
-        return NextResponse.json({ error: "Failed to update connection settings" }, { status: 500 });
+        console.error(
+          '[PATCH /api/admin/channels] governance error:',
+          govError
+        );
+        return NextResponse.json(
+          { error: 'Failed to update connection settings' },
+          { status: 500 }
+        );
       }
       await logPlatformAudit(admin, {
         actorId: ctx.userId,
         accountId,
-        action: "channel.governance_updated",
+        action: 'channel.governance_updated',
         entity: `channel_connection:${row.id}`,
-        before: { client_can_toggle: row.client_can_toggle, platform_notice: row.platform_notice },
-        after: { client_can_toggle: updated.client_can_toggle, platform_notice: updated.platform_notice },
+        before: {
+          client_can_toggle: row.client_can_toggle,
+          platform_notice: row.platform_notice,
+        },
+        after: {
+          client_can_toggle: updated.client_can_toggle,
+          platform_notice: updated.platform_notice,
+        },
       });
       return NextResponse.json({ connection: enrich(updated) });
     }
 
     // --- Enable / disable toggle. ---
-    if (typeof parsed.data.isEnabled !== "boolean") {
-      return NextResponse.json({ error: "isEnabled boolean or action:'test' is required" }, { status: 400 });
+    if (typeof parsed.data.isEnabled !== 'boolean') {
+      return NextResponse.json(
+        { error: "isEnabled boolean or action:'test' is required" },
+        { status: 400 }
+      );
     }
-    if (parsed.data.isEnabled && !["connected", "degraded"].includes(row.status as string)) {
-      return NextResponse.json({ error: "Run a connection test before enabling" }, { status: 409 });
+    if (
+      parsed.data.isEnabled &&
+      !['connected', 'degraded'].includes(row.status as string)
+    ) {
+      return NextResponse.json(
+        { error: 'Run a connection test before enabling' },
+        { status: 409 }
+      );
     }
     const { data: updated, error: updateError } = await admin
-      .from("channel_connections")
+      .from('channel_connections')
       .update({ is_enabled: parsed.data.isEnabled })
-      .eq("id", row.id)
+      .eq('id', row.id)
       .select(SAFE_COLUMNS)
       .single();
     if (updateError || !updated) {
-      console.error("[PATCH /api/admin/channels] toggle error:", updateError);
-      return NextResponse.json({ error: "Failed to update channel connection" }, { status: 500 });
+      console.error('[PATCH /api/admin/channels] toggle error:', updateError);
+      return NextResponse.json(
+        { error: 'Failed to update channel connection' },
+        { status: 500 }
+      );
     }
 
     await logPlatformAudit(admin, {
       actorId: ctx.userId,
       accountId,
-      action: parsed.data.isEnabled ? "channel.activated" : "channel.deactivated",
+      action: parsed.data.isEnabled
+        ? 'channel.activated'
+        : 'channel.deactivated',
       entity: `channel_connection:${row.id}`,
       before: { is_enabled: row.is_enabled },
       after: { is_enabled: updated.is_enabled },
@@ -397,30 +512,45 @@ export async function DELETE(request: Request) {
     const admin = platformAdmin();
 
     const url = new URL(request.url);
-    const id = url.searchParams.get("id");
-    const accountId = url.searchParams.get("account_id");
+    const id = url.searchParams.get('id');
+    const accountId = url.searchParams.get('account_id');
     if (!id || !accountId) {
-      return NextResponse.json({ error: "id and account_id are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: 'id and account_id are required' },
+        { status: 400 }
+      );
     }
 
     const { data: row } = await admin
-      .from("channel_connections")
-      .select("id, channel, provider, display_name, external_identity, managed_by")
-      .eq("id", id)
-      .eq("account_id", accountId)
+      .from('channel_connections')
+      .select(
+        'id, channel, provider, display_name, external_identity, managed_by'
+      )
+      .eq('id', id)
+      .eq('account_id', accountId)
       .maybeSingle();
-    if (!row) return NextResponse.json({ error: "Channel connection not found" }, { status: 404 });
+    if (!row)
+      return NextResponse.json(
+        { error: 'Channel connection not found' },
+        { status: 404 }
+      );
 
-    const { error } = await admin.from("channel_connections").delete().eq("id", row.id);
+    const { error } = await admin
+      .from('channel_connections')
+      .delete()
+      .eq('id', row.id);
     if (error) {
-      console.error("[DELETE /api/admin/channels] delete error:", error);
-      return NextResponse.json({ error: "Failed to delete channel connection" }, { status: 500 });
+      console.error('[DELETE /api/admin/channels] delete error:', error);
+      return NextResponse.json(
+        { error: 'Failed to delete channel connection' },
+        { status: 500 }
+      );
     }
 
     await logPlatformAudit(admin, {
       actorId: ctx.userId,
       accountId,
-      action: "channel.deleted",
+      action: 'channel.deleted',
       entity: `channel_connection:${row.id}`,
       before: {
         channel: row.channel,

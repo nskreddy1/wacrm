@@ -1,11 +1,20 @@
-'use client'
+'use client';
 
-import { useMemo, useState } from 'react'
-import useSWR from 'swr'
-import { ChevronRight, Loader2, Mail, MessageCircle, Plus, Settings2, ShieldCheck, Smartphone } from 'lucide-react'
-import { toast } from 'sonner'
-import { BrandIcon } from '@/components/shared/brand-icon'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useMemo, useState } from 'react';
+import useSWR from 'swr';
+import {
+  ChevronRight,
+  Loader2,
+  Mail,
+  MessageCircle,
+  Plus,
+  Settings2,
+  ShieldCheck,
+  Smartphone,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { BrandIcon } from '@/components/shared/brand-icon';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,32 +24,48 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChannelConnectionSheet } from './channel-connection-sheet'
-import { ChannelSetupSheet, type ChannelSetupInit } from './channel-setup-sheet'
-import { ConnectChannelDialog } from './connect-channel-dialog'
-import { SettingsPanelHead } from './settings-panel-head'
-import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types'
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ChannelConnectionSheet } from './channel-connection-sheet';
+import {
+  ChannelSetupSheet,
+  type ChannelSetupInit,
+} from './channel-setup-sheet';
+import { ConnectChannelDialog } from './connect-channel-dialog';
+import { SettingsPanelHead } from './settings-panel-head';
+import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types';
 
-type ProviderInfo = { provider: ChannelProvider; channel: ChannelKind; label: string; available: boolean }
-type Connection = ChannelConnection & { credentialsConfigured: boolean; providerLabel: string }
+type ProviderInfo = {
+  provider: ChannelProvider;
+  channel: ChannelKind;
+  label: string;
+  available: boolean;
+};
+type Connection = ChannelConnection & {
+  credentialsConfigured: boolean;
+  providerLabel: string;
+};
 type GuidedConnect = {
-  twilio: { configured: boolean; authorizeUrl: string | null }
-  whatsappEmbeddedSignup: { configured: boolean }
-}
-type ResponseData = { connections: Connection[]; providers: ProviderInfo[]; guidedConnect?: GuidedConnect }
+  twilio: { configured: boolean; authorizeUrl: string | null };
+  whatsappEmbeddedSignup: { configured: boolean };
+};
+type ResponseData = {
+  connections: Connection[];
+  providers: ProviderInfo[];
+  guidedConnect?: GuidedConnect;
+};
 
 const fetcher = async (url: string) => {
-  const response = await fetch(url)
-  const payload = await response.json()
-  if (!response.ok) throw new Error(payload.error ?? 'Could not load channel connections')
-  return payload
-}
+  const response = await fetch(url);
+  const payload = await response.json();
+  if (!response.ok)
+    throw new Error(payload.error ?? 'Could not load channel connections');
+  return payload;
+};
 
 /**
  * Per-channel copy and requirements: WhatsApp is a policy-governed
@@ -52,7 +77,12 @@ const fetcher = async (url: string) => {
  */
 const CHANNEL_HEAD: Record<
   ChannelKind,
-  { title: string; heroTitle: string; description: string; requirements: string[] }
+  {
+    title: string;
+    heroTitle: string;
+    description: string;
+    requirements: string[];
+  }
 > = {
   whatsapp: {
     title: 'WhatsApp',
@@ -90,9 +120,13 @@ const CHANNEL_HEAD: Record<
       'Send a test message before enabling the connection.',
     ],
   },
-}
+};
 
-const CHANNEL_ICON: Record<ChannelKind, typeof Mail> = { whatsapp: MessageCircle, sms: Smartphone, email: Mail }
+const CHANNEL_ICON: Record<ChannelKind, typeof Mail> = {
+  whatsapp: MessageCircle,
+  sms: Smartphone,
+  email: Mail,
+};
 
 /**
  * Bigin-style provider card ("Popular Email Services" pattern): a
@@ -106,79 +140,122 @@ function ProviderCard({
   icon: IconCmp,
   onClick,
 }: {
-  label: string
-  hint?: string
-  iconSrc?: string
-  icon?: typeof Mail
-  onClick: () => void
+  label: string;
+  hint?: string;
+  iconSrc?: string;
+  icon?: typeof Mail;
+  onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-40 flex-col items-center gap-3 rounded-lg border border-border bg-card px-4 py-6 text-center transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="border-border bg-card hover:border-primary/50 hover:bg-muted/40 focus-visible:ring-ring flex w-40 flex-col items-center gap-3 rounded-lg border px-4 py-6 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none"
     >
       {iconSrc ? (
         <BrandIcon src={iconSrc} size={40} />
       ) : IconCmp ? (
-        <IconCmp className="size-10 text-muted-foreground" strokeWidth={1.25} aria-hidden />
+        <IconCmp
+          className="text-muted-foreground size-10"
+          strokeWidth={1.25}
+          aria-hidden
+        />
       ) : null}
       <span className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        {hint ? <span className="text-xs leading-snug text-muted-foreground">{hint}</span> : null}
+        <span className="text-foreground text-sm font-medium">{label}</span>
+        {hint ? (
+          <span className="text-muted-foreground text-xs leading-snug">
+            {hint}
+          </span>
+        ) : null}
       </span>
     </button>
-  )
+  );
 }
 
-export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKind }) {
-  const { data, error, isLoading, mutate } = useSWR<ResponseData>('/api/settings/channels', fetcher)
-  const [channel, setChannel] = useState<ChannelKind>(fixedChannel ?? 'email')
-  const [connectOpen, setConnectOpen] = useState(false)
-  const [setupOpen, setSetupOpen] = useState(false)
-  const [setupInit, setSetupInit] = useState<ChannelSetupInit | null>(null)
-  const [detailsConnection, setDetailsConnection] = useState<Connection | null>(null)
-  const [busyToggle, setBusyToggle] = useState<string | null>(null)
+export function ChannelConnections({
+  fixedChannel,
+}: {
+  fixedChannel?: ChannelKind;
+}) {
+  const { data, error, isLoading, mutate } = useSWR<ResponseData>(
+    '/api/settings/channels',
+    fetcher
+  );
+  const [channel, setChannel] = useState<ChannelKind>(fixedChannel ?? 'email');
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupInit, setSetupInit] = useState<ChannelSetupInit | null>(null);
+  const [detailsConnection, setDetailsConnection] = useState<Connection | null>(
+    null
+  );
+  const [busyToggle, setBusyToggle] = useState<string | null>(null);
   /** "Twilio already connected — reuse credentials?" prompt. */
-  const [reusePromptOpen, setReusePromptOpen] = useState(false)
+  const [reusePromptOpen, setReusePromptOpen] = useState(false);
 
-  const connections = useMemo(() => data?.connections.filter((item) => item.channel === channel) ?? [], [data, channel])
+  const connections = useMemo(
+    () => data?.connections.filter((item) => item.channel === channel) ?? [],
+    [data, channel]
+  );
   const providers = useMemo(
-    () => (data?.providers.filter((item) => item.channel === channel) ?? []).map(({ provider, label, available }) => ({ provider, label, available })),
-    [data, channel],
-  )
+    () =>
+      (data?.providers.filter((item) => item.channel === channel) ?? []).map(
+        ({ provider, label, available }) => ({ provider, label, available })
+      ),
+    [data, channel]
+  );
   // An existing Twilio connection on ANOTHER channel whose credentials
   // can be reused — one Twilio account often serves WhatsApp + SMS, so
   // we offer reuse instead of duplicating secrets.
   const reusableTwilio = useMemo(
-    () => data?.connections.find((item) => item.provider === 'twilio' && item.channel !== channel) ?? null,
-    [data, channel],
-  )
+    () =>
+      data?.connections.find(
+        (item) => item.provider === 'twilio' && item.channel !== channel
+      ) ?? null,
+    [data, channel]
+  );
 
   async function quickToggle(connection: Connection, enabled: boolean) {
-  // Support can lock the toggle (e.g. number under carrier review) —
-  // surface their notice instead of a failed request.
-  if (connection.managed_by === 'platform' && connection.client_can_toggle === false) {
-    toast.error(connection.platform_notice?.trim() || 'This connection is temporarily locked by our support team. Contact support for details.')
-    return
-  }
-  setBusyToggle(connection.id)
+    // Support can lock the toggle (e.g. number under carrier review) —
+    // surface their notice instead of a failed request.
+    if (
+      connection.managed_by === 'platform' &&
+      connection.client_can_toggle === false
+    ) {
+      toast.error(
+        connection.platform_notice?.trim() ||
+          'This connection is temporarily locked by our support team. Contact support for details.'
+      );
+      return;
+    }
+    setBusyToggle(connection.id);
     try {
-      const response = await fetch('/api/settings/channels', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: connection.id, isEnabled: enabled, isPrimary: enabled ? true : undefined }) })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error ?? 'Could not update connection')
-      await mutate()
-      toast.success(enabled ? 'Connection enabled.' : 'Connection disabled.')
+      const response = await fetch('/api/settings/channels', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: connection.id,
+          isEnabled: enabled,
+          isPrimary: enabled ? true : undefined,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok)
+        throw new Error(payload.error ?? 'Could not update connection');
+      await mutate();
+      toast.success(enabled ? 'Connection enabled.' : 'Connection disabled.');
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : 'Could not update connection')
+      toast.error(
+        cause instanceof Error ? cause.message : 'Could not update connection'
+      );
     } finally {
-      setBusyToggle(null)
+      setBusyToggle(null);
     }
   }
 
   function openSetup(init: ChannelSetupInit | null) {
-    setSetupInit(init)
-    setSetupOpen(true)
+    setSetupInit(init);
+    setSetupOpen(true);
   }
 
   /**
@@ -189,49 +266,84 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
    * secrets.
    */
   function startTwilio() {
-    if (reusableTwilio) setReusePromptOpen(true)
-    else if (data?.guidedConnect?.twilio.configured) setConnectOpen(true)
-    else openSetup({ provider: 'twilio' })
+    if (reusableTwilio) setReusePromptOpen(true);
+    else if (data?.guidedConnect?.twilio.configured) setConnectOpen(true);
+    else openSetup({ provider: 'twilio' });
   }
 
   function startConnect(target: ChannelKind) {
-    if (target === 'email') openSetup(null)
-    else startTwilio()
+    if (target === 'email') openSetup(null);
+    else startTwilio();
   }
 
-  const visibleChannels: ChannelKind[] = fixedChannel ? [fixedChannel] : ['email', 'whatsapp', 'sms']
+  const visibleChannels: ChannelKind[] = fixedChannel
+    ? [fixedChannel]
+    : ['email', 'whatsapp', 'sms'];
 
   return (
     <section>
       {!fixedChannel ? (
         <>
-          <SettingsPanelHead title="Channels" description="Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — providers are configured, tested, and enabled per channel." />
+          <SettingsPanelHead
+            title="Channels"
+            description="Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — providers are configured, tested, and enabled per channel."
+          />
           <Alert className="mb-5">
             <ShieldCheck />
             <AlertTitle>Provider-neutral and secret-safe</AlertTitle>
-            <AlertDescription>Credentials are encrypted at rest and never returned to this browser. Switching providers requires deliberate setup and a successful health check.</AlertDescription>
+            <AlertDescription>
+              Credentials are encrypted at rest and never returned to this
+              browser. Switching providers requires deliberate setup and a
+              successful health check.
+            </AlertDescription>
           </Alert>
         </>
       ) : null}
 
-      <Tabs value={channel} onValueChange={(value) => setChannel(value as ChannelKind)}>
+      <Tabs
+        value={channel}
+        onValueChange={(value) => setChannel(value as ChannelKind)}
+      >
         {fixedChannel ? null : (
           <TabsList>
-            <TabsTrigger value="email"><Mail />Email</TabsTrigger>
-            <TabsTrigger value="whatsapp"><MessageCircle />WhatsApp</TabsTrigger>
-            <TabsTrigger value="sms"><Smartphone />SMS</TabsTrigger>
+            <TabsTrigger value="email">
+              <Mail />
+              Email
+            </TabsTrigger>
+            <TabsTrigger value="whatsapp">
+              <MessageCircle />
+              WhatsApp
+            </TabsTrigger>
+            <TabsTrigger value="sms">
+              <Smartphone />
+              SMS
+            </TabsTrigger>
           </TabsList>
         )}
         {visibleChannels.map((tab) => {
-          const head = CHANNEL_HEAD[tab]
-          const Icon = CHANNEL_ICON[tab]
-          const empty = !isLoading && connections.length === 0
+          const head = CHANNEL_HEAD[tab];
+          const Icon = CHANNEL_ICON[tab];
+          const empty = !isLoading && connections.length === 0;
           return (
-            <TabsContent key={tab} value={tab} className="flex flex-col gap-5 pt-2">
+            <TabsContent
+              key={tab}
+              value={tab}
+              className="flex flex-col gap-5 pt-2"
+            >
               {isLoading ? (
-                <Card><CardContent className="flex items-center justify-center py-12"><Loader2 className="animate-spin" /><span className="sr-only">Loading connections</span></CardContent></Card>
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <Loader2 className="animate-spin" />
+                    <span className="sr-only">Loading connections</span>
+                  </CardContent>
+                </Card>
               ) : null}
-              {error ? <Alert variant="destructive"><AlertTitle>Connections unavailable</AlertTitle><AlertDescription>{error.message}</AlertDescription></Alert> : null}
+              {error ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Connections unavailable</AlertTitle>
+                  <AlertDescription>{error.message}</AlertDescription>
+                </Alert>
+              ) : null}
 
               {empty ? (
                 /* Bigin-style connect hero — shown until the first
@@ -241,18 +353,28 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                    one-click options appear when their env config
                    exists. */
                 <div className="flex flex-col items-center gap-4 pt-4 text-center">
-                  <h2 className="text-2xl font-bold text-balance text-foreground">{head.heroTitle}</h2>
+                  <h2 className="text-foreground text-2xl font-bold text-balance">
+                    {head.heroTitle}
+                  </h2>
                   {tab === 'whatsapp' ? (
-                    <BrandIcon src="/icons/brands/whatsapp.svg" alt="WhatsApp" size={48} />
+                    <BrandIcon
+                      src="/icons/brands/whatsapp.svg"
+                      alt="WhatsApp"
+                      size={48}
+                    />
                   ) : (
-                    <div className="flex size-14 items-center justify-center rounded-full bg-primary-soft">
-                      <Icon className="size-7 text-primary" aria-hidden />
+                    <div className="bg-primary-soft flex size-14 items-center justify-center rounded-full">
+                      <Icon className="text-primary size-7" aria-hidden />
                     </div>
                   )}
-                  <p className="max-w-xl text-sm leading-relaxed text-pretty text-muted-foreground">{head.description}</p>
+                  <p className="text-muted-foreground max-w-xl text-sm leading-relaxed text-pretty">
+                    {head.description}
+                  </p>
                   <div className="flex w-full max-w-2xl flex-col gap-3 pt-2">
-                    <h3 className="text-left text-sm font-semibold text-foreground">
-                      {tab === 'email' ? 'Popular email services:' : `Popular ${tab === 'sms' ? 'SMS' : 'WhatsApp'} services:`}
+                    <h3 className="text-foreground text-left text-sm font-semibold">
+                      {tab === 'email'
+                        ? 'Popular email services:'
+                        : `Popular ${tab === 'sms' ? 'SMS' : 'WhatsApp'} services:`}
                     </h3>
                     <div className="flex flex-wrap gap-4">
                       {tab !== 'email' ? (
@@ -267,21 +389,33 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                           ) : null}
                           <ProviderCard
                             label="Twilio"
-                            hint={tab === 'whatsapp' ? 'WhatsApp Business via Twilio' : 'SMS via Twilio'}
+                            hint={
+                              tab === 'whatsapp'
+                                ? 'WhatsApp Business via Twilio'
+                                : 'SMS via Twilio'
+                            }
                             iconSrc="/icons/brands/twilio.svg"
                             onClick={() => startTwilio()}
                           />
                         </>
                       ) : (
-                        providers.filter((item) => item.available).map((item) => (
-                          <ProviderCard
-                            key={item.provider}
-                            label={item.label}
-                            hint={item.provider === 'smtp' ? 'Any SMTP mailbox' : 'Transactional email API'}
-                            icon={Mail}
-                            onClick={() => openSetup({ provider: item.provider })}
-                          />
-                        ))
+                        providers
+                          .filter((item) => item.available)
+                          .map((item) => (
+                            <ProviderCard
+                              key={item.provider}
+                              label={item.label}
+                              hint={
+                                item.provider === 'smtp'
+                                  ? 'Any SMTP mailbox'
+                                  : 'Transactional email API'
+                              }
+                              icon={Mail}
+                              onClick={() =>
+                                openSetup({ provider: item.provider })
+                              }
+                            />
+                          ))
                       )}
                       {tab !== 'sms' ? (
                         /* SMS has exactly one provider (Twilio), so a
@@ -297,11 +431,19 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                     </div>
                   </div>
                   <div className="w-full max-w-2xl rounded-lg bg-amber-500/10 px-5 py-4 text-left">
-                    <h3 className="mb-2 text-sm font-semibold text-foreground">Requirements</h3>
+                    <h3 className="text-foreground mb-2 text-sm font-semibold">
+                      Requirements
+                    </h3>
                     <ul className="flex flex-col gap-1.5">
                       {head.requirements.map((requirement) => (
-                        <li key={requirement} className="flex gap-2.5 text-sm leading-relaxed text-foreground/85">
-                          <span aria-hidden className="mt-2 size-1 shrink-0 rounded-full bg-foreground/60" />
+                        <li
+                          key={requirement}
+                          className="text-foreground/85 flex gap-2.5 text-sm leading-relaxed"
+                        >
+                          <span
+                            aria-hidden
+                            className="bg-foreground/60 mt-2 size-1 shrink-0 rounded-full"
+                          />
                           {requirement}
                         </li>
                       ))}
@@ -316,32 +458,51 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-col gap-1">
-                      <h2 className="text-lg font-semibold text-foreground">{head.title} numbers</h2>
-                      <p className="text-sm text-muted-foreground">{connections.length} connection{connections.length === 1 ? '' : 's'} · click a row for details, test, and controls</p>
+                      <h2 className="text-foreground text-lg font-semibold">
+                        {head.title} numbers
+                      </h2>
+                      <p className="text-muted-foreground text-sm">
+                        {connections.length} connection
+                        {connections.length === 1 ? '' : 's'} · click a row for
+                        details, test, and controls
+                      </p>
                     </div>
                     <Button onClick={() => startConnect(tab)}>
                       <Plus data-icon="inline-start" />
                       Add {tab === 'email' ? 'sender' : 'number'}
                     </Button>
                   </div>
-                  <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                  <div className="divide-border border-border divide-y overflow-hidden rounded-lg border">
                     {connections.map((connection) => (
                       <div
                         key={connection.id}
                         role="button"
                         tabIndex={0}
                         onClick={() => setDetailsConnection(connection)}
-                        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setDetailsConnection(connection) } }}
-                        className="flex cursor-pointer items-center gap-4 bg-card px-4 py-3.5 transition-colors hover:bg-muted/50"
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setDetailsConnection(connection);
+                          }
+                        }}
+                        className="bg-card hover:bg-muted/50 flex cursor-pointer items-center gap-4 px-4 py-3.5 transition-colors"
                       >
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft">
-                          <Icon className="size-4.5 text-primary" aria-hidden />
+                        <div className="bg-primary-soft flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <Icon className="text-primary size-4.5" aria-hidden />
                         </div>
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="truncate text-sm font-medium text-foreground">{connection.display_name}</span>
-                          <span className="truncate text-xs text-muted-foreground">{connection.external_identity} · {connection.providerLabel}{connection.is_primary ? ' · Primary' : ''}</span>
+                          <span className="text-foreground truncate text-sm font-medium">
+                            {connection.display_name}
+                          </span>
+                          <span className="text-muted-foreground truncate text-xs">
+                            {connection.external_identity} ·{' '}
+                            {connection.providerLabel}
+                            {connection.is_primary ? ' · Primary' : ''}
+                          </span>
                           {connection.platform_notice ? (
-                            <span className="truncate text-xs text-amber-600 dark:text-amber-500">{connection.platform_notice}</span>
+                            <span className="truncate text-xs text-amber-600 dark:text-amber-500">
+                              {connection.platform_notice}
+                            </span>
                           ) : null}
                         </div>
                         {connection.managed_by === 'platform' ? (
@@ -350,23 +511,40 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                             Managed
                           </Badge>
                         ) : null}
-                        <Badge variant={connection.status === 'connected' ? 'default' : 'secondary'} className="shrink-0">{connection.status}</Badge>
-                        <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                        <Badge
+                          variant={
+                            connection.status === 'connected'
+                              ? 'default'
+                              : 'secondary'
+                          }
+                          className="shrink-0"
+                        >
+                          {connection.status}
+                        </Badge>
+                        <span
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
+                        >
                           <Switch
                             checked={connection.is_enabled}
-                            onCheckedChange={(checked) => quickToggle(connection, checked)}
+                            onCheckedChange={(checked) =>
+                              quickToggle(connection, checked)
+                            }
                             disabled={busyToggle !== null}
                             aria-label={`${connection.display_name} enabled`}
                           />
                         </span>
-                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                        <ChevronRight
+                          className="text-muted-foreground size-4 shrink-0"
+                          aria-hidden
+                        />
                       </div>
                     ))}
                   </div>
                 </div>
               ) : null}
             </TabsContent>
-          )
+          );
         })}
       </Tabs>
 
@@ -376,12 +554,27 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
           open={connectOpen}
           onOpenChange={setConnectOpen}
           authorizeUrl={data?.guidedConnect?.twilio.authorizeUrl ?? null}
-          reusable={reusableTwilio ? { id: reusableTwilio.id, displayName: reusableTwilio.display_name, channelLabel: reusableTwilio.channel === 'whatsapp' ? 'WhatsApp' : reusableTwilio.channel === 'sms' ? 'SMS' : 'Email' } : null}
+          reusable={
+            reusableTwilio
+              ? {
+                  id: reusableTwilio.id,
+                  displayName: reusableTwilio.display_name,
+                  channelLabel:
+                    reusableTwilio.channel === 'whatsapp'
+                      ? 'WhatsApp'
+                      : reusableTwilio.channel === 'sms'
+                        ? 'SMS'
+                        : 'Email',
+                }
+              : null
+          }
           onContinue={({ accountSid, reuseFromId }) => {
             openSetup({
               ...(accountSid ? { accountSid } : {}),
-              ...(reuseFromId && reusableTwilio ? { reuseFromId, reuseFromLabel: reusableTwilio.display_name } : {}),
-            })
+              ...(reuseFromId && reusableTwilio
+                ? { reuseFromId, reuseFromLabel: reusableTwilio.display_name }
+                : {}),
+            });
           }}
         />
       ) : null}
@@ -392,21 +585,32 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
       <AlertDialog open={reusePromptOpen} onOpenChange={setReusePromptOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <div className="mb-1 flex size-10 items-center justify-center rounded-lg border border-border bg-card">
+            <div className="border-border bg-card mb-1 flex size-10 items-center justify-center rounded-lg border">
               <BrandIcon src="/icons/brands/twilio.svg" size={24} />
             </div>
-            <AlertDialogTitle>Use your existing Twilio account?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Use your existing Twilio account?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {reusableTwilio ? `“${reusableTwilio.display_name}” is already connected for ${reusableTwilio.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}.` : ''}
+              {reusableTwilio
+                ? `“${reusableTwilio.display_name}” is already connected for ${reusableTwilio.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}.`
+                : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => openSetup({ provider: 'twilio' })}>
+            <AlertDialogCancel
+              onClick={() => openSetup({ provider: 'twilio' })}
+            >
               Connect new account
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (reusableTwilio) openSetup({ provider: 'twilio', reuseFromId: reusableTwilio.id, reuseFromLabel: reusableTwilio.display_name })
+                if (reusableTwilio)
+                  openSetup({
+                    provider: 'twilio',
+                    reuseFromId: reusableTwilio.id,
+                    reuseFromLabel: reusableTwilio.display_name,
+                  });
               }}
             >
               Use existing account
@@ -421,16 +625,25 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
         init={setupInit}
         providers={providers}
         onOpenChange={setSetupOpen}
-        onSaved={() => { void mutate() }}
+        onSaved={() => {
+          void mutate();
+        }}
       />
 
       <ChannelConnectionSheet
-        connection={detailsConnection ? (connections.find((item) => item.id === detailsConnection.id) ?? detailsConnection) : null}
+        connection={
+          detailsConnection
+            ? (connections.find((item) => item.id === detailsConnection.id) ??
+              detailsConnection)
+            : null
+        }
         channel={channel}
         open={detailsConnection !== null}
-        onOpenChange={(open) => { if (!open) setDetailsConnection(null) }}
+        onOpenChange={(open) => {
+          if (!open) setDetailsConnection(null);
+        }}
         onChanged={() => mutate()}
       />
     </section>
-  )
+  );
 }

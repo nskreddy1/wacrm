@@ -4,33 +4,33 @@
 
 No values are recorded. `NEXT_PUBLIC_*` variables are client-visible and must never hold secrets.
 
-| Variable | Visibility / requirement | Purpose, precedence and consumers |
-| --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | public; required for real backend | Primary Supabase URL used by proxy, clients, auth UI, runtime detection and server routes. `next.config.ts` can map integration aliases. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public; required | Browser-safe anon key used by Supabase clients/proxy. Alias/publishable-key fallbacks are normalized in `next.config.ts`. |
-| `SUPABASE_URL` | server fallback | Server/admin fallback if public URL is absent. |
-| `SUPABASE_SERVICE_ROLE_KEY` | secret; server only | Preferred admin credential for AI/flow/automation/channel/WhatsApp server modules. |
-| `SUPABASE_SECRET_KEY` | secret fallback | Alternate admin key after service-role/publishable-secret fallback chain. |
-| `SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | Integration naming compatibility normalized to anon public config. |
-| `NEXT_PUBLIC_zepo_SUPABASE_URL`, `NEXT_PUBLIC_zepo_SUPABASE_ANON_KEY` | public compatibility | Legacy integration aliases consumed only by Next config normalization. |
-| `WEB_PORT`, `PORT` | server | Next launcher port; `WEB_PORT` wins, then `PORT`, then 3000. |
-| `API_HOST`, `API_PORT` | server | Express bind target; default documented as `127.0.0.1:4000`. |
-| `EXPRESS_API_URL` | server optional | Explicit BFF target; otherwise derived from API host/port. |
-| `NEXT_PUBLIC_SITE_URL` | public | Canonical invitation/auth redirect origin. |
-| `ALLOWED_INVITE_HOSTS` | server optional | Comma-separated host allowlist for invitation link generation. |
-| `NEXT_PUBLIC_APP_LOCALE` | public optional | next-intl locale, defaults to `en`. |
-| `META_APP_ID` | server | Meta template/header upload operations. |
-| `META_APP_SECRET` | secret; required for webhook | HMAC verification; route fails closed when missing. |
-| `ENCRYPTION_KEY` | secret; required for encrypted credentials | AES key for WhatsApp/provider/AI secret envelopes; rotation requires migration strategy. |
-| `AUTOMATION_CRON_SECRET` | secret | Shared header secret for automation and flow cron drains. |
-| `WHATSAPP_TEMPLATES_DRY_RUN` | server optional | `true`/`1` prevents real template mutation for submit/update/delete paths. |
-| `AI_REQUEST_TIMEOUT_MS` | server optional | Numeric generation timeout with code default/validation. |
-| `AI_CONTEXT_MESSAGE_LIMIT` | server optional | Numeric conversation-context bound with code default/validation. |
-| `WACRM_BASE_URL` | MCP required | Base URL for public REST calls; trimmed/validated. |
-| `WACRM_API_KEY` | MCP secret; required | Scoped API key sent by MCP client. |
-| `WACRM_ENABLE_WRITES` | MCP optional | Truthy flag registers/enables mutation tools. |
-| `WACRM_ENABLE_BROADCASTS` | MCP optional | Separate truthy gate for campaign creation. |
-| `NODE_ENV` | runtime | Framework mode and test-only guard enforcement. |
+| Variable                                                              | Visibility / requirement                   | Purpose, precedence and consumers                                                                                                        |
+| --------------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`                                            | public; required for real backend          | Primary Supabase URL used by proxy, clients, auth UI, runtime detection and server routes. `next.config.ts` can map integration aliases. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                       | public; required                           | Browser-safe anon key used by Supabase clients/proxy. Alias/publishable-key fallbacks are normalized in `next.config.ts`.                |
+| `SUPABASE_URL`                                                        | server fallback                            | Server/admin fallback if public URL is absent.                                                                                           |
+| `SUPABASE_SERVICE_ROLE_KEY`                                           | secret; server only                        | Preferred admin credential for AI/flow/automation/channel/WhatsApp server modules.                                                       |
+| `SUPABASE_SECRET_KEY`                                                 | secret fallback                            | Alternate admin key after service-role/publishable-secret fallback chain.                                                                |
+| `SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`    | public                                     | Integration naming compatibility normalized to anon public config.                                                                       |
+| `NEXT_PUBLIC_zepo_SUPABASE_URL`, `NEXT_PUBLIC_zepo_SUPABASE_ANON_KEY` | public compatibility                       | Legacy integration aliases consumed only by Next config normalization.                                                                   |
+| `WEB_PORT`, `PORT`                                                    | server                                     | Next launcher port; `WEB_PORT` wins, then `PORT`, then 3000.                                                                             |
+| `API_HOST`, `API_PORT`                                                | server                                     | Express bind target; default documented as `127.0.0.1:4000`.                                                                             |
+| `EXPRESS_API_URL`                                                     | server optional                            | Explicit BFF target; otherwise derived from API host/port.                                                                               |
+| `NEXT_PUBLIC_SITE_URL`                                                | public                                     | Canonical invitation/auth redirect origin.                                                                                               |
+| `ALLOWED_INVITE_HOSTS`                                                | server optional                            | Comma-separated host allowlist for invitation link generation.                                                                           |
+| `NEXT_PUBLIC_APP_LOCALE`                                              | public optional                            | next-intl locale, defaults to `en`.                                                                                                      |
+| `META_APP_ID`                                                         | server                                     | Meta template/header upload operations.                                                                                                  |
+| `META_APP_SECRET`                                                     | secret; required for webhook               | HMAC verification; route fails closed when missing.                                                                                      |
+| `ENCRYPTION_KEY`                                                      | secret; required for encrypted credentials | AES key for WhatsApp/provider/AI secret envelopes; rotation requires migration strategy.                                                 |
+| `AUTOMATION_CRON_SECRET`                                              | secret                                     | Shared header secret for automation and flow cron drains.                                                                                |
+| `WHATSAPP_TEMPLATES_DRY_RUN`                                          | server optional                            | `true`/`1` prevents real template mutation for submit/update/delete paths.                                                               |
+| `AI_REQUEST_TIMEOUT_MS`                                               | server optional                            | Numeric generation timeout with code default/validation.                                                                                 |
+| `AI_CONTEXT_MESSAGE_LIMIT`                                            | server optional                            | Numeric conversation-context bound with code default/validation.                                                                         |
+| `WACRM_BASE_URL`                                                      | MCP required                               | Base URL for public REST calls; trimmed/validated.                                                                                       |
+| `WACRM_API_KEY`                                                       | MCP secret; required                       | Scoped API key sent by MCP client.                                                                                                       |
+| `WACRM_ENABLE_WRITES`                                                 | MCP optional                               | Truthy flag registers/enables mutation tools.                                                                                            |
+| `WACRM_ENABLE_BROADCASTS`                                             | MCP optional                               | Separate truthy gate for campaign creation.                                                                                              |
+| `NODE_ENV`                                                            | runtime                                    | Framework mode and test-only guard enforcement.                                                                                          |
 
 Provider credentials entered through Settings are stored encrypted in `channel_connections`; they are not global env requirements. AI uses per-account encrypted BYO OpenAI/Anthropic keys rather than requiring a global model key.
 
@@ -48,17 +48,17 @@ Provider credentials entered through Settings are stored encrypted in `channel_c
 
 ## Build and process commands
 
-| Script | Effect |
-| --- | --- |
-| `pnpm dev` | Runs `dev:web` and `dev:api` concurrently. |
-| `pnpm dev:web` | Loads `.env.development.local`, invokes validated Next dev launcher. |
-| `pnpm dev:api` | Loads env and executes `server/index.ts` through `tsx`. |
-| `pnpm build` | Next production build. |
-| `pnpm start` | Supervises production web/API processes and terminates peers on failure. |
-| `pnpm typecheck` | `tsc --noEmit`. |
-| `pnpm test` | Vitest run. |
-| `pnpm lint` | ESLint repository scan. |
-| `pnpm format:check` | Prettier verification. |
+| Script              | Effect                                                                   |
+| ------------------- | ------------------------------------------------------------------------ |
+| `pnpm dev`          | Runs `dev:web` and `dev:api` concurrently.                               |
+| `pnpm dev:web`      | Loads `.env.development.local`, invokes validated Next dev launcher.     |
+| `pnpm dev:api`      | Loads env and executes `server/index.ts` through `tsx`.                  |
+| `pnpm build`        | Next production build.                                                   |
+| `pnpm start`        | Supervises production web/API processes and terminates peers on failure. |
+| `pnpm typecheck`    | `tsc --noEmit`.                                                          |
+| `pnpm test`         | Vitest run.                                                              |
+| `pnpm lint`         | ESLint repository scan.                                                  |
+| `pnpm format:check` | Prettier verification.                                                   |
 
 ## Deployment topology
 

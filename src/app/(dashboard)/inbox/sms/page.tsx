@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { InboxWorkspace } from "@/features/inbox/components/inbox-workspace";
+import { InboxWorkspace } from '@/features/inbox/components/inbox-workspace';
 
 /**
  * SMS Inbox — a fully separate conversation workspace scoped to the

@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // Lazy, shared service-role client for platform-operator paths
 // (super-admin console, support-ticket triage, compensating
@@ -9,7 +9,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 // shell after a failed message insert). Never expose query results
 // from this client without explicitly scoping/filtering them first —
 // it bypasses RLS entirely.
-let _adminClient: SupabaseClient | null = null
+let _adminClient: SupabaseClient | null = null;
 
 export function platformAdmin(): SupabaseClient {
   if (!_adminClient) {
@@ -18,8 +18,8 @@ export function platformAdmin(): SupabaseClient {
       (process.env.SUPABASE_SERVICE_ROLE_KEY ??
         process.env.zepo_SUPABASE_SERVICE_ROLE_KEY ??
         process.env.zepo_SUPABASE_SECRET_KEY ??
-        process.env.SUPABASE_SECRET_KEY)!,
-    )
+        process.env.SUPABASE_SECRET_KEY)!
+    );
   }
-  return _adminClient
+  return _adminClient;
 }

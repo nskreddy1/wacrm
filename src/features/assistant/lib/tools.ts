@@ -1,6 +1,6 @@
-import { tool } from 'ai'
-import { z } from 'zod'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { tool } from 'ai';
+import { z } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ============================================================
 // Platform assistant tools — full application coverage.
@@ -19,42 +19,42 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // ============================================================
 
 export interface AssistantToolContext {
-  supabase: SupabaseClient
-  accountId: string
+  supabase: SupabaseClient;
+  accountId: string;
   /** Null for MCP callers authenticated by account-level API key. */
-  userId: string | null
+  userId: string | null;
 }
 
 /** The filter builder shape countRows callers narrow with. Keeping it
  *  structural (rather than importing PostgrestFilterBuilder's five type
  *  params) keeps call sites simple while staying fully typed. */
 type CountQuery = {
-  eq(column: string, value: string): CountQuery
-  gte(column: string, value: string): CountQuery
-  in(column: string, values: string[]): CountQuery
+  eq(column: string, value: string): CountQuery;
+  gte(column: string, value: string): CountQuery;
+  in(column: string, values: string[]): CountQuery;
   then<T>(
-    onfulfilled: (value: { count: number | null; error: unknown }) => T,
-  ): Promise<T>
-}
+    onfulfilled: (value: { count: number | null; error: unknown }) => T
+  ): Promise<T>;
+};
 
 /** Count helper: exact count without fetching rows. */
 async function countRows(
   db: SupabaseClient,
   table: string,
   accountId: string,
-  extra?: (q: CountQuery) => CountQuery,
+  extra?: (q: CountQuery) => CountQuery
 ): Promise<number | null> {
   let q = db
     .from(table)
     .select('id', { count: 'exact', head: true })
-    .eq('account_id', accountId) as unknown as CountQuery
-  if (extra) q = extra(q)
-  const { count, error } = await q.then((res) => res)
-  return error ? null : (count ?? 0)
+    .eq('account_id', accountId) as unknown as CountQuery;
+  if (extra) q = extra(q);
+  const { count, error } = await q.then((res) => res);
+  return error ? null : (count ?? 0);
 }
 
 export function buildAssistantTools(ctx: AssistantToolContext) {
-  const db = ctx.supabase
+  const db = ctx.supabase;
 
   return {
     // ---------- READ TOOLS (no approval needed) ----------
@@ -64,7 +64,7 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
         'Get workspace-wide counts: total contacts, deals, open conversations, upcoming appointments, broadcasts, templates, automations, open tasks and open support tickets. Use this FIRST for any "how many…" question. Read-only.',
       inputSchema: z.object({}),
       execute: async () => {
-        const nowIso = new Date().toISOString()
+        const nowIso = new Date().toISOString();
         const [
           contacts,
           deals,
@@ -80,10 +80,10 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           countRows(db, 'contacts', ctx.accountId),
           countRows(db, 'deals', ctx.accountId),
           countRows(db, 'conversations', ctx.accountId, (q) =>
-            q.eq('status', 'open'),
+            q.eq('status', 'open')
           ),
           countRows(db, 'appointments', ctx.accountId, (q) =>
-            q.gte('starts_at', nowIso),
+            q.gte('starts_at', nowIso)
           ),
           countRows(db, 'broadcasts', ctx.accountId),
           countRows(db, 'message_templates', ctx.accountId),
@@ -91,9 +91,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           countRows(db, 'flows', ctx.accountId),
           countRows(db, 'tasks', ctx.accountId, (q) => q.eq('status', 'open')),
           countRows(db, 'support_tickets', ctx.accountId, (q) =>
-            q.in('status', ['open', 'pending']),
+            q.in('status', ['open', 'pending'])
           ),
-        ])
+        ]);
         return {
           contacts,
           deals,
@@ -104,7 +104,7 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           automations: (automations ?? 0) + (flows ?? 0),
           open_tasks: openTasks,
           open_support_tickets: openTickets,
-        }
+        };
       },
     }),
 
@@ -122,14 +122,14 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .select('id, name, phone, email, created_at', { count: 'exact' })
           .eq('account_id', ctx.accountId)
           .order('created_at', { ascending: false })
-          .range((page - 1) * page_size, page * page_size - 1)
+          .range((page - 1) * page_size, page * page_size - 1);
         if (search) {
           q = q.or(
-            `name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`,
-          )
+            `name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`
+          );
         }
-        const { data, count, error } = await q
-        if (error) return { error: 'Could not list contacts.' }
+        const { data, count, error } = await q;
+        if (error) return { error: 'Could not list contacts.' };
         return {
           total_contacts: count ?? 0,
           page,
@@ -139,7 +139,7 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             phone: c.phone,
             email: c.email,
           })),
-        }
+        };
       },
     }),
 
@@ -156,11 +156,11 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
       }),
       execute: async ({ contact_id, query }) => {
         let contact: {
-          id: string
-          name: string | null
-          phone: string | null
-          email: string | null
-        } | null = null
+          id: string;
+          name: string | null;
+          phone: string | null;
+          email: string | null;
+        } | null = null;
 
         if (contact_id) {
           const { data } = await db
@@ -168,8 +168,8 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             .select('id, name, phone, email')
             .eq('account_id', ctx.accountId)
             .eq('id', contact_id)
-            .maybeSingle()
-          contact = data
+            .maybeSingle();
+          contact = data;
         } else if (query) {
           const { data } = await db
             .from('contacts')
@@ -177,11 +177,11 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             .eq('account_id', ctx.accountId)
             .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
             .limit(1)
-            .maybeSingle()
-          contact = data
+            .maybeSingle();
+          contact = data;
         }
         if (!contact) {
-          return { error: 'Contact not found. Provide contact_id or query.' }
+          return { error: 'Contact not found. Provide contact_id or query.' };
         }
 
         const [deals, notes, tasks, appointments] = await Promise.all([
@@ -210,7 +210,7 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             .eq('contact_id', contact.id)
             .gte('starts_at', new Date().toISOString())
             .limit(5),
-        ])
+        ]);
 
         return {
           contact,
@@ -218,19 +218,19 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           deals: (deals.data ?? []).map((d) => {
             const stage = Array.isArray(d.pipeline_stages)
               ? d.pipeline_stages[0]
-              : d.pipeline_stages
+              : d.pipeline_stages;
             return {
               title: d.title,
               value: d.value,
               currency: d.currency,
               status: d.status,
               stage: (stage as { name?: string } | null)?.name ?? null,
-            }
+            };
           }),
           recent_notes: notes.data ?? [],
           tasks: tasks.data ?? [],
           upcoming_appointments: appointments.data ?? [],
-        }
+        };
       },
     }),
 
@@ -247,9 +247,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .eq('account_id', ctx.accountId)
           .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
           .order('created_at', { ascending: false })
-          .limit(5)
-        if (error) return { error: 'Could not search contacts.' }
-        return { count: data.length, contacts: data }
+          .limit(5);
+        if (error) return { error: 'Could not search contacts.' };
+        return { count: data.length, contacts: data };
       },
     }),
 
@@ -264,31 +264,28 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             .select('id, value, currency, status, stage_id')
             .eq('account_id', ctx.accountId)
             .limit(1000),
-          db
-            .from('pipeline_stages')
-            .select('id, name')
-            .limit(100),
-        ])
-        if (dealsRes.error) return { error: 'Could not load deals.' }
+          db.from('pipeline_stages').select('id, name').limit(100),
+        ]);
+        if (dealsRes.error) return { error: 'Could not load deals.' };
         const stageName = new Map(
-          (stagesRes.data ?? []).map((s) => [s.id, s.name as string]),
-        )
+          (stagesRes.data ?? []).map((s) => [s.id, s.name as string])
+        );
         const byStage: Record<
           string,
           { deals: number; total_value: number; currency: string | null }
-        > = {}
-        let won = 0
-        let lost = 0
-        let open = 0
+        > = {};
+        let won = 0;
+        let lost = 0;
+        let open = 0;
         for (const d of dealsRes.data ?? []) {
-          const key = stageName.get(d.stage_id) ?? 'No stage'
-          byStage[key] ??= { deals: 0, total_value: 0, currency: null }
-          byStage[key].deals += 1
-          byStage[key].total_value += Number(d.value ?? 0)
-          byStage[key].currency ??= d.currency ?? null
-          if (d.status === 'won') won += 1
-          else if (d.status === 'lost') lost += 1
-          else open += 1
+          const key = stageName.get(d.stage_id) ?? 'No stage';
+          byStage[key] ??= { deals: 0, total_value: 0, currency: null };
+          byStage[key].deals += 1;
+          byStage[key].total_value += Number(d.value ?? 0);
+          byStage[key].currency ??= d.currency ?? null;
+          if (d.status === 'won') won += 1;
+          else if (d.status === 'lost') lost += 1;
+          else open += 1;
         }
         return {
           total_deals: dealsRes.data?.length ?? 0,
@@ -296,7 +293,7 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           won,
           lost,
           stages: byStage,
-        }
+        };
       },
     }),
 
@@ -311,23 +308,23 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
         let q = db
           .from('deals')
           .select(
-            'id, title, value, currency, status, pipeline_stages(name), contacts(name)',
+            'id, title, value, currency, status, pipeline_stages(name), contacts(name)'
           )
           .eq('account_id', ctx.accountId)
           .order('created_at', { ascending: false })
-          .limit(limit)
-        if (query) q = q.ilike('title', `%${query}%`)
-        const { data, error } = await q
-        if (error) return { error: 'Could not load deals.' }
+          .limit(limit);
+        if (query) q = q.ilike('title', `%${query}%`);
+        const { data, error } = await q;
+        if (error) return { error: 'Could not load deals.' };
         return {
           count: data.length,
           deals: data.map((d) => {
             const stage = Array.isArray(d.pipeline_stages)
               ? d.pipeline_stages[0]
-              : d.pipeline_stages
+              : d.pipeline_stages;
             const contact = Array.isArray(d.contacts)
               ? d.contacts[0]
-              : d.contacts
+              : d.contacts;
             return {
               id: d.id,
               title: d.title,
@@ -336,9 +333,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
               status: d.status,
               stage: (stage as { name?: string } | null)?.name ?? null,
               contact: (contact as { name?: string } | null)?.name ?? null,
-            }
+            };
           }),
-        }
+        };
       },
     }),
 
@@ -355,22 +352,24 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .select('id, status, last_message_at, contacts(name, phone)')
           .eq('account_id', ctx.accountId)
           .order('last_message_at', { ascending: false })
-          .limit(limit)
-        if (status !== 'all') q = q.eq('status', status)
-        const { data, error } = await q
-        if (error) return { error: 'Could not load conversations.' }
+          .limit(limit);
+        if (status !== 'all') q = q.eq('status', status);
+        const { data, error } = await q;
+        if (error) return { error: 'Could not load conversations.' };
         return {
           conversations: data.map((c) => {
-            const contact = Array.isArray(c.contacts) ? c.contacts[0] : c.contacts
-            const ct = contact as { name?: string; phone?: string } | null
+            const contact = Array.isArray(c.contacts)
+              ? c.contacts[0]
+              : c.contacts;
+            const ct = contact as { name?: string; phone?: string } | null;
             return {
               id: c.id,
               status: c.status,
               contact: ct?.name ?? ct?.phone ?? 'Unknown',
               last_message_at: c.last_message_at,
-            }
+            };
           }),
-        }
+        };
       },
     }),
 
@@ -389,17 +388,18 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .select('id')
           .eq('account_id', ctx.accountId)
           .eq('id', conversation_id)
-          .maybeSingle()
-        if (!convo) return { error: 'Conversation not found in this workspace.' }
+          .maybeSingle();
+        if (!convo)
+          return { error: 'Conversation not found in this workspace.' };
 
         const { data, error } = await db
           .from('messages')
           .select('sender_type, content_type, content_text, status, created_at')
           .eq('conversation_id', conversation_id)
           .order('created_at', { ascending: false })
-          .limit(limit)
-        if (error) return { error: 'Could not load messages.' }
-        return { messages: (data ?? []).reverse() }
+          .limit(limit);
+        if (error) return { error: 'Could not load messages.' };
+        return { messages: (data ?? []).reverse() };
       },
     }),
 
@@ -415,20 +415,22 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .eq('account_id', ctx.accountId)
           .gte('starts_at', new Date().toISOString())
           .order('starts_at', { ascending: true })
-          .limit(limit)
-        if (error) return { error: 'Could not load appointments.' }
+          .limit(limit);
+        if (error) return { error: 'Could not load appointments.' };
         return {
           appointments: data.map((a) => {
-            const contact = Array.isArray(a.contacts) ? a.contacts[0] : a.contacts
+            const contact = Array.isArray(a.contacts)
+              ? a.contacts[0]
+              : a.contacts;
             return {
               id: a.id,
               title: a.title,
               starts_at: a.starts_at,
               status: a.status,
               contact: (contact as { name?: string } | null)?.name ?? null,
-            }
+            };
           }),
-        }
+        };
       },
     }),
 
@@ -441,12 +443,14 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
       execute: async ({ limit }) => {
         const { data, error } = await db
           .from('broadcasts')
-          .select('id, name, status, total_recipients, scheduled_at, created_at')
+          .select(
+            'id, name, status, total_recipients, scheduled_at, created_at'
+          )
           .eq('account_id', ctx.accountId)
           .order('created_at', { ascending: false })
-          .limit(limit)
-        if (error) return { error: 'Could not load broadcasts.' }
-        return { broadcasts: data ?? [] }
+          .limit(limit);
+        if (error) return { error: 'Could not load broadcasts.' };
+        return { broadcasts: data ?? [] };
       },
     }),
 
@@ -462,9 +466,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .select('id, name, category, language, status')
           .eq('account_id', ctx.accountId)
           .order('created_at', { ascending: false })
-          .limit(limit)
-        if (error) return { error: 'Could not load templates.' }
-        return { templates: data ?? [] }
+          .limit(limit);
+        if (error) return { error: 'Could not load templates.' };
+        return { templates: data ?? [] };
       },
     }),
 
@@ -484,11 +488,11 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             .select('id, name, status')
             .eq('account_id', ctx.accountId)
             .limit(20),
-        ])
+        ]);
         return {
           automations: autos.data ?? [],
           flows: flows.data ?? [],
-        }
+        };
       },
     }),
 
@@ -504,13 +508,15 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .select('id, title, status, priority, due_at, contacts(name)')
           .eq('account_id', ctx.accountId)
           .order('due_at', { ascending: true, nullsFirst: false })
-          .limit(limit)
-        if (status !== 'all') q = q.eq('status', status)
-        const { data, error } = await q
-        if (error) return { error: 'Could not load tasks.' }
+          .limit(limit);
+        if (status !== 'all') q = q.eq('status', status);
+        const { data, error } = await q;
+        if (error) return { error: 'Could not load tasks.' };
         return {
           tasks: (data ?? []).map((t) => {
-            const contact = Array.isArray(t.contacts) ? t.contacts[0] : t.contacts
+            const contact = Array.isArray(t.contacts)
+              ? t.contacts[0]
+              : t.contacts;
             return {
               id: t.id,
               title: t.title,
@@ -518,9 +524,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
               priority: t.priority,
               due_at: t.due_at,
               contact: (contact as { name?: string } | null)?.name ?? null,
-            }
+            };
           }),
-        }
+        };
       },
     }),
 
@@ -536,9 +542,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .select('id, subject, category, priority, status, created_at')
           .eq('account_id', ctx.accountId)
           .order('created_at', { ascending: false })
-          .limit(limit)
-        if (error) return { error: 'Could not load tickets.' }
-        return { tickets: data ?? [] }
+          .limit(limit);
+        if (error) return { error: 'Could not load tickets.' };
+        return { tickets: data ?? [] };
       },
     }),
 
@@ -551,16 +557,16 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .from('ai_configs')
           .select('provider, model, is_active, auto_reply_enabled')
           .eq('account_id', ctx.accountId)
-          .maybeSingle()
-        if (error) return { error: 'Could not load agent status.' }
-        if (!data) return { configured: false }
+          .maybeSingle();
+        if (error) return { error: 'Could not load agent status.' };
+        if (!data) return { configured: false };
         return {
           configured: true,
           provider: data.provider,
           model: data.model,
           active: data.is_active,
           auto_reply: data.auto_reply_enabled,
-        }
+        };
       },
     }),
 
@@ -580,9 +586,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .select('id')
           .eq('account_id', ctx.accountId)
           .eq('phone', phone)
-          .maybeSingle()
+          .maybeSingle();
         if (existing) {
-          return { error: 'A contact with this phone number already exists.' }
+          return { error: 'A contact with this phone number already exists.' };
         }
         const { data, error } = await db
           .from('contacts')
@@ -594,9 +600,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             email: email ?? null,
           })
           .select('id')
-          .single()
-        if (error || !data) return { error: 'Could not create the contact.' }
-        return { created: true, contact_id: data.id, name }
+          .single();
+        if (error || !data) return { error: 'Could not create the contact.' };
+        return { created: true, contact_id: data.id, name };
       },
     }),
 
@@ -621,8 +627,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             .select('id')
             .eq('account_id', ctx.accountId)
             .eq('id', contact_id)
-            .maybeSingle()
-          if (!contact) return { error: 'Contact not found in this workspace.' }
+            .maybeSingle();
+          if (!contact)
+            return { error: 'Contact not found in this workspace.' };
         }
         const { data, error } = await db
           .from('tasks')
@@ -636,9 +643,9 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             contact_id: contact_id ?? null,
           })
           .select('id')
-          .single()
-        if (error || !data) return { error: 'Could not create the task.' }
-        return { created: true, task_id: data.id, title }
+          .single();
+        if (error || !data) return { error: 'Could not create the task.' };
+        return { created: true, task_id: data.id, title };
       },
     }),
 
@@ -646,7 +653,10 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
       description:
         'Add an internal note to a contact record. WRITE action — requires user approval.',
       inputSchema: z.object({
-        contact_id: z.string().uuid().describe('Contact id from search_contacts'),
+        contact_id: z
+          .string()
+          .uuid()
+          .describe('Contact id from search_contacts'),
         note: z.string().min(1).max(1000),
       }),
       execute: async ({ contact_id, note }) => {
@@ -655,16 +665,16 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           .select('id, name')
           .eq('account_id', ctx.accountId)
           .eq('id', contact_id)
-          .maybeSingle()
-        if (!contact) return { error: 'Contact not found in this workspace.' }
+          .maybeSingle();
+        if (!contact) return { error: 'Contact not found in this workspace.' };
 
         const { error } = await db.from('contact_notes').insert({
           contact_id,
           user_id: ctx.userId,
           note_text: note,
-        })
-        if (error) return { error: 'Could not save the note.' }
-        return { saved: true, contact: contact.name }
+        });
+        if (error) return { error: 'Could not save the note.' };
+        return { saved: true, contact: contact.name };
       },
     }),
 
@@ -674,7 +684,13 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
       inputSchema: z.object({
         subject: z.string().min(3).max(200),
         category: z
-          .enum(['billing', 'technical', 'channel_setup', 'agent_help', 'other'])
+          .enum([
+            'billing',
+            'technical',
+            'channel_setup',
+            'agent_help',
+            'other',
+          ])
           .default('other'),
         priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal'),
         description: z
@@ -694,8 +710,8 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             priority,
           })
           .select('id')
-          .single()
-        if (error || !ticket) return { error: 'Could not create the ticket.' }
+          .single();
+        if (error || !ticket) return { error: 'Could not create the ticket.' };
 
         const { error: msgError } = await db
           .from('support_ticket_messages')
@@ -704,23 +720,23 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             author_id: ctx.userId,
             is_admin_reply: false,
             body: description,
-          })
+          });
         if (msgError) {
           return {
             ticket_id: ticket.id,
             warning:
               'Ticket created, but the description could not be attached. Please add it manually.',
-          }
+          };
         }
         return {
           ticket_id: ticket.id,
           status: 'open',
           message:
             'Ticket created and routed to the founder support team. They will reply in Support.',
-        }
+        };
       },
     }),
-  }
+  };
 }
 
 /** Tool names that mutate data — approval-gated in the chat route. */
@@ -729,7 +745,7 @@ export const WRITE_TOOL_NAMES = [
   'create_task',
   'add_contact_note',
   'create_support_ticket',
-] as const
+] as const;
 
 /** Read-only tool names — safe to expose on the MCP server without approval. */
 export const READ_TOOL_NAMES = [
@@ -748,4 +764,4 @@ export const READ_TOOL_NAMES = [
   'list_tasks',
   'list_support_tickets',
   'get_ai_agent_status',
-] as const
+] as const;

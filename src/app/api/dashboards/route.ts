@@ -10,51 +10,56 @@
 // project data the user can already see on the overview.
 // ============================================================
 
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
-import { getCurrentAccount, toErrorResponse } from '@/features/auth/lib/account'
+import {
+  getCurrentAccount,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
 import {
   MAX_DASHBOARDS_PER_USER,
   sanitizeWidgets,
-} from '@/features/dashboards/lib/widgets'
+} from '@/features/dashboards/lib/widgets';
 
-const COLUMNS = 'id, name, widgets, position, created_at, updated_at'
-const MAX_NAME_LEN = 60
+const COLUMNS = 'id, name, widgets, position, created_at, updated_at';
+const MAX_NAME_LEN = 60;
 
 export async function GET() {
   try {
-    const ctx = await getCurrentAccount()
+    const ctx = await getCurrentAccount();
     const { data, error } = await ctx.supabase
       .from('user_dashboards')
       .select(COLUMNS)
       .eq('account_id', ctx.accountId)
       .order('position', { ascending: true })
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: true });
 
     if (error) {
       return NextResponse.json(
         { error: 'Failed to load dashboards' },
-        { status: 500 },
-      )
+        { status: 500 }
+      );
     }
-    return NextResponse.json({ dashboards: data ?? [] })
+    return NextResponse.json({ dashboards: data ?? [] });
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const ctx = await getCurrentAccount()
+    const ctx = await getCurrentAccount();
     const body = (await request.json().catch(() => null)) as {
-      name?: unknown
-      widgets?: unknown
-    } | null
+      name?: unknown;
+      widgets?: unknown;
+    } | null;
 
     const name =
-      typeof body?.name === 'string' ? body.name.trim().slice(0, MAX_NAME_LEN) : ''
+      typeof body?.name === 'string'
+        ? body.name.trim().slice(0, MAX_NAME_LEN)
+        : '';
     if (!name) {
-      return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
     // Per-user cap — keeps the switcher (and the jsonb rows) sane.
@@ -62,12 +67,12 @@ export async function POST(request: Request) {
       .from('user_dashboards')
       .select('id', { count: 'exact', head: true })
       .eq('account_id', ctx.accountId)
-      .eq('user_id', ctx.userId)
+      .eq('user_id', ctx.userId);
     if ((count ?? 0) >= MAX_DASHBOARDS_PER_USER) {
       return NextResponse.json(
         { error: `Limit of ${MAX_DASHBOARDS_PER_USER} dashboards reached` },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
 
     const { data, error } = await ctx.supabase
@@ -80,16 +85,16 @@ export async function POST(request: Request) {
         position: count ?? 0,
       })
       .select(COLUMNS)
-      .single()
+      .single();
 
     if (error || !data) {
       return NextResponse.json(
         { error: 'Failed to create dashboard' },
-        { status: 500 },
-      )
+        { status: 500 }
+      );
     }
-    return NextResponse.json({ dashboard: data }, { status: 201 })
+    return NextResponse.json({ dashboard: data }, { status: 201 });
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 }

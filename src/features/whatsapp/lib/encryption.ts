@@ -1,4 +1,4 @@
-import crypto from 'crypto'
+import crypto from 'crypto';
 
 /**
  * WhatsApp token encryption.
@@ -30,83 +30,91 @@ import crypto from 'crypto'
 // call time instead of `Buffer.from(undefined)` throwing a cryptic
 // "first argument must be of type string" TypeError deep in crypto.
 function getEncryptionKey(): Buffer {
-  const raw = process.env.ENCRYPTION_KEY
+  const raw = process.env.ENCRYPTION_KEY;
   if (!raw) {
     throw new Error(
       'ENCRYPTION_KEY environment variable is not set. Add it to this ' +
         'deployment environment (it must be the same 64-char hex key used ' +
-        'when the credentials were saved).',
-    )
+        'when the credentials were saved).'
+    );
   }
-  const key = Buffer.from(raw, 'hex')
+  const key = Buffer.from(raw, 'hex');
   if (key.length !== 32) {
     throw new Error(
-      `ENCRYPTION_KEY must be 32 bytes of hex (64 chars), got ${key.length} bytes`,
-    )
+      `ENCRYPTION_KEY must be 32 bytes of hex (64 chars), got ${key.length} bytes`
+    );
   }
-  return key
+  return key;
 }
 // 12 bytes is the NIST-recommended IV length for GCM — keeps the
 // counter block well below 2^32 and matches the default web-crypto
 // behaviour, so any future port is straightforward.
-const GCM_IV_LENGTH = 12
-const CBC_IV_LENGTH = 16
-const AUTH_TAG_LENGTH = 16
+const GCM_IV_LENGTH = 12;
+const CBC_IV_LENGTH = 16;
+const AUTH_TAG_LENGTH = 16;
 
 export function encrypt(text: string): string {
-  const iv = crypto.randomBytes(GCM_IV_LENGTH)
-  const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv)
-  let encrypted = cipher.update(text, 'utf8', 'hex')
-  encrypted += cipher.final('hex')
-  const authTag = cipher.getAuthTag()
-  return `${iv.toString('hex')}:${encrypted}:${authTag.toString('hex')}`
+  const iv = crypto.randomBytes(GCM_IV_LENGTH);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${encrypted}:${authTag.toString('hex')}`;
 }
 
 export function decrypt(encryptedText: string): string {
-  const parts = encryptedText.split(':')
+  const parts = encryptedText.split(':');
 
   if (parts.length === 3) {
     // GCM — current format.
-    const [ivHex, ctHex, tagHex] = parts
-    const iv = Buffer.from(ivHex, 'hex')
+    const [ivHex, ctHex, tagHex] = parts;
+    const iv = Buffer.from(ivHex, 'hex');
     if (iv.length !== GCM_IV_LENGTH) {
       throw new Error(
-        `Encrypted token has unexpected GCM IV length ${iv.length}`,
-      )
+        `Encrypted token has unexpected GCM IV length ${iv.length}`
+      );
     }
-    const authTag = Buffer.from(tagHex, 'hex')
+    const authTag = Buffer.from(tagHex, 'hex');
     if (authTag.length !== AUTH_TAG_LENGTH) {
       throw new Error(
-        `Encrypted token has unexpected GCM auth-tag length ${authTag.length}`,
-      )
+        `Encrypted token has unexpected GCM auth-tag length ${authTag.length}`
+      );
     }
-    const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), iv)
-    decipher.setAuthTag(authTag)
-    let decrypted = decipher.update(ctHex, 'hex', 'utf8')
-    decrypted += decipher.final('utf8')
-    return decrypted
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      getEncryptionKey(),
+      iv
+    );
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(ctHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
   }
 
   if (parts.length === 2) {
     // CBC — legacy. Read-only; `encrypt()` never produces this shape.
-    const [ivHex, ctHex] = parts
-    const iv = Buffer.from(ivHex, 'hex')
+    const [ivHex, ctHex] = parts;
+    const iv = Buffer.from(ivHex, 'hex');
     if (iv.length !== CBC_IV_LENGTH) {
       throw new Error(
-        `Encrypted token has unexpected CBC IV length ${iv.length}`,
-      )
+        `Encrypted token has unexpected CBC IV length ${iv.length}`
+      );
     }
-    const decipher = crypto.createDecipheriv('aes-256-cbc', getEncryptionKey(), iv)
-    let decrypted = decipher.update(ctHex, 'hex', 'utf8')
-    decrypted += decipher.final('utf8')
-    return decrypted
+    const decipher = crypto.createDecipheriv(
+      'aes-256-cbc',
+      getEncryptionKey(),
+      iv
+    );
+    let decrypted = decipher.update(ctHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
   }
 
   throw new Error(
     `Encrypted token has unrecognised format (expected 1 or 2 colons, got ${
       parts.length - 1
-    })`,
-  )
+    })`
+  );
 }
 
 /**
@@ -116,5 +124,5 @@ export function decrypt(encryptedText: string): string {
  * structural check.
  */
 export function isLegacyFormat(encryptedText: string): boolean {
-  return encryptedText.split(':').length === 2
+  return encryptedText.split(':').length === 2;
 }

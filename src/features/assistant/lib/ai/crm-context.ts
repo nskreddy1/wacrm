@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ============================================================
 // Agentic CRM awareness — level 1 of the agentic ladder.
@@ -19,12 +19,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // ============================================================
 
 interface CrmDealRow {
-  title: string
-  value: number | null
-  currency: string | null
-  status: string | null
-  expected_close_date: string | null
-  pipeline_stages: { name: string | null } | null
+  title: string;
+  value: number | null;
+  currency: string | null;
+  status: string | null;
+  expected_close_date: string | null;
+  pipeline_stages: { name: string | null } | null;
 }
 
 /**
@@ -34,7 +34,7 @@ interface CrmDealRow {
  */
 export async function buildCrmContext(
   db: SupabaseClient,
-  contactId: string,
+  contactId: string
 ): Promise<string | null> {
   try {
     const [{ data: contact }, { data: deals }] = await Promise.all([
@@ -46,25 +46,25 @@ export async function buildCrmContext(
       db
         .from('deals')
         .select(
-          'title, value, currency, status, expected_close_date, pipeline_stages(name)',
+          'title, value, currency, status, expected_close_date, pipeline_stages(name)'
         )
         .eq('contact_id', contactId)
         .eq('status', 'active')
         .order('updated_at', { ascending: false })
         .limit(5),
-    ])
+    ]);
 
-    const lines: string[] = []
+    const lines: string[] = [];
 
     if (contact) {
       const identity = [
         contact.name ? `Name: ${contact.name}` : null,
         contact.company ? `Company: ${contact.company}` : null,
-      ].filter(Boolean)
-      if (identity.length > 0) lines.push(identity.join(' · '))
+      ].filter(Boolean);
+      if (identity.length > 0) lines.push(identity.join(' · '));
     }
 
-    const dealRows = (deals ?? []) as unknown as CrmDealRow[]
+    const dealRows = (deals ?? []) as unknown as CrmDealRow[];
     if (dealRows.length > 0) {
       lines.push(
         'Open deals with us:',
@@ -75,24 +75,26 @@ export async function buildCrmContext(
             d.value != null && d.value > 0
               ? `value: ${d.currency ?? 'USD'} ${Number(d.value).toLocaleString()}`
               : null,
-            d.expected_close_date ? `expected close: ${d.expected_close_date}` : null,
-          ].filter(Boolean)
-          return bits.join(' · ')
-        }),
-      )
+            d.expected_close_date
+              ? `expected close: ${d.expected_close_date}`
+              : null,
+          ].filter(Boolean);
+          return bits.join(' · ');
+        })
+      );
     }
 
-    if (lines.length === 0) return null
+    if (lines.length === 0) return null;
 
     return (
       'Customer record — our CRM data about this customer. Use it to ' +
       'personalize the reply (greet by name, reference their deal when ' +
       'relevant). Never recite the whole record back, and never reveal ' +
-      "data about anyone other than this customer.\n\n" +
+      'data about anyone other than this customer.\n\n' +
       lines.join('\n')
-    )
+    );
   } catch {
     // CRM enrichment is a bonus, never a blocker.
-    return null
+    return null;
   }
 }

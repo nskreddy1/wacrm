@@ -5,19 +5,19 @@
 
 ## Source-controlled baseline
 
-| Area | Tracked files before this audit | Documentation coverage |
-| --- | ---: | --- |
-| `src/` | 429 | Architecture, all page/route families, component/domain groups, hooks/stores, methods and security boundaries. |
-| `supabase/` | 40 | Every migration `001`–`040` represented chronologically with object/capability groups. |
-| `docs/` | 20 | All 15 upstream snapshots indexed; existing local reports compared. |
-| `mcp-server/` | 16 | Runtime, config, API client, read/write/broadcast tools and security gates documented. |
-| `.github/` | 10 | CI/governance/operations classified. |
-| `server/` | 7 | Every Express file and request stage documented. |
-| `public/` | 7 | Static assets classified as UI/runtime support. |
-| `scripts/` | 1 | Web launcher and port behavior documented. |
-| `messages/` | 1 | English message catalog classified. |
-| root | 20 | Package/config/lock/build/contribution/legal files classified. |
-| **Total** | **551** | Generated/private files intentionally excluded. |
+| Area          | Tracked files before this audit | Documentation coverage                                                                                         |
+| ------------- | ------------------------------: | -------------------------------------------------------------------------------------------------------------- |
+| `src/`        |                             429 | Architecture, all page/route families, component/domain groups, hooks/stores, methods and security boundaries. |
+| `supabase/`   |                              40 | Every migration `001`–`040` represented chronologically with object/capability groups.                         |
+| `docs/`       |                              20 | All 15 upstream snapshots indexed; existing local reports compared.                                            |
+| `mcp-server/` |                              16 | Runtime, config, API client, read/write/broadcast tools and security gates documented.                         |
+| `.github/`    |                              10 | CI/governance/operations classified.                                                                           |
+| `server/`     |                               7 | Every Express file and request stage documented.                                                               |
+| `public/`     |                               7 | Static assets classified as UI/runtime support.                                                                |
+| `scripts/`    |                               1 | Web launcher and port behavior documented.                                                                     |
+| `messages/`   |                               1 | English message catalog classified.                                                                            |
+| root          |                              20 | Package/config/lock/build/contribution/legal files classified.                                                 |
+| **Total**     |                         **551** | Generated/private files intentionally excluded.                                                                |
 
 ## Executable surface counts
 
@@ -31,15 +31,15 @@
 
 ## Validation performed
 
-| Check | Result |
-| --- | --- |
-| `pnpm typecheck` | Passed with exit code 0. |
-| `pnpm test` | Passed with exit code 0. Expected stderr from negative-path tests and Node’s experimental SQLite warning were observed. |
-| Git baseline/status | Commit and branch captured before documentation writes. |
-| Route extraction | All `page.tsx`, `layout.tsx`, `loading.tsx`, and `route.ts` paths scanned. The service catch-all exports handlers through an alias/pattern not detected by the simple named-method regex, so it is documented manually. |
-| Symbol extraction | Exported functions, values and types scanned from non-test TypeScript source and mapped by domain. Dynamic/local callbacks are covered by owning page/component flow rather than falsely presented as public API. |
-| SQL extraction | CREATE TABLE/FUNCTION/POLICY/INDEX/TRIGGER and bucket statements scanned in migration order. ALTER-only corrections are represented by migration purpose. |
-| Secret safety | No environment values read into or written to documentation. |
+| Check               | Result                                                                                                                                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm typecheck`    | Passed with exit code 0.                                                                                                                                                                                                |
+| `pnpm test`         | Passed with exit code 0. Expected stderr from negative-path tests and Node’s experimental SQLite warning were observed.                                                                                                 |
+| Git baseline/status | Commit and branch captured before documentation writes.                                                                                                                                                                 |
+| Route extraction    | All `page.tsx`, `layout.tsx`, `loading.tsx`, and `route.ts` paths scanned. The service catch-all exports handlers through an alias/pattern not detected by the simple named-method regex, so it is documented manually. |
+| Symbol extraction   | Exported functions, values and types scanned from non-test TypeScript source and mapped by domain. Dynamic/local callbacks are covered by owning page/component flow rather than falsely presented as public API.       |
+| SQL extraction      | CREATE TABLE/FUNCTION/POLICY/INDEX/TRIGGER and bucket statements scanned in migration order. ALTER-only corrections are represented by migration purpose.                                                               |
+| Secret safety       | No environment values read into or written to documentation.                                                                                                                                                            |
 
 ## Environment and Supabase finding
 

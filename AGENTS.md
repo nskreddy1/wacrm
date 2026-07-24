@@ -1,4 +1,5 @@
 <!-- BEGIN:nextjs-agent-rules -->
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
@@ -95,34 +96,34 @@ Import with the `@/features/<domain>/...` alias; shared code stays on `@/compone
 
 ### Other key directories
 
-| Path | What lives there |
-| --- | --- |
-| `src/app/(auth)/` | login, signup, forgot/reset password |
-| `src/app/(dashboard)/` | authenticated UI pages |
-| `src/app/api/` | BFF JSON routes: `whatsapp/`, `ai/`, `automations/`, `flows/`, `account/`, `v1/` (public API), `service/` (Express forwarder) |
-| `src/features/whatsapp/lib/` | Meta API client, encryption, webhook signatures, phone utils |
-| `src/features/automations/lib/` | automation engine, steps, validation |
-| `src/lib/routing/` | canonical route constants |
-| `src/lib/data/` | Supabase repositories per domain |
-| `server/` | Express business API (config, http middleware, domain routers) |
-| `supabase/migrations/` | idempotent SQL, run in numeric order |
-| `mcp-server/` | Model Context Protocol server |
-| `messages/` | i18n message catalogs |
-| `docs/` | local authoritative docs; `docs/archive/` holds historical planning/AI notes |
+| Path                            | What lives there                                                                                                              |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `src/app/(auth)/`               | login, signup, forgot/reset password                                                                                          |
+| `src/app/(dashboard)/`          | authenticated UI pages                                                                                                        |
+| `src/app/api/`                  | BFF JSON routes: `whatsapp/`, `ai/`, `automations/`, `flows/`, `account/`, `v1/` (public API), `service/` (Express forwarder) |
+| `src/features/whatsapp/lib/`    | Meta API client, encryption, webhook signatures, phone utils                                                                  |
+| `src/features/automations/lib/` | automation engine, steps, validation                                                                                          |
+| `src/lib/routing/`              | canonical route constants                                                                                                     |
+| `src/lib/data/`                 | Supabase repositories per domain                                                                                              |
+| `server/`                       | Express business API (config, http middleware, domain routers)                                                                |
+| `supabase/migrations/`          | idempotent SQL, run in numeric order                                                                                          |
+| `mcp-server/`                   | Model Context Protocol server                                                                                                 |
+| `messages/`                     | i18n message catalogs                                                                                                         |
+| `docs/`                         | local authoritative docs; `docs/archive/` holds historical planning/AI notes                                                  |
 
 ## Commands
 
 Derived from `package.json`. **pnpm is the standard package manager** (`pnpm-lock.yaml` + `packageManager` field); there is no `package-lock.json`. Use `pnpm` for all commands:
 
-| Task | Command |
-| --- | --- |
-| Install | `pnpm install` |
-| Develop (web + api) | `pnpm dev` |
-| Typecheck | `pnpm typecheck` |
-| Lint | `pnpm lint` |
-| Format / check | `pnpm format` / `pnpm format:check` |
-| Tests (Vitest) | `pnpm test` (watch: `pnpm test:watch`) |
-| Production build | `pnpm build` then `pnpm start` |
+| Task                | Command                                |
+| ------------------- | -------------------------------------- |
+| Install             | `pnpm install`                         |
+| Develop (web + api) | `pnpm dev`                             |
+| Typecheck           | `pnpm typecheck`                       |
+| Lint                | `pnpm lint`                            |
+| Format / check      | `pnpm format` / `pnpm format:check`    |
+| Tests (Vitest)      | `pnpm test` (watch: `pnpm test:watch`) |
+| Production build    | `pnpm build` then `pnpm start`         |
 
 ## Before changing a module — checklist
 

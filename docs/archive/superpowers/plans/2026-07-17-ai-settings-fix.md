@@ -24,12 +24,14 @@
 ### Task 1: Provider Metadata and Settings UI
 
 **Files:**
+
 - Create: `src/lib/ai/providers.ts`
 - Create: `src/lib/ai/providers.test.ts`
 - Modify: `src/components/settings/ai-config.tsx`
 - Modify: `messages/en.json`
 
 **Interfaces:**
+
 - Produces: `AI_PROVIDER_OPTIONS`, an ordered readonly list with `{ value: AiProvider; label: string; requiresApiKey: boolean; supportsBaseUrl: boolean }`.
 - Produces: `getProviderCapabilities(provider: AiProvider)` for form behavior.
 - Consumes: existing `AiProvider`, `DEFAULT_MODELS`, config/test API payloads, and shadcn controls.
@@ -110,12 +112,14 @@ git commit -m "fix: complete AI provider settings UI"
 ### Task 2: Keyless Ollama API Proof Regression Coverage
 
 **Files:**
+
 - Create: `src/app/api/ai/test/route.test.ts` only if route-level mocking is practical with the existing Vitest setup; otherwise extend `src/lib/ai/config.test.ts` around the shared proof/config functions.
 - Modify: `src/app/api/ai/test/route.ts` only if the failing test proves a mismatch.
 - Modify: `src/app/api/ai/config/route.ts` only if the failing test proves a mismatch.
 - Modify: `src/lib/ai/config.ts` only if the failing test proves a mismatch.
 
 **Interfaces:**
+
 - Consumes: existing `/api/ai/test` payload `{ provider, model, api_key?, base_url? }` and returned proof.
 - Consumes: existing `/api/ai/config` save proof validation.
 - Produces: regression coverage showing Ollama can validate without a user key and cannot bypass connectivity proof.
@@ -172,9 +176,11 @@ Stage only files that actually changed.
 ### Task 3: Final Verification and Review
 
 **Files:**
+
 - Modify only files required to resolve verified Critical or Important review findings.
 
 **Interfaces:**
+
 - Consumes: completed Task 1 and Task 2 commits.
 - Produces: reviewed branch with focused tests, typecheck, lint, and browser path verified.
 

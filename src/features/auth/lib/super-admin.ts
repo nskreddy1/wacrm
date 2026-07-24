@@ -28,19 +28,16 @@
 //   }
 // ============================================================
 
-import { cache } from "react";
+import { cache } from 'react';
 
-import { createClient } from "@/lib/supabase/server";
-import {
-  ForbiddenError,
-  UnauthorizedError,
-} from "./account";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from '@/lib/supabase/server';
+import { ForbiddenError, UnauthorizedError } from './account';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** Parse the allowlist from env: comma-separated, trimmed, lowercased. */
 function allowlist(): string[] {
-  return (process.env.SUPER_ADMIN_EMAILS ?? "")
-    .split(",")
+  return (process.env.SUPER_ADMIN_EMAILS ?? '')
+    .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter((e) => e.length > 0);
 }
@@ -82,34 +79,32 @@ export interface SuperAdminContext {
  * Wrapped in React `cache()` so layouts + nested route handlers in
  * the same request resolve the gate at most once.
  */
-export const requireSuperAdmin = cache(
-  async (): Promise<SuperAdminContext> => {
-    const supabase = await createClient();
+export const requireSuperAdmin = cache(async (): Promise<SuperAdminContext> => {
+  const supabase = await createClient();
 
-    const { data: claimsData, error: claimsErr } =
-      await supabase.auth.getClaims();
-    const userId = claimsData?.claims.sub;
-    if (claimsErr || !userId) {
-      throw new UnauthorizedError();
-    }
+  const { data: claimsData, error: claimsErr } =
+    await supabase.auth.getClaims();
+  const userId = claimsData?.claims.sub;
+  if (claimsErr || !userId) {
+    throw new UnauthorizedError();
+  }
 
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("email, is_super_admin")
-      .eq("user_id", userId)
-      .maybeSingle();
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('email, is_super_admin')
+    .eq('user_id', userId)
+    .maybeSingle();
 
-    if (error) {
-      console.error("[requireSuperAdmin] profile fetch error:", error);
-      throw new ForbiddenError("Could not verify platform access");
-    }
+  if (error) {
+    console.error('[requireSuperAdmin] profile fetch error:', error);
+    throw new ForbiddenError('Could not verify platform access');
+  }
 
-    const email = profile?.email ?? null;
-    const isOperator = profile?.is_super_admin === true || isSuperAdmin(email);
-    if (!isOperator) {
-      throw new ForbiddenError("Super admin access required");
-    }
+  const email = profile?.email ?? null;
+  const isOperator = profile?.is_super_admin === true || isSuperAdmin(email);
+  if (!isOperator) {
+    throw new ForbiddenError('Super admin access required');
+  }
 
-    return { supabase, userId, email };
-  },
-);
+  return { supabase, userId, email };
+});

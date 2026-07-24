@@ -11,19 +11,19 @@
 //   without buying anything.
 // ============================================================
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
 import {
   requireRole,
   getCurrentAccount,
   toErrorResponse,
-} from "@/features/auth/lib/account";
+} from '@/features/auth/lib/account';
 import {
   checkRateLimit,
   rateLimitResponse,
   RATE_LIMITS,
-} from "@/lib/rate-limit";
-import { getDataSource } from "@/lib/data/runtime";
+} from '@/lib/rate-limit';
+import { getDataSource } from '@/lib/data/runtime';
 
 export async function GET() {
   try {
@@ -32,7 +32,7 @@ export async function GET() {
     return NextResponse.json({
       account: ctx.account,
       role: ctx.role,
-      meta: { source: "supabase" },
+      meta: { source: 'supabase' },
     });
   } catch (err) {
     return toErrorResponse(err);
@@ -42,35 +42,35 @@ export async function GET() {
 const MAX_NAME_LEN = 80;
 
 export async function PATCH(request: Request) {
-  const body = (await request.json().catch(() => null)) as
-    | { name?: unknown }
-    | null;
+  const body = (await request.json().catch(() => null)) as {
+    name?: unknown;
+  } | null;
   const rawName = body?.name;
 
-  if (typeof rawName !== "string") {
+  if (typeof rawName !== 'string') {
     return NextResponse.json(
       { error: "'name' must be a string" },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
   const name = rawName.trim();
   if (name.length === 0) {
     return NextResponse.json(
-      { error: "Account name cannot be empty" },
-      { status: 400 },
+      { error: 'Account name cannot be empty' },
+      { status: 400 }
     );
   }
   if (name.length > MAX_NAME_LEN) {
     return NextResponse.json(
       { error: `Account name must be ${MAX_NAME_LEN} characters or fewer` },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
   try {
     getDataSource();
-    const ctx = await requireRole("admin");
+    const ctx = await requireRole('admin');
 
     // Per-user limit on admin-class mutations. Bounds accidental
     // abuse (script run in a loop) and a compromised admin session
@@ -78,7 +78,7 @@ export async function PATCH(request: Request) {
     // one route doesn't starve another.
     const limit = checkRateLimit(
       `admin:rename:${ctx.userId}`,
-      RATE_LIMITS.adminAction,
+      RATE_LIMITS.adminAction
     );
     if (!limit.success) return rateLimitResponse(limit);
 
@@ -86,17 +86,17 @@ export async function PATCH(request: Request) {
     // `is_account_member(id, 'admin')`, and requireRole already
     // guaranteed the caller is admin+.
     const { data, error } = await ctx.supabase
-      .from("accounts")
+      .from('accounts')
       .update({ name })
-      .eq("id", ctx.accountId)
-      .select("id, name")
+      .eq('id', ctx.accountId)
+      .select('id, name')
       .single();
 
     if (error) {
-      console.error("[PATCH /api/account] update error:", error);
+      console.error('[PATCH /api/account] update error:', error);
       return NextResponse.json(
-        { error: "Failed to update account" },
-        { status: 500 },
+        { error: 'Failed to update account' },
+        { status: 500 }
       );
     }
 

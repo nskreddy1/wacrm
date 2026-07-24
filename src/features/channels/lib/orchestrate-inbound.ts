@@ -1,17 +1,17 @@
-import { dispatchInboundToAiReply } from '@/features/assistant/lib/ai/auto-reply'
-import { runAutomationsForTrigger } from '@/features/automations/lib/engine'
-import { dispatchInboundToFlows } from '@/features/flows/lib/engine'
+import { dispatchInboundToAiReply } from '@/features/assistant/lib/ai/auto-reply';
+import { runAutomationsForTrigger } from '@/features/automations/lib/engine';
+import { dispatchInboundToFlows } from '@/features/flows/lib/engine';
 
 export interface OrchestrateInboundChannelMessageInput {
-  accountId: string
-  conversationId: string
-  contactId: string
-  externalMessageId: string
-  text?: string
-  contentType: 'text' | 'image' | 'document' | 'audio' | 'video'
-  contactCreated: boolean
-  isFirstInboundMessage: boolean
-  configOwnerUserId: string
+  accountId: string;
+  conversationId: string;
+  contactId: string;
+  externalMessageId: string;
+  text?: string;
+  contentType: 'text' | 'image' | 'document' | 'audio' | 'video';
+  contactCreated: boolean;
+  isFirstInboundMessage: boolean;
+  configOwnerUserId: string;
 }
 
 /**
@@ -22,10 +22,10 @@ export interface OrchestrateInboundChannelMessageInput {
  * never reject, because downstream processing cannot change the provider ack.
  */
 export async function orchestrateInboundChannelMessage(
-  input: OrchestrateInboundChannelMessageInput,
+  input: OrchestrateInboundChannelMessageInput
 ): Promise<void> {
   try {
-    const messageText = input.text ?? ''
+    const messageText = input.text ?? '';
     const flowResult = await dispatchInboundToFlows({
       accountId: input.accountId,
       userId: input.configOwnerUserId,
@@ -38,26 +38,26 @@ export async function orchestrateInboundChannelMessage(
         // Kept for persisted API compatibility; this may be a Meta or Twilio ID.
         meta_message_id: input.externalMessageId,
       },
-    })
+    });
 
-    if (flowResult.consumed) return
+    if (flowResult.consumed) return;
 
     const context = {
       message_text: messageText,
       conversation_id: input.conversationId,
-    }
+    };
     await runAutomationsForTrigger({
       accountId: input.accountId,
       triggerType: 'new_message_received',
       contactId: input.contactId,
       context,
-    })
+    });
     await runAutomationsForTrigger({
       accountId: input.accountId,
       triggerType: 'keyword_match',
       contactId: input.contactId,
       context,
-    })
+    });
 
     if (input.contactCreated) {
       await runAutomationsForTrigger({
@@ -65,7 +65,7 @@ export async function orchestrateInboundChannelMessage(
         triggerType: 'new_contact_created',
         contactId: input.contactId,
         context,
-      })
+      });
     }
     if (input.isFirstInboundMessage) {
       await runAutomationsForTrigger({
@@ -73,7 +73,7 @@ export async function orchestrateInboundChannelMessage(
         triggerType: 'first_inbound_message',
         contactId: input.contactId,
         context,
-      })
+      });
     }
 
     if (input.contentType === 'text' && messageText.trim()) {
@@ -82,9 +82,9 @@ export async function orchestrateInboundChannelMessage(
         conversationId: input.conversationId,
         contactId: input.contactId,
         configOwnerUserId: input.configOwnerUserId,
-      })
+      });
     }
   } catch (error) {
-    console.error('[channel-inbound] orchestration failed:', error)
+    console.error('[channel-inbound] orchestration failed:', error);
   }
 }

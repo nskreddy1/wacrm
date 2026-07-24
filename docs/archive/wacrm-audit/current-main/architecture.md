@@ -37,32 +37,32 @@ sequenceDiagram
 
 ## Domain map
 
-| Domain | Main source | Persistence/state | Status |
-| --- | --- | --- | --- |
-| Auth/accounts | `src/lib/auth`, `src/lib/account`, `/api/account`, Express account router | Supabase Auth, `profiles`, `accounts`, membership/invitations | Implemented; live RLS verification blocked. |
-| Dashboard | `src/lib/dashboard`, dashboard components/API | Supabase projections plus SWR | Implemented. |
-| Contacts | contact components, `src/lib/data/contacts`, v1/workspace APIs | Supabase; mock repository for demo paths | Implemented with demo boundary. |
-| Inbox/messages | inbox components/hooks, WhatsApp and v1 APIs | Supabase, Realtime, Storage, SWR | Meta-centric implementation. |
-| Pipelines | `src/lib/pipelines`, pipeline components/routes | Supabase repository plus SQLite/demo variants | Mixed; production convergence incomplete. |
-| Broadcasts/templates | broadcast UI, WhatsApp routes/libs | Supabase + Meta | Implemented for Meta; generic channels partial. |
-| Automations | automation builder, engine/admin client, cron | Supabase tables and pending executions | Implemented; instance/external scheduler assumptions. |
-| Flows | flow editor/state/engine/routes | Supabase graph/run tables; local editor state | Implemented. |
-| AI | `src/lib/ai`, `/api/ai`, agents/settings | encrypted BYO provider config, knowledge/pgvector, usage | Implemented for OpenAI/Anthropic paths; provider calls require credentials. |
-| Channels | `src/lib/channels`, settings API/UI, webhook boundaries | `channel_connections` and identity/webhook tables | Foundation implemented; parity partial. |
-| Notifications | notification page/hook/API | notifications/preferences/deliveries | Base implementation; full delivery center partial. |
-| Bookings/agents | page/component surfaces | limited source-controlled domain depth | Early/partial UI. |
-| Public API/webhooks | `/api/v1`, api-key/webhook libs | hashed keys, scoped access, signed deliveries | Implemented additive surface. |
+| Domain               | Main source                                                               | Persistence/state                                             | Status                                                                      |
+| -------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Auth/accounts        | `src/lib/auth`, `src/lib/account`, `/api/account`, Express account router | Supabase Auth, `profiles`, `accounts`, membership/invitations | Implemented; live RLS verification blocked.                                 |
+| Dashboard            | `src/lib/dashboard`, dashboard components/API                             | Supabase projections plus SWR                                 | Implemented.                                                                |
+| Contacts             | contact components, `src/lib/data/contacts`, v1/workspace APIs            | Supabase; mock repository for demo paths                      | Implemented with demo boundary.                                             |
+| Inbox/messages       | inbox components/hooks, WhatsApp and v1 APIs                              | Supabase, Realtime, Storage, SWR                              | Meta-centric implementation.                                                |
+| Pipelines            | `src/lib/pipelines`, pipeline components/routes                           | Supabase repository plus SQLite/demo variants                 | Mixed; production convergence incomplete.                                   |
+| Broadcasts/templates | broadcast UI, WhatsApp routes/libs                                        | Supabase + Meta                                               | Implemented for Meta; generic channels partial.                             |
+| Automations          | automation builder, engine/admin client, cron                             | Supabase tables and pending executions                        | Implemented; instance/external scheduler assumptions.                       |
+| Flows                | flow editor/state/engine/routes                                           | Supabase graph/run tables; local editor state                 | Implemented.                                                                |
+| AI                   | `src/lib/ai`, `/api/ai`, agents/settings                                  | encrypted BYO provider config, knowledge/pgvector, usage      | Implemented for OpenAI/Anthropic paths; provider calls require credentials. |
+| Channels             | `src/lib/channels`, settings API/UI, webhook boundaries                   | `channel_connections` and identity/webhook tables             | Foundation implemented; parity partial.                                     |
+| Notifications        | notification page/hook/API                                                | notifications/preferences/deliveries                          | Base implementation; full delivery center partial.                          |
+| Bookings/agents      | page/component surfaces                                                   | limited source-controlled domain depth                        | Early/partial UI.                                                           |
+| Public API/webhooks  | `/api/v1`, api-key/webhook libs                                           | hashed keys, scoped access, signed deliveries                 | Implemented additive surface.                                               |
 
 ## Provider maturity
 
-| Provider | Settings/contracts | Send | Receive | Operational classification |
-| --- | --- | --- | --- | --- |
-| Meta WhatsApp | Mature legacy + neutral schema | Implemented | HMAC-verified webhook | Most complete. |
-| SMTP | Encrypted settings and Nodemailer adapter | Implemented adapter | N/A | Partial until live connection/schema verification. |
-| Twilio WhatsApp | Registry/settings/signature boundary | Partial | Webhook boundary | Not end-to-end complete. |
-| Resend | Registry/settings/adapter foundation | Partial | Not complete | Staged. |
-| Gmail | Types/capabilities | Not complete | Not complete | Target-only beyond foundation. |
-| Microsoft 365 | Types/schema constraint | Not complete | Not complete | Target-only beyond foundation. |
+| Provider        | Settings/contracts                        | Send                | Receive               | Operational classification                         |
+| --------------- | ----------------------------------------- | ------------------- | --------------------- | -------------------------------------------------- |
+| Meta WhatsApp   | Mature legacy + neutral schema            | Implemented         | HMAC-verified webhook | Most complete.                                     |
+| SMTP            | Encrypted settings and Nodemailer adapter | Implemented adapter | N/A                   | Partial until live connection/schema verification. |
+| Twilio WhatsApp | Registry/settings/signature boundary      | Partial             | Webhook boundary      | Not end-to-end complete.                           |
+| Resend          | Registry/settings/adapter foundation      | Partial             | Not complete          | Staged.                                            |
+| Gmail           | Types/capabilities                        | Not complete        | Not complete          | Target-only beyond foundation.                     |
+| Microsoft 365   | Types/schema constraint                   | Not complete        | Not complete          | Target-only beyond foundation.                     |
 
 No provider is allowed to silently fall back to another.
 

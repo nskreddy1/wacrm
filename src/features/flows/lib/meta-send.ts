@@ -2,9 +2,9 @@ import type {
   InteractiveButton,
   InteractiveListSection,
   MediaKind,
-} from '@/features/whatsapp/lib/meta-api'
-import type { InteractiveMessagePayload } from '@/features/whatsapp/lib/interactive'
-import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound'
+} from '@/features/whatsapp/lib/meta-api';
+import type { InteractiveMessagePayload } from '@/features/whatsapp/lib/interactive';
+import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
 
 // ------------------------------------------------------------
 // Flows-side senders — thin wrappers over the unified outbound
@@ -20,19 +20,19 @@ import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound'
 
 interface SendTextEngineArgs {
   /** Account-level tenancy key. */
-  accountId: string
+  accountId: string;
   /** Original author of the flow — audit only, not tenancy. */
-  userId: string
-  conversationId: string
-  contactId: string
-  text: string
+  userId: string;
+  conversationId: string;
+  contactId: string;
+  text: string;
   /** Marks the persisted row `ai_generated = true` (auto-reply bot only). */
-  aiGenerated?: boolean
+  aiGenerated?: boolean;
 }
 
 /** Send a plain-text WhatsApp message from the Flows engine. */
 export async function engineSendText(
-  args: SendTextEngineArgs,
+  args: SendTextEngineArgs
 ): Promise<{ whatsapp_message_id: string }> {
   const result = await sendChannelMessage({
     accountId: args.accountId,
@@ -41,26 +41,26 @@ export async function engineSendText(
     payload: { kind: 'text', text: args.text },
     senderType: 'bot',
     aiGenerated: args.aiGenerated ?? false,
-  })
-  return { whatsapp_message_id: result.externalMessageId }
+  });
+  return { whatsapp_message_id: result.externalMessageId };
 }
 
 interface SendMediaEngineArgs {
-  accountId: string
-  userId: string
-  conversationId: string
-  contactId: string
-  kind: MediaKind
+  accountId: string;
+  userId: string;
+  conversationId: string;
+  contactId: string;
+  kind: MediaKind;
   /** Public URL the provider fetches at send time. */
-  link: string
-  caption?: string
+  link: string;
+  caption?: string;
   /** Document-only; ignored for image/video/audio. */
-  filename?: string
+  filename?: string;
 }
 
 /** Send an image / video / document / audio from the Flows engine. */
 export async function engineSendMedia(
-  args: SendMediaEngineArgs,
+  args: SendMediaEngineArgs
 ): Promise<{ whatsapp_message_id: string }> {
   const result = await sendChannelMessage({
     accountId: args.accountId,
@@ -74,38 +74,42 @@ export async function engineSendMedia(
       filename: args.filename,
     },
     senderType: 'bot',
-  })
-  return { whatsapp_message_id: result.externalMessageId }
+  });
+  return { whatsapp_message_id: result.externalMessageId };
 }
 
 interface SendInteractiveButtonsEngineArgs {
-  accountId: string
-  userId: string
-  conversationId: string
-  contactId: string
-  bodyText: string
-  buttons: InteractiveButton[]
-  headerText?: string
-  footerText?: string
+  accountId: string;
+  userId: string;
+  conversationId: string;
+  contactId: string;
+  bodyText: string;
+  buttons: InteractiveButton[];
+  headerText?: string;
+  footerText?: string;
 }
 
 interface SendInteractiveListEngineArgs {
-  accountId: string
-  userId: string
-  conversationId: string
-  contactId: string
-  bodyText: string
-  buttonLabel: string
-  sections: InteractiveListSection[]
-  headerText?: string
-  footerText?: string
+  accountId: string;
+  userId: string;
+  conversationId: string;
+  contactId: string;
+  bodyText: string;
+  buttonLabel: string;
+  sections: InteractiveListSection[];
+  headerText?: string;
+  footerText?: string;
 }
 
 /** Build the raw Meta `interactive` object for a buttons message. */
-function metaInteractiveButtons(input: SendInteractiveButtonsEngineArgs): Record<string, unknown> {
+function metaInteractiveButtons(
+  input: SendInteractiveButtonsEngineArgs
+): Record<string, unknown> {
   return {
     type: 'button',
-    ...(input.headerText ? { header: { type: 'text', text: input.headerText } } : {}),
+    ...(input.headerText
+      ? { header: { type: 'text', text: input.headerText } }
+      : {}),
     body: { text: input.bodyText },
     ...(input.footerText ? { footer: { text: input.footerText } } : {}),
     action: {
@@ -114,21 +118,25 @@ function metaInteractiveButtons(input: SendInteractiveButtonsEngineArgs): Record
         reply: { id: b.id, title: b.title },
       })),
     },
-  }
+  };
 }
 
 /** Build the raw Meta `interactive` object for a list message. */
-function metaInteractiveList(input: SendInteractiveListEngineArgs): Record<string, unknown> {
+function metaInteractiveList(
+  input: SendInteractiveListEngineArgs
+): Record<string, unknown> {
   return {
     type: 'list',
-    ...(input.headerText ? { header: { type: 'text', text: input.headerText } } : {}),
+    ...(input.headerText
+      ? { header: { type: 'text', text: input.headerText } }
+      : {}),
     body: { text: input.bodyText },
     ...(input.footerText ? { footer: { text: input.footerText } } : {}),
     action: {
       button: input.buttonLabel,
       sections: input.sections,
     },
-  }
+  };
 }
 
 /**
@@ -137,7 +145,7 @@ function metaInteractiveList(input: SendInteractiveListEngineArgs): Record<strin
  * inbox re-renders the buttons the bot sent (round-trip).
  */
 export async function engineSendInteractiveButtons(
-  args: SendInteractiveButtonsEngineArgs,
+  args: SendInteractiveButtonsEngineArgs
 ): Promise<{ whatsapp_message_id: string }> {
   const persistPayload: InteractiveMessagePayload = {
     kind: 'buttons',
@@ -145,16 +153,19 @@ export async function engineSendInteractiveButtons(
     header: args.headerText,
     footer: args.footerText,
     buttons: args.buttons,
-  }
+  };
   const result = await sendChannelMessage({
     accountId: args.accountId,
     conversationId: args.conversationId,
     contactId: args.contactId,
     payload: { kind: 'interactive', interactive: metaInteractiveButtons(args) },
     senderType: 'bot',
-    interactivePersistPayload: persistPayload as unknown as Record<string, unknown>,
-  })
-  return { whatsapp_message_id: result.externalMessageId }
+    interactivePersistPayload: persistPayload as unknown as Record<
+      string,
+      unknown
+    >,
+  });
+  return { whatsapp_message_id: result.externalMessageId };
 }
 
 /**
@@ -162,7 +173,7 @@ export async function engineSendInteractiveButtons(
  * Used when the flow needs more than 3 options (Meta's button cap).
  */
 export async function engineSendInteractiveList(
-  args: SendInteractiveListEngineArgs,
+  args: SendInteractiveListEngineArgs
 ): Promise<{ whatsapp_message_id: string }> {
   const persistPayload: InteractiveMessagePayload = {
     kind: 'list',
@@ -171,14 +182,17 @@ export async function engineSendInteractiveList(
     footer: args.footerText,
     button_label: args.buttonLabel,
     sections: args.sections,
-  }
+  };
   const result = await sendChannelMessage({
     accountId: args.accountId,
     conversationId: args.conversationId,
     contactId: args.contactId,
     payload: { kind: 'interactive', interactive: metaInteractiveList(args) },
     senderType: 'bot',
-    interactivePersistPayload: persistPayload as unknown as Record<string, unknown>,
-  })
-  return { whatsapp_message_id: result.externalMessageId }
+    interactivePersistPayload: persistPayload as unknown as Record<
+      string,
+      unknown
+    >,
+  });
+  return { whatsapp_message_id: result.externalMessageId };
 }

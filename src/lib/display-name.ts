@@ -18,15 +18,17 @@ export function looksLikeEmail(value: string | null | undefined): boolean {
  * "admin@gmail.com" -> "Admin", "jane.doe@x.io" -> "Jane Doe".
  * Non-email input is returned trimmed and unchanged.
  */
-export function friendlyNameFromEmail(value: string | null | undefined): string {
-  const trimmed = value?.trim() ?? "";
+export function friendlyNameFromEmail(
+  value: string | null | undefined
+): string {
+  const trimmed = value?.trim() ?? '';
   if (!looksLikeEmail(trimmed)) return trimmed;
-  const local = trimmed.split("@")[0] ?? "";
+  const local = trimmed.split('@')[0] ?? '';
   return local
     .split(/[._\-+]+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+    .join(' ');
 }
 
 /**
@@ -38,7 +40,7 @@ export function titleCaseName(value: string): string {
     .split(/\s+/)
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+    .join(' ');
 }
 
 /**
@@ -48,22 +50,24 @@ export function titleCaseName(value: string): string {
  */
 export function personDisplayName(
   fullName: string | null | undefined,
-  email: string | null | undefined,
+  email: string | null | undefined
 ): string {
   const name = fullName?.trim();
   if (name && !looksLikeEmail(name)) return titleCaseName(name);
   const friendly = friendlyNameFromEmail(name || email);
-  return friendly || "Account";
+  return friendly || 'Account';
 }
 
 /**
  * Workspace label: the stored account name, unless it's still the
  * signup-default email — then "<Friendly>'s workspace".
  */
-export function workspaceDisplayName(accountName: string | null | undefined): string {
+export function workspaceDisplayName(
+  accountName: string | null | undefined
+): string {
   const name = accountName?.trim();
-  if (!name) return "Workspace";
+  if (!name) return 'Workspace';
   if (!looksLikeEmail(name)) return name;
   const friendly = friendlyNameFromEmail(name);
-  return friendly ? `${friendly}'s workspace` : "Workspace";
+  return friendly ? `${friendly}'s workspace` : 'Workspace';
 }

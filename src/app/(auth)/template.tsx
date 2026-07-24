@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 // Next.js remounts template.tsx on every navigation within the (auth)
 // group. That remount is what re-triggers the form column's entrance

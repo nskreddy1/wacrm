@@ -56,27 +56,82 @@ export interface SectionMeta {
   id: SettingsSection;
   label: string;
   icon: LucideIcon;
-  group: 'top' | 'account' | 'general' | 'customization' | 'channels' | 'data' | 'help';
+  group:
+    | 'top'
+    | 'account'
+    | 'general'
+    | 'customization'
+    | 'channels'
+    | 'data'
+    | 'help';
 }
 
 export const SECTION_META: Record<SettingsSection, SectionMeta> = {
-  overview: { id: 'overview', label: 'Overview', icon: LayoutGrid, group: 'top' },
-  profile: { id: 'profile', label: 'Your profile', icon: User, group: 'account' },
-  security: { id: 'security', label: 'Login & security', icon: Shield, group: 'account' },
-  appearance: { id: 'appearance', label: 'Appearance', icon: Palette, group: 'account' },
-  members: { id: 'members', label: 'Users and Controls', icon: UsersRound, group: 'general' },
+  overview: {
+    id: 'overview',
+    label: 'Overview',
+    icon: LayoutGrid,
+    group: 'top',
+  },
+  profile: {
+    id: 'profile',
+    label: 'Your profile',
+    icon: User,
+    group: 'account',
+  },
+  security: {
+    id: 'security',
+    label: 'Login & security',
+    icon: Shield,
+    group: 'account',
+  },
+  appearance: {
+    id: 'appearance',
+    label: 'Appearance',
+    icon: Palette,
+    group: 'account',
+  },
+  members: {
+    id: 'members',
+    label: 'Users and Controls',
+    icon: UsersRound,
+    group: 'general',
+  },
   fields: { id: 'fields', label: 'Fields', icon: Tags, group: 'customization' },
-  deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'customization' },
-  whatsapp: { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, group: 'channels' },
+  deals: {
+    id: 'deals',
+    label: 'Deals & currency',
+    icon: Coins,
+    group: 'customization',
+  },
+  whatsapp: {
+    id: 'whatsapp',
+    label: 'WhatsApp',
+    icon: MessageCircle,
+    group: 'channels',
+  },
   sms: { id: 'sms', label: 'SMS', icon: Smartphone, group: 'channels' },
   email: { id: 'email', label: 'Email', icon: Mail, group: 'channels' },
-  'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'channels' },
-  'external-sources': { id: 'external-sources', label: 'External sources', icon: Database, group: 'data' },
+  'quick-replies': {
+    id: 'quick-replies',
+    label: 'Quick replies',
+    icon: Zap,
+    group: 'channels',
+  },
+  'external-sources': {
+    id: 'external-sources',
+    label: 'External sources',
+    icon: Database,
+    group: 'data',
+  },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'data' },
   support: { id: 'support', label: 'Support', icon: LifeBuoy, group: 'help' },
 };
 
-export const RAIL_GROUPS: { label: string | null; group: SectionMeta['group'] }[] = [
+export const RAIL_GROUPS: {
+  label: string | null;
+  group: SectionMeta['group'];
+}[] = [
   { label: null, group: 'top' },
   { label: 'Account', group: 'account' },
   { label: 'General', group: 'general' },

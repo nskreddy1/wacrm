@@ -1,5 +1,5 @@
-import { AiError } from '../../types'
-import { MAX_OUTPUT_TOKENS, aiRequestTimeoutMs } from '../../defaults'
+import { AiError } from '../../types';
+import { MAX_OUTPUT_TOKENS, aiRequestTimeoutMs } from '../../defaults';
 import {
   mergeConsecutive,
   normalizeUsage,
@@ -7,28 +7,28 @@ import {
   toNetworkError,
   type ProviderArgs,
   type ProviderResult,
-} from './shared'
+} from './shared';
 
-const OPENAI_BASE_URL = 'https://api.openai.com/v1'
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
 interface OpenAiResponse {
-  choices?: { message?: { content?: string } }[]
+  choices?: { message?: { content?: string } }[];
   usage?: {
-    prompt_tokens?: number
-    completion_tokens?: number
-    total_tokens?: number
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
     /** OpenAI (and some compatible gateways) report the discounted
      *  prefix here when automatic prompt caching hits. */
-    prompt_tokens_details?: { cached_tokens?: number }
-  }
+    prompt_tokens_details?: { cached_tokens?: number };
+  };
 }
 
 export interface OpenAiCompatOptions {
   /** Endpoint base, e.g. `https://integrate.api.nvidia.com/v1`. The adapter
    *  appends `/chat/completions`. Defaults to OpenAI's own API. */
-  baseUrl?: string
+  baseUrl?: string;
   /** Human-readable provider name for error messages ("NVIDIA", "Groq"…). */
-  providerLabel?: string
+  providerLabel?: string;
 }
 
 /**
@@ -41,14 +41,14 @@ export interface OpenAiCompatOptions {
  */
 export async function generateOpenAi(
   args: ProviderArgs,
-  opts: OpenAiCompatOptions = {},
+  opts: OpenAiCompatOptions = {}
 ): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs, cacheKey } = args
-  const baseUrl = (opts.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '')
-  const label = opts.providerLabel ?? 'OpenAI'
-  const isOpenAiProper = baseUrl === OPENAI_BASE_URL
+  const { apiKey, model, systemPrompt, messages, timeoutMs, cacheKey } = args;
+  const baseUrl = (opts.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '');
+  const label = opts.providerLabel ?? 'OpenAI';
+  const isOpenAiProper = baseUrl === OPENAI_BASE_URL;
 
-  let res: Response
+  let res: Response;
   try {
     res = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
@@ -75,29 +75,29 @@ export async function generateOpenAi(
         ...(isOpenAiProper && cacheKey ? { prompt_cache_key: cacheKey } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
-    })
+    });
   } catch (err) {
-    throw toNetworkError(err)
+    throw toNetworkError(err);
   }
 
   if (!res.ok) {
-    throw await providerHttpError(label, res)
+    throw await providerHttpError(label, res);
   }
 
-  const data = (await res.json().catch(() => null)) as OpenAiResponse | null
-  const text = data?.choices?.[0]?.message?.content
+  const data = (await res.json().catch(() => null)) as OpenAiResponse | null;
+  const text = data?.choices?.[0]?.message?.content;
   if (!text || typeof text !== 'string' || !text.trim()) {
     throw new AiError(`${label} returned an empty response.`, {
       code: 'empty_response',
-    })
+    });
   }
   const usage = normalizeUsage({
     prompt: data?.usage?.prompt_tokens,
     completion: data?.usage?.completion_tokens,
     total: data?.usage?.total_tokens,
     cached: data?.usage?.prompt_tokens_details?.cached_tokens,
-  })
-  return { text, usage }
+  });
+  return { text, usage };
 }
 
 // ============================================================
@@ -107,14 +107,14 @@ export async function generateOpenAi(
 // the shared dispatch layer (src/lib/ai/embeddings.ts).
 // ============================================================
 
-const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings'
+const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
 
 // OpenAI accepts an array input; keep batches modest so a big re-index
 // stays under request-size limits and partial failures are cheap.
-const BATCH_SIZE = 96
+const BATCH_SIZE = 96;
 
 interface EmbeddingResponse {
-  data?: { embedding?: number[]; index?: number }[]
+  data?: { embedding?: number[]; index?: number }[];
 }
 
 /**
@@ -125,16 +125,16 @@ interface EmbeddingResponse {
 export async function embedTextsDirect(
   apiKey: string,
   model: string,
-  inputs: string[],
+  inputs: string[]
 ): Promise<number[][]> {
-  if (inputs.length === 0) return []
-  const timeoutMs = aiRequestTimeoutMs()
-  const out: number[][] = []
+  if (inputs.length === 0) return [];
+  const timeoutMs = aiRequestTimeoutMs();
+  const out: number[][] = [];
 
   for (let start = 0; start < inputs.length; start += BATCH_SIZE) {
-    const batch = inputs.slice(start, start + BATCH_SIZE)
+    const batch = inputs.slice(start, start + BATCH_SIZE);
 
-    let res: Response
+    let res: Response;
     try {
       res = await fetch(OPENAI_EMBEDDINGS_URL, {
         method: 'POST',
@@ -144,21 +144,23 @@ export async function embedTextsDirect(
         },
         body: JSON.stringify({ model, input: batch }),
         signal: AbortSignal.timeout(timeoutMs),
-      })
+      });
     } catch (err) {
-      throw toNetworkError(err)
+      throw toNetworkError(err);
     }
 
     if (!res.ok) {
-      throw await providerHttpError('OpenAI embeddings', res)
+      throw await providerHttpError('OpenAI embeddings', res);
     }
 
-    const data = (await res.json().catch(() => null)) as EmbeddingResponse | null
-    const rows = data?.data
+    const data = (await res
+      .json()
+      .catch(() => null)) as EmbeddingResponse | null;
+    const rows = data?.data;
     if (!rows || rows.length !== batch.length) {
       throw new AiError('Embeddings response was malformed.', {
         code: 'embeddings_malformed',
-      })
+      });
     }
 
     // Sort by index so order matches the input batch regardless of how
@@ -168,18 +170,18 @@ export async function embedTextsDirect(
     if (rows.some((r) => typeof r.index !== 'number')) {
       throw new AiError('Embeddings response was missing result indices.', {
         code: 'embeddings_malformed',
-      })
+      });
     }
-    const ordered = [...rows].sort((a, b) => a.index! - b.index!)
+    const ordered = [...rows].sort((a, b) => a.index! - b.index!);
     for (const r of ordered) {
       if (!Array.isArray(r.embedding)) {
         throw new AiError('Embeddings response missing a vector.', {
           code: 'embeddings_malformed',
-        })
+        });
       }
-      out.push(r.embedding)
+      out.push(r.embedding);
     }
   }
 
-  return out
+  return out;
 }

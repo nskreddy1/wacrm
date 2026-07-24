@@ -8,49 +8,49 @@
 // in hooks/use-studio-templates.ts.
 // ============================================================
 
-export type TemplateChannel = "whatsapp" | "sms"
+export type TemplateChannel = 'whatsapp' | 'sms';
 
-export type TemplateStatus = "approved" | "pending" | "draft" | "rejected"
+export type TemplateStatus = 'approved' | 'pending' | 'draft' | 'rejected';
 
-export type TemplateCategory = "marketing" | "utility" | "authentication"
+export type TemplateCategory = 'marketing' | 'utility' | 'authentication';
 
 /** Which provider a WhatsApp template submits through. */
-export type TemplateProvider = "meta" | "twilio" | "none"
+export type TemplateProvider = 'meta' | 'twilio' | 'none';
 
-export type HeaderKind = "none" | "text" | "image"
+export type HeaderKind = 'none' | 'text' | 'image';
 
 export type TemplateButton =
-  | { id: string; kind: "quick_reply"; label: string }
-  | { id: string; kind: "url"; label: string; url: string }
-  | { id: string; kind: "call"; label: string; phone: string }
+  | { id: string; kind: 'quick_reply'; label: string }
+  | { id: string; kind: 'url'; label: string; url: string }
+  | { id: string; kind: 'call'; label: string; phone: string };
 
 export interface WhatsAppDraft {
-  headerKind: HeaderKind
-  headerText: string
-  body: string
-  footer: string
-  buttons: TemplateButton[]
+  headerKind: HeaderKind;
+  headerText: string;
+  body: string;
+  footer: string;
+  buttons: TemplateButton[];
 }
 
 export interface SmsDraft {
-  body: string
+  body: string;
 }
 
 export interface StudioTemplate {
-  id: string
-  name: string
-  channel: TemplateChannel
-  category: TemplateCategory
-  language: string
-  status: TemplateStatus
-  provider: TemplateProvider
-  updatedAt: string
-  whatsapp: WhatsAppDraft
-  sms: SmsDraft
+  id: string;
+  name: string;
+  channel: TemplateChannel;
+  category: TemplateCategory;
+  language: string;
+  status: TemplateStatus;
+  provider: TemplateProvider;
+  updatedAt: string;
+  whatsapp: WhatsAppDraft;
+  sms: SmsDraft;
   /** Provider rejection / submission error, surfaced in the editor. */
-  errorMessage?: string | null
+  errorMessage?: string | null;
   /** True for rows that only exist locally (never saved). */
-  isNew?: boolean
+  isNew?: boolean;
 }
 
 /**
@@ -62,15 +62,23 @@ export interface StudioTemplate {
  * broadcast wizard's personalize step.
  */
 export const TEMPLATE_VARIABLES = [
-  { token: "{{first_name}}", label: "First name", sample: "Priya" },
-  { token: "{{last_name}}", label: "Last name", sample: "Sharma" },
-  { token: "{{name}}", label: "Full name", sample: "Priya Sharma" },
-  { token: "{{company}}", label: "Company / school", sample: "Sunrise Public School" },
-  { token: "{{order_id}}", label: "Order ID", sample: "#48291" },
-  { token: "{{appointment_time}}", label: "Appointment time", sample: "3:30 PM, Jul 22" },
-  { token: "{{agent_name}}", label: "Agent name", sample: "Ram" },
-  { token: "{{otp}}", label: "One-time code", sample: "482913" },
-] as const
+  { token: '{{first_name}}', label: 'First name', sample: 'Priya' },
+  { token: '{{last_name}}', label: 'Last name', sample: 'Sharma' },
+  { token: '{{name}}', label: 'Full name', sample: 'Priya Sharma' },
+  {
+    token: '{{company}}',
+    label: 'Company / school',
+    sample: 'Sunrise Public School',
+  },
+  { token: '{{order_id}}', label: 'Order ID', sample: '#48291' },
+  {
+    token: '{{appointment_time}}',
+    label: 'Appointment time',
+    sample: '3:30 PM, Jul 22',
+  },
+  { token: '{{agent_name}}', label: 'Agent name', sample: 'Ram' },
+  { token: '{{otp}}', label: 'One-time code', sample: '482913' },
+] as const;
 
 /**
  * An account-defined variable from the template_variables table.
@@ -79,10 +87,10 @@ export const TEMPLATE_VARIABLES = [
  * {{class}}, {{fee_due_date}} — beyond the built-in set.
  */
 export interface CustomTemplateVariable {
-  id: string
-  key: string
-  label: string
-  sampleValue: string
+  id: string;
+  key: string;
+  label: string;
+  sampleValue: string;
 }
 
 /**
@@ -92,16 +100,16 @@ export interface CustomTemplateVariable {
  */
 export function withSampleValues(
   text: string,
-  customVariables?: CustomTemplateVariable[],
+  customVariables?: CustomTemplateVariable[]
 ): string {
-  let out = text
+  let out = text;
   for (const v of customVariables ?? []) {
-    out = out.split(`{{${v.key}}}`).join(v.sampleValue || v.label || v.key)
+    out = out.split(`{{${v.key}}}`).join(v.sampleValue || v.label || v.key);
   }
   for (const v of TEMPLATE_VARIABLES) {
-    out = out.split(v.token).join(v.sample)
+    out = out.split(v.token).join(v.sample);
   }
-  return out
+  return out;
 }
 
 // ------------------------------------------------------------
@@ -110,57 +118,66 @@ export function withSampleValues(
 // ------------------------------------------------------------
 
 const GSM7 =
-  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?" +
-  "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑܧ¿abcdefghijklmnopqrstuvwxyzäöñüà"
+  '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?' +
+  '¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑܧ¿abcdefghijklmnopqrstuvwxyzäöñüà';
 
-const GSM7_EXTENDED = "^{}\\[~]|€"
+const GSM7_EXTENDED = '^{}\\[~]|€';
 
 export interface SmsMeta {
-  encoding: "GSM-7" | "Unicode"
-  charCount: number
-  segments: number
-  perSegment: number
+  encoding: 'GSM-7' | 'Unicode';
+  charCount: number;
+  segments: number;
+  perSegment: number;
 }
 
 export function analyzeSms(text: string): SmsMeta {
-  let gsm = true
-  let units = 0
+  let gsm = true;
+  let units = 0;
   for (const ch of text) {
-    if (GSM7.includes(ch)) units += 1
-    else if (GSM7_EXTENDED.includes(ch)) units += 2
+    if (GSM7.includes(ch)) units += 1;
+    else if (GSM7_EXTENDED.includes(ch)) units += 2;
     else {
-      gsm = false
-      break
+      gsm = false;
+      break;
     }
   }
   if (!gsm) {
-    const len = [...text].length
-    const per = len <= 70 ? 70 : 67
+    const len = [...text].length;
+    const per = len <= 70 ? 70 : 67;
     return {
-      encoding: "Unicode",
+      encoding: 'Unicode',
       charCount: len,
       segments: len === 0 ? 0 : Math.ceil(len / per),
       perSegment: per,
-    }
+    };
   }
-  const per = units <= 160 ? 160 : 153
+  const per = units <= 160 ? 160 : 153;
   return {
-    encoding: "GSM-7",
+    encoding: 'GSM-7',
     charCount: units,
     segments: units === 0 ? 0 : Math.ceil(units / per),
     perSegment: per,
-  }
+  };
 }
 
-export const STATUS_META: Record<TemplateStatus, { label: string; className: string }> = {
-  approved: { label: "Approved", className: "bg-primary/15 text-primary" },
-  pending: { label: "In review", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
-  draft: { label: "Draft", className: "bg-muted text-muted-foreground" },
-  rejected: { label: "Rejected", className: "bg-destructive/15 text-destructive" },
-}
+export const STATUS_META: Record<
+  TemplateStatus,
+  { label: string; className: string }
+> = {
+  approved: { label: 'Approved', className: 'bg-primary/15 text-primary' },
+  pending: {
+    label: 'In review',
+    className: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  },
+  draft: { label: 'Draft', className: 'bg-muted text-muted-foreground' },
+  rejected: {
+    label: 'Rejected',
+    className: 'bg-destructive/15 text-destructive',
+  },
+};
 
 export const CATEGORY_LABELS: Record<TemplateCategory, string> = {
-  marketing: "Marketing",
-  utility: "Utility",
-  authentication: "Authentication",
-}
+  marketing: 'Marketing',
+  utility: 'Utility',
+  authentication: 'Authentication',
+};

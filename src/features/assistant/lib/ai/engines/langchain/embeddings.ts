@@ -1,6 +1,6 @@
-import { OpenAIEmbeddings } from '@langchain/openai'
-import { aiRequestTimeoutMs } from '../../defaults'
-import { toAiError } from '../../errors'
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { aiRequestTimeoutMs } from '../../defaults';
+import { toAiError } from '../../errors';
 
 // ============================================================
 // LangChain engine — embeddings (OpenAI). Selected when the platform
@@ -10,7 +10,7 @@ import { toAiError } from '../../errors'
 
 // OpenAI accepts an array input; keep batches modest so a big re-index
 // stays under request-size limits and partial failures are cheap.
-const BATCH_SIZE = 96
+const BATCH_SIZE = 96;
 
 /**
  * Embed a list of strings via LangChain's OpenAI embeddings client,
@@ -19,9 +19,9 @@ const BATCH_SIZE = 96
 export async function embedTextsLangChain(
   apiKey: string,
   model: string,
-  inputs: string[],
+  inputs: string[]
 ): Promise<number[][]> {
-  if (inputs.length === 0) return []
+  if (inputs.length === 0) return [];
 
   const embeddings = new OpenAIEmbeddings({
     apiKey,
@@ -31,11 +31,11 @@ export async function embedTextsLangChain(
     // Single attempt, matching the direct fetch adapter — callers decide
     // whether/when to retry.
     maxRetries: 0,
-  })
+  });
 
   try {
-    return await embeddings.embedDocuments(inputs)
+    return await embeddings.embedDocuments(inputs);
   } catch (err) {
-    throw toAiError(err, 'OpenAI embeddings')
+    throw toAiError(err, 'OpenAI embeddings');
   }
 }

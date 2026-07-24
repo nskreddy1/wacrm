@@ -1,48 +1,80 @@
-"use client"
+'use client';
 
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { ChartTooltipContent } from "@/components/ui/chart"
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { ChartTooltipContent } from '@/components/ui/chart';
 
 type ContactsGrowthProps = {
-  data: Array<{ day: string; total: number; added: number }>
-}
+  data: Array<{ day: string; total: number; added: number }>;
+};
 
-const dayFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" })
+const dayFormatter = new Intl.DateTimeFormat('en', {
+  month: 'short',
+  day: 'numeric',
+});
 
 /** 30-day cumulative contact base growth (area with gradient fill). */
 export function ContactsGrowth({ data }: ContactsGrowthProps) {
-  const chartData = data.map((d) => ({ ...d, label: dayFormatter.format(new Date(`${d.day}T00:00:00`)) }))
+  const chartData = data.map((d) => ({
+    ...d,
+    label: dayFormatter.format(new Date(`${d.day}T00:00:00`)),
+  }));
   return (
     <div className="h-56 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+        <AreaChart
+          data={chartData}
+          margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
+        >
           <defs>
             <linearGradient id="contacts-fill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} />
-              <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} />
+              <stop
+                offset="100%"
+                stopColor="var(--primary)"
+                stopOpacity={0.02}
+              />
             </linearGradient>
           </defs>
-          <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
+          <CartesianGrid
+            vertical={false}
+            stroke="var(--border)"
+            strokeDasharray="3 3"
+          />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
             interval="preserveStartEnd"
             minTickGap={40}
-            tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+            tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
             width={44}
             allowDecimals={false}
-            domain={[(dataMin: number) => Math.max(0, dataMin - 20), (dataMax: number) => Math.max(dataMax + 20, 10)]}
-            tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+            domain={[
+              (dataMin: number) => Math.max(0, dataMin - 20),
+              (dataMax: number) => Math.max(dataMax + 20, 10),
+            ]}
+            tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
           />
           <Tooltip
-            cursor={{ stroke: "var(--border)" }}
+            cursor={{ stroke: 'var(--border)' }}
             isAnimationActive={false}
-            content={<ChartTooltipContent labels={{ total: "Total contacts", added: "Added" }} />}
+            content={
+              <ChartTooltipContent
+                labels={{ total: 'Total contacts', added: 'Added' }}
+              />
+            }
           />
           <Area
             type="monotone"
@@ -55,5 +87,5 @@ export function ContactsGrowth({ data }: ContactsGrowthProps) {
         </AreaChart>
       </ResponsiveContainer>
     </div>
-  )
+  );
 }

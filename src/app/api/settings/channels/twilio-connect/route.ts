@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
 /**
  * Twilio Connect authorize callback.
@@ -14,11 +14,11 @@ import { NextResponse } from 'next/server'
  * deployment, and the opener validates event.origin symmetrically.
  */
 export function GET(request: Request) {
-  const url = new URL(request.url)
-  const accountSid = url.searchParams.get('AccountSid') ?? ''
-  const denied = url.searchParams.get('error') === 'unauthorized_client'
+  const url = new URL(request.url);
+  const accountSid = url.searchParams.get('AccountSid') ?? '';
+  const denied = url.searchParams.get('error') === 'unauthorized_client';
   // AccountSid shape guard — never inject unvalidated values into HTML.
-  const safeSid = /^AC[0-9a-fA-F]{32}$/.test(accountSid) ? accountSid : ''
+  const safeSid = /^AC[0-9a-fA-F]{32}$/.test(accountSid) ? accountSid : '';
 
   const html = `<!doctype html>
 <html>
@@ -35,6 +35,8 @@ export function GET(request: Request) {
       }
     </script>
   </body>
-</html>`
-  return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+</html>`;
+  return new NextResponse(html, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
 }

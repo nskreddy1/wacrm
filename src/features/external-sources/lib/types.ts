@@ -72,9 +72,7 @@ export interface GoogleSheetSourceConfig {
 }
 
 export type SourceConfig =
-  | RestSourceConfig
-  | PostgresSourceConfig
-  | GoogleSheetSourceConfig;
+  RestSourceConfig | PostgresSourceConfig | GoogleSheetSourceConfig;
 
 // ------------------------------------------------------------
 // Field mapping (stored in the `field_map` jsonb column)

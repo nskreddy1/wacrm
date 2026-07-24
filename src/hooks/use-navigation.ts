@@ -1,10 +1,14 @@
-"use client"
+'use client';
 
-import useSWR from "swr"
+import useSWR from 'swr';
 
-import { navigationForAccess, type NavAccess, type NavGroupConfig } from "@/lib/navigation/config"
+import {
+  navigationForAccess,
+  type NavAccess,
+  type NavGroupConfig,
+} from '@/lib/navigation/config';
 
-type NavigationResponse = { data: { groups: NavGroupConfig[] } }
+type NavigationResponse = { data: { groups: NavGroupConfig[] } };
 
 /**
  * Backend-driven app navigation.
@@ -18,14 +22,20 @@ type NavigationResponse = { data: { groups: NavGroupConfig[] } }
  * across sidebar instances.
  */
 export function useNavigation(initialAccess: NavAccess | null = null): {
-  groups: NavGroupConfig[]
-  isLoading: boolean
+  groups: NavGroupConfig[];
+  isLoading: boolean;
 } {
-  const { data, isLoading } = useSWR<NavigationResponse>("/api/v1/workspace/navigation", {
-    revalidateOnFocus: false,
-    dedupingInterval: 5 * 60_000,
-    fallbackData: { data: { groups: navigationForAccess(initialAccess) } },
-  })
+  const { data, isLoading } = useSWR<NavigationResponse>(
+    '/api/v1/workspace/navigation',
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 5 * 60_000,
+      fallbackData: { data: { groups: navigationForAccess(initialAccess) } },
+    }
+  );
 
-  return { groups: data?.data.groups ?? navigationForAccess(initialAccess), isLoading }
+  return {
+    groups: data?.data.groups ?? navigationForAccess(initialAccess),
+    isLoading,
+  };
 }

@@ -1,4 +1,4 @@
-import type { Automation } from "@/types";
+import type { Automation } from '@/types';
 
 /**
  * FlowRow was previously a private interface inside
@@ -9,8 +9,8 @@ export interface FlowRow {
   id: string;
   name: string;
   description: string | null;
-  status: "draft" | "active" | "archived";
-  trigger_type: "keyword" | "first_inbound_message" | "manual";
+  status: 'draft' | 'active' | 'archived';
+  trigger_type: 'keyword' | 'first_inbound_message' | 'manual';
   trigger_config: { keywords?: string[] } | Record<string, unknown>;
   execution_count: number;
   last_executed_at: string | null;
@@ -19,10 +19,10 @@ export interface FlowRow {
 }
 
 export type UnifiedItem =
-  | { kind: "flow"; flow: FlowRow }
-  | { kind: "automation"; automation: Automation };
+  | { kind: 'flow'; flow: FlowRow }
+  | { kind: 'automation'; automation: Automation };
 
-export type UnifiedFilter = "all" | "flows" | "rules";
+export type UnifiedFilter = 'all' | 'flows' | 'rules';
 
 function sortTime(iso: string | null | undefined): number {
   if (!iso) return Number.NEGATIVE_INFINITY;
@@ -33,26 +33,31 @@ function sortTime(iso: string | null | undefined): number {
 /** Merge flows and classic automations into one list, newest updated first. */
 export function mergeUnifiedItems(
   flows: FlowRow[],
-  automations: Automation[],
+  automations: Automation[]
 ): UnifiedItem[] {
   const items: UnifiedItem[] = [
-    ...flows.map((flow): UnifiedItem => ({ kind: "flow", flow })),
-    ...automations.map(
-      (automation): UnifiedItem => ({ kind: "automation", automation }),
-    ),
+    ...flows.map((flow): UnifiedItem => ({ kind: 'flow', flow })),
+    ...automations.map((automation): UnifiedItem => ({
+      kind: 'automation',
+      automation,
+    })),
   ];
   return items.sort((a, b) => {
-    const ta = sortTime(a.kind === "flow" ? a.flow.updated_at : a.automation.updated_at);
-    const tb = sortTime(b.kind === "flow" ? b.flow.updated_at : b.automation.updated_at);
+    const ta = sortTime(
+      a.kind === 'flow' ? a.flow.updated_at : a.automation.updated_at
+    );
+    const tb = sortTime(
+      b.kind === 'flow' ? b.flow.updated_at : b.automation.updated_at
+    );
     return tb - ta;
   });
 }
 
 export function filterUnifiedItems(
   items: UnifiedItem[],
-  filter: UnifiedFilter,
+  filter: UnifiedFilter
 ): UnifiedItem[] {
-  if (filter === "flows") return items.filter((i) => i.kind === "flow");
-  if (filter === "rules") return items.filter((i) => i.kind === "automation");
+  if (filter === 'flows') return items.filter((i) => i.kind === 'flow');
+  if (filter === 'rules') return items.filter((i) => i.kind === 'automation');
   return items;
 }

@@ -1,6 +1,6 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-let adminClient: SupabaseClient | null = null
+let adminClient: SupabaseClient | null = null;
 
 export function channelAdmin(): SupabaseClient {
   if (!adminClient) {
@@ -10,8 +10,8 @@ export function channelAdmin(): SupabaseClient {
         process.env.zepo_SUPABASE_SERVICE_ROLE_KEY ??
         process.env.zepo_SUPABASE_SECRET_KEY ??
         process.env.SUPABASE_SECRET_KEY)!,
-      { auth: { persistSession: false, autoRefreshToken: false } },
-    )
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    );
   }
-  return adminClient
+  return adminClient;
 }

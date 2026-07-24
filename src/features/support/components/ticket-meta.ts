@@ -20,8 +20,7 @@ export const STATUS_META: Record<
 > = {
   open: {
     label: 'Open',
-    className:
-      'bg-primary-soft text-primary border border-primary/20',
+    className: 'bg-primary-soft text-primary border border-primary/20',
   },
   in_progress: {
     label: 'In progress',

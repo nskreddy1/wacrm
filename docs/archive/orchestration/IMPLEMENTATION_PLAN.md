@@ -26,15 +26,15 @@ their callers are migrated).
 
 ## Progress Overview
 
-| Phase | Scope | Status |
-|---|---|---|
-| 1a | `MetaWhatsAppAdapter` + extended outbound contracts | done |
-| 1b | Unified outbound orchestrator `sendChannelMessage()` | done |
-| 1c | Migrate callers (dashboard, flows, automations, AI reply) | in-progress |
-| 2 | Durable outbox + unified delivery tracking | todo |
-| 3 | Channel-agnostic inbound pipeline + router | todo |
-| 4 | AI agent layer (per-channel + role-based) | todo |
-| 5 | Observability & hardening | todo |
+| Phase | Scope                                                     | Status      |
+| ----- | --------------------------------------------------------- | ----------- |
+| 1a    | `MetaWhatsAppAdapter` + extended outbound contracts       | done        |
+| 1b    | Unified outbound orchestrator `sendChannelMessage()`      | done        |
+| 1c    | Migrate callers (dashboard, flows, automations, AI reply) | in-progress |
+| 2     | Durable outbox + unified delivery tracking                | todo        |
+| 3     | Channel-agnostic inbound pipeline + router                | todo        |
+| 4     | AI agent layer (per-channel + role-based)                 | todo        |
+| 5     | Observability & hardening                                 | todo        |
 
 ---
 
@@ -123,8 +123,7 @@ recipient) flows through one function.
       post-persist cascade (flow session → automations → AI, deterministic wins) into a
       channel-agnostic function invoked from all webhook routes. — `todo`
 - [ ] 3c. Legacy Meta webhook delegates to the shared router (incremental cutover). — `todo`
-- [ ] 3d. SMS-readiness documented: adding SMS = `'sms'` enum value + `TwilioSmsAdapter`
-      + webhook parser. No orchestrator/schema changes. — `todo`
+- [ ] 3d. SMS-readiness documented: adding SMS = `'sms'` enum value + `TwilioSmsAdapter` + webhook parser. No orchestrator/schema changes. — `todo`
 
 ---
 
@@ -153,7 +152,7 @@ recipient) flows through one function.
 
 ## Change Log
 
-| Date | Change |
-|---|---|
-| 2026-07-15 | Plan created; analysis of legacy vs omnichannel foundation completed. |
+| Date       | Change                                                                                                                                                                                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-07-15 | Plan created; analysis of legacy vs omnichannel foundation completed.                                                                                                                                                                                              |
 | 2026-07-15 | Phase 2c (Twilio): native Content-API template sends (`contentSid`/`contentVariables` on the template payload), `StatusCallback` on all Twilio sends, status-callback handling in the Twilio webhook, and new shared `src/lib/orchestration/status.ts` with tests. |

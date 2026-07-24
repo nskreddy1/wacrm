@@ -1,4 +1,4 @@
-import { supabaseAdmin } from './admin-client'
+import { supabaseAdmin } from './admin-client';
 
 // ============================================================
 // Platform-wide AI engine flag.
@@ -19,23 +19,23 @@ import { supabaseAdmin } from './admin-client'
 // converge within the TTL.
 // ============================================================
 
-export type AiEngine = 'direct' | 'langchain'
+export type AiEngine = 'direct' | 'langchain';
 
-export const DEFAULT_AI_ENGINE: AiEngine = 'direct'
+export const DEFAULT_AI_ENGINE: AiEngine = 'direct';
 
 /** How long a fetched flag value is trusted before re-reading the DB. */
-const CACHE_TTL_MS = 30_000
+const CACHE_TTL_MS = 30_000;
 
-let cached: { value: AiEngine; expiresAt: number } | null = null
+let cached: { value: AiEngine; expiresAt: number } | null = null;
 
 function isAiEngine(value: unknown): value is AiEngine {
-  return value === 'direct' || value === 'langchain'
+  return value === 'direct' || value === 'langchain';
 }
 
 /** Env fallback (also the local-dev/test override when no DB row exists). */
 function envEngine(): AiEngine | null {
-  const raw = process.env.AI_ENGINE?.trim().toLowerCase()
-  return isAiEngine(raw) ? raw : null
+  const raw = process.env.AI_ENGINE?.trim().toLowerCase();
+  return isAiEngine(raw) ? raw : null;
 }
 
 /**
@@ -45,28 +45,28 @@ function envEngine(): AiEngine | null {
  * the settings table must never take the reply path down with it.
  */
 export async function getAiEngine(): Promise<AiEngine> {
-  const now = Date.now()
-  if (cached && now < cached.expiresAt) return cached.value
+  const now = Date.now();
+  if (cached && now < cached.expiresAt) return cached.value;
 
-  let value: AiEngine | null = null
+  let value: AiEngine | null = null;
   try {
     const { data, error } = await supabaseAdmin()
       .from('platform_settings')
       .select('value')
       .eq('key', 'ai_engine')
-      .maybeSingle()
+      .maybeSingle();
     if (error) {
-      console.error('[ai/engine-flag] settings read failed:', error.message)
+      console.error('[ai/engine-flag] settings read failed:', error.message);
     } else if (data && isAiEngine(data.value)) {
-      value = data.value
+      value = data.value;
     }
   } catch (err) {
-    console.error('[ai/engine-flag] settings read threw:', err)
+    console.error('[ai/engine-flag] settings read threw:', err);
   }
 
-  const resolved = value ?? envEngine() ?? DEFAULT_AI_ENGINE
-  cached = { value: resolved, expiresAt: now + CACHE_TTL_MS }
-  return resolved
+  const resolved = value ?? envEngine() ?? DEFAULT_AI_ENGINE;
+  cached = { value: resolved, expiresAt: now + CACHE_TTL_MS };
+  return resolved;
 }
 
 /**
@@ -75,5 +75,5 @@ export async function getAiEngine(): Promise<AiEngine> {
  * local instance reflects the change immediately.
  */
 export function resetEngineCache(): void {
-  cached = null
+  cached = null;
 }

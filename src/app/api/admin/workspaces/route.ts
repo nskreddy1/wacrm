@@ -7,11 +7,11 @@
 // never N+1.
 // ============================================================
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { toErrorResponse } from "@/features/auth/lib/account";
-import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
-import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
+import { toErrorResponse } from '@/features/auth/lib/account';
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
+import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
 
 const PAGE_SIZE = 25;
 const MAX_SEARCH_LEN = 120;
@@ -22,27 +22,30 @@ export async function GET(request: Request) {
     const admin = platformAdmin();
 
     const url = new URL(request.url);
-    const q = (url.searchParams.get("q") ?? "").slice(0, MAX_SEARCH_LEN).trim();
-    const cursor = url.searchParams.get("cursor"); // created_at keyset
+    const q = (url.searchParams.get('q') ?? '').slice(0, MAX_SEARCH_LEN).trim();
+    const cursor = url.searchParams.get('cursor'); // created_at keyset
 
     let query = admin
-      .from("accounts")
-      .select("id, name, owner_user_id, created_at")
-      .order("created_at", { ascending: false })
+      .from('accounts')
+      .select('id, name, owner_user_id, created_at')
+      .order('created_at', { ascending: false })
       .limit(PAGE_SIZE + 1);
 
     if (q) {
-      const escaped = q.replace(/[%_]/g, "\\$&").replace(/[(),.]/g, " ").trim();
-      if (escaped) query = query.ilike("name", `%${escaped}%`);
+      const escaped = q
+        .replace(/[%_]/g, '\\$&')
+        .replace(/[(),.]/g, ' ')
+        .trim();
+      if (escaped) query = query.ilike('name', `%${escaped}%`);
     }
-    if (cursor) query = query.lt("created_at", cursor);
+    if (cursor) query = query.lt('created_at', cursor);
 
     const { data: rows, error } = await query;
     if (error) {
-      console.error("[GET /api/admin/workspaces] fetch error:", error);
+      console.error('[GET /api/admin/workspaces] fetch error:', error);
       return NextResponse.json(
-        { error: "Failed to load workspaces" },
-        { status: 500 },
+        { error: 'Failed to load workspaces' },
+        { status: 500 }
       );
     }
 
@@ -58,21 +61,21 @@ export async function GET(request: Request) {
     const [membersRes, ownersRes, channelsRes] = await Promise.all([
       accountIds.length
         ? admin
-            .from("profiles")
-            .select("account_id")
-            .in("account_id", accountIds)
+            .from('profiles')
+            .select('account_id')
+            .in('account_id', accountIds)
         : Promise.resolve({ data: [], error: null }),
       ownerIds.length
         ? admin
-            .from("profiles")
-            .select("user_id, full_name, email")
-            .in("user_id", ownerIds)
+            .from('profiles')
+            .select('user_id, full_name, email')
+            .in('user_id', ownerIds)
         : Promise.resolve({ data: [], error: null }),
       accountIds.length
         ? admin
-            .from("channel_configurations")
-            .select("account_id, channel, is_active")
-            .in("account_id", accountIds)
+            .from('channel_configurations')
+            .select('account_id, channel, is_active')
+            .in('account_id', accountIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
 
@@ -84,7 +87,7 @@ export async function GET(request: Request) {
       (ownersRes.data ?? []).map((p) => [
         p.user_id,
         p.full_name || p.email || null,
-      ]),
+      ])
     );
     const activeChannels = new Map<string, string[]>();
     for (const c of channelsRes.data ?? []) {

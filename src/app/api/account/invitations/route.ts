@@ -17,22 +17,25 @@
 // revoke and re-issue.
 // ============================================================
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { requirePermission, toErrorResponse } from "@/features/auth/lib/account";
+import {
+  requirePermission,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
 import {
   clampExpiryDays,
   generateInviteToken,
   inviteExpiresAt,
   inviteUrl,
-} from "@/features/auth/lib/invitations";
-import { isAccountRole } from "@/features/auth/lib/roles";
-import { sendInviteEmail } from "@/lib/email/invite-email";
+} from '@/features/auth/lib/invitations';
+import { isAccountRole } from '@/features/auth/lib/roles';
+import { sendInviteEmail } from '@/lib/email/invite-email';
 import {
   checkRateLimit,
   rateLimitResponse,
   RATE_LIMITS,
-} from "@/lib/rate-limit";
+} from '@/lib/rate-limit';
 
 // Resolve the base URL we publish invite links under.
 //
@@ -78,7 +81,7 @@ function parseAllowedHosts(): readonly string[] | null {
   const raw = process.env.ALLOWED_INVITE_HOSTS?.trim();
   if (!raw) return null;
   const list = raw
-    .split(",")
+    .split(',')
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean);
   return list.length > 0 ? list : null;
@@ -86,7 +89,7 @@ function parseAllowedHosts(): readonly string[] | null {
 
 function isHostAllowed(
   hostname: string,
-  allowList: readonly string[] | null,
+  allowList: readonly string[] | null
 ): boolean {
   if (!allowList) return true; // No allow-list → permissive (legacy behavior).
   return allowList.includes(hostname.toLowerCase());
@@ -94,26 +97,26 @@ function isHostAllowed(
 
 function getBaseUrl(request: Request): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
+  if (explicit) return explicit.replace(/\/+$/, '');
 
   const allowList = parseAllowedHosts();
   const forwardedHost = request.headers
-    .get("x-forwarded-host")
-    ?.split(",")[0]
+    .get('x-forwarded-host')
+    ?.split(',')[0]
     ?.trim();
   const forwardedProto = request.headers
-    .get("x-forwarded-proto")
-    ?.split(",")[0]
+    .get('x-forwarded-proto')
+    ?.split(',')[0]
     ?.trim();
   if (forwardedHost && isHostAllowed(forwardedHost, allowList)) {
-    return `${forwardedProto || "https"}://${forwardedHost}`;
+    return `${forwardedProto || 'https'}://${forwardedHost}`;
   }
 
-  const host = request.headers.get("host")?.trim();
+  const host = request.headers.get('host')?.trim();
   if (host && isHostAllowed(host, allowList)) {
     // The protocol on `request.url` is whatever the framework saw —
     // reliable for bare deployments where no proxy is rewriting it.
-    const reqProto = new URL(request.url).protocol.replace(":", "");
+    const reqProto = new URL(request.url).protocol.replace(':', '');
     return `${reqProto}://${host}`;
   }
 
@@ -124,15 +127,15 @@ function getBaseUrl(request: Request): string {
   // probing the API with a spoofed Host header.
   if (allowList && (forwardedHost || host)) {
     console.warn(
-      "[POST /api/account/invitations] rejected non-allow-listed host:",
-      { forwardedHost, host, allowList },
+      '[POST /api/account/invitations] rejected non-allow-listed host:',
+      { forwardedHost, host, allowList }
     );
   } else {
     console.warn(
-      "[POST /api/account/invitations] could not derive base URL from request; falling back to marketing domain",
+      '[POST /api/account/invitations] could not derive base URL from request; falling back to marketing domain'
     );
   }
-  return "https://wacrm.tech";
+  return 'https://wacrm.tech';
 }
 
 const MAX_LABEL_LEN = 80;
@@ -143,23 +146,23 @@ const MAX_PENDING_INVITES = 20;
 
 export async function GET() {
   try {
-    const ctx = await requirePermission("members:manage");
+    const ctx = await requirePermission('members:manage');
 
     const { data, error } = await ctx.supabase
-      .from("account_invitations")
+      .from('account_invitations')
       .select(
-        "id, role, label, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id, invited_email, invited_first_name, invited_last_name, workspace_profile_id, workspace_profiles(id, name)",
+        'id, role, label, created_by_user_id, created_at, expires_at, accepted_at, accepted_by_user_id, invited_email, invited_first_name, invited_last_name, workspace_profile_id, workspace_profiles(id, name)'
       )
-      .eq("account_id", ctx.accountId)
-      .is("accepted_at", null)
-      .gt("expires_at", new Date().toISOString())
-      .order("created_at", { ascending: false });
+      .eq('account_id', ctx.accountId)
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
 
     if (error) {
-      console.error("[GET /api/account/invitations] fetch error:", error);
+      console.error('[GET /api/account/invitations] fetch error:', error);
       return NextResponse.json(
-        { error: "Failed to load invitations" },
-        { status: 500 },
+        { error: 'Failed to load invitations' },
+        { status: 500 }
       );
     }
 
@@ -171,7 +174,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const ctx = await requirePermission("members:manage");
+    const ctx = await requirePermission('members:manage');
 
     // 30/min per user. The Members tab is a clicks-only UI so any
     // legitimate admin is far below this; the cap exists to keep
@@ -179,31 +182,29 @@ export async function POST(request: Request) {
     // flooding `account_invitations` with rows.
     const limit = checkRateLimit(
       `admin:inviteCreate:${ctx.userId}`,
-      RATE_LIMITS.adminAction,
+      RATE_LIMITS.adminAction
     );
     if (!limit.success) return rateLimitResponse(limit);
 
-    const body = (await request.json().catch(() => null)) as
-      | {
-          role?: unknown;
-          expiresInDays?: unknown;
-          label?: unknown;
-          email?: unknown;
-          firstName?: unknown;
-          lastName?: unknown;
-          workspaceRoleId?: unknown;
-          workspaceProfileId?: unknown;
-        }
-      | null;
+    const body = (await request.json().catch(() => null)) as {
+      role?: unknown;
+      expiresInDays?: unknown;
+      label?: unknown;
+      email?: unknown;
+      firstName?: unknown;
+      lastName?: unknown;
+      workspaceRoleId?: unknown;
+      workspaceProfileId?: unknown;
+    } | null;
 
     const role = body?.role;
-    if (!isAccountRole(role) || role === "owner") {
+    if (!isAccountRole(role) || role === 'owner') {
       // The DB CHECK already rejects 'owner', but failing fast
       // here gives a clearer 400 than the eventual constraint
       // violation surfaced as a 500.
       return NextResponse.json(
         { error: "'role' must be one of admin, agent, viewer" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -212,20 +213,20 @@ export async function POST(request: Request) {
     // collapsing to the safe default, so we just pass the raw
     // value through after a type narrow.
     const expiresInDays =
-      typeof expiresInDaysRaw === "number" ? expiresInDaysRaw : undefined;
+      typeof expiresInDaysRaw === 'number' ? expiresInDaysRaw : undefined;
     const expiryDays = clampExpiryDays(expiresInDays);
     const expiresAt = inviteExpiresAt(expiryDays);
 
     let label: string | null = null;
-    if (typeof body?.label === "string") {
+    if (typeof body?.label === 'string') {
       const trimmed = body.label.trim();
       if (trimmed.length > MAX_LABEL_LEN) {
         return NextResponse.json(
           { error: `Label must be ${MAX_LABEL_LEN} characters or fewer` },
-          { status: 400 },
+          { status: 400 }
         );
       }
-      label = trimmed === "" ? null : trimmed;
+      label = trimmed === '' ? null : trimmed;
     }
 
     // ------------------------------------------------------------
@@ -235,23 +236,23 @@ export async function POST(request: Request) {
     // legacy anonymous share-link flow.
     // ------------------------------------------------------------
     let invitedEmail: string | null = null;
-    if (typeof body?.email === "string" && body.email.trim() !== "") {
+    if (typeof body?.email === 'string' && body.email.trim() !== '') {
       const trimmed = body.email.trim().toLowerCase();
       // Pragmatic RFC-lite check — the definitive validation is the
       // email actually arriving.
       if (trimmed.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
         return NextResponse.json(
           { error: "'email' must be a valid email address" },
-          { status: 400 },
+          { status: 400 }
         );
       }
       invitedEmail = trimmed;
     }
 
     const nameField = (v: unknown): string | null => {
-      if (typeof v !== "string") return null;
+      if (typeof v !== 'string') return null;
       const trimmed = v.trim();
-      return trimmed === "" ? null : trimmed.slice(0, 80);
+      return trimmed === '' ? null : trimmed.slice(0, 80);
     };
     const invitedFirstName = nameField(body?.firstName);
     const invitedLastName = nameField(body?.lastName);
@@ -261,19 +262,21 @@ export async function POST(request: Request) {
     // foreign account's role.
     let workspaceRoleId: string | null = null;
     if (
-      typeof body?.workspaceRoleId === "string" &&
-      body.workspaceRoleId.trim() !== ""
+      typeof body?.workspaceRoleId === 'string' &&
+      body.workspaceRoleId.trim() !== ''
     ) {
       const { data: wsRole } = await ctx.supabase
-        .from("workspace_roles")
-        .select("id")
-        .eq("id", body.workspaceRoleId.trim())
-        .eq("account_id", ctx.accountId)
+        .from('workspace_roles')
+        .select('id')
+        .eq('id', body.workspaceRoleId.trim())
+        .eq('account_id', ctx.accountId)
         .maybeSingle();
       if (!wsRole) {
         return NextResponse.json(
-          { error: "'workspaceRoleId' does not match a role in this workspace" },
-          { status: 400 },
+          {
+            error: "'workspaceRoleId' does not match a role in this workspace",
+          },
+          { status: 400 }
         );
       }
       workspaceRoleId = wsRole.id;
@@ -285,14 +288,14 @@ export async function POST(request: Request) {
     // flow falls back to the account's "Standard" system profile.
     let workspaceProfileId: string | null = null;
     if (
-      typeof body?.workspaceProfileId === "string" &&
-      body.workspaceProfileId.trim() !== ""
+      typeof body?.workspaceProfileId === 'string' &&
+      body.workspaceProfileId.trim() !== ''
     ) {
       const { data: wsProfile } = await ctx.supabase
-        .from("workspace_profiles")
-        .select("id")
-        .eq("id", body.workspaceProfileId.trim())
-        .eq("account_id", ctx.accountId)
+        .from('workspace_profiles')
+        .select('id')
+        .eq('id', body.workspaceProfileId.trim())
+        .eq('account_id', ctx.accountId)
         .maybeSingle();
       if (!wsProfile) {
         return NextResponse.json(
@@ -300,7 +303,7 @@ export async function POST(request: Request) {
             error:
               "'workspaceProfileId' does not match a profile in this workspace",
           },
-          { status: 400 },
+          { status: 400 }
         );
       }
       workspaceProfileId = wsProfile.id;
@@ -312,20 +315,20 @@ export async function POST(request: Request) {
     // have in the wild at once — an enterprise hygiene control, not
     // an abuse control.
     const { count: pendingCount, error: pendingErr } = await ctx.supabase
-      .from("account_invitations")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", ctx.accountId)
-      .is("accepted_at", null)
-      .gt("expires_at", new Date().toISOString());
+      .from('account_invitations')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', ctx.accountId)
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString());
 
     if (pendingErr) {
       console.error(
-        "[POST /api/account/invitations] pending count error:",
-        pendingErr,
+        '[POST /api/account/invitations] pending count error:',
+        pendingErr
       );
       return NextResponse.json(
-        { error: "Failed to create invitation" },
-        { status: 500 },
+        { error: 'Failed to create invitation' },
+        { status: 500 }
       );
     }
     if ((pendingCount ?? 0) >= MAX_PENDING_INVITES) {
@@ -333,14 +336,14 @@ export async function POST(request: Request) {
         {
           error: `This workspace already has ${MAX_PENDING_INVITES} pending invitations. Revoke unused invites before creating new ones.`,
         },
-        { status: 409 },
+        { status: 409 }
       );
     }
 
     const { token, hash } = generateInviteToken();
 
     const { data, error } = await ctx.supabase
-      .from("account_invitations")
+      .from('account_invitations')
       .insert({
         account_id: ctx.accountId,
         token_hash: hash,
@@ -354,14 +357,14 @@ export async function POST(request: Request) {
         workspace_role_id: workspaceRoleId,
         workspace_profile_id: workspaceProfileId,
       })
-      .select("id, role, label, expires_at, created_at, invited_email")
+      .select('id, role, label, expires_at, created_at, invited_email')
       .single();
 
     if (error || !data) {
-      console.error("[POST /api/account/invitations] insert error:", error);
+      console.error('[POST /api/account/invitations] insert error:', error);
       return NextResponse.json(
-        { error: "Failed to create invitation" },
-        { status: 500 },
+        { error: 'Failed to create invitation' },
+        { status: 500 }
       );
     }
 
@@ -377,14 +380,14 @@ export async function POST(request: Request) {
       const [{ data: accountRow }, { data: inviterProfile }] =
         await Promise.all([
           ctx.supabase
-            .from("accounts")
-            .select("name")
-            .eq("id", ctx.accountId)
+            .from('accounts')
+            .select('name')
+            .eq('id', ctx.accountId)
             .maybeSingle(),
           ctx.supabase
-            .from("profiles")
-            .select("full_name, email")
-            .eq("id", ctx.userId)
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', ctx.userId)
             .maybeSingle(),
         ]);
 
@@ -394,7 +397,7 @@ export async function POST(request: Request) {
         lastName: invitedLastName,
         accountName: accountRow?.name ?? "your team's workspace",
         inviterName:
-          inviterProfile?.full_name ?? inviterProfile?.email ?? "A teammate",
+          inviterProfile?.full_name ?? inviterProfile?.email ?? 'A teammate',
         inviteUrl: url,
         expiresInDays: expiryDays,
       });
@@ -412,7 +415,7 @@ export async function POST(request: Request) {
         emailSent,
         emailProvider,
       },
-      { status: 201 },
+      { status: 201 }
     );
   } catch (err) {
     return toErrorResponse(err);

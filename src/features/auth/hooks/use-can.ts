@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useAuth } from "@/features/auth/hooks/use-auth";
-import type { PermissionSlug } from "@/features/auth/lib/permissions";
+import { useAuth } from '@/features/auth/hooks/use-auth';
+import type { PermissionSlug } from '@/features/auth/lib/permissions';
 
 /**
  * Typed action keys for `useCan`. These map onto capability flags
@@ -10,12 +10,12 @@ import type { PermissionSlug } from "@/features/auth/lib/permissions";
  * list closed lets the compiler catch typos at every call site.
  */
 export type CanAction =
-  | "manage-members"
-  | "edit-settings"
-  | "send-messages"
-  | "view-only"
-  | "delete-account"
-  | "transfer-ownership";
+  | 'manage-members'
+  | 'edit-settings'
+  | 'send-messages'
+  | 'view-only'
+  | 'delete-account'
+  | 'transfer-ownership';
 
 /**
  * Inline alternative to `<RequireRole>` for places that need a
@@ -42,16 +42,16 @@ export function useCan(action: CanAction): boolean {
   if (profileLoading || !profile) return false;
 
   switch (action) {
-    case "manage-members":
+    case 'manage-members':
       return canManageMembers;
-    case "edit-settings":
+    case 'edit-settings':
       return canEditSettings;
-    case "send-messages":
+    case 'send-messages':
       return canSendMessages;
-    case "view-only":
+    case 'view-only':
       return !canSendMessages && !canEditSettings;
-    case "delete-account":
-    case "transfer-ownership":
+    case 'delete-account':
+    case 'transfer-ownership':
       // Destructive account-level actions stay owner-only ("Super
       // Admin" semantics) — no permission slug can grant these.
       return isOwner;

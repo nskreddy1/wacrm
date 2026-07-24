@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { AxonMark } from "@/features/brand/components/axon-logo";
+import Link from 'next/link';
+import { AxonMark } from '@/features/brand/components/axon-logo';
 
 type AuthShellProps = {
   children: React.ReactNode;
@@ -22,10 +22,10 @@ export function AuthShell({
       Axon!
     </>
   ),
-  promoDescription = "Turn every conversation into revenue. WhatsApp, SMS, and email in one shared inbox — with pipelines and automated follow-ups built in.",
+  promoDescription = 'Turn every conversation into revenue. WhatsApp, SMS, and email in one shared inbox — with pipelines and automated follow-ups built in.',
 }: AuthShellProps) {
   return (
-    <main className="grid min-h-screen bg-background lg:grid-cols-[1.05fr_1fr]">
+    <main className="bg-background grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       {/* Brand panel */}
       <section
         aria-label="About Axon"
@@ -57,19 +57,19 @@ export function AuthShell({
         <div className="auth-stagger relative flex flex-1 flex-col justify-between gap-10 p-12 xl:p-16">
           <div
             className="flex flex-col gap-6 pt-16"
-            style={{ "--stagger-index": 0 } as React.CSSProperties}
+            style={{ '--stagger-index': 0 } as React.CSSProperties}
           >
-            <h2 className="max-w-xl text-balance text-5xl font-semibold leading-[1.05] tracking-tight xl:text-6xl">
+            <h2 className="max-w-xl text-5xl leading-[1.05] font-semibold tracking-tight text-balance xl:text-6xl">
               {promoTitle}
             </h2>
-            <p className="max-w-md text-pretty text-lg leading-relaxed opacity-85">
+            <p className="max-w-md text-lg leading-relaxed text-pretty opacity-85">
               {promoDescription}
             </p>
           </div>
 
           <p
             className="text-sm opacity-70"
-            style={{ "--stagger-index": 1 } as React.CSSProperties}
+            style={{ '--stagger-index': 1 } as React.CSSProperties}
           >
             &copy; {new Date().getFullYear()} Axon. All rights reserved.
           </p>
@@ -81,7 +81,7 @@ export function AuthShell({
         <header className="flex items-center justify-between gap-4">
           <Link
             href="/"
-            className="flex w-fit items-center gap-2.5 text-lg font-bold tracking-tight text-foreground"
+            className="text-foreground flex w-fit items-center gap-2.5 text-lg font-bold tracking-tight"
             aria-label="Axon home"
           >
             <AxonMark size={26} variant="mono" className="text-foreground" />
@@ -95,13 +95,15 @@ export function AuthShell({
           <div className="w-full max-w-md">{children}</div>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-          <p className="lg:hidden">&copy; {new Date().getFullYear()} Axon. All rights reserved.</p>
+        <footer className="text-muted-foreground flex flex-wrap items-center justify-between gap-3 text-xs">
+          <p className="lg:hidden">
+            &copy; {new Date().getFullYear()} Axon. All rights reserved.
+          </p>
           <div className="flex items-center gap-4">
-            <Link href="/" className="transition-colors hover:text-foreground">
+            <Link href="/" className="hover:text-foreground transition-colors">
               Privacy
             </Link>
-            <Link href="/" className="transition-colors hover:text-foreground">
+            <Link href="/" className="hover:text-foreground transition-colors">
               Terms
             </Link>
           </div>

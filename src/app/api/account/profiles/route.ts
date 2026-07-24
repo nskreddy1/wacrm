@@ -14,19 +14,19 @@
 // members:manage. RLS enforces the same split at the DB.
 // ============================================================
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
 import {
   getCurrentAccount,
   requirePermission,
   toErrorResponse,
-} from "@/features/auth/lib/account";
-import { isPermissionSlug } from "@/features/auth/lib/permissions";
+} from '@/features/auth/lib/account';
+import { isPermissionSlug } from '@/features/auth/lib/permissions';
 import {
   checkRateLimit,
   rateLimitResponse,
   RATE_LIMITS,
-} from "@/lib/rate-limit";
+} from '@/lib/rate-limit';
 
 const MAX_NAME_LEN = 80;
 const MAX_DESCRIPTION_LEN = 500;
@@ -35,34 +35,34 @@ const MAX_DESCRIPTION_LEN = 500;
 const MAX_PROFILES_PER_ACCOUNT = 25;
 
 const PROFILE_SELECT =
-  "id, name, description, permissions, is_system, created_at, updated_at, updated_by_user_id, created_by_user_id";
+  'id, name, description, permissions, is_system, created_at, updated_at, updated_by_user_id, created_by_user_id';
 
 export async function GET() {
   try {
     const ctx = await getCurrentAccount();
 
     const { data, error } = await ctx.supabase
-      .from("workspace_profiles")
+      .from('workspace_profiles')
       .select(PROFILE_SELECT)
-      .eq("account_id", ctx.accountId)
-      .order("is_system", { ascending: false })
-      .order("created_at", { ascending: true });
+      .eq('account_id', ctx.accountId)
+      .order('is_system', { ascending: false })
+      .order('created_at', { ascending: true });
 
     if (error) {
-      console.error("[GET /api/account/profiles] error:", error);
+      console.error('[GET /api/account/profiles] error:', error);
       return NextResponse.json(
-        { error: "Failed to load profiles" },
-        { status: 500 },
+        { error: 'Failed to load profiles' },
+        { status: 500 }
       );
     }
 
     // Member counts per profile — drives the "N users" column.
     const { data: counts } = await ctx.supabase
-      .from("profiles")
-      .select("workspace_profile_id")
-      .eq("account_id", ctx.accountId)
-      .neq("status", "deleted")
-      .not("workspace_profile_id", "is", null);
+      .from('profiles')
+      .select('workspace_profile_id')
+      .eq('account_id', ctx.accountId)
+      .neq('status', 'deleted')
+      .not('workspace_profile_id', 'is', null);
 
     const countByProfile = new Map<string, number>();
     for (const row of counts ?? []) {
@@ -83,11 +83,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const ctx = await requirePermission("members:manage");
+    const ctx = await requirePermission('members:manage');
 
     const limit = checkRateLimit(
       `admin:profileCreate:${ctx.userId}`,
-      RATE_LIMITS.adminAction,
+      RATE_LIMITS.adminAction
     );
     if (!limit.success) return rateLimitResponse(limit);
 
@@ -97,26 +97,26 @@ export async function POST(request: Request) {
       permissions?: unknown;
     } | null;
 
-    const nameRaw = typeof body?.name === "string" ? body.name.trim() : "";
-    if (nameRaw === "" || nameRaw.length > MAX_NAME_LEN) {
+    const nameRaw = typeof body?.name === 'string' ? body.name.trim() : '';
+    if (nameRaw === '' || nameRaw.length > MAX_NAME_LEN) {
       return NextResponse.json(
         { error: `'name' is required (max ${MAX_NAME_LEN} characters)` },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
     let description: string | null = null;
-    if (typeof body?.description === "string") {
+    if (typeof body?.description === 'string') {
       const trimmed = body.description.trim();
       if (trimmed.length > MAX_DESCRIPTION_LEN) {
         return NextResponse.json(
           {
             error: `'description' must be ${MAX_DESCRIPTION_LEN} characters or fewer`,
           },
-          { status: 400 },
+          { status: 400 }
         );
       }
-      description = trimmed === "" ? null : trimmed;
+      description = trimmed === '' ? null : trimmed;
     }
 
     // Permissions: every entry must be a known slug. Unknown slugs
@@ -126,34 +126,34 @@ export async function POST(request: Request) {
     if (!Array.isArray(body?.permissions)) {
       return NextResponse.json(
         { error: "'permissions' must be an array of permission slugs" },
-        { status: 400 },
+        { status: 400 }
       );
     }
     const permissions = [...new Set(body.permissions)];
     for (const slug of permissions) {
-      if (typeof slug !== "string" || !isPermissionSlug(slug)) {
+      if (typeof slug !== 'string' || !isPermissionSlug(slug)) {
         return NextResponse.json(
           { error: `Unknown permission slug: ${String(slug)}` },
-          { status: 400 },
+          { status: 400 }
         );
       }
     }
 
     const { count } = await ctx.supabase
-      .from("workspace_profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", ctx.accountId);
+      .from('workspace_profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', ctx.accountId);
     if ((count ?? 0) >= MAX_PROFILES_PER_ACCOUNT) {
       return NextResponse.json(
         {
           error: `This workspace already has ${MAX_PROFILES_PER_ACCOUNT} profiles. Delete unused profiles first.`,
         },
-        { status: 409 },
+        { status: 409 }
       );
     }
 
     const { data, error } = await ctx.supabase
-      .from("workspace_profiles")
+      .from('workspace_profiles')
       .insert({
         account_id: ctx.accountId,
         name: nameRaw,
@@ -167,22 +167,22 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      if (error.code === "23505") {
+      if (error.code === '23505') {
         return NextResponse.json(
           { error: `A profile named "${nameRaw}" already exists` },
-          { status: 409 },
+          { status: 409 }
         );
       }
-      console.error("[POST /api/account/profiles] error:", error);
+      console.error('[POST /api/account/profiles] error:', error);
       return NextResponse.json(
-        { error: "Failed to create profile" },
-        { status: 500 },
+        { error: 'Failed to create profile' },
+        { status: 500 }
       );
     }
 
     return NextResponse.json(
       { data: { ...data, member_count: 0 } },
-      { status: 201 },
+      { status: 201 }
     );
   } catch (err) {
     return toErrorResponse(err);

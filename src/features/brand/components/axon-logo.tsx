@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties } from 'react';
 
 /* ------------------------------------------------------------------
  * Axon brand mark — minimal geometric.
@@ -17,26 +17,26 @@ import type { CSSProperties } from "react";
  *   - "inverse": solid white for dark/brand surfaces (auth panel)
  * ------------------------------------------------------------------ */
 
-export type AxonVariant = "primary" | "mono" | "inverse";
+export type AxonVariant = 'primary' | 'mono' | 'inverse';
 
 const PALETTES: Record<
   AxonVariant,
   { mark: string; node: string; text: string }
 > = {
   primary: {
-    mark: "var(--primary)",
-    node: "var(--primary)",
-    text: "var(--foreground)",
+    mark: 'var(--primary)',
+    node: 'var(--primary)',
+    text: 'var(--foreground)',
   },
   // `currentColor` lets the mono mark inherit its color from the
   // surrounding text — it adapts to light/dark themes for free.
-  mono: { mark: "currentColor", node: "currentColor", text: "currentColor" },
-  inverse: { mark: "#ffffff", node: "#ffffff", text: "#ffffff" },
+  mono: { mark: 'currentColor', node: 'currentColor', text: 'currentColor' },
+  inverse: { mark: '#ffffff', node: '#ffffff', text: '#ffffff' },
 };
 
 export function AxonMark({
   size = 32,
-  variant = "primary",
+  variant = 'primary',
   className,
   style,
 }: {
@@ -74,7 +74,7 @@ export function AxonMark({
 
 export function AxonLogo({
   size = 32,
-  variant = "primary",
+  variant = 'primary',
   className,
 }: {
   size?: number;
@@ -85,7 +85,7 @@ export function AxonLogo({
   return (
     <span
       className={className}
-      style={{ display: "inline-flex", alignItems: "center", gap: size * 0.3 }}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: size * 0.3 }}
     >
       <AxonMark size={size} variant={variant} />
       <span
@@ -93,9 +93,9 @@ export function AxonLogo({
           color: p.text,
           fontSize: size * 0.78,
           fontWeight: 700,
-          letterSpacing: "-0.03em",
+          letterSpacing: '-0.03em',
           lineHeight: 1,
-          fontFamily: "inherit",
+          fontFamily: 'inherit',
         }}
       >
         axon

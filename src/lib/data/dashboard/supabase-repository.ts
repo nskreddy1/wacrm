@@ -1,4 +1,4 @@
-import "server-only"
+import 'server-only';
 
 // ============================================================
 // Dashboard overview repository.
@@ -8,11 +8,11 @@ import "server-only"
 // DashboardOverview contract consumed by the dashboard UI.
 // ============================================================
 
-import type { AccountContext } from "@/features/auth/lib/account"
+import type { AccountContext } from '@/features/auth/lib/account';
 import {
   listAppointments,
   listTasks,
-} from "@/lib/data/operations/supabase-repository"
+} from '@/lib/data/operations/supabase-repository';
 
 import type {
   ActivityEntry,
@@ -25,94 +25,104 @@ import type {
   PipelineSummary,
   TeamMemberSummary,
   VolumePoint,
-} from "./types"
+} from './types';
 
-const DAY_MS = 86_400_000
+const DAY_MS = 86_400_000;
 
 /** A deal is considered stalled after 14 days without movement. */
-const STALLED_DEAL_THRESHOLD_MS = 14 * DAY_MS
+const STALLED_DEAL_THRESHOLD_MS = 14 * DAY_MS;
 
 function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
+  return date.toISOString().slice(0, 10);
 }
 
 function startOfDayAgo(days: number): Date {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  d.setDate(d.getDate() - days)
-  return d
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - days);
+  return d;
 }
 
 /** Percent change vs baseline; null when there is no baseline. */
 function percentDelta(current: number, previous: number): number | null {
-  if (previous <= 0) return null
-  return Math.round(((current - previous) / previous) * 100)
+  if (previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
 }
 
 function relativeTime(value: string): string {
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000))
-  if (seconds < 60) return "just now"
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
+  const seconds = Math.max(
+    0,
+    Math.round((Date.now() - new Date(value).getTime()) / 1000)
+  );
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }
 
 type ConversationRow = {
-  id: string
-  assigned_agent_id: string | null
-  status: string
-  channel: string | null
-  created_at: string
-  updated_at: string
-}
+  id: string;
+  assigned_agent_id: string | null;
+  status: string;
+  channel: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 type MessageRow = {
-  id: string
-  conversation_id: string
-  created_at: string
-  sender_type: string
-  content_text: string | null
-  conversation: { account_id: string; channel: string | null } | null
-}
+  id: string;
+  conversation_id: string;
+  created_at: string;
+  sender_type: string;
+  content_text: string | null;
+  conversation: { account_id: string; channel: string | null } | null;
+};
 
 type DealRow = {
-  id: string
-  title: string
-  value: number | null
-  currency: string | null
-  status: string
-  stage_id: string | null
-  user_id: string | null
-  updated_at: string
-  closed_at: string | null
-}
+  id: string;
+  title: string;
+  value: number | null;
+  currency: string | null;
+  status: string;
+  stage_id: string | null;
+  user_id: string | null;
+  updated_at: string;
+  closed_at: string | null;
+};
 
-type TaskStatRow = { id: string; status: string; due_at: string | null; updated_at: string }
+type TaskStatRow = {
+  id: string;
+  status: string;
+  due_at: string | null;
+  updated_at: string;
+};
 
-type StageRow = { id: string; name: string; position: number }
+type StageRow = { id: string; name: string; position: number };
 
 type BroadcastRow = {
-  id: string
-  name: string
-  channel: string | null
-  status: string
-  total_recipients: number | null
-  sent_count: number | null
-  delivered_count: number | null
-  read_count: number | null
-  replied_count: number | null
-  failed_count: number | null
-  created_at: string
-}
+  id: string;
+  name: string;
+  channel: string | null;
+  status: string;
+  total_recipients: number | null;
+  sent_count: number | null;
+  delivered_count: number | null;
+  read_count: number | null;
+  replied_count: number | null;
+  failed_count: number | null;
+  created_at: string;
+};
 
 function conversationChannel(raw: string | null): Channel {
-  return raw === "email" ? "email" : raw === "sms" ? "sms" : "whatsapp"
+  return raw === 'email' ? 'email' : raw === 'sms' ? 'sms' : 'whatsapp';
 }
 
-export async function getDashboardOverview(ctx: AccountContext): Promise<DashboardOverview> {
-  const now = Date.now()
-  const since14d = new Date(now - 14 * DAY_MS).toISOString()
-  const since60d = new Date(now - 60 * DAY_MS).toISOString()
+export async function getDashboardOverview(
+  ctx: AccountContext
+): Promise<DashboardOverview> {
+  const now = Date.now();
+  const since14d = new Date(now - 14 * DAY_MS).toISOString();
+  const since60d = new Date(now - 60 * DAY_MS).toISOString();
 
   const [
     conversationsRes,
@@ -129,53 +139,66 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     accountRes,
   ] = await Promise.all([
     ctx.supabase
-      .from("conversations")
-      .select("id, assigned_agent_id, status, channel, created_at, updated_at")
-      .eq("account_id", ctx.accountId),
+      .from('conversations')
+      .select('id, assigned_agent_id, status, channel, created_at, updated_at')
+      .eq('account_id', ctx.accountId),
     ctx.supabase
-      .from("contacts")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", ctx.accountId),
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', ctx.accountId),
     ctx.supabase
-      .from("contacts")
-      .select("id, name, created_at")
-      .eq("account_id", ctx.accountId)
-      .gte("created_at", since60d)
-      .order("created_at", { ascending: false }),
+      .from('contacts')
+      .select('id, name, created_at')
+      .eq('account_id', ctx.accountId)
+      .gte('created_at', since60d)
+      .order('created_at', { ascending: false }),
     ctx.supabase
-      .from("deals")
-      .select("id, title, value, currency, status, stage_id, user_id, updated_at, closed_at")
-      .eq("account_id", ctx.accountId),
+      .from('deals')
+      .select(
+        'id, title, value, currency, status, stage_id, user_id, updated_at, closed_at'
+      )
+      .eq('account_id', ctx.accountId),
     // Aggregate task workload — separate from the open-task list so
     // counters reflect the whole workspace, not the first 8 rows.
     ctx.supabase
-      .from("tasks")
-      .select("id, status, due_at, updated_at")
-      .eq("account_id", ctx.accountId),
-    ctx.supabase.from("pipeline_stages").select("id, name, position"),
+      .from('tasks')
+      .select('id, status, due_at, updated_at')
+      .eq('account_id', ctx.accountId),
+    ctx.supabase.from('pipeline_stages').select('id, name, position'),
     // messages has no account_id — scope through the conversations FK
     // (inner join); RLS enforces the same boundary.
     ctx.supabase
-      .from("messages")
+      .from('messages')
       .select(
-        "id, conversation_id, created_at, sender_type, content_text, conversation:conversations!inner(account_id, channel)",
+        'id, conversation_id, created_at, sender_type, content_text, conversation:conversations!inner(account_id, channel)'
       )
-      .eq("conversation.account_id", ctx.accountId)
-      .gte("created_at", since14d)
-      .order("created_at", { ascending: false }),
-    ctx.supabase.from("profiles").select("user_id, full_name").eq("account_id", ctx.accountId),
+      .eq('conversation.account_id', ctx.accountId)
+      .gte('created_at', since14d)
+      .order('created_at', { ascending: false }),
     ctx.supabase
-      .from("broadcasts")
+      .from('profiles')
+      .select('user_id, full_name')
+      .eq('account_id', ctx.accountId),
+    ctx.supabase
+      .from('broadcasts')
       .select(
-        "id, name, channel, status, total_recipients, sent_count, delivered_count, read_count, replied_count, failed_count, created_at",
+        'id, name, channel, status, total_recipients, sent_count, delivered_count, read_count, replied_count, failed_count, created_at'
       )
-      .eq("account_id", ctx.accountId)
-      .order("created_at", { ascending: false })
+      .eq('account_id', ctx.accountId)
+      .order('created_at', { ascending: false })
       .limit(25),
-    listAppointments(ctx, { status: "scheduled", from: new Date(now).toISOString(), limit: 6 }),
-    listTasks(ctx, { status: "open", limit: 8 }),
-    ctx.supabase.from("accounts").select("default_currency").eq("id", ctx.accountId).single(),
-  ])
+    listAppointments(ctx, {
+      status: 'scheduled',
+      from: new Date(now).toISOString(),
+      limit: 6,
+    }),
+    listTasks(ctx, { status: 'open', limit: 8 }),
+    ctx.supabase
+      .from('accounts')
+      .select('default_currency')
+      .eq('id', ctx.accountId)
+      .single(),
+  ]);
 
   const queryError = [
     conversationsRes.error,
@@ -187,95 +210,125 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     messagesRes.error,
     profilesRes.error,
     broadcastsRes.error,
-  ].find(Boolean)
-  if (queryError) throw new Error(queryError.message)
+  ].find(Boolean);
+  if (queryError) throw new Error(queryError.message);
 
-  const conversations = (conversationsRes.data ?? []) as ConversationRow[]
-  const deals = (dealsRes.data ?? []) as DealRow[]
-  const stages = (stagesRes.data ?? []) as StageRow[]
-  const messages = (messagesRes.data ?? []) as unknown as MessageRow[]
-  const broadcasts = (broadcastsRes.data ?? []) as BroadcastRow[]
-  const contactsTotal = contactsTotalRes.count ?? 0
+  const conversations = (conversationsRes.data ?? []) as ConversationRow[];
+  const deals = (dealsRes.data ?? []) as DealRow[];
+  const stages = (stagesRes.data ?? []) as StageRow[];
+  const messages = (messagesRes.data ?? []) as unknown as MessageRow[];
+  const broadcasts = (broadcastsRes.data ?? []) as BroadcastRow[];
+  const contactsTotal = contactsTotalRes.count ?? 0;
   const recentContacts = (contactsRecentRes.data ?? []) as Array<{
-    id: string
-    name: string | null
-    created_at: string
-  }>
-  const contactDates = recentContacts.map((row) => String(row.created_at))
+    id: string;
+    name: string | null;
+    created_at: string;
+  }>;
+  const contactDates = recentContacts.map((row) => String(row.created_at));
 
   // ---- KPIs -------------------------------------------------
-  const openConversations = conversations.filter((c) => c.status !== "closed")
-  const unassigned = openConversations.filter((c) => !c.assigned_agent_id).length
+  const openConversations = conversations.filter((c) => c.status !== 'closed');
+  const unassigned = openConversations.filter(
+    (c) => !c.assigned_agent_id
+  ).length;
 
-  const cutoff7d = now - 7 * DAY_MS
-  const cutoff14d = now - 14 * DAY_MS
-  const newConvs7d = conversations.filter((c) => new Date(c.created_at).getTime() >= cutoff7d).length
+  const cutoff7d = now - 7 * DAY_MS;
+  const cutoff14d = now - 14 * DAY_MS;
+  const newConvs7d = conversations.filter(
+    (c) => new Date(c.created_at).getTime() >= cutoff7d
+  ).length;
   const newConvsPrev7d = conversations.filter((c) => {
-    const at = new Date(c.created_at).getTime()
-    return at >= cutoff14d && at < cutoff7d
-  }).length
+    const at = new Date(c.created_at).getTime();
+    return at >= cutoff14d && at < cutoff7d;
+  }).length;
 
-  const cutoff30d = now - 30 * DAY_MS
-  const newContacts30d = contactDates.filter((at) => new Date(at).getTime() >= cutoff30d).length
-  const newContactsPrev30d = contactDates.length - newContacts30d
+  const cutoff30d = now - 30 * DAY_MS;
+  const newContacts30d = contactDates.filter(
+    (at) => new Date(at).getTime() >= cutoff30d
+  ).length;
+  const newContactsPrev30d = contactDates.length - newContacts30d;
 
-  const messages7d = messages.filter((m) => new Date(m.created_at).getTime() >= cutoff7d)
-  const messagesPrev7d = messages.length - messages7d.length
+  const messages7d = messages.filter(
+    (m) => new Date(m.created_at).getTime() >= cutoff7d
+  );
+  const messagesPrev7d = messages.length - messages7d.length;
 
-  const openDeals = deals.filter((d) => d.status === "open")
-  const pipelineValue = openDeals.reduce((sum, d) => sum + Number(d.value ?? 0), 0)
+  const openDeals = deals.filter((d) => d.status === 'open');
+  const pipelineValue = openDeals.reduce(
+    (sum, d) => sum + Number(d.value ?? 0),
+    0
+  );
   // Global workspace currency (Settings → Deals): every money figure on
   // the dashboard renders in the account's configured currency, never a
   // guess from whichever deal happened to sort first.
   const pipelineCurrency =
-    (accountRes.data as { default_currency?: string | null } | null)?.default_currency ?? "USD"
+    (accountRes.data as { default_currency?: string | null } | null)
+      ?.default_currency ?? 'USD';
 
   // Response rate: of conversations with inbound in the last 7d, how
   // many also have an outbound (agent/system) message in that window.
-  const inboundConvIds = new Set<string>()
-  const outboundConvIds = new Set<string>()
+  const inboundConvIds = new Set<string>();
+  const outboundConvIds = new Set<string>();
   for (const message of messages7d) {
-    if (message.sender_type === "customer") inboundConvIds.add(message.conversation_id)
-    else outboundConvIds.add(message.conversation_id)
+    if (message.sender_type === 'customer')
+      inboundConvIds.add(message.conversation_id);
+    else outboundConvIds.add(message.conversation_id);
   }
-  let answered = 0
-  for (const id of inboundConvIds) if (outboundConvIds.has(id)) answered += 1
+  let answered = 0;
+  for (const id of inboundConvIds) if (outboundConvIds.has(id)) answered += 1;
   const responseRatePct =
-    inboundConvIds.size > 0 ? Math.round((answered / inboundConvIds.size) * 100) : null
+    inboundConvIds.size > 0
+      ? Math.round((answered / inboundConvIds.size) * 100)
+      : null;
 
   // ---- Channels + volume -----------------------------------
-  const channelMap = new Map<Channel, ChannelSummary>()
+  const channelMap = new Map<Channel, ChannelSummary>();
   const ensureChannel = (channel: Channel): ChannelSummary => {
-    let summary = channelMap.get(channel)
+    let summary = channelMap.get(channel);
     if (!summary) {
-      summary = { channel, openConversations: 0, messages7d: 0, inbound7d: 0, outbound7d: 0 }
-      channelMap.set(channel, summary)
+      summary = {
+        channel,
+        openConversations: 0,
+        messages7d: 0,
+        inbound7d: 0,
+        outbound7d: 0,
+      };
+      channelMap.set(channel, summary);
     }
-    return summary
-  }
+    return summary;
+  };
 
   for (const conversation of openConversations) {
-    ensureChannel(conversationChannel(conversation.channel)).openConversations += 1
+    ensureChannel(
+      conversationChannel(conversation.channel)
+    ).openConversations += 1;
   }
   for (const message of messages7d) {
-    const summary = ensureChannel(conversationChannel(message.conversation?.channel ?? null))
-    summary.messages7d += 1
-    if (message.sender_type === "customer") summary.inbound7d += 1
-    else summary.outbound7d += 1
+    const summary = ensureChannel(
+      conversationChannel(message.conversation?.channel ?? null)
+    );
+    summary.messages7d += 1;
+    if (message.sender_type === 'customer') summary.inbound7d += 1;
+    else summary.outbound7d += 1;
   }
 
   const volume: VolumePoint[] = Array.from({ length: 14 }, (_, index) => {
-    const dayStart = startOfDayAgo(13 - index)
-    const dayEnd = new Date(dayStart.getTime() + DAY_MS)
-    const point: VolumePoint = { day: isoDate(dayStart), whatsapp: 0, sms: 0, email: 0 }
+    const dayStart = startOfDayAgo(13 - index);
+    const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+    const point: VolumePoint = {
+      day: isoDate(dayStart),
+      whatsapp: 0,
+      sms: 0,
+      email: 0,
+    };
     for (const message of messages) {
-      const at = new Date(message.created_at)
+      const at = new Date(message.created_at);
       if (at >= dayStart && at < dayEnd) {
-        point[conversationChannel(message.conversation?.channel ?? null)] += 1
+        point[conversationChannel(message.conversation?.channel ?? null)] += 1;
       }
     }
-    return point
-  })
+    return point;
+  });
 
   // ---- Broadcasts ------------------------------------------
   const broadcastTotals = broadcasts.reduce(
@@ -286,264 +339,310 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
       replied: totals.replied + Number(row.replied_count ?? 0),
       failed: totals.failed + Number(row.failed_count ?? 0),
     }),
-    { sent: 0, delivered: 0, read: 0, replied: 0, failed: 0 },
-  )
+    { sent: 0, delivered: 0, read: 0, replied: 0, failed: 0 }
+  );
 
   const recentBroadcasts = broadcasts.slice(0, 4).map((row) => ({
     id: row.id,
     name: row.name,
-    channel: (row.channel === "sms" ? "sms" : "whatsapp") as Channel,
-    status: (["draft", "scheduled", "sending", "sent", "failed"].includes(row.status)
+    channel: (row.channel === 'sms' ? 'sms' : 'whatsapp') as Channel,
+    status: (['draft', 'scheduled', 'sending', 'sent', 'failed'].includes(
+      row.status
+    )
       ? row.status
-      : "draft") as BroadcastStatus,
+      : 'draft') as BroadcastStatus,
     totalRecipients: Number(row.total_recipients ?? 0),
     sent: Number(row.sent_count ?? 0),
     delivered: Number(row.delivered_count ?? 0),
     read: Number(row.read_count ?? 0),
     failed: Number(row.failed_count ?? 0),
     createdAt: row.created_at,
-  }))
+  }));
 
   // ---- Pipeline --------------------------------------------
-  const stageOrder = new Map(stages.map((stage) => [stage.id, stage]))
-  const stageAggregates = new Map<string, { count: number; value: number }>()
+  const stageOrder = new Map(stages.map((stage) => [stage.id, stage]));
+  const stageAggregates = new Map<string, { count: number; value: number }>();
   for (const deal of openDeals) {
-    if (!deal.stage_id) continue
-    const aggregate = stageAggregates.get(deal.stage_id) ?? { count: 0, value: 0 }
-    aggregate.count += 1
-    aggregate.value += Number(deal.value ?? 0)
-    stageAggregates.set(deal.stage_id, aggregate)
+    if (!deal.stage_id) continue;
+    const aggregate = stageAggregates.get(deal.stage_id) ?? {
+      count: 0,
+      value: 0,
+    };
+    aggregate.count += 1;
+    aggregate.value += Number(deal.value ?? 0);
+    stageAggregates.set(deal.stage_id, aggregate);
   }
 
   const pipelineStages = Array.from(stageAggregates.entries())
     .map(([stageId, aggregate]) => ({
       id: stageId,
-      name: stageOrder.get(stageId)?.name ?? "Stage",
+      name: stageOrder.get(stageId)?.name ?? 'Stage',
       position: stageOrder.get(stageId)?.position ?? 999,
       count: aggregate.count,
       value: aggregate.value,
     }))
     .sort((a, b) => a.position - b.position)
-    .map(({ position: _position, ...stage }) => stage)
+    .map(({ position: _position, ...stage }) => stage);
 
   const closed30d = deals.filter(
-    (deal) => deal.closed_at && new Date(deal.closed_at).getTime() >= cutoff30d,
-  )
-  const won30d = closed30d.filter((deal) => deal.status === "won")
+    (deal) => deal.closed_at && new Date(deal.closed_at).getTime() >= cutoff30d
+  );
+  const won30d = closed30d.filter((deal) => deal.status === 'won');
   const pipeline: PipelineSummary = {
     stages: pipelineStages,
     wonValue30d: won30d.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0),
     wonCount30d: won30d.length,
-    lostCount30d: closed30d.filter((deal) => deal.status === "lost").length,
-  }
+    lostCount30d: closed30d.filter((deal) => deal.status === 'lost').length,
+  };
 
   // ---- Sales trend (6 months) ------------------------------
-  const monthKeys: string[] = []
+  const monthKeys: string[] = [];
   {
-    const cursor = new Date()
-    cursor.setDate(1)
-    cursor.setHours(0, 0, 0, 0)
-    cursor.setMonth(cursor.getMonth() - 5)
+    const cursor = new Date();
+    cursor.setDate(1);
+    cursor.setHours(0, 0, 0, 0);
+    cursor.setMonth(cursor.getMonth() - 5);
     for (let i = 0; i < 6; i++) {
-      monthKeys.push(cursor.toISOString().slice(0, 7))
-      cursor.setMonth(cursor.getMonth() + 1)
+      monthKeys.push(cursor.toISOString().slice(0, 7));
+      cursor.setMonth(cursor.getMonth() + 1);
     }
   }
   const trendByMonth = new Map(
-    monthKeys.map((month) => [month, { month, wonValue: 0, wonCount: 0, lostCount: 0 }]),
-  )
+    monthKeys.map((month) => [
+      month,
+      { month, wonValue: 0, wonCount: 0, lostCount: 0 },
+    ])
+  );
   for (const deal of deals) {
-    if (!deal.closed_at) continue
-    const month = deal.closed_at.slice(0, 7)
-    const bucket = trendByMonth.get(month)
-    if (!bucket) continue
-    if (deal.status === "won") {
-      bucket.wonValue += Number(deal.value ?? 0)
-      bucket.wonCount += 1
-    } else if (deal.status === "lost") {
-      bucket.lostCount += 1
+    if (!deal.closed_at) continue;
+    const month = deal.closed_at.slice(0, 7);
+    const bucket = trendByMonth.get(month);
+    if (!bucket) continue;
+    if (deal.status === 'won') {
+      bucket.wonValue += Number(deal.value ?? 0);
+      bucket.wonCount += 1;
+    } else if (deal.status === 'lost') {
+      bucket.lostCount += 1;
     }
   }
-  const salesTrend = monthKeys.map((month) => trendByMonth.get(month)!)
+  const salesTrend = monthKeys.map((month) => trendByMonth.get(month)!);
 
   // ---- Performers leaderboard (30d wins + open book) --------
   const profileNames = new Map(
     (profilesRes.data ?? []).map((profile) => [
       String(profile.user_id),
-      (profile.full_name as string | null) || "Team member",
-    ]),
-  )
+      (profile.full_name as string | null) || 'Team member',
+    ])
+  );
   const performerMap = new Map<
     string,
-    { wonValue30d: number; wonCount30d: number; openDeals: number; openValue: number }
-  >()
-  const ensurePerformer = (userId: string) => {
-    let p = performerMap.get(userId)
-    if (!p) {
-      p = { wonValue30d: 0, wonCount30d: 0, openDeals: 0, openValue: 0 }
-      performerMap.set(userId, p)
+    {
+      wonValue30d: number;
+      wonCount30d: number;
+      openDeals: number;
+      openValue: number;
     }
-    return p
-  }
+  >();
+  const ensurePerformer = (userId: string) => {
+    let p = performerMap.get(userId);
+    if (!p) {
+      p = { wonValue30d: 0, wonCount30d: 0, openDeals: 0, openValue: 0 };
+      performerMap.set(userId, p);
+    }
+    return p;
+  };
   for (const deal of deals) {
-    if (!deal.user_id) continue
-    if (deal.status === "open") {
-      const p = ensurePerformer(deal.user_id)
-      p.openDeals += 1
-      p.openValue += Number(deal.value ?? 0)
+    if (!deal.user_id) continue;
+    if (deal.status === 'open') {
+      const p = ensurePerformer(deal.user_id);
+      p.openDeals += 1;
+      p.openValue += Number(deal.value ?? 0);
     } else if (
-      deal.status === "won" &&
+      deal.status === 'won' &&
       deal.closed_at &&
       new Date(deal.closed_at).getTime() >= cutoff30d
     ) {
-      const p = ensurePerformer(deal.user_id)
-      p.wonCount30d += 1
-      p.wonValue30d += Number(deal.value ?? 0)
+      const p = ensurePerformer(deal.user_id);
+      p.wonCount30d += 1;
+      p.wonValue30d += Number(deal.value ?? 0);
     }
   }
   const performers = Array.from(performerMap.entries())
     .map(([userId, stats]) => ({
       userId,
-      name: profileNames.get(userId) ?? "Team member",
+      name: profileNames.get(userId) ?? 'Team member',
       ...stats,
     }))
     .sort((a, b) => b.wonValue30d - a.wonValue30d || b.openValue - a.openValue)
-    .slice(0, 5)
+    .slice(0, 5);
 
   // ---- Task workload stats ----------------------------------
-  const taskRows = (taskStatsRes.data ?? []) as TaskStatRow[]
-  const todayStart = startOfDayAgo(0).getTime()
-  const todayEnd = todayStart + DAY_MS
-  const openTaskRows = taskRows.filter((t) => t.status === "open")
+  const taskRows = (taskStatsRes.data ?? []) as TaskStatRow[];
+  const todayStart = startOfDayAgo(0).getTime();
+  const todayEnd = todayStart + DAY_MS;
+  const openTaskRows = taskRows.filter((t) => t.status === 'open');
   const taskStats = {
     open: openTaskRows.length,
-    overdue: openTaskRows.filter((t) => t.due_at && new Date(t.due_at).getTime() < now).length,
+    overdue: openTaskRows.filter(
+      (t) => t.due_at && new Date(t.due_at).getTime() < now
+    ).length,
     dueToday: openTaskRows.filter((t) => {
-      if (!t.due_at) return false
-      const due = new Date(t.due_at).getTime()
-      return due >= todayStart && due < todayEnd
+      if (!t.due_at) return false;
+      const due = new Date(t.due_at).getTime();
+      return due >= todayStart && due < todayEnd;
     }).length,
     completed7d: taskRows.filter(
-      (t) => t.status === "done" && new Date(t.updated_at).getTime() >= cutoff7d,
+      (t) => t.status === 'done' && new Date(t.updated_at).getTime() >= cutoff7d
     ).length,
-  }
+  };
 
   // ---- Team -------------------------------------------------
   const team: TeamMemberSummary[] = (profilesRes.data ?? [])
     .map((profile) => ({
       userId: String(profile.user_id),
-      name: (profile.full_name as string | null) || "Team member",
-      open: openConversations.filter((c) => c.assigned_agent_id === profile.user_id).length,
+      name: (profile.full_name as string | null) || 'Team member',
+      open: openConversations.filter(
+        (c) => c.assigned_agent_id === profile.user_id
+      ).length,
       resolved7d: conversations.filter(
         (c) =>
-          c.status === "closed" &&
+          c.status === 'closed' &&
           c.assigned_agent_id === profile.user_id &&
-          new Date(c.updated_at).getTime() >= cutoff7d,
+          new Date(c.updated_at).getTime() >= cutoff7d
       ).length,
     }))
     .sort((a, b) => b.open - a.open || b.resolved7d - a.resolved7d)
-    .slice(0, 5)
+    .slice(0, 5);
 
   // ---- Contacts growth (30d) -------------------------------
-  const added30d = contactDates.filter((at) => new Date(at).getTime() >= cutoff30d)
-  let runningTotal = contactsTotal - added30d.length
-  const contactsGrowth: GrowthPoint[] = Array.from({ length: 30 }, (_, index) => {
-    const dayStart = startOfDayAgo(29 - index)
-    const dayEnd = new Date(dayStart.getTime() + DAY_MS)
-    const added = added30d.filter((at) => {
-      const time = new Date(at).getTime()
-      return time >= dayStart.getTime() && time < dayEnd.getTime()
-    }).length
-    runningTotal += added
-    return { day: isoDate(dayStart), total: runningTotal, added }
-  })
+  const added30d = contactDates.filter(
+    (at) => new Date(at).getTime() >= cutoff30d
+  );
+  let runningTotal = contactsTotal - added30d.length;
+  const contactsGrowth: GrowthPoint[] = Array.from(
+    { length: 30 },
+    (_, index) => {
+      const dayStart = startOfDayAgo(29 - index);
+      const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+      const added = added30d.filter((at) => {
+        const time = new Date(at).getTime();
+        return time >= dayStart.getTime() && time < dayEnd.getTime();
+      }).length;
+      runningTotal += added;
+      return { day: isoDate(dayStart), total: runningTotal, added };
+    }
+  );
 
   // ---- Activity feed ---------------------------------------
   // Merge the latest events across surfaces, then sort by recency.
   const activityCandidates: Array<ActivityEntry & { at: number }> = [
     ...messages.slice(0, 4).map((message) => ({
       id: `msg-${message.id}`,
-      title: message.content_text?.slice(0, 90) || "New conversation activity",
+      title: message.content_text?.slice(0, 90) || 'New conversation activity',
       time: relativeTime(message.created_at),
       at: new Date(message.created_at).getTime(),
-      type: "message" as const,
-      href: "/inbox",
+      type: 'message' as const,
+      href: '/inbox',
     })),
     ...deals
       .slice()
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      )
       .slice(0, 3)
       .map((deal) => ({
         id: `deal-${deal.id}`,
         title:
-          deal.status === "won"
+          deal.status === 'won'
             ? `Deal "${deal.title}" was won`
-            : deal.status === "lost"
+            : deal.status === 'lost'
               ? `Deal "${deal.title}" was lost`
               : `Deal "${deal.title}" was updated`,
         time: relativeTime(deal.updated_at),
         at: new Date(deal.updated_at).getTime(),
-        type: "deal" as const,
-        href: "/pipeline",
+        type: 'deal' as const,
+        href: '/pipeline',
       })),
     ...broadcasts.slice(0, 2).map((row) => ({
       id: `bc-${row.id}`,
-      title: `Broadcast "${row.name}" ${row.status === "sending" ? "is sending" : `is ${row.status}`}`,
+      title: `Broadcast "${row.name}" ${row.status === 'sending' ? 'is sending' : `is ${row.status}`}`,
       time: relativeTime(row.created_at),
       at: new Date(row.created_at).getTime(),
-      type: "broadcast" as const,
-      href: "/broadcasts",
+      type: 'broadcast' as const,
+      href: '/broadcasts',
     })),
     ...recentContacts.slice(0, 3).map((row) => ({
       id: `contact-${row.id}`,
-      title: `Contact "${row.name?.trim() || "New contact"}" was added`,
+      title: `Contact "${row.name?.trim() || 'New contact'}" was added`,
       time: relativeTime(row.created_at),
       at: new Date(row.created_at).getTime(),
-      type: "contact" as const,
-      href: "/contacts",
+      type: 'contact' as const,
+      href: '/contacts',
     })),
     ...appointments.slice(0, 3).map((appointment) => ({
       id: `apt-${appointment.id}`,
-      title: `Appointment "${appointment.title}" scheduled with ${appointment.contactName ?? "a contact"}`,
+      title: `Appointment "${appointment.title}" scheduled with ${appointment.contactName ?? 'a contact'}`,
       time: relativeTime(appointment.createdAt),
       at: new Date(appointment.createdAt).getTime(),
-      type: "appointment" as const,
-      href: "/appointments",
+      type: 'appointment' as const,
+      href: '/appointments',
     })),
     ...tasks.slice(0, 2).map((task) => ({
       id: `task-${task.id}`,
       title: `Task "${task.title}" is open`,
       time: relativeTime(task.createdAt),
       at: new Date(task.createdAt).getTime(),
-      type: "task" as const,
-      href: "/dashboard",
+      type: 'task' as const,
+      href: '/dashboard',
     })),
-  ]
+  ];
 
   const activity: ActivityEntry[] = activityCandidates
     .sort((a, b) => b.at - a.at)
     .slice(0, 9)
-    .map(({ at: _at, ...entry }) => entry)
+    .map(({ at: _at, ...entry }) => entry);
 
   // ---- Needs attention -------------------------------------
   const overdueTasks = tasks.filter(
-    (task) => task.dueAt && new Date(task.dueAt).getTime() < now,
-  ).length
+    (task) => task.dueAt && new Date(task.dueAt).getTime() < now
+  ).length;
   const failedBroadcasts7d = broadcasts.filter(
     (row) =>
       new Date(row.created_at).getTime() >= cutoff7d &&
-      (row.status === "failed" || Number(row.failed_count ?? 0) > 0),
-  ).length
+      (row.status === 'failed' || Number(row.failed_count ?? 0) > 0)
+  ).length;
   const stalledDeals = openDeals.filter(
-    (deal) => now - new Date(deal.updated_at).getTime() > STALLED_DEAL_THRESHOLD_MS,
-  ).length
+    (deal) =>
+      now - new Date(deal.updated_at).getTime() > STALLED_DEAL_THRESHOLD_MS
+  ).length;
 
   const attention: AttentionItem[] = [
-    { key: "unassigned", label: "Unassigned conversations", count: unassigned, href: "/inbox" },
-    { key: "overdue_tasks", label: "Overdue tasks", count: overdueTasks, href: "/dashboard" },
-    { key: "failed_broadcasts", label: "Broadcasts with failures (7d)", count: failedBroadcasts7d, href: "/broadcasts" },
-    { key: "stalled_deals", label: "Deals stalled 14+ days", count: stalledDeals, href: "/pipeline" },
-  ]
+    {
+      key: 'unassigned',
+      label: 'Unassigned conversations',
+      count: unassigned,
+      href: '/inbox',
+    },
+    {
+      key: 'overdue_tasks',
+      label: 'Overdue tasks',
+      count: overdueTasks,
+      href: '/dashboard',
+    },
+    {
+      key: 'failed_broadcasts',
+      label: 'Broadcasts with failures (7d)',
+      count: failedBroadcasts7d,
+      href: '/broadcasts',
+    },
+    {
+      key: 'stalled_deals',
+      label: 'Deals stalled 14+ days',
+      count: stalledDeals,
+      href: '/pipeline',
+    },
+  ];
 
   return {
     kpis: {
@@ -559,7 +658,9 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
       messagesDelta: percentDelta(messages7d.length, messagesPrev7d),
       responseRatePct,
     },
-    channels: Array.from(channelMap.values()).sort((a, b) => b.messages7d - a.messages7d),
+    channels: Array.from(channelMap.values()).sort(
+      (a, b) => b.messages7d - a.messages7d
+    ),
     volume,
     broadcasts: { totals: broadcastTotals, recent: recentBroadcasts },
     pipeline,
@@ -571,7 +672,7 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
     activity,
     appointments: appointments.map((appointment) => ({
       id: appointment.id,
-      contact: appointment.contactName ?? "Contact",
+      contact: appointment.contactName ?? 'Contact',
       service: appointment.catalogItemName ?? appointment.title,
       startsAt: appointment.startsAt,
       location: appointment.location,
@@ -585,5 +686,5 @@ export async function getDashboardOverview(ctx: AccountContext): Promise<Dashboa
       overdue: Boolean(task.dueAt && new Date(task.dueAt).getTime() < now),
     })),
     attention,
-  }
+  };
 }

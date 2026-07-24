@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 // ============================================================
 // AdminAiAgent — /admin/ai-agent (per-tenant bot provisioning).
@@ -12,9 +12,9 @@
 // super admin provisions here is what the customer sees.
 // ============================================================
 
-import { useState } from "react";
-import useSWR from "swr";
-import { toast } from "sonner";
+import { useState } from 'react';
+import useSWR from 'swr';
+import { toast } from 'sonner';
 import {
   type LucideIcon,
   Bot,
@@ -25,23 +25,23 @@ import {
   ShieldAlert,
   SlidersHorizontal,
   Trash2,
-} from "lucide-react";
+} from 'lucide-react';
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,24 +51,27 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from '@/components/ui/alert-dialog';
 
-import { AI_PROVIDERS, type AiProvider } from "@/features/assistant/lib/ai/types";
-import { AI_PROVIDER_DEFAULT_MODEL } from "@/features/assistant/lib/ai/defaults";
+import {
+  AI_PROVIDERS,
+  type AiProvider,
+} from '@/features/assistant/lib/ai/types';
+import { AI_PROVIDER_DEFAULT_MODEL } from '@/features/assistant/lib/ai/defaults';
 
 const PROVIDER_LABEL: Record<AiProvider, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  gemini: "Google Gemini",
-  nvidia: "NVIDIA NIM",
-  groq: "Groq",
-  openrouter: "OpenRouter",
-  together: "Together AI",
-  mistral: "Mistral",
-  deepseek: "DeepSeek",
-  xai: "xAI",
-  ollama: "Ollama (self-hosted)",
-  custom: "Custom (OpenAI-compatible)",
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  gemini: 'Google Gemini',
+  nvidia: 'NVIDIA NIM',
+  groq: 'Groq',
+  openrouter: 'OpenRouter',
+  together: 'Together AI',
+  mistral: 'Mistral',
+  deepseek: 'DeepSeek',
+  xai: 'xAI',
+  ollama: 'Ollama (self-hosted)',
+  custom: 'Custom (OpenAI-compatible)',
 };
 
 interface MemberOption {
@@ -100,7 +103,7 @@ interface WorkspaceOption {
 const jsonFetcher = async (url: string) => {
   const res = await fetch(url);
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error ?? "Request failed");
+  if (!res.ok) throw new Error(body?.error ?? 'Request failed');
   return body;
 };
 
@@ -109,7 +112,7 @@ export function AdminAiAgent() {
 
   const { data: wsData, isLoading: wsLoading } = useSWR<{
     workspaces: WorkspaceOption[];
-  }>("/api/admin/workspaces", jsonFetcher);
+  }>('/api/admin/workspaces', jsonFetcher);
   const workspaces = wsData?.workspaces ?? [];
   const activeWorkspace = workspaces.find((w) => w.id === accountId);
 
@@ -119,7 +122,7 @@ export function AdminAiAgent() {
     mutate,
   } = useSWR<AiConfigResponse>(
     accountId ? `/api/admin/ai-config?account_id=${accountId}` : null,
-    jsonFetcher,
+    jsonFetcher
   );
 
   return (
@@ -128,18 +131,18 @@ export function AdminAiAgent() {
       aria-label="AI agent provisioning"
     >
       {/* Context bar: which tenant are we operating on + live status */}
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+      <div className="bg-card flex flex-col gap-3 rounded-xl border p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted">
+          <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-lg border">
             <Building2
-              className="size-5 text-muted-foreground"
+              className="text-muted-foreground size-5"
               aria-hidden="true"
             />
           </div>
           <div className="flex min-w-0 flex-col gap-1">
             <Label
               htmlFor="ai-workspace"
-              className="text-xs text-muted-foreground"
+              className="text-muted-foreground text-xs"
             >
               Operating on workspace
             </Label>
@@ -157,7 +160,7 @@ export function AdminAiAgent() {
               >
                 <SelectValue
                   placeholder={
-                    wsLoading ? "Loading workspaces…" : "Select a workspace…"
+                    wsLoading ? 'Loading workspaces…' : 'Select a workspace…'
                   }
                 />
               </SelectTrigger>
@@ -193,7 +196,7 @@ export function AdminAiAgent() {
         <AgentForm
           key={accountId}
           accountId={accountId}
-          workspaceName={activeWorkspace?.name ?? "this workspace"}
+          workspaceName={activeWorkspace?.name ?? 'this workspace'}
           config={config}
           onSaved={() => void mutate()}
         />
@@ -215,7 +218,7 @@ function StatusPill({
     return (
       <Badge variant="outline" className="shrink-0 gap-1.5">
         <span
-          className="size-1.5 rounded-full bg-muted-foreground"
+          className="bg-muted-foreground size-1.5 rounded-full"
           aria-hidden="true"
         />
         Not provisioned
@@ -226,7 +229,7 @@ function StatusPill({
     return (
       <Badge variant="secondary" className="shrink-0 gap-1.5">
         <span
-          className="size-1.5 rounded-full bg-muted-foreground"
+          className="bg-muted-foreground size-1.5 rounded-full"
           aria-hidden="true"
         />
         Provisioned · off
@@ -236,10 +239,10 @@ function StatusPill({
   return (
     <Badge className="shrink-0 gap-1.5">
       <span
-        className="size-1.5 animate-pulse rounded-full bg-primary-foreground"
+        className="bg-primary-foreground size-1.5 animate-pulse rounded-full"
         aria-hidden="true"
       />
-      {autoReply ? "Live · auto-reply on" : "Live · drafts only"}
+      {autoReply ? 'Live · auto-reply on' : 'Live · drafts only'}
     </Badge>
   );
 }
@@ -247,12 +250,12 @@ function StatusPill({
 function EmptyState() {
   return (
     <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed px-6 py-16 text-center">
-      <div className="flex size-14 items-center justify-center rounded-full border bg-muted">
-        <Bot className="size-7 text-muted-foreground" aria-hidden="true" />
+      <div className="bg-muted flex size-14 items-center justify-center rounded-full border">
+        <Bot className="text-muted-foreground size-7" aria-hidden="true" />
       </div>
       <div className="flex max-w-md flex-col gap-1">
         <h3 className="text-sm font-semibold">Provision an AI agent</h3>
-        <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+        <p className="text-muted-foreground text-sm leading-relaxed text-pretty">
           Pick a workspace above to set up its WhatsApp bot for the customer —
           provider and model, encrypted API key, system prompt, auto-reply
           behaviour and human handoff. They&apos;ll see the same configuration
@@ -282,10 +285,10 @@ function SettingsSection({
     <div className="grid gap-6 p-5 sm:p-6 md:grid-cols-[220px_1fr] md:gap-10">
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+          <Icon className="text-muted-foreground size-4" aria-hidden="true" />
           <h3 className="text-sm font-semibold">{title}</h3>
         </div>
-        <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
+        <p className="text-muted-foreground text-xs leading-relaxed text-pretty">
           {description}
         </p>
       </div>
@@ -306,29 +309,29 @@ function AgentForm({
   onSaved: () => void;
 }) {
   const [provider, setProvider] = useState<AiProvider>(
-    config.provider ?? "gemini",
+    config.provider ?? 'gemini'
   );
   const [model, setModel] = useState(
-    config.model ?? AI_PROVIDER_DEFAULT_MODEL[config.provider ?? "gemini"],
+    config.model ?? AI_PROVIDER_DEFAULT_MODEL[config.provider ?? 'gemini']
   );
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState(config.base_url ?? "");
-  const [systemPrompt, setSystemPrompt] = useState(config.system_prompt ?? "");
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState(config.base_url ?? '');
+  const [systemPrompt, setSystemPrompt] = useState(config.system_prompt ?? '');
   // Unprovisioned workspace → default the switches ON so a validated
   // first save goes live immediately (the backend tests the key with
   // the provider before persisting). Existing configs keep their
   // stored values.
   const [isActive, setIsActive] = useState(
-    config.configured ? (config.is_active ?? false) : true,
+    config.configured ? (config.is_active ?? false) : true
   );
   const [autoReply, setAutoReply] = useState(
-    config.configured ? (config.auto_reply_enabled ?? false) : true,
+    config.configured ? (config.auto_reply_enabled ?? false) : true
   );
   const [maxPer, setMaxPer] = useState(
-    String(config.auto_reply_max_per_conversation ?? 3),
+    String(config.auto_reply_max_per_conversation ?? 3)
   );
   const [handoff, setHandoff] = useState<string>(
-    config.handoff_agent_id ?? "unassigned",
+    config.handoff_agent_id ?? 'unassigned'
   );
   const [saving, setSaving] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -342,21 +345,21 @@ function AgentForm({
     setProvider(next);
     setModel((current) => {
       const defaults = Object.values(AI_PROVIDER_DEFAULT_MODEL);
-      return current === "" || defaults.includes(current)
+      return current === '' || defaults.includes(current)
         ? AI_PROVIDER_DEFAULT_MODEL[next]
         : current;
     });
   }
 
-  const needsBaseUrl = provider === "custom" || provider === "ollama";
-  const keyOptional = provider === "ollama";
+  const needsBaseUrl = provider === 'custom' || provider === 'ollama';
+  const keyOptional = provider === 'ollama';
 
   async function submit() {
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/ai-config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/admin/ai-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           account_id: accountId,
           provider,
@@ -367,20 +370,20 @@ function AgentForm({
           is_active: isActive,
           auto_reply_enabled: autoReply,
           auto_reply_max_per_conversation: Number(maxPer),
-          handoff_agent_id: handoff === "unassigned" ? "" : handoff,
+          handoff_agent_id: handoff === 'unassigned' ? '' : handoff,
         }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? "Failed to save");
+      if (!res.ok) throw new Error(body?.error ?? 'Failed to save');
       toast.success(
         config.configured
-          ? "AI agent updated"
-          : "AI agent provisioned for the workspace",
+          ? 'AI agent updated'
+          : 'AI agent provisioned for the workspace'
       );
-      setApiKey("");
+      setApiKey('');
       onSaved();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setSaving(false);
     }
@@ -390,15 +393,15 @@ function AgentForm({
     setRemoving(true);
     try {
       const res = await fetch(`/api/admin/ai-config?account_id=${accountId}`, {
-        method: "DELETE",
+        method: 'DELETE',
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? "Failed to remove");
-      toast.success("AI agent removed — bot is off and the key was forgotten");
+      if (!res.ok) throw new Error(body?.error ?? 'Failed to remove');
+      toast.success('AI agent removed — bot is off and the key was forgotten');
       setRemoveOpen(false);
       onSaved();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setRemoving(false);
     }
@@ -412,7 +415,7 @@ function AgentForm({
         void submit();
       }}
     >
-      <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+      <div className="bg-card overflow-hidden rounded-xl border shadow-xs">
         {/* ------------------- Connection ------------------- */}
         <SettingsSection
           icon={KeyRound}
@@ -466,7 +469,7 @@ function AgentForm({
                   Key stored
                 </Badge>
               ) : keyOptional ? (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-muted-foreground text-xs">
                   Optional for Ollama
                 </span>
               ) : null}
@@ -478,8 +481,8 @@ function AgentForm({
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={
                 config.has_key
-                  ? "•••••••••••• — leave blank to keep the stored key"
-                  : "Provider API key"
+                  ? '•••••••••••• — leave blank to keep the stored key'
+                  : 'Provider API key'
               }
               autoComplete="new-password"
               className="font-mono text-sm"
@@ -490,9 +493,9 @@ function AgentForm({
           {needsBaseUrl && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="agent-base-url">
-                Base URL{" "}
-                {provider === "ollama" && (
-                  <span className="font-normal text-muted-foreground">
+                Base URL{' '}
+                {provider === 'ollama' && (
+                  <span className="text-muted-foreground font-normal">
                     (optional — defaults to the local daemon)
                   </span>
                 )}
@@ -503,13 +506,13 @@ function AgentForm({
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
                 placeholder={
-                  provider === "ollama"
-                    ? "http://localhost:11434/v1"
-                    : "https://api.example.com/v1"
+                  provider === 'ollama'
+                    ? 'http://localhost:11434/v1'
+                    : 'https://api.example.com/v1'
                 }
                 autoComplete="off"
                 className="font-mono text-sm"
-                required={provider === "custom"}
+                required={provider === 'custom'}
               />
             </div>
           )}
@@ -532,15 +535,15 @@ function AgentForm({
               rows={8}
               className="min-h-40 leading-relaxed"
               placeholder={
-                "You represent Acme Fashions, a clothing store in Hyderabad.\n" +
-                "Store hours 10am–9pm. Free delivery above ₹999.\n" +
-                "Be warm and concise; escalate order-status questions to a human."
+                'You represent Acme Fashions, a clothing store in Hyderabad.\n' +
+                'Store hours 10am–9pm. Free delivery above ₹999.\n' +
+                'Be warm and concise; escalate order-status questions to a human.'
               }
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {systemPrompt.length > 0
                 ? `${systemPrompt.length.toLocaleString()} characters`
-                : "Tip: include who the business is, hours, policies, and when to hand off."}
+                : 'Tip: include who the business is, hours, policies, and when to hand off.'}
             </p>
           </div>
         </SettingsSection>
@@ -557,7 +560,7 @@ function AgentForm({
             <label className="flex items-center justify-between gap-4 p-3.5 text-sm">
               <span className="grid gap-0.5 leading-tight">
                 <span className="font-medium">Assistant enabled</span>
-                <span className="text-xs font-normal text-muted-foreground">
+                <span className="text-muted-foreground text-xs font-normal">
                   Master switch — off means no drafts and no auto-replies.
                 </span>
               </span>
@@ -571,7 +574,7 @@ function AgentForm({
             <label className="flex items-center justify-between gap-4 p-3.5 text-sm">
               <span className="grid gap-0.5 leading-tight">
                 <span className="font-medium">Auto-reply to customers</span>
-                <span className="text-xs font-normal text-muted-foreground">
+                <span className="text-muted-foreground text-xs font-normal">
                   Bot answers incoming WhatsApp messages with no human in the
                   loop.
                 </span>
@@ -597,7 +600,7 @@ function AgentForm({
                 value={maxPer}
                 onChange={(e) => setMaxPer(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 After this, the bot goes quiet and hands off.
               </p>
             </div>
@@ -606,12 +609,12 @@ function AgentForm({
               <Label htmlFor="agent-handoff">Handoff assignee</Label>
               <Select
                 items={{
-                  unassigned: "Unassigned (shared queue)",
+                  unassigned: 'Unassigned (shared queue)',
                   ...Object.fromEntries(
                     config.members.map((m) => [
                       m.user_id,
                       `${m.full_name || m.email || m.user_id} (${m.account_role})`,
-                    ]),
+                    ])
                   ),
                 }}
                 value={handoff}
@@ -633,7 +636,7 @@ function AgentForm({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Who picks up when a customer asks for a human.
               </p>
             </div>
@@ -641,34 +644,32 @@ function AgentForm({
         </SettingsSection>
 
         {/* ------------------ Sticky save bar ---------------- */}
-        <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t bg-card/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:px-6">
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Changes apply to{" "}
-            <span className="font-medium text-foreground">
-              {workspaceName}
-            </span>{" "}
+        <div className="bg-card/95 supports-[backdrop-filter]:bg-card/80 sticky bottom-0 flex items-center justify-between gap-3 border-t p-4 backdrop-blur sm:px-6">
+          <p className="text-muted-foreground hidden text-xs sm:block">
+            Changes apply to{' '}
+            <span className="text-foreground font-medium">{workspaceName}</span>{' '}
             immediately and are recorded in the audit trail.
           </p>
           <Button type="submit" disabled={saving} className="min-w-36">
             {saving && (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             )}
-            {config.configured ? "Save changes" : "Provision agent"}
+            {config.configured ? 'Save changes' : 'Provision agent'}
           </Button>
         </div>
       </div>
 
       {/* ------------------- Danger zone -------------------- */}
       {config.configured && (
-        <div className="flex flex-col gap-3 rounded-xl border border-destructive/40 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="border-destructive/40 flex flex-col gap-3 rounded-xl border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div className="flex items-start gap-3">
             <ShieldAlert
-              className="mt-0.5 size-4 shrink-0 text-destructive"
+              className="text-destructive mt-0.5 size-4 shrink-0"
               aria-hidden="true"
             />
             <div className="grid gap-0.5 leading-tight">
               <h3 className="text-sm font-semibold">Remove AI agent</h3>
-              <p className="text-xs leading-relaxed text-muted-foreground">
+              <p className="text-muted-foreground text-xs leading-relaxed">
                 Turns the bot off immediately and deletes the stored API key.
                 The workspace can be re-provisioned at any time.
               </p>
@@ -677,7 +678,7 @@ function AgentForm({
           <Button
             type="button"
             variant="outline"
-            className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
             disabled={removing}
             onClick={() => setRemoveOpen(true)}
           >

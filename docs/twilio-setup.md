@@ -9,12 +9,12 @@ school sending fee reminders), WhatsApp-only, or both.
 
 ## 1. What you need from Twilio
 
-| Item | Where to find it | Used for |
-| --- | --- | --- |
-| **Account SID** (`AC…`) | Twilio Console → Account Info | Both channels |
-| **Auth Token** | Twilio Console → Account Info | Both channels (also validates inbound webhooks) |
-| **Phone number** (E.164, e.g. `+15551234567`) | Console → Phone Numbers → Manage → Active numbers | The sender identity per connection |
-| **Messaging Service SID** (`MG…`, optional but recommended) | Console → Messaging → Services | Enterprise sending: sender pooling, Sticky Sender, Advanced Opt-Out, queue pacing |
+| Item                                                        | Where to find it                                  | Used for                                                                          |
+| ----------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Account SID** (`AC…`)                                     | Twilio Console → Account Info                     | Both channels                                                                     |
+| **Auth Token**                                              | Twilio Console → Account Info                     | Both channels (also validates inbound webhooks)                                   |
+| **Phone number** (E.164, e.g. `+15551234567`)               | Console → Phone Numbers → Manage → Active numbers | The sender identity per connection                                                |
+| **Messaging Service SID** (`MG…`, optional but recommended) | Console → Messaging → Services                    | Enterprise sending: sender pooling, Sticky Sender, Advanced Opt-Out, queue pacing |
 
 > **India / cost note:** SMS to India over Twilio is priced per segment
 > and is comparatively expensive. Keep messages inside one GSM-7
@@ -34,12 +34,12 @@ independently.
 
 ### SMS (Twilio)
 
-1. Open the **SMS** tab → *Add SMS provider* → provider **Twilio**.
+1. Open the **SMS** tab → _Add SMS provider_ → provider **Twilio**.
 2. Fill in:
    - **Connection name** — anything, e.g. `School SMS`.
    - **SMS number** — your Twilio number in E.164 (`+1…`).
    - **Account SID** / **Auth token** — from the Console.
-   - **Messaging Service SID** *(optional, recommended)* — an `MG…`
+   - **Messaging Service SID** _(optional, recommended)_ — an `MG…`
      SID. When set, sends use `MessagingServiceSid` instead of a bare
      `From` number, so Twilio picks the best sender from the service's
      pool and applies Sticky Sender + Advanced Opt-Out.
@@ -47,7 +47,7 @@ independently.
 
 ### WhatsApp (Twilio)
 
-1. Open the **WhatsApp** tab → *Add WhatsApp provider* → **Twilio**.
+1. Open the **WhatsApp** tab → _Add WhatsApp provider_ → **Twilio**.
 2. Same fields as SMS; the number must be a **WhatsApp-enabled sender**
    (Console → Messaging → Senders → WhatsApp senders).
 3. The optional Messaging Service SID also works here — add the
@@ -165,11 +165,11 @@ kinds with a live phone preview:
 
 ## 6. Quick troubleshooting
 
-| Symptom | Likely cause |
-| --- | --- |
-| Inbound messages not appearing | Webhook URL wrong or connection disabled; check Console → Monitor → Logs → Errors |
-| `401` in Twilio error logs for webhook | Auth Token mismatch (signature validation failed) — re-save credentials |
-| Sends fail with `21610` | Recipient texted STOP; the app marks them opted out and skips them next time |
-| Sends fail with `63016` (WhatsApp) | Freeform message outside the 24-hour window — use an approved template |
-| Statuses stuck at "sent" | `NEXT_PUBLIC_SITE_URL` not set to a public https domain, so no StatusCallback |
-| WhatsApp template stuck Pending | Use **Sync statuses** in the studio; Meta review can take up to 24h |
+| Symptom                                | Likely cause                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| Inbound messages not appearing         | Webhook URL wrong or connection disabled; check Console → Monitor → Logs → Errors |
+| `401` in Twilio error logs for webhook | Auth Token mismatch (signature validation failed) — re-save credentials           |
+| Sends fail with `21610`                | Recipient texted STOP; the app marks them opted out and skips them next time      |
+| Sends fail with `63016` (WhatsApp)     | Freeform message outside the 24-hour window — use an approved template            |
+| Statuses stuck at "sent"               | `NEXT_PUBLIC_SITE_URL` not set to a public https domain, so no StatusCallback     |
+| WhatsApp template stuck Pending        | Use **Sync statuses** in the studio; Meta review can take up to 24h               |

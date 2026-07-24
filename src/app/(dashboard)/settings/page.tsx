@@ -51,7 +51,7 @@ export default function SettingsPage() {
       appearance: mode.charAt(0).toUpperCase() + mode.slice(1),
       deals: defaultCurrency,
     }),
-    [mode, defaultCurrency],
+    [mode, defaultCurrency]
   );
 
   const panel: Record<SettingsSection, ReactNode> = {
@@ -79,7 +79,9 @@ export default function SettingsPage() {
 
       <div className="grid flex-1 gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
         <SettingsRail active={section} onSelect={go} hints={hints} />
-        <div className="flex min-w-0 flex-col lg:self-stretch">{panel[section]}</div>
+        <div className="flex min-w-0 flex-col lg:self-stretch">
+          {panel[section]}
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
-import type { AccountRole } from "@/features/auth/lib/roles";
-import type { InteractiveMessagePayload } from "@/features/whatsapp/lib/interactive";
+import type { AccountRole } from '@/features/auth/lib/roles';
+import type { InteractiveMessagePayload } from '@/features/whatsapp/lib/interactive';
 
 export type {
   InteractiveMessagePayload,
@@ -8,7 +8,7 @@ export type {
   InteractiveButton,
   InteractiveListRow,
   InteractiveListSection,
-} from "@/features/whatsapp/lib/interactive";
+} from '@/features/whatsapp/lib/interactive';
 
 export interface Profile {
   id: string;
@@ -77,7 +77,7 @@ export interface AccountMember {
   role: AccountRole;
   joined_at: string;
   /** Membership lifecycle: active | inactive | deleted. */
-  status: "active" | "inactive" | "deleted";
+  status: 'active' | 'inactive' | 'deleted';
   /** Workspace owner — rendered as the "Super Admin" profile. */
   is_owner: boolean;
   /** Assigned workspace profile (permission set), if any. */
@@ -96,7 +96,7 @@ export interface AccountInvitation {
   id: string;
   account_id: string;
   /** Roles offered via invite — owner is never offered. */
-  role: Exclude<AccountRole, "owner">;
+  role: Exclude<AccountRole, 'owner'>;
   created_by_user_id: string | null;
   label: string | null;
   created_at: string;
@@ -212,11 +212,7 @@ export type NotificationType =
   | 'sync_failed';
 
 export type NotificationEmailStatus =
-  | 'not_requested'
-  | 'pending'
-  | 'sent'
-  | 'failed'
-  | 'skipped';
+  'not_requested' | 'pending' | 'sent' | 'failed' | 'skipped';
 
 export interface Notification {
   id: string;
@@ -239,17 +235,9 @@ export interface Notification {
 
 export type ChannelKind = 'whatsapp' | 'sms' | 'email';
 export type ChannelProvider =
-  | 'meta'
-  | 'twilio'
-  | 'google'
-  | 'microsoft'
-  | 'resend'
-  | 'smtp';
+  'meta' | 'twilio' | 'google' | 'microsoft' | 'resend' | 'smtp';
 export type ChannelConnectionStatus =
-  | 'draft'
-  | 'connected'
-  | 'degraded'
-  | 'disconnected';
+  'draft' | 'connected' | 'degraded' | 'disconnected';
 
 export interface ChannelConnection {
   id: string;
@@ -315,7 +303,8 @@ export type ContentType =
   | 'template'
   /** Customer tapped a reply button or list row on a message we sent. */
   | 'interactive';
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+export type MessageStatus =
+  'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface Message {
   id: string;
@@ -485,8 +474,10 @@ export interface Deal {
   assignee?: Profile;
 }
 
-export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
-export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
+export type BroadcastStatus =
+  'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+export type RecipientStatus =
+  'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 
 export interface Broadcast {
   id: string;
@@ -653,10 +644,7 @@ export interface WaitStepConfig {
 }
 
 export type ConditionSubject =
-  | 'contact_field'
-  | 'tag_presence'
-  | 'message_content'
-  | 'time_of_day';
+  'contact_field' | 'tag_presence' | 'message_content' | 'time_of_day';
 
 export interface ConditionStepConfig {
   subject: ConditionSubject;

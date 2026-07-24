@@ -24,7 +24,7 @@ export type AiProvider =
   // overridden per-account (`baseUrl`) or via `OLLAMA_BASE_URL`.
   | 'ollama'
   // Bring-your-own OpenAI-compatible endpoint (`baseUrl` required).
-  | 'custom'
+  | 'custom';
 
 export const AI_PROVIDERS: readonly AiProvider[] = [
   'openai',
@@ -39,10 +39,12 @@ export const AI_PROVIDERS: readonly AiProvider[] = [
   'xai',
   'ollama',
   'custom',
-]
+];
 
 export function isAiProvider(value: unknown): value is AiProvider {
-  return typeof value === 'string' && AI_PROVIDERS.includes(value as AiProvider)
+  return (
+    typeof value === 'string' && AI_PROVIDERS.includes(value as AiProvider)
+  );
 }
 
 /**
@@ -51,21 +53,21 @@ export function isAiProvider(value: unknown): value is AiProvider {
  *  - `per_day`          — cap resets daily per thread
  *  - `never`            — no cap; the bot always replies
  */
-export type AutoReplyLimitMode = 'per_conversation' | 'per_day' | 'never'
+export type AutoReplyLimitMode = 'per_conversation' | 'per_day' | 'never';
 
 export const AUTO_REPLY_LIMIT_MODES: readonly AutoReplyLimitMode[] = [
   'per_conversation',
   'per_day',
   'never',
-]
+];
 
 export function isAutoReplyLimitMode(
-  value: unknown,
+  value: unknown
 ): value is AutoReplyLimitMode {
   return (
     typeof value === 'string' &&
     AUTO_REPLY_LIMIT_MODES.includes(value as AutoReplyLimitMode)
-  )
+  );
 }
 
 /**
@@ -74,46 +76,46 @@ export function isAutoReplyLimitMode(
  * (stored AES-256-GCM-encrypted at rest).
  */
 export interface AiConfig {
-  provider: AiProvider
-  model: string
-  apiKey: string
+  provider: AiProvider;
+  model: string;
+  apiKey: string;
   /** OpenAI-compatible endpoint base URL. Only meaningful when
    *  `provider === 'custom'` (e.g. `https://my-gateway.example.com/v1`);
    *  presets derive their URL from the registry in `defaults.ts`. */
-  baseUrl?: string | null
-  systemPrompt: string | null
-  isActive: boolean
-  autoReplyEnabled: boolean
-  autoReplyMaxPerConversation: number
+  baseUrl?: string | null;
+  systemPrompt: string | null;
+  isActive: boolean;
+  autoReplyEnabled: boolean;
+  autoReplyMaxPerConversation: number;
   /** What the reply cap counts against (lifetime, daily, or no cap). */
-  autoReplyLimitMode: AutoReplyLimitMode
+  autoReplyLimitMode: AutoReplyLimitMode;
   /** Auto-reply window start, 'HH:MM' 24h local to `autoReplyTimezone`.
    *  Null (with end also null) = always on — the default. */
-  autoReplyScheduleStart: string | null
+  autoReplyScheduleStart: string | null;
   /** Auto-reply window end, 'HH:MM'. May be earlier than start for an
    *  overnight window (e.g. 20:00 → 06:00). */
-  autoReplyScheduleEnd: string | null
+  autoReplyScheduleEnd: string | null;
   /** IANA timezone the schedule is evaluated in (e.g. 'Asia/Kolkata').
    *  Null = UTC. */
-  autoReplyTimezone: string | null
+  autoReplyTimezone: string | null;
   /** Where auto-reply hands a conversation off when the model bails: an
    *  agent's `auth.users.id`, or null to leave it unassigned (drop into
    *  the shared queue). */
-  handoffAgentId: string | null
+  handoffAgentId: string | null;
   /** Optional OpenAI-compatible key for embeddings. When set, the
    *  knowledge base is embedded and semantic retrieval turns on; when
    *  null, retrieval falls back to lexical full-text search. */
-  embeddingsApiKey: string | null
+  embeddingsApiKey: string | null;
   /** Which key pays for the call: the account's own BYO key, or the
    *  shared `process.env.GEMINI_API_KEY` fallback. Logged to
    *  `ai_usage_log.key_source` so shared-key spend is auditable. */
-  keySource: 'account' | 'env'
+  keySource: 'account' | 'env';
 }
 
 /** A single conversation turn in the shape both providers accept. */
 export interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
+  role: 'user' | 'assistant';
+  content: string;
 }
 
 /**
@@ -122,21 +124,21 @@ export interface ChatMessage {
  * the provider didn't return usage. Logged to `ai_usage_log`.
  */
 export interface AiUsage {
-  promptTokens: number
-  completionTokens: number
-  totalTokens: number
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
   /** Provider-reported cached (discounted) prompt tokens — OpenAI
    *  `prompt_tokens_details.cached_tokens`, Anthropic
    *  `cache_read_input_tokens`, Gemini `cachedContentTokenCount`.
    *  Null/undefined when the provider didn't report. */
-  cachedTokens?: number | null
+  cachedTokens?: number | null;
   /** Anthropic-only `cache_creation_input_tokens` (billed at +25% once
    *  when a new prefix is written to the cache). */
-  cacheWriteTokens?: number | null
+  cacheWriteTokens?: number | null;
 }
 
 /** Customer sentiment classified by the model in the [[META]] tail. */
-export type AiSentiment = 'angry' | 'frustrated' | 'neutral' | 'happy'
+export type AiSentiment = 'angry' | 'frustrated' | 'neutral' | 'happy';
 
 /** Why the model asked for a human, from the [[META]] tail. */
 export type AiEscalationReason =
@@ -144,21 +146,21 @@ export type AiEscalationReason =
   | 'angry_customer'
   | 'out_of_scope'
   | 'needs_account_data'
-  | 'purchase_ready'
+  | 'purchase_ready';
 
 /** Outcome of a generation call. */
 export interface GenerateResult {
   /** The reply text, with any handoff sentinel / [[META]] tail stripped. */
-  text: string
+  text: string;
   /** True when the model asked to hand off to a human (auto-reply mode). */
-  handoff: boolean
+  handoff: boolean;
   /** Provider token usage for this call, or null when unavailable. */
-  usage: AiUsage | null
+  usage: AiUsage | null;
   /** Classified customer sentiment; 'neutral' when meta is missing/bad. */
-  sentiment: AiSentiment
+  sentiment: AiSentiment;
   /** Escalation reason when handing off; null when not escalating (or
    *  when only the legacy bare [[HANDOFF]] sentinel was emitted). */
-  escalationReason: AiEscalationReason | null
+  escalationReason: AiEscalationReason | null;
 }
 
 /**
@@ -167,12 +169,12 @@ export interface GenerateResult {
  * (invalid_key vs rate_limited vs timeout, etc.).
  */
 export class AiError extends Error {
-  readonly code: string
-  readonly status: number
+  readonly code: string;
+  readonly status: number;
   constructor(message: string, opts: { code?: string; status?: number } = {}) {
-    super(message)
-    this.name = 'AiError'
-    this.code = opts.code ?? 'ai_error'
-    this.status = opts.status ?? 502
+    super(message);
+    this.name = 'AiError';
+    this.code = opts.code ?? 'ai_error';
+    this.status = opts.status ?? 502;
   }
 }

@@ -108,8 +108,13 @@ export function validateSendMessageParams(params: {
   templateName?: string | null;
   interactivePayload?: InteractiveMessagePayload | null;
 }): void {
-  const { messageType, contentText, mediaUrl, templateName, interactivePayload } =
-    params;
+  const {
+    messageType,
+    contentText,
+    mediaUrl,
+    templateName,
+    interactivePayload,
+  } = params;
 
   if (!messageType) {
     throw new SendMessageError('bad_request', 'message_type is required', 400);
@@ -368,8 +373,7 @@ export async function sendMessageToConversation(
   let payload: OutboundMessagePayload;
   if (messageType === 'template') {
     const structured = (templateMessageParams ?? undefined) as
-      | SendTimeParams
-      | undefined;
+      SendTimeParams | undefined;
     let components: unknown[] | undefined;
     if (templateRow) {
       try {

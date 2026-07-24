@@ -1,31 +1,34 @@
-import { NextResponse } from "next/server"
+import { NextResponse } from 'next/server';
 
-import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account"
-import { getSessionPayload } from "@/features/auth/lib/session-payload"
-import { getDataSource } from "@/lib/data/runtime"
+import {
+  getCurrentAccount,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
+import { getSessionPayload } from '@/features/auth/lib/session-payload';
+import { getDataSource } from '@/lib/data/runtime';
 
-export const dynamic = "force-dynamic"
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     // Shared with the dashboard server layout so the SSR-provided
     // fallback session and this client-revalidated session can never
     // drift in shape. See lib/auth/session-payload.ts for the perf notes.
-    const payload = await getSessionPayload()
-    return NextResponse.json(payload)
+    const payload = await getSessionPayload();
+    return NextResponse.json(payload);
   } catch (error) {
-    return toErrorResponse(error)
+    return toErrorResponse(error);
   }
 }
 
 export async function DELETE() {
   try {
-    const source = getDataSource()
-    const context = await getCurrentAccount()
-    const { error } = await context.supabase.auth.signOut()
-    if (error) throw error
-    return NextResponse.json({ data: { signed_out: true }, meta: { source } })
+    const source = getDataSource();
+    const context = await getCurrentAccount();
+    const { error } = await context.supabase.auth.signOut();
+    if (error) throw error;
+    return NextResponse.json({ data: { signed_out: true }, meta: { source } });
   } catch (error) {
-    return toErrorResponse(error)
+    return toErrorResponse(error);
   }
 }

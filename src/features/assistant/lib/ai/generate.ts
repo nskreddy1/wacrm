@@ -5,13 +5,13 @@ import {
   type AiUsage,
   type ChatMessage,
   type GenerateResult,
-} from './types'
-import { HANDOFF_SENTINEL, META_SENTINEL } from './defaults'
-import { providerLabel } from './errors'
-import { getAiEngine } from './engine-flag'
-import { generateReplyDirect } from './engines/direct/generate'
-import { generateReplyLangChain } from './engines/langchain/generate'
-import type { AiConfig } from './types'
+} from './types';
+import { HANDOFF_SENTINEL, META_SENTINEL } from './defaults';
+import { providerLabel } from './errors';
+import { getAiEngine } from './engine-flag';
+import { generateReplyDirect } from './engines/direct/generate';
+import { generateReplyLangChain } from './engines/langchain/generate';
+import type { AiConfig } from './types';
 
 // ============================================================
 // Shared dispatch layer for chat generation.
@@ -26,12 +26,12 @@ import type { AiConfig } from './types'
 // ============================================================
 
 export interface GenerateArgs {
-  config: AiConfig
+  config: AiConfig;
   /** Raw system prompt for one-off calls (credential validation probe).
    *  Chat paths pass `promptParts` instead. */
-  systemPrompt?: string
+  systemPrompt?: string;
   /** Recent conversation turns, oldest first. */
-  messages: ChatMessage[]
+  messages: ChatMessage[];
   /**
    * Cache-aligned prompt — the standard path for all chat generation
    * (benchmarked ~70% cheaper on full-price input tokens than a single
@@ -41,13 +41,13 @@ export interface GenerateArgs {
    * never invalidates the provider's prefix cache. Built by
    * `buildPromptParts`. Wins over `systemPrompt` when both are set.
    */
-  promptParts?: { systemBlocks: string[]; volatileContext: string | null }
+  promptParts?: { systemBlocks: string[]; volatileContext: string | null };
   /**
    * Stable per-conversation cache-routing hint (we pass the
    * conversation id). Forwarded as OpenAI's `prompt_cache_key`;
    * harmless elsewhere. Only used when `promptParts` is set.
    */
-  cacheKey?: string
+  cacheKey?: string;
 }
 
 /**
@@ -57,16 +57,16 @@ export interface GenerateArgs {
  * compact.
  */
 export function mergeConsecutive(messages: ChatMessage[]): ChatMessage[] {
-  const out: ChatMessage[] = []
+  const out: ChatMessage[] = [];
   for (const m of messages) {
-    const last = out[out.length - 1]
+    const last = out[out.length - 1];
     if (last && last.role === m.role) {
-      last.content = `${last.content}\n\n${m.content}`
+      last.content = `${last.content}\n\n${m.content}`;
     } else {
-      out.push({ role: m.role, content: m.content })
+      out.push({ role: m.role, content: m.content });
     }
   }
-  return out
+  return out;
 }
 
 /**
@@ -82,17 +82,19 @@ export function mergeConsecutive(messages: ChatMessage[]): ChatMessage[] {
  */
 export function normalizeTurns(
   messages: ChatMessage[],
-  provider: AiConfig['provider'],
+  provider: AiConfig['provider']
 ): ChatMessage[] {
-  const merged = mergeConsecutive(messages)
-  if (provider !== 'anthropic') return merged
+  const merged = mergeConsecutive(messages);
+  if (provider !== 'anthropic') return merged;
   while (merged.length > 0 && merged[0].role === 'assistant') {
-    merged.shift()
+    merged.shift();
   }
   if (merged.length === 0) {
-    return [{ role: 'user', content: '(The customer has not sent a message yet.)' }]
+    return [
+      { role: 'user', content: '(The customer has not sent a message yet.)' },
+    ];
   }
-  return merged
+  return merged;
 }
 
 /**
@@ -102,22 +104,24 @@ export function normalizeTurns(
  * provider/network failure — with identical error codes across
  * engines.
  */
-export async function generateReply(args: GenerateArgs): Promise<GenerateResult> {
-  const { config, promptParts, cacheKey } = args
-  const engine = await getAiEngine()
+export async function generateReply(
+  args: GenerateArgs
+): Promise<GenerateResult> {
+  const { config, promptParts, cacheKey } = args;
+  const engine = await getAiEngine();
 
   // Cache-aligned path: stable blocks form the system prompt; the
   // volatile knowledge context rides as the final user turn so the
   // prefix (system + history) stays byte-identical between calls.
   const systemPrompt = promptParts
     ? promptParts.systemBlocks.join('\n\n')
-    : (args.systemPrompt ?? '')
+    : (args.systemPrompt ?? '');
   const messages = promptParts?.volatileContext
     ? [
         ...args.messages,
         { role: 'user' as const, content: promptParts.volatileContext },
       ]
-    : args.messages
+    : args.messages;
 
   const raw =
     engine === 'langchain'
@@ -132,16 +136,19 @@ export async function generateReply(args: GenerateArgs): Promise<GenerateResult>
           messages,
           systemBlocks: promptParts?.systemBlocks,
           cacheKey: promptParts ? cacheKey : undefined,
-        })
+        });
 
-  const text = raw.text.trim()
+  const text = raw.text.trim();
   if (!text) {
-    throw new AiError(`${providerLabel(config.provider)} returned an empty response.`, {
-      code: 'empty_response',
-    })
+    throw new AiError(
+      `${providerLabel(config.provider)} returned an empty response.`,
+      {
+        code: 'empty_response',
+      }
+    );
   }
 
-  return parseGeneration(text, raw.usage)
+  return parseGeneration(text, raw.usage);
 }
 
 const SENTIMENTS: readonly AiSentiment[] = [
@@ -149,14 +156,14 @@ const SENTIMENTS: readonly AiSentiment[] = [
   'frustrated',
   'neutral',
   'happy',
-]
+];
 const ESCALATION_REASONS: readonly AiEscalationReason[] = [
   'human_requested',
   'angry_customer',
   'out_of_scope',
   'needs_account_data',
   'purchase_ready',
-]
+];
 
 /**
  * Split the raw model output into `{ text, handoff, usage, sentiment,
@@ -174,46 +181,49 @@ const ESCALATION_REASONS: readonly AiEscalationReason[] = [
  */
 export function parseGeneration(
   raw: string,
-  usage: AiUsage | null = null,
+  usage: AiUsage | null = null
 ): GenerateResult {
-  let sentiment: AiSentiment = 'neutral'
-  let escalationReason: AiEscalationReason | null = null
-  let metaEscalate = false
+  let sentiment: AiSentiment = 'neutral';
+  let escalationReason: AiEscalationReason | null = null;
+  let metaEscalate = false;
 
-  let body = raw
-  const metaIdx = raw.lastIndexOf(META_SENTINEL)
+  let body = raw;
+  const metaIdx = raw.lastIndexOf(META_SENTINEL);
   if (metaIdx !== -1) {
     // Everything from the sentinel on is machine metadata — never send
     // it to the customer, even if the JSON turns out to be malformed.
-    body = raw.slice(0, metaIdx)
-    const tail = raw.slice(metaIdx + META_SENTINEL.length).trim()
+    body = raw.slice(0, metaIdx);
+    const tail = raw.slice(metaIdx + META_SENTINEL.length).trim();
     try {
-      const meta = JSON.parse(extractJsonObject(tail)) as Record<string, unknown>
+      const meta = JSON.parse(extractJsonObject(tail)) as Record<
+        string,
+        unknown
+      >;
       if (SENTIMENTS.includes(meta.sentiment as AiSentiment)) {
-        sentiment = meta.sentiment as AiSentiment
+        sentiment = meta.sentiment as AiSentiment;
       }
-      metaEscalate = meta.escalate === true
+      metaEscalate = meta.escalate === true;
       if (
         metaEscalate &&
         ESCALATION_REASONS.includes(meta.reason as AiEscalationReason)
       ) {
-        escalationReason = meta.reason as AiEscalationReason
+        escalationReason = meta.reason as AiEscalationReason;
       }
     } catch {
       // Malformed meta → keep the defaults; the reply itself still goes out.
     }
   }
 
-  const handoff = body.includes(HANDOFF_SENTINEL) || metaEscalate
-  const text = body.split(HANDOFF_SENTINEL).join('').trim()
-  return { text, handoff, usage, sentiment, escalationReason }
+  const handoff = body.includes(HANDOFF_SENTINEL) || metaEscalate;
+  const text = body.split(HANDOFF_SENTINEL).join('').trim();
+  return { text, handoff, usage, sentiment, escalationReason };
 }
 
 /** Best-effort first `{...}` block from the meta tail — providers
  *  occasionally wrap it in code fences or trail whitespace. */
 function extractJsonObject(tail: string): string {
-  const start = tail.indexOf('{')
-  const end = tail.lastIndexOf('}')
-  if (start === -1 || end === -1 || end < start) return tail
-  return tail.slice(start, end + 1)
+  const start = tail.indexOf('{');
+  const end = tail.lastIndexOf('}');
+  if (start === -1 || end === -1 || end < start) return tail;
+  return tail.slice(start, end + 1);
 }

@@ -59,7 +59,9 @@ export function EditFieldSheet({
   const [unique, setUnique] = useState(field.unique);
 
   const dirty =
-    label.trim() !== field.label || required !== field.required || unique !== field.unique;
+    label.trim() !== field.label ||
+    required !== field.required ||
+    unique !== field.unique;
   const canSave =
     field.editable || field.canToggleRequired || field.canToggleUnique
       ? dirty && label.trim().length > 0
@@ -67,8 +69,11 @@ export function EditFieldSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-        <SheetHeader className="border-b border-border px-5 py-4">
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
+      >
+        <SheetHeader className="border-border border-b px-5 py-4">
           <SheetTitle className="flex items-center gap-2.5 text-lg">
             Edit Field
             <Badge variant="secondary" className="rounded-full font-normal">
@@ -81,34 +86,44 @@ export function EditFieldSheet({
         </SheetHeader>
 
         <div className="flex-1 space-y-3 overflow-y-auto px-5 py-5">
-          <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
-            <span className="w-24 shrink-0 text-sm text-muted-foreground">Field Label</span>
+          <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3">
+            <span className="text-muted-foreground w-24 shrink-0 text-sm">
+              Field Label
+            </span>
             {field.editable ? (
               <Input
                 value={label}
                 onChange={(event) => setLabel(event.target.value)}
                 maxLength={60}
-                className="h-8 flex-1 bg-card"
+                className="bg-card h-8 flex-1"
                 aria-label="Field label"
               />
             ) : (
-              <span className="truncate text-sm font-medium text-foreground">
+              <span className="text-foreground truncate text-sm font-medium">
                 {field.label}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3.5">
-            <span className="w-24 shrink-0 text-sm text-muted-foreground">Field Type</span>
-            <span className="text-sm font-medium text-foreground">{field.typeLabel}</span>
+          <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3.5">
+            <span className="text-muted-foreground w-24 shrink-0 text-sm">
+              Field Type
+            </span>
+            <span className="text-foreground text-sm font-medium">
+              {field.typeLabel}
+            </span>
           </div>
 
-          <div className="flex items-center gap-4 rounded-md border border-border bg-muted/40 px-4 py-3.5">
-            <span className="w-24 shrink-0 text-sm text-muted-foreground">Sub Type</span>
-            <span className="text-sm font-medium text-foreground">{field.subTypeLabel}</span>
+          <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3.5">
+            <span className="text-muted-foreground w-24 shrink-0 text-sm">
+              Sub Type
+            </span>
+            <span className="text-foreground text-sm font-medium">
+              {field.subTypeLabel}
+            </span>
           </div>
 
-          <label className="flex items-center gap-2.5 pt-2 text-sm text-foreground">
+          <label className="text-foreground flex items-center gap-2.5 pt-2 text-sm">
             <Checkbox
               checked={required}
               disabled={!field.canToggleRequired}
@@ -118,7 +133,7 @@ export function EditFieldSheet({
           </label>
 
           {(field.canToggleUnique || field.unique) && (
-            <label className="flex items-center gap-2.5 text-sm text-foreground">
+            <label className="text-foreground flex items-center gap-2.5 text-sm">
               <Checkbox
                 checked={unique}
                 disabled={!field.canToggleUnique}
@@ -128,14 +143,17 @@ export function EditFieldSheet({
             </label>
           )}
 
-          {!field.editable && !field.canToggleRequired && !field.canToggleUnique && (
-            <p className="pt-2 text-xs text-muted-foreground">
-              This is a standard field — its settings are managed by the system.
-            </p>
-          )}
+          {!field.editable &&
+            !field.canToggleRequired &&
+            !field.canToggleUnique && (
+              <p className="text-muted-foreground pt-2 text-xs">
+                This is a standard field — its settings are managed by the
+                system.
+              </p>
+            )}
         </div>
 
-        <SheetFooter className="flex-row justify-end gap-2 border-t border-border px-5 py-4">
+        <SheetFooter className="border-border flex-row justify-end gap-2 border-t px-5 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

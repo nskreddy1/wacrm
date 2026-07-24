@@ -25,19 +25,19 @@
 //   }
 // ============================================================
 
-import { cache } from "react";
+import { cache } from 'react';
 
-import { NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { createClient } from "@/lib/supabase/server";
-import { isAccountRole, type AccountRole } from "./roles";
+import { createClient } from '@/lib/supabase/server';
+import { isAccountRole, type AccountRole } from './roles';
 import {
   deriveCapabilities,
   hasPermission,
   type MemberCapabilities,
   type PermissionSlug,
-} from "./permissions";
+} from './permissions';
 
 // ------------------------------------------------------------
 // Errors
@@ -48,17 +48,17 @@ import {
 
 export class UnauthorizedError extends Error {
   readonly status = 401 as const;
-  constructor(message = "Unauthorized") {
+  constructor(message = 'Unauthorized') {
     super(message);
-    this.name = "UnauthorizedError";
+    this.name = 'UnauthorizedError';
   }
 }
 
 export class ForbiddenError extends Error {
   readonly status = 403 as const;
-  constructor(message = "Forbidden") {
+  constructor(message = 'Forbidden') {
     super(message);
-    this.name = "ForbiddenError";
+    this.name = 'ForbiddenError';
   }
 }
 
@@ -78,8 +78,8 @@ export function toErrorResponse(err: unknown): NextResponse {
   if (err instanceof UnauthorizedError || err instanceof ForbiddenError) {
     return NextResponse.json({ error: err.message }, { status: err.status });
   }
-  console.error("[toErrorResponse] uncategorized error:", err);
-  return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  console.error('[toErrorResponse] uncategorized error:', err);
+  return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
 }
 
 // ------------------------------------------------------------
@@ -148,18 +148,18 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
     throw new UnauthorizedError();
   }
 
-  const { data: rows, error } = await supabase.rpc("get_account_context");
+  const { data: rows, error } = await supabase.rpc('get_account_context');
 
   if (error) {
     // PGRST202: function not in PostgREST's schema cache — occurs when
     // migration 053 hasn't been applied yet or the cache is stale right
     // after applying it. Fall back to the legacy two-query path so auth
     // keeps working during rollout.
-    if (error.code === "PGRST202") {
+    if (error.code === 'PGRST202') {
       return getCurrentAccountLegacy(supabase, userId);
     }
-    console.error("[getCurrentAccount] context RPC error:", error);
-    throw new ForbiddenError("Could not load account context");
+    console.error('[getCurrentAccount] context RPC error:', error);
+    throw new ForbiddenError('Could not load account context');
   }
 
   const row = Array.isArray(rows) ? rows[0] : rows;
@@ -167,7 +167,7 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
     // Pre-migration profile, or a manual insert that skipped the
     // signup trigger. The user is authenticated but the app has
     // no way to scope their queries — treat as forbidden.
-    throw new ForbiddenError("Profile is not linked to an account");
+    throw new ForbiddenError('Profile is not linked to an account');
   }
   if (!isAccountRole(row.account_role)) {
     // The DB enum should make this impossible, but a future
@@ -180,12 +180,14 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
   // authenticated but must not reach any workspace data. RLS blocks
   // them at the database too (is_account_member checks status);
   // this throw gives them a clean 403 instead of empty responses.
-  const status = typeof row.status === "string" ? row.status : "active";
-  if (status !== "active") {
-    throw new ForbiddenError("This user account has been deactivated");
+  const status = typeof row.status === 'string' ? row.status : 'active';
+  if (status !== 'active') {
+    throw new ForbiddenError('This user account has been deactivated');
   }
 
-  const permissions: string[] = Array.isArray(row.permissions) ? row.permissions : [];
+  const permissions: string[] = Array.isArray(row.permissions)
+    ? row.permissions
+    : [];
   const isOwner = row.is_owner === true;
 
   return {
@@ -212,20 +214,20 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
  */
 async function getCurrentAccountLegacy(
   supabase: SupabaseClient,
-  userId: string,
+  userId: string
 ): Promise<AccountContext> {
   const { data, error } = await supabase
-    .from("profiles")
-    .select("account_id, account_role, status, workspace_profile_id")
-    .eq("user_id", userId)
+    .from('profiles')
+    .select('account_id, account_role, status, workspace_profile_id')
+    .eq('user_id', userId)
     .maybeSingle();
 
   if (error) {
-    console.error("[getCurrentAccount] profile fetch error:", error);
-    throw new ForbiddenError("Could not load account context");
+    console.error('[getCurrentAccount] profile fetch error:', error);
+    throw new ForbiddenError('Could not load account context');
   }
   if (!data || !data.account_id || !data.account_role) {
-    throw new ForbiddenError("Profile is not linked to an account");
+    throw new ForbiddenError('Profile is not linked to an account');
   }
   if (!isAccountRole(data.account_role)) {
     throw new ForbiddenError(`Unknown account role: ${data.account_role}`);
@@ -236,22 +238,22 @@ async function getCurrentAccountLegacy(
   // right after migrations (PGRST200, issue #294). A lookup by id needs
   // no relationship inference and is gated by the same accounts RLS.
   const { data: account, error: accountErr } = await supabase
-    .from("accounts")
-    .select("id, name, owner_user_id")
-    .eq("id", data.account_id)
+    .from('accounts')
+    .select('id, name, owner_user_id')
+    .eq('id', data.account_id)
     .maybeSingle();
 
   if (accountErr) {
-    console.error("[getCurrentAccount] account fetch error:", accountErr);
-    throw new ForbiddenError("Could not load account context");
+    console.error('[getCurrentAccount] account fetch error:', accountErr);
+    throw new ForbiddenError('Could not load account context');
   }
   if (!account) {
-    throw new ForbiddenError("Profile is not linked to an account");
+    throw new ForbiddenError('Profile is not linked to an account');
   }
 
-  const status = typeof data.status === "string" ? data.status : "active";
-  if (status !== "active") {
-    throw new ForbiddenError("This user account has been deactivated");
+  const status = typeof data.status === 'string' ? data.status : 'active';
+  if (status !== 'active') {
+    throw new ForbiddenError('This user account has been deactivated');
   }
 
   const isOwner = account.owner_user_id === userId;
@@ -263,9 +265,9 @@ async function getCurrentAccountLegacy(
   let permissions: string[] = [];
   if (data.workspace_profile_id) {
     const { data: wp } = await supabase
-      .from("workspace_profiles")
-      .select("id, name, permissions")
-      .eq("id", data.workspace_profile_id)
+      .from('workspace_profiles')
+      .select('id, name, permissions')
+      .eq('id', data.workspace_profile_id)
       .maybeSingle();
     if (wp) {
       workspaceProfile = { id: wp.id, name: wp.name };
@@ -303,17 +305,17 @@ export async function requireRole(min: AccountRole): Promise<AccountContext> {
   // `is_account_member(account_id, min_role)` shim, so TS guards
   // and RLS agree.
   const ok =
-    min === "viewer"
+    min === 'viewer'
       ? true
-      : min === "agent"
+      : min === 'agent'
         ? ctx.capabilities.canSendMessages
-        : min === "admin"
+        : min === 'admin'
           ? ctx.capabilities.canEditSettings
           : ctx.isOwner;
 
   if (!ok) {
     throw new ForbiddenError(
-      `This action requires the '${min}' role or higher`,
+      `This action requires the '${min}' role or higher`
     );
   }
   return ctx;
@@ -328,7 +330,7 @@ export async function requireRole(min: AccountRole): Promise<AccountContext> {
  * Owners implicitly pass every check (Super Admin semantics).
  */
 export async function requirePermission(
-  slug: PermissionSlug,
+  slug: PermissionSlug
 ): Promise<AccountContext> {
   const ctx = await getCurrentAccount();
   if (!hasPermission(ctx.permissions, slug, ctx.isOwner)) {

@@ -1,8 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata } from 'next';
 
-import { AdminTickets } from "@/features/admin/components/admin-tickets";
+import { AdminTickets } from '@/features/admin/components/admin-tickets';
 
-export const metadata: Metadata = { title: "Tickets · Admin console" };
+export const metadata: Metadata = { title: 'Tickets · Admin console' };
 
 export default function AdminTicketsPage() {
   return <AdminTickets />;

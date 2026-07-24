@@ -98,7 +98,9 @@ export function InviteUserSheet({
           .select('id, name')
           .eq('account_id', profile.account_id)
           .order('created_at', { ascending: true }),
-        fetch('/api/account/profiles').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('/api/account/profiles')
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
       ]);
       if (cancelled) return;
       if (roles) {
@@ -110,8 +112,12 @@ export function InviteUserSheet({
       if (profiles.length > 0) {
         setWsProfiles(profiles);
         // Default to the "Standard" system profile like Bigin.
-        const standard = profiles.find((p) => p.is_system && p.name === 'Standard');
-        setWorkspaceProfileId((prev) => prev || standard?.id || profiles[0]?.id || '');
+        const standard = profiles.find(
+          (p) => p.is_system && p.name === 'Standard'
+        );
+        setWorkspaceProfileId(
+          (prev) => prev || standard?.id || profiles[0]?.id || ''
+        );
       }
     })();
     return () => {
@@ -142,7 +148,9 @@ export function InviteUserSheet({
       // Legacy role enum kept for compatibility: Administrator system
       // profile maps to admin, everything else invites as agent. The
       // real capabilities come from workspaceProfileId.
-      const selectedProfile = wsProfiles.find((p) => p.id === workspaceProfileId);
+      const selectedProfile = wsProfiles.find(
+        (p) => p.id === workspaceProfileId
+      );
       const legacyRole =
         selectedProfile?.is_system && selectedProfile.name === 'Administrator'
           ? 'admin'
@@ -234,7 +242,11 @@ export function InviteUserSheet({
           />
         </RecordField>
 
-        <RecordField label={t('emailLabel')} htmlFor="invite-email" error={emailError}>
+        <RecordField
+          label={t('emailLabel')}
+          htmlFor="invite-email"
+          error={emailError}
+        >
           <Input
             id="invite-email"
             type="email"
@@ -255,7 +267,12 @@ export function InviteUserSheet({
             value={workspaceRoleId || null}
             options={wsRoles.map((r) => ({ id: r.id, label: r.name }))}
             placeholder={t('roleLabel')}
-            icon={<Share2 className="size-4 shrink-0 rotate-90 text-muted-foreground" aria-hidden="true" />}
+            icon={
+              <Share2
+                className="text-muted-foreground size-4 shrink-0 rotate-90"
+                aria-hidden="true"
+              />
+            }
             onSelect={(id) => setWorkspaceRoleId(id ?? '')}
           />
         </RecordField>
@@ -270,21 +287,31 @@ export function InviteUserSheet({
               hint: p.is_system ? t('systemProfileHint') : undefined,
             }))}
             placeholder={t('profileLabel')}
-            icon={<ShieldCheck className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+            icon={
+              <ShieldCheck
+                className="text-muted-foreground size-4 shrink-0"
+                aria-hidden="true"
+              />
+            }
             onSelect={(id) => setWorkspaceProfileId(id ?? '')}
           />
         </RecordField>
       </RecordSheet>
 
       {/* Bigin-style "Invite sent!" confirmation */}
-      <Dialog open={sent !== null} onOpenChange={(next) => !next && setSent(null)}>
+      <Dialog
+        open={sent !== null}
+        onOpenChange={(next) => !next && setSent(null)}
+      >
         <DialogContent className="bg-popover border-border sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl text-popover-foreground">
+            <DialogTitle className="text-popover-foreground text-xl">
               {t('inviteSentTitle')}
             </DialogTitle>
-            <DialogDescription className="text-sm leading-relaxed text-muted-foreground">
-              {sent?.emailSent ? t('inviteSentDesc') : t('inviteSentNoEmailDesc')}
+            <DialogDescription className="text-muted-foreground text-sm leading-relaxed">
+              {sent?.emailSent
+                ? t('inviteSentDesc')
+                : t('inviteSentNoEmailDesc')}
             </DialogDescription>
           </DialogHeader>
 

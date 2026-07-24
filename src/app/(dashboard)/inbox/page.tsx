@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { InboxWorkspace } from "@/features/inbox/components/inbox-workspace";
+import { InboxWorkspace } from '@/features/inbox/components/inbox-workspace';
 
 /**
  * WhatsApp Inbox — the primary conversation workspace. The full

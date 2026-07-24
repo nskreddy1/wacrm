@@ -1,21 +1,21 @@
-"use client";
+'use client';
 
-import { Suspense, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { CheckCircle2, UsersRound } from "lucide-react";
-import { GoogleAuthButton } from "@/features/auth/components/google-auth-button";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Suspense, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { CheckCircle2, UsersRound } from 'lucide-react';
+import { GoogleAuthButton } from '@/features/auth/components/google-auth-button';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Field,
   FieldError,
   FieldGroup,
   FieldLabel,
   FieldSeparator,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
+} from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { createClient } from '@/lib/supabase/client';
 
 export default function SignupPage() {
   return (
@@ -27,15 +27,15 @@ export default function SignupPage() {
 
 function SignupPageInner() {
   const searchParams = useSearchParams();
-  const inviteToken = searchParams.get("invite");
+  const inviteToken = searchParams.get('invite');
   const loginHref = inviteToken
     ? `/login?invite=${encodeURIComponent(inviteToken)}`
-    : "/login";
+    : '/login';
 
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -48,17 +48,17 @@ function SignupPageInner() {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (normalizedName.length < 2) {
-      setError("Enter your full name to continue.");
+      setError('Enter your full name to continue.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError('Passwords do not match.');
       return;
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+      setError('Password must be at least 6 characters.');
       return;
     }
 
@@ -85,14 +85,14 @@ function SignupPageInner() {
       }
 
       if (!data.user) {
-        setError("We could not create your account. Please try again.");
+        setError('We could not create your account. Please try again.');
         return;
       }
 
       setEmail(normalizedEmail);
       setSuccess(true);
     } catch {
-      setError("Something went wrong while creating your account. Try again.");
+      setError('Something went wrong while creating your account. Try again.');
     } finally {
       setLoading(false);
     }
@@ -101,141 +101,165 @@ function SignupPageInner() {
   return (
     <>
       {success ? (
-              <div className="auth-rise-block flex w-full max-w-md flex-col items-center gap-6 text-center">
-                <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <CheckCircle2 aria-hidden="true" />
-                </span>
-                <div className="flex flex-col gap-2">
-                  <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">
-                    Check your email
-                  </h1>
-                  <p className="text-pretty leading-relaxed text-muted-foreground">
-                    We sent a confirmation link to <strong className="font-medium text-foreground">{email}</strong>.
-                    Verify your email to finish creating your Axon account.
-                  </p>
-                </div>
-                <Button variant="outline" className="w-full" render={<Link href={loginHref} />}>
-                  Back to sign in
-                </Button>
+        <div className="auth-rise-block flex w-full max-w-md flex-col items-center gap-6 text-center">
+          <span className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-full">
+            <CheckCircle2 aria-hidden="true" />
+          </span>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-foreground text-3xl font-semibold tracking-tight text-balance">
+              Check your email
+            </h1>
+            <p className="text-muted-foreground leading-relaxed text-pretty">
+              We sent a confirmation link to{' '}
+              <strong className="text-foreground font-medium">{email}</strong>.
+              Verify your email to finish creating your Axon account.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            render={<Link href={loginHref} />}
+          >
+            Back to sign in
+          </Button>
+        </div>
+      ) : (
+        <div className="w-full max-w-md">
+          <div className="mb-7 flex flex-col gap-2">
+            <div className="text-primary flex items-center gap-2 text-sm font-medium lg:hidden">
+              {inviteToken && <UsersRound aria-hidden="true" />}
+              {inviteToken ? 'Team invitation' : 'Your customer workspace'}
+            </div>
+            <h1 className="text-foreground text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+              {inviteToken
+                ? 'Create your account & join'
+                : 'Create your account'}
+            </h1>
+            <p className="text-muted-foreground leading-relaxed text-pretty">
+              {inviteToken
+                ? 'Verify your email, then accept your invitation to join the team.'
+                : 'Start organizing every customer conversation — WhatsApp, SMS, and email — in one place.'}
+            </p>
+          </div>
+
+          <FieldGroup>
+            <GoogleAuthButton
+              inviteToken={inviteToken}
+              label="Continue with Google"
+            />
+
+            <FieldSeparator>or</FieldSeparator>
+
+            <form onSubmit={handleSignup} className="contents">
+              {error && <FieldError>{error}</FieldError>}
+
+              <Field>
+                <FieldLabel htmlFor="fullName">Full name</FieldLabel>
+                <Input
+                  id="fullName"
+                  name="name"
+                  type="text"
+                  autoComplete="name"
+                  placeholder="Enter your name"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  required
+                  aria-invalid={Boolean(error)}
+                  variant="underline"
+                  size="lg"
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  aria-invalid={Boolean(error)}
+                  variant="underline"
+                  size="lg"
+                />
+              </Field>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="At least 6 characters"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    minLength={6}
+                    required
+                    aria-invalid={Boolean(error)}
+                    variant="underline"
+                    size="lg"
+                  />
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="confirmPassword">
+                    Confirm password
+                  </FieldLabel>
+                  <Input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Repeat password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    minLength={6}
+                    required
+                    aria-invalid={Boolean(error)}
+                    variant="underline"
+                    size="lg"
+                  />
+                </Field>
               </div>
-            ) : (
-              <div className="w-full max-w-md">
-                <div className="mb-7 flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-primary lg:hidden">
-                    {inviteToken && <UsersRound aria-hidden="true" />}
-                    {inviteToken ? "Team invitation" : "Your customer workspace"}
-                  </div>
-                  <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                    {inviteToken ? "Create your account & join" : "Create your account"}
-                  </h1>
-                  <p className="text-pretty leading-relaxed text-muted-foreground">
-                    {inviteToken
-                      ? "Verify your email, then accept your invitation to join the team."
-                      : "Start organizing every customer conversation — WhatsApp, SMS, and email — in one place."}
-                  </p>
-                </div>
 
-                <FieldGroup>
-                  <GoogleAuthButton inviteToken={inviteToken} label="Continue with Google" />
+              <Field orientation="horizontal">
+                <Checkbox id="terms" aria-describedby="terms-label" />
+                <FieldLabel
+                  id="terms-label"
+                  htmlFor="terms"
+                  className="text-muted-foreground text-sm font-normal"
+                >
+                  I agree to the Terms, Privacy Policy, and Fees.
+                </FieldLabel>
+              </Field>
 
-                  <FieldSeparator>or</FieldSeparator>
+              <Button
+                type="submit"
+                disabled={loading}
+                size="xl"
+                className="w-full"
+              >
+                {loading ? 'Creating account...' : 'Create account'}
+              </Button>
+            </form>
+          </FieldGroup>
 
-                  <form onSubmit={handleSignup} className="contents">
-                    {error && <FieldError>{error}</FieldError>}
-
-                    <Field>
-                      <FieldLabel htmlFor="fullName">Full name</FieldLabel>
-                      <Input
-                        id="fullName"
-                        name="name"
-                        type="text"
-                        autoComplete="name"
-                        placeholder="Enter your name"
-                        value={fullName}
-                        onChange={(event) => setFullName(event.target.value)}
-                        required
-                        aria-invalid={Boolean(error)}
-                        variant="underline"
-                        size="lg"
-                      />
-                    </Field>
-
-                    <Field>
-                      <FieldLabel htmlFor="email">Email</FieldLabel>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        inputMode="email"
-                        autoComplete="email"
-                        placeholder="Enter your email"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        required
-                        aria-invalid={Boolean(error)}
-                        variant="underline"
-                        size="lg"
-                      />
-                    </Field>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Field>
-                        <FieldLabel htmlFor="password">Password</FieldLabel>
-                        <Input
-                          id="password"
-                          name="password"
-                          type="password"
-                          autoComplete="new-password"
-                          placeholder="At least 6 characters"
-                          value={password}
-                          onChange={(event) => setPassword(event.target.value)}
-                          minLength={6}
-                          required
-                          aria-invalid={Boolean(error)}
-                          variant="underline"
-                          size="lg"
-                        />
-                      </Field>
-
-                      <Field>
-                        <FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
-                        <Input
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          type="password"
-                          autoComplete="new-password"
-                          placeholder="Repeat password"
-                          value={confirmPassword}
-                          onChange={(event) => setConfirmPassword(event.target.value)}
-                          minLength={6}
-                          required
-                          aria-invalid={Boolean(error)}
-                          variant="underline"
-                          size="lg"
-                        />
-                      </Field>
-                    </div>
-
-                    <Field orientation="horizontal">
-                      <Checkbox id="terms" aria-describedby="terms-label" />
-                      <FieldLabel id="terms-label" htmlFor="terms" className="text-sm font-normal text-muted-foreground">
-                        I agree to the Terms, Privacy Policy, and Fees.
-                      </FieldLabel>
-                    </Field>
-
-                    <Button type="submit" disabled={loading} size="xl" className="w-full">
-                      {loading ? "Creating account..." : "Create account"}
-                    </Button>
-                  </form>
-                </FieldGroup>
-
-                <p className="mt-5 text-sm text-muted-foreground">
-                  Already have an account?{" "}
-                  <Link href={loginHref} className="font-medium text-primary hover:underline">
-                    Sign in
-                  </Link>
-                </p>
-              </div>
+          <p className="text-muted-foreground mt-5 text-sm">
+            Already have an account?{' '}
+            <Link
+              href={loginHref}
+              className="text-primary font-medium hover:underline"
+            >
+              Sign in
+            </Link>
+          </p>
+        </div>
       )}
     </>
   );

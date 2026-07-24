@@ -1,28 +1,33 @@
-"use client";
+'use client';
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { createClient } from "@/lib/supabase/client";
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { createClient } from '@/lib/supabase/client';
 import {
   CONVERSATION_SELECT,
   normalizeConversation,
-} from "@/features/inbox/lib/conversations";
-import type { Conversation, Message, Contact, ConversationStatus } from "@/types";
-import { useRealtime } from "@/features/inbox/hooks/use-realtime";
-import { ConversationList } from "@/features/inbox/components/conversation-list";
-import { MessageThread } from "@/features/inbox/components/message-thread";
-import { ContactSidebar } from "@/features/inbox/components/contact-sidebar";
-import { useLocalStorageBoolean } from "@/hooks/use-local-storage-state";
-import { WifiOff } from "lucide-react";
-import { cn } from "@/lib/utils";
+} from '@/features/inbox/lib/conversations';
+import type {
+  Conversation,
+  Message,
+  Contact,
+  ConversationStatus,
+} from '@/types';
+import { useRealtime } from '@/features/inbox/hooks/use-realtime';
+import { ConversationList } from '@/features/inbox/components/conversation-list';
+import { MessageThread } from '@/features/inbox/components/message-thread';
+import { ContactSidebar } from '@/features/inbox/components/contact-sidebar';
+import { useLocalStorageBoolean } from '@/hooks/use-local-storage-state';
+import { WifiOff } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // Remembers the agent's show/hide choice for the desktop contact panel
 // across reloads and sessions (device-scoped, like the theme prefs).
-const CONTACT_PANEL_STORAGE_KEY = "wacrm:inbox:contact-panel-open";
+const CONTACT_PANEL_STORAGE_KEY = 'wacrm:inbox:contact-panel-open';
 
 /** Channels the Inbox workspace can host. Email is not surfaced yet. */
-export type InboxChannel = "whatsapp" | "sms";
+export type InboxChannel = 'whatsapp' | 'sms';
 
 interface InboxWorkspaceProps {
   /**
@@ -40,10 +45,10 @@ interface InboxWorkspaceProps {
  * treated as WhatsApp, the only channel that existed before SMS.
  */
 export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
-  const t = useTranslations("Inbox.page");
+  const t = useTranslations('Inbox.page');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const basePath = channel === "sms" ? "/inbox/sms" : "/inbox";
+  const basePath = channel === 'sms' ? '/inbox/sms' : '/inbox';
 
   /**
    * Whether a conversation row belongs in this workspace. Missing
@@ -52,15 +57,15 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
    */
   const belongsHere = useCallback(
     (conv: { channel?: string | null }) =>
-      (conv.channel ?? "whatsapp") === channel,
-    [channel],
+      (conv.channel ?? 'whatsapp') === channel,
+    [channel]
   );
   /**
    * `?c=<id>` deep-link support. Used when landing here from the
    * dashboard's recent-conversations list so the right thread opens
    * automatically instead of showing the empty center panel.
    */
-  const deepLinkConvId = searchParams.get("c");
+  const deepLinkConvId = searchParams.get('c');
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] =
@@ -92,7 +97,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
    */
   const [contactPanelOpen, setContactPanelOpen] = useLocalStorageBoolean(
     CONTACT_PANEL_STORAGE_KEY,
-    true,
+    true
   );
 
   const handleToggleContactPanel = useCallback(() => {
@@ -137,53 +142,56 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
   // conversations stuck on "No messages yet" until the user reloaded.
   // Also self-heals if a realtime event was missed: callers can invoke
   // this whenever they reference a conversation id they don't recognise.
-  const hydrateConversation = useCallback(async (convId: string) => {
-    if (hydratingConvIdsRef.current.has(convId)) return;
-    hydratingConvIdsRef.current.add(convId);
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("conversations")
-        .select(CONVERSATION_SELECT)
-        .eq("id", convId)
-        .maybeSingle();
-      if (error) {
-        // Supabase errors have non-enumerable properties — log fields
-        // explicitly so the console message isn't just `{}`.
-        console.error("Failed to hydrate conversation:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
-        return;
-      }
-      if (!data) return;
-      const fetched = normalizeConversation(data);
-      // Cross-channel guard: a realtime event may reference a
-      // conversation from the other channel's inbox — drop it here
-      // rather than letting it surface in the wrong list.
-      if (!belongsHere(fetched)) return;
-      setConversations((prev) => {
-        const existing = prev.find((c) => c.id === fetched.id);
-        if (existing) {
-          // Already in state — keep its fields (a realtime UPDATE may
-          // have landed while the fetch was in flight and patched
-          // last_message_text / unread_count to fresher values than
-          // the row we just read). Only backfill `contact`, which the
-          // realtime payloads never carry.
-          return prev.map((c) =>
-            c.id === fetched.id
-              ? { ...c, contact: c.contact ?? fetched.contact }
-              : c,
-          );
+  const hydrateConversation = useCallback(
+    async (convId: string) => {
+      if (hydratingConvIdsRef.current.has(convId)) return;
+      hydratingConvIdsRef.current.add(convId);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('conversations')
+          .select(CONVERSATION_SELECT)
+          .eq('id', convId)
+          .maybeSingle();
+        if (error) {
+          // Supabase errors have non-enumerable properties — log fields
+          // explicitly so the console message isn't just `{}`.
+          console.error('Failed to hydrate conversation:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+          });
+          return;
         }
-        return [fetched, ...prev];
-      });
-    } finally {
-      hydratingConvIdsRef.current.delete(convId);
-    }
-  }, [belongsHere]);
+        if (!data) return;
+        const fetched = normalizeConversation(data);
+        // Cross-channel guard: a realtime event may reference a
+        // conversation from the other channel's inbox — drop it here
+        // rather than letting it surface in the wrong list.
+        if (!belongsHere(fetched)) return;
+        setConversations((prev) => {
+          const existing = prev.find((c) => c.id === fetched.id);
+          if (existing) {
+            // Already in state — keep its fields (a realtime UPDATE may
+            // have landed while the fetch was in flight and patched
+            // last_message_text / unread_count to fresher values than
+            // the row we just read). Only backfill `contact`, which the
+            // realtime payloads never carry.
+            return prev.map((c) =>
+              c.id === fetched.id
+                ? { ...c, contact: c.contact ?? fetched.contact }
+                : c
+            );
+          }
+          return [fetched, ...prev];
+        });
+      } finally {
+        hydratingConvIdsRef.current.delete(convId);
+      }
+    },
+    [belongsHere]
+  );
 
   // Check this channel's connection status on mount.
   useEffect(() => {
@@ -196,7 +204,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
 
       if (!user) return;
 
-      if (channel === "whatsapp") {
+      if (channel === 'whatsapp') {
         // whatsapp_config is one-row-per-account post-multi-user, so
         // the previous `.eq('user_id', user.id)` would miss the row
         // for any teammate who didn't personally save the config —
@@ -204,9 +212,9 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
         // shared inbox even though the admin had it configured.
         // Resolve account_id via the profile and query by that.
         const { data: profile } = await supabase
-          .from("profiles")
-          .select("account_id")
-          .eq("user_id", user.id)
+          .from('profiles')
+          .select('account_id')
+          .eq('user_id', user.id)
           .maybeSingle();
         const accountId = profile?.account_id as string | undefined;
         if (!accountId) {
@@ -215,12 +223,12 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
         }
 
         const { data } = await supabase
-          .from("whatsapp_config")
-          .select("status")
-          .eq("account_id", accountId)
+          .from('whatsapp_config')
+          .select('status')
+          .eq('account_id', accountId)
           .maybeSingle();
 
-        if (data?.status === "connected") {
+        if (data?.status === 'connected') {
           setChannelConnected(true);
           return;
         }
@@ -230,10 +238,11 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
       // future providers) live in channel_connections. This is the
       // only source for SMS and the fallback for WhatsApp.
       try {
-        const res = await fetch("/api/settings/channels");
+        const res = await fetch('/api/settings/channels');
         if (res.ok) {
-          const payload: { connections?: Array<{ channel: string; is_enabled: boolean }> } =
-            await res.json();
+          const payload: {
+            connections?: Array<{ channel: string; is_enabled: boolean }>;
+          } = await res.json();
           const hasChannel = (payload.connections ?? []).some(
             (c) => c.channel === channel && c.is_enabled
           );
@@ -255,7 +264,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     (event: { eventType: string; new: Message; old: Partial<Message> }) => {
       const newMsg = event.new;
 
-      if (event.eventType === "INSERT") {
+      if (event.eventType === 'INSERT') {
         // Add to messages if it belongs to active conversation
         if (
           activeConversation &&
@@ -266,7 +275,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
             if (prev.some((m) => m.id === newMsg.id)) return prev;
             // Replace optimistic message if it exists
             const withoutOptimistic = prev.filter(
-              (m) => !m.id.startsWith("temp-")
+              (m) => !m.id.startsWith('temp-')
             );
             return [...withoutOptimistic, newMsg];
           });
@@ -283,15 +292,15 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
               c.id === newMsg.conversation_id
                 ? {
                     ...c,
-                    last_message_text: newMsg.content_text ?? "",
+                    last_message_text: newMsg.content_text ?? '',
                     last_message_at: newMsg.created_at,
                     unread_count:
                       activeConversation?.id === newMsg.conversation_id
                         ? 0
                         : c.unread_count + 1,
                   }
-                : c,
-            ),
+                : c
+            )
           );
         } else {
           // First time we're seeing this conv: the conv-INSERT event
@@ -303,7 +312,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
         }
       }
 
-      if (event.eventType === "UPDATE") {
+      if (event.eventType === 'UPDATE') {
         // Update message status
         setMessages((prev) =>
           prev.map((m) => (m.id === newMsg.id ? { ...m, ...newMsg } : m))
@@ -322,7 +331,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     }) => {
       const conv = event.new;
 
-      if (event.eventType === "INSERT") {
+      if (event.eventType === 'INSERT') {
         // Prepend immediately for snappy UX so the new conv shows in the
         // list right away, then hydrate to fill in the `contact` join
         // (realtime payloads never include joins). Skip both if we
@@ -337,7 +346,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
         }
       }
 
-      if (event.eventType === "UPDATE") {
+      if (event.eventType === 'UPDATE') {
         if (knownConvIdsRef.current.has(conv.id)) {
           // If this UPDATE is for the conv the user is currently viewing,
           // suppress the incoming unread_count — the user is reading it
@@ -353,8 +362,8 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
                     ...conv,
                     unread_count: isActive ? 0 : conv.unread_count,
                   }
-                : c,
-            ),
+                : c
+            )
           );
         } else {
           // UPDATE arrived before the INSERT (or after a missed INSERT)
@@ -366,9 +375,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
 
         // Update active conversation if it changed
         if (activeConversation && conv.id === activeConversation.id) {
-          setActiveConversation((prev) =>
-            prev ? { ...prev, ...conv } : prev
-          );
+          setActiveConversation((prev) => (prev ? { ...prev, ...conv } : prev));
         }
       }
     },
@@ -380,7 +387,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
   // WS was disconnected (laptop sleep, network blip, background-tab
   // throttle) are simply lost. We need a way to catch up.
   const { isConnected } = useRealtime({
-    channelName: "inbox-realtime",
+    channelName: 'inbox-realtime',
     onMessageEvent: handleMessageEvent,
     onConversationEvent: handleConversationEvent,
     enabled: true,
@@ -418,13 +425,13 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
    */
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === 'visible') {
         setResyncToken((n) => n + 1);
       }
     };
-    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
@@ -474,8 +481,8 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
           if (match.unread_count > 0) {
             setConversations((prev) =>
               prev.map((c) =>
-                c.id === match.id ? { ...c, unread_count: 0 } : c,
-              ),
+                c.id === match.id ? { ...c, unread_count: 0 } : c
+              )
             );
           }
         }
@@ -505,10 +512,8 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
       // even if the realtime UPDATE is dropped.
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === conv.id && c.unread_count > 0
-            ? { ...c, unread_count: 0 }
-            : c,
-        ),
+          c.id === conv.id && c.unread_count > 0 ? { ...c, unread_count: 0 } : c
+        )
       );
       // Record the selection on the deep-link ref BEFORE we change the
       // URL. The router.replace below flips `deepLinkConvId`, which can
@@ -538,7 +543,6 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     autoSelectedForDeepLinkRef.current = null;
     router.replace(basePath, { scroll: false });
   }, [router, basePath]);
-
 
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
     setMessages(loaded);
@@ -607,7 +611,9 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
         <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
           <WifiOff className="h-4 w-4 text-amber-400" />
           <p className="text-xs text-amber-400">
-            {channel === "sms" ? t("smsNotConnected") : t("whatsappNotConnected")}
+            {channel === 'sms'
+              ? t('smsNotConnected')
+              : t('whatsappNotConnected')}
           </p>
         </div>
       )}
@@ -618,8 +624,8 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
             thread can occupy the full width. Always visible on lg+. */}
         <div
           className={cn(
-            "flex h-full flex-1 lg:flex-none",
-            hasActiveConv ? "hidden lg:flex" : "flex",
+            'flex h-full flex-1 lg:flex-none',
+            hasActiveConv ? 'hidden lg:flex' : 'flex'
           )}
         >
           <ConversationList
@@ -644,8 +650,8 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
             on the right. Issue #165. */}
         <div
           className={cn(
-            "flex h-full min-w-0 flex-1 lg:flex",
-            hasActiveConv ? "flex" : "hidden lg:flex",
+            'flex h-full min-w-0 flex-1 lg:flex',
+            hasActiveConv ? 'flex' : 'hidden lg:flex'
           )}
         >
           <MessageThread

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 // ============================================================
 // WorkspaceNameCard — Settings → Team members (top card)
@@ -10,17 +10,17 @@
 // so a direct client-side update is safe; non-admins see read-only.
 // ============================================================
 
-import { useState } from "react";
-import { toast } from "sonner";
-import { Building2, Loader2 } from "lucide-react";
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { Building2, Loader2 } from 'lucide-react';
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useAuth } from "@/features/auth/hooks/use-auth";
-import { looksLikeEmail, workspaceDisplayName } from "@/lib/display-name";
-import { createClient } from "@/lib/supabase/client";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useAuth } from '@/features/auth/hooks/use-auth';
+import { looksLikeEmail, workspaceDisplayName } from '@/lib/display-name';
+import { createClient } from '@/lib/supabase/client';
 
 export function WorkspaceNameCard() {
   const { account, canEditSettings, refreshProfile } = useAuth();
@@ -30,7 +30,7 @@ export function WorkspaceNameCard() {
   const [draftName, setDraftName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const name = draftName ?? (account ? workspaceDisplayName(account.name) : "");
+  const name = draftName ?? (account ? workspaceDisplayName(account.name) : '');
   const setName = setDraftName;
 
   if (!account) return null;
@@ -42,22 +42,24 @@ export function WorkspaceNameCard() {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed || trimmed.length > 80) {
-      toast.error("Workspace name must be 1–80 characters.");
+      toast.error('Workspace name must be 1–80 characters.');
       return;
     }
     setSaving(true);
     try {
       const supabase = createClient();
       const { error } = await supabase
-        .from("accounts")
+        .from('accounts')
         .update({ name: trimmed })
-        .eq("id", account.id);
+        .eq('id', account.id);
       if (error) throw new Error(error.message);
       await refreshProfile();
       setDraftName(null); // back to deriving from the refreshed account
-      toast.success("Workspace renamed.");
+      toast.success('Workspace renamed.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to rename workspace.");
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to rename workspace.'
+      );
     } finally {
       setSaving(false);
     }
@@ -67,21 +69,24 @@ export function WorkspaceNameCard() {
     <Card>
       <CardContent className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <div className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
             <Building2 className="size-4" aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold">Workspace name</p>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="text-muted-foreground truncate text-xs">
               {canEditSettings
-                ? "Shown to every member in the sidebar and dashboard."
-                : "Only owners and admins can rename the workspace."}
+                ? 'Shown to every member in the sidebar and dashboard.'
+                : 'Only owners and admins can rename the workspace.'}
             </p>
           </div>
         </div>
 
         {canEditSettings ? (
-          <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <form
+            onSubmit={onSubmit}
+            className="flex flex-col gap-3 sm:flex-row sm:items-end"
+          >
             <div className="flex-1 space-y-2">
               <Label htmlFor="workspace-name">Name</Label>
               <Input
@@ -94,8 +99,9 @@ export function WorkspaceNameCard() {
                 required
               />
               {stillDefault && (
-                <p className="text-xs text-muted-foreground">
-                  Your workspace is still using its signup default. Give it a proper name.
+                <p className="text-muted-foreground text-xs">
+                  Your workspace is still using its signup default. Give it a
+                  proper name.
                 </p>
               )}
             </div>
@@ -105,12 +111,14 @@ export function WorkspaceNameCard() {
                   <Loader2 className="size-4 animate-spin" /> Saving
                 </>
               ) : (
-                "Save"
+                'Save'
               )}
             </Button>
           </form>
         ) : (
-          <p className="text-sm text-foreground">{workspaceDisplayName(account.name)}</p>
+          <p className="text-foreground text-sm">
+            {workspaceDisplayName(account.name)}
+          </p>
         )}
       </CardContent>
     </Card>

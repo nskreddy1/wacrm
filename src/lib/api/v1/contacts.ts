@@ -9,9 +9,15 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { findExistingContact, isUniqueViolation } from '@/features/contacts/lib/dedupe';
+import {
+  findExistingContact,
+  isUniqueViolation,
+} from '@/features/contacts/lib/dedupe';
 import { resolveImportTagIds } from '@/features/contacts/lib/resolve-import-tags';
-import { sanitizePhoneForMeta, isValidE164 } from '@/features/whatsapp/lib/phone-utils';
+import {
+  sanitizePhoneForMeta,
+  isValidE164,
+} from '@/features/whatsapp/lib/phone-utils';
 
 /** Row select that embeds the contact's tags for serialization. */
 export const CONTACT_SELECT = '*, contact_tags(tags(*))';
@@ -183,9 +189,7 @@ export async function setContactTags(
   if (readErr) {
     throw new ContactError('Failed to read contact tags', 500);
   }
-  const existing = new Set(
-    (current ?? []).map((r) => r.tag_id as string)
-  );
+  const existing = new Set((current ?? []).map((r) => r.tag_id as string));
 
   const toAdd = [...desired].filter((id) => !existing.has(id));
   const toRemove = [...existing].filter((id) => !desired.has(id));

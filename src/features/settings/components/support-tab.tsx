@@ -122,21 +122,21 @@ export function SupportTab() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <Loader2 className="text-muted-foreground size-5 animate-spin" />
         </div>
       ) : tickets.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-            <div className="flex size-11 items-center justify-center rounded-full bg-primary-soft">
-              <LifeBuoy className="size-5 text-primary" />
+            <div className="bg-primary-soft flex size-11 items-center justify-center rounded-full">
+              <LifeBuoy className="text-primary size-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-foreground text-sm font-medium">
                 No tickets yet
               </p>
-              <p className="mt-1 text-sm text-muted-foreground text-pretty">
-                Stuck on channel setup, billing or anything else? Open a
-                ticket and we&apos;ll help you out.
+              <p className="text-muted-foreground mt-1 text-sm text-pretty">
+                Stuck on channel setup, billing or anything else? Open a ticket
+                and we&apos;ll help you out.
               </p>
             </div>
             <Button variant="outline" onClick={() => setCreateOpen(true)}>
@@ -148,7 +148,7 @@ export function SupportTab() {
       ) : (
         <Card>
           <CardContent className="p-0">
-            <ul className="divide-y divide-border">
+            <ul className="divide-border divide-y">
               {tickets.map((ticket) => {
                 const status = STATUS_META[ticket.status];
                 const priority = PRIORITY_META[ticket.priority];
@@ -157,13 +157,13 @@ export function SupportTab() {
                     <button
                       type="button"
                       onClick={() => setSelectedId(ticket.id)}
-                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/60"
+                      className="hover:bg-muted/60 flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">
+                        <p className="text-foreground truncate text-sm font-medium">
                           {ticket.subject}
                         </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
+                        <p className="text-muted-foreground mt-0.5 text-xs">
                           {CATEGORY_META[ticket.category].label}
                           {' · updated '}
                           {relTime(ticket.updated_at)} ago
@@ -251,7 +251,9 @@ function CreateTicketDialog({
       onOpenChange(false);
       onCreated(body.ticket.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create ticket');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to create ticket'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -416,7 +418,9 @@ function TicketThread({
       toast.success('Ticket closed');
       await mutate();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to close ticket');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to close ticket'
+      );
     } finally {
       setClosing(false);
     }
@@ -429,14 +433,14 @@ function TicketThread({
           <button
             type="button"
             onClick={onBack}
-            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
           >
             <ArrowLeft className="size-4" />
             All tickets
           </button>
           {ticket ? (
             <>
-              <h2 className="text-lg font-semibold tracking-tight text-foreground text-balance">
+              <h2 className="text-foreground text-lg font-semibold tracking-tight text-balance">
                 {ticket.subject}
               </h2>
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -448,7 +452,7 @@ function TicketThread({
                     {PRIORITY_META[ticket.priority].label}
                   </Badge>
                 ) : null}
-                <span className="text-xs text-muted-foreground">
+                <span className="text-muted-foreground text-xs">
                   {CATEGORY_META[ticket.category].label}
                 </span>
               </div>
@@ -474,7 +478,7 @@ function TicketThread({
 
       {isLoading && !data ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <Loader2 className="text-muted-foreground size-5 animate-spin" />
         </div>
       ) : (
         <Card>
@@ -485,15 +489,13 @@ function TicketThread({
                 className={cn(
                   'max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
                   m.is_admin_reply
-                    ? 'self-start border border-border bg-muted/60 text-foreground'
-                    : 'self-end bg-primary-soft text-foreground',
+                    ? 'border-border bg-muted/60 text-foreground self-start border'
+                    : 'bg-primary-soft text-foreground self-end'
                 )}
               >
-                <p className="mb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                  {m.is_admin_reply
-                    ? 'Support team'
-                    : (m.author_name ?? 'You')}
-                  <span className="ml-2 font-normal normal-case tracking-normal">
+                <p className="text-muted-foreground mb-1 text-[11px] font-semibold tracking-wide uppercase">
+                  {m.is_admin_reply ? 'Support team' : (m.author_name ?? 'You')}
+                  <span className="ml-2 font-normal tracking-normal normal-case">
                     {relTime(m.created_at)} ago
                   </span>
                 </p>
@@ -502,7 +504,7 @@ function TicketThread({
             ))}
 
             {conversational ? (
-              <div className="mt-2 flex items-end gap-2 border-t border-border pt-4">
+              <div className="border-border mt-2 flex items-end gap-2 border-t pt-4">
                 <Textarea
                   value={reply}
                   rows={2}
@@ -535,9 +537,10 @@ function TicketThread({
                 </Button>
               </div>
             ) : (
-              <p className="border-t border-border pt-4 text-center text-sm text-muted-foreground">
-                This ticket is {ticket?.status === 'resolved' ? 'resolved' : 'closed'}.
-                Open a new ticket if you need more help.
+              <p className="border-border text-muted-foreground border-t pt-4 text-center text-sm">
+                This ticket is{' '}
+                {ticket?.status === 'resolved' ? 'resolved' : 'closed'}. Open a
+                new ticket if you need more help.
               </p>
             )}
           </CardContent>
@@ -546,4 +549,3 @@ function TicketThread({
     </div>
   );
 }
-

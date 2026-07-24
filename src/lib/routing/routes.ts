@@ -1,43 +1,48 @@
-const segment = (value: string) => encodeURIComponent(value)
+const segment = (value: string) => encodeURIComponent(value);
 
 export const routes = {
-  home: "/",
+  home: '/',
   auth: {
-    login: "/login",
-    signup: "/signup",
-    forgotPassword: "/forgot-password",
-    resetPassword: "/reset-password",
-    callback: "/auth/callback",
+    login: '/login',
+    signup: '/signup',
+    forgotPassword: '/forgot-password',
+    resetPassword: '/reset-password',
+    callback: '/auth/callback',
   },
   app: {
-    dashboard: "/dashboard",
-    inbox: "/inbox",
-    smsInbox: "/inbox/sms",
-    contacts: "/contacts",
+    dashboard: '/dashboard',
+    inbox: '/inbox',
+    smsInbox: '/inbox/sms',
+    contacts: '/contacts',
     contact: (contactId: string) => `/contacts?contact=${segment(contactId)}`,
-    pipelines: "/pipelines",
-    pipeline: (pipelineId: string, view: "board" | "list" | "sheet" = "board") => {
-      const params = new URLSearchParams({ pipeline: pipelineId })
-      if (view !== "board") params.set("view", view)
-      return `/pipelines?${params.toString()}`
+    pipelines: '/pipelines',
+    pipeline: (
+      pipelineId: string,
+      view: 'board' | 'list' | 'sheet' = 'board'
+    ) => {
+      const params = new URLSearchParams({ pipeline: pipelineId });
+      if (view !== 'board') params.set('view', view);
+      return `/pipelines?${params.toString()}`;
     },
-    appointments: "/appointments",
-    catalog: "/catalog",
-    broadcasts: "/broadcasts",
-    templates: "/templates",
-    newBroadcast: "/broadcasts/new",
+    appointments: '/appointments',
+    catalog: '/catalog',
+    broadcasts: '/broadcasts',
+    templates: '/templates',
+    newBroadcast: '/broadcasts/new',
     broadcast: (broadcastId: string) => `/broadcasts/${segment(broadcastId)}`,
-    automations: "/automations",
-    newAutomation: "/automations/new",
-    automation: (automationId: string) => `/automations/${segment(automationId)}`,
-    automationLogs: (automationId: string) => `/automations/${segment(automationId)}/logs`,
-    flows: "/flows",
-    newFlow: "/flows?create=1",
+    automations: '/automations',
+    newAutomation: '/automations/new',
+    automation: (automationId: string) =>
+      `/automations/${segment(automationId)}`,
+    automationLogs: (automationId: string) =>
+      `/automations/${segment(automationId)}/logs`,
+    flows: '/flows',
+    newFlow: '/flows?create=1',
     flow: (flowId: string) => `/flows/${segment(flowId)}`,
     flowRuns: (flowId: string) => `/flows/${segment(flowId)}/runs`,
-    agents: "/agents",
-    notifications: "/notifications",
-    settings: "/settings",
+    agents: '/agents',
+    notifications: '/notifications',
+    settings: '/settings',
     invite: (token: string) => `/join/${segment(token)}`,
   },
   api: {
@@ -45,9 +50,9 @@ export const routes = {
     // Express (server/) is legacy/local-only: the old `/api/service/...`
     // proxy hop was removed so requests go browser -> Next.js -> Supabase
     // with no extra network hop. `account` maps to `/api/account`, etc.
-    service: (path: string) => `/api/${path.replace(/^\/+/, "")}`,
+    service: (path: string) => `/api/${path.replace(/^\/+/, '')}`,
   },
-} as const
+} as const;
 
 export const canonicalAppRoutes = [
   routes.app.dashboard,
@@ -65,15 +70,17 @@ export const canonicalAppRoutes = [
   routes.app.agents,
   routes.app.notifications,
   routes.app.settings,
-] as const
+] as const;
 
 export const authRouteSet = new Set<string>([
   routes.auth.login,
   routes.auth.signup,
   routes.auth.forgotPassword,
   routes.auth.resetPassword,
-])
+]);
 
 export function isCanonicalAppPath(pathname: string) {
-  return canonicalAppRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+  return canonicalAppRoutes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
 }

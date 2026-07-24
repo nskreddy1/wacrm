@@ -38,7 +38,8 @@ export function SettingsRail({
   // the rail is a static column, so skip.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (window.matchMedia(`(min-width: ${RAIL_DESKTOP_MIN_PX}px)`).matches) return;
+    if (window.matchMedia(`(min-width: ${RAIL_DESKTOP_MIN_PX}px)`).matches)
+      return;
     activeRef.current?.scrollIntoView({
       inline: 'center',
       block: 'nearest',
@@ -50,16 +51,16 @@ export function SettingsRail({
     <nav
       aria-label="Settings sections"
       className={cn(
-        'flex gap-1 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-        'border-b border-border',
-        'lg:sticky lg:top-0 lg:flex-col lg:overflow-visible lg:border-b-0 lg:pb-0',
+        'flex [scrollbar-width:none] gap-1 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden',
+        'border-border border-b',
+        'lg:sticky lg:top-0 lg:flex-col lg:overflow-visible lg:border-b-0 lg:pb-0'
       )}
     >
       {/* Bigin-style rail: plain text items (no icons), sentence-case
           semibold group headings — typography carries the hierarchy. */}
       {RAIL_GROUPS.map(({ label, group }) => {
         const items = SETTINGS_SECTIONS.filter(
-          (s) => SECTION_META[s].group === group,
+          (s) => SECTION_META[s].group === group
         );
         return (
           <div
@@ -67,7 +68,7 @@ export function SettingsRail({
             className="flex shrink-0 gap-1 lg:flex-col lg:gap-px"
           >
             {label ? (
-              <div className="hidden px-3 pt-5 pb-2 text-[15px] font-bold text-foreground lg:block">
+              <div className="text-foreground hidden px-3 pt-5 pb-2 text-[15px] font-bold lg:block">
                 {t(`groups.${group}`)}
               </div>
             ) : null}
@@ -84,8 +85,8 @@ export function SettingsRail({
                     'flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors',
                     'lg:w-full',
                     isActive
-                      ? 'bg-primary-soft font-medium text-primary'
-                      : 'text-foreground/80 hover:bg-muted hover:text-foreground',
+                      ? 'bg-primary-soft text-primary font-medium'
+                      : 'text-foreground/80 hover:bg-muted hover:text-foreground'
                   )}
                 >
                   <span className="flex-1">{t(`sections.${s}`)}</span>
@@ -93,7 +94,7 @@ export function SettingsRail({
                     <span
                       className={cn(
                         'hidden items-center gap-1.5 text-xs lg:inline-flex',
-                        isActive ? 'text-primary' : 'text-muted-foreground',
+                        isActive ? 'text-primary' : 'text-muted-foreground'
                       )}
                     >
                       {hints[s]}

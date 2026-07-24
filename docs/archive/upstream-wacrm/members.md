@@ -16,23 +16,23 @@ Multi-user requires migrations `017`–`020`. If you're self-hosting and upgradi
 
 Four roles, in a flat privilege ladder. Each one inherits everything the role below it can do.
 
-| Role | Can do |
-| --- | --- |
-| Owner | Everything. Exactly one per account. Plus the two owner-only powers: transfer ownership and delete the account. |
-| Admin | Manage members (invite / remove / change roles) and edit account-wide settings — WhatsApp config, templates, pipelines, tags, custom fields, the account name. |
-| Agent | Operational work: send messages, create/edit contacts, move deals, run broadcasts, build automations and flows. Cannot touch account settings or members. |
-| Viewer | Read-only across the whole app. Sees everything, changes nothing. |
+| Role   | Can do                                                                                                                                                         |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner  | Everything. Exactly one per account. Plus the two owner-only powers: transfer ownership and delete the account.                                                |
+| Admin  | Manage members (invite / remove / change roles) and edit account-wide settings — WhatsApp config, templates, pipelines, tags, custom fields, the account name. |
+| Agent  | Operational work: send messages, create/edit contacts, move deals, run broadcasts, build automations and flows. Cannot touch account settings or members.      |
+| Viewer | Read-only across the whole app. Sees everything, changes nothing.                                                                                              |
 
 ### Permission matrix
 
-| Capability | Viewer | Agent | Admin | Owner |
-| --- | --- | --- | --- | --- |
-| View all data (inbox, contacts, pipelines, …) | ✅ | ✅ | ✅ | ✅ |
-| Send messages, edit contacts/deals/broadcasts/automations/flows | — | ✅ | ✅ | ✅ |
-| Edit account settings (WhatsApp config, templates, pipelines, tags, account name) | — | — | ✅ | ✅ |
-| Manage members (invite, remove, change roles) | — | — | ✅ | ✅ |
-| Transfer ownership | — | — | — | ✅ |
-| Delete the account | — | — | — | ✅ |
+| Capability                                                                        | Viewer | Agent | Admin | Owner |
+| --------------------------------------------------------------------------------- | ------ | ----- | ----- | ----- |
+| View all data (inbox, contacts, pipelines, …)                                     | ✅     | ✅    | ✅    | ✅    |
+| Send messages, edit contacts/deals/broadcasts/automations/flows                   | —      | ✅    | ✅    | ✅    |
+| Edit account settings (WhatsApp config, templates, pipelines, tags, account name) | —      | —     | ✅    | ✅    |
+| Manage members (invite, remove, change roles)                                     | —      | —     | ✅    | ✅    |
+| Transfer ownership                                                                | —      | —     | —     | ✅    |
+| Delete the account                                                                | —      | —     | —     | ✅    |
 
 Per-user settings — your own name, avatar, and password — are always editable regardless of role. They're yours, not the account's.
 
