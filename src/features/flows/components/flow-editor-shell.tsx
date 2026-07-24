@@ -29,10 +29,9 @@ import { GitFork, List } from 'lucide-react';
 
 import { FlowBuilder } from './flow-builder';
 import { FlowCanvas } from './flow-canvas';
-import { FlowEditorProvider } from './flow-editor-state';
+import { FlowEditorProvider, useFlowEditor } from './flow-editor-state';
 import { EditorHeader } from './header';
 import { ValidationPanel } from './validation-panel';
-import { NODE_META, nodeColors, type NodeType } from './shared';
 import { cn } from '@/lib/utils';
 import type { FlowRow, FlowNodeRow } from '@/features/flows/lib/types';
 import { useTranslations } from 'next-intl';
@@ -48,11 +47,6 @@ const MOBILE_BREAKPOINT = '(max-width: 767px)';
 type View = 'canvas' | 'list';
 
 const STORAGE_KEY = 'wacrm.flowEditor.view';
-
-// Legend covers every node type, derived from NODE_META so a new type
-// can't silently go undocumented. NODE_META's key order already reads
-// the way a flow flows: start → talk → capture → branch → mutate → end.
-const LEGEND_TYPES = Object.keys(NODE_META) as NodeType[];
 
 interface Props {
   initialFlow: FlowRow;
@@ -127,9 +121,7 @@ export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
                 card already carries its own colored icon chip, which
                 is the legend. Keep the right side calm: just a step
                 count so the toolbar reads as status, not noise. */}
-            <span className="text-muted-foreground ml-auto text-[12px] tabular-nums">
-              {t('stepCount', { count: initialNodes.length })}
-            </span>
+            <LiveStepCount />
           </div>
         )}
 
@@ -150,6 +142,21 @@ export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
         </div>
       </div>
     </FlowEditorProvider>
+  );
+}
+
+/**
+ * Live step counter — reads authored state from the editor context so
+ * the number tracks adds/deletes immediately (the `initialNodes` prop
+ * only reflects the last load).
+ */
+function LiveStepCount() {
+  const t = useTranslations('Flows.builder');
+  const { state } = useFlowEditor();
+  return (
+    <span className="text-muted-foreground ml-auto text-[12px] tabular-nums">
+      {t('stepCount', { count: state.nodes.length })}
+    </span>
   );
 }
 

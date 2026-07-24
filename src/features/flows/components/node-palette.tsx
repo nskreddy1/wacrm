@@ -102,10 +102,10 @@ export function NodePalette({
   /** Flat row list — the keyboard cursor walks this. */
   const flatRows = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
 
-  // Clamp the cursor when the filter shrinks the list.
-  useEffect(() => {
-    setActiveIx((ix) => Math.min(ix, Math.max(0, flatRows.length - 1)));
-  }, [flatRows.length]);
+  // Clamp at read time instead of a setState-in-effect: when the
+  // filter shrinks the list the cursor stays valid on the same render
+  // pass, with no cascading re-render.
+  const cursor = Math.min(activeIx, Math.max(0, flatRows.length - 1));
 
   const reset = useCallback(() => {
     setQuery('');
@@ -124,13 +124,13 @@ export function NodePalette({
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIx((ix) => Math.min(ix + 1, flatRows.length - 1));
+      setActiveIx(Math.min(cursor + 1, flatRows.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActiveIx((ix) => Math.max(ix - 1, 0));
+      setActiveIx(Math.max(cursor - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const row = flatRows[activeIx];
+      const row = flatRows[cursor];
       if (row) pick(row.type);
     }
   };
@@ -139,7 +139,7 @@ export function NodePalette({
   useEffect(() => {
     const el = listRef.current?.querySelector('[data-active="true"]');
     el?.scrollIntoView({ block: 'nearest' });
-  }, [activeIx]);
+  }, [cursor]);
 
   return (
     <Popover
@@ -171,8 +171,7 @@ export function NodePalette({
         <div className="border-border flex items-center gap-2 border-b px-3.5 py-2.5">
           <Search className="text-muted-foreground h-4 w-4 shrink-0" />
           <input
-            // eslint-disable-next-line jsx-a11y/no-autofocus -- the
-            // palette is a command-menu; focus belongs in the search.
+            // The palette is a command-menu; focus belongs in search.
             autoFocus
             value={query}
             onChange={(e) => {
@@ -207,7 +206,7 @@ export function NodePalette({
                 </p>
                 {group.rows.map((row) => {
                   const ix = flatRows.indexOf(row);
-                  const active = ix === activeIx;
+                  const active = ix === cursor;
                   return (
                     <button
                       key={row.type}

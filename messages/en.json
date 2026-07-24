@@ -1279,7 +1279,10 @@
       "weekdayWed": "Wednesday",
       "weekdayThu": "Thursday",
       "weekdayFri": "Friday",
-      "weekdaySat": "Saturday"
+      "weekdaySat": "Saturday",
+      "stepCount": "{count, plural, one {# step} other {# steps}}",
+      "searchNodes": "Search steps...",
+      "noNodesMatch": "No steps match your search"
     },
     "validation": {
       "noIssues": "No issues. Ready to activate.",
