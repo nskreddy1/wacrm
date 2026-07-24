@@ -2,7 +2,10 @@ import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/features/flows/lib/admin-client';
 import { resolveFallbackPolicy } from '@/features/flows/lib/fallback';
-import { resumeWaitingRuns } from '@/features/flows/lib/engine';
+import {
+  resumeWaitingRuns,
+  startScheduledFlows,
+} from '@/features/flows/lib/engine';
 
 /**
  * Sweep abandoned active flow runs.
@@ -51,6 +54,10 @@ export async function GET(request: Request) {
   // before the stale sweep times it out.
   const { resumed } = await resumeWaitingRuns();
 
+  // Then start any scheduled flows whose HH:mm window covers this
+  // tick (dedupe inside guarantees one run per contact per period).
+  const { started: scheduled } = await startScheduledFlows();
+
   const admin = supabaseAdmin();
   const now = new Date();
 
@@ -68,7 +75,9 @@ export async function GET(request: Request) {
     console.error('[flows-cron] active-run scan failed:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  if (!runs?.length) return NextResponse.json({ swept: 0, resumed });
+  if (!runs?.length) {
+    return NextResponse.json({ swept: 0, resumed, scheduled });
+  }
 
   type Row = {
     id: string;

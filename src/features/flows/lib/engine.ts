@@ -1371,3 +1371,114 @@ export async function resumeWaitingRuns(): Promise<{ resumed: number }> {
   }
   return { resumed };
 }
+
+// ============================================================
+// Scheduled trigger — cron-tick starter (Workflows unification).
+// A `scheduled` flow fires when the tick lands inside its HH:mm
+// window (±10 min tolerance for slow crons). Audience: contacts
+// with recent conversation activity (last 24h), so a schedule
+// re-engages active threads instead of blasting the whole book.
+// Dedupe: one run per flow+contact per period (day/week).
+// ============================================================
+
+const SCHEDULE_WINDOW_MIN = 10;
+const SCHEDULE_AUDIENCE_CAP = 50;
+
+export async function startScheduledFlows(
+  now: Date = new Date()
+): Promise<{ started: number }> {
+  const db = supabaseAdmin();
+  let started = 0;
+  try {
+    const { data: flows, error } = await db
+      .from('flows')
+      .select('*')
+      .eq('status', 'active')
+      .eq('trigger_type', 'scheduled');
+    if (error || !flows?.length) return { started };
+
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+
+    for (const flowRaw of flows as FlowRow[]) {
+      if (!flowRaw.entry_node_id) continue;
+      const cfg = (flowRaw.trigger_config ?? {}) as {
+        frequency?: string;
+        hour?: number;
+        minute?: number;
+        weekday?: number;
+      };
+      if (typeof cfg.hour !== 'number' || typeof cfg.minute !== 'number') {
+        continue;
+      }
+      if (cfg.frequency === 'weekly' && now.getDay() !== (cfg.weekday ?? 1)) {
+        continue;
+      }
+      const target = cfg.hour * 60 + cfg.minute;
+      // Fire only within [target, target + window) — late ticks catch
+      // up, early ones don't pre-fire.
+      if (nowMin < target || nowMin >= target + SCHEDULE_WINDOW_MIN) continue;
+
+      // Period start for dedupe: today 00:00 (daily) or 6 days back
+      // (weekly) — one run per flow+contact per period.
+      const periodStart = new Date(now);
+      periodStart.setHours(0, 0, 0, 0);
+      if (cfg.frequency === 'weekly') {
+        periodStart.setDate(periodStart.getDate() - 6);
+      }
+
+      // Audience: recently-active conversations for this account.
+      const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString();
+      const { data: convos } = await db
+        .from('conversations')
+        .select('id, contact_id')
+        .eq('account_id', flowRaw.account_id)
+        .gte('last_message_at', dayAgo)
+        .order('last_message_at', { ascending: false })
+        .limit(SCHEDULE_AUDIENCE_CAP);
+      if (!convos?.length) continue;
+
+      // One query for all already-started contacts this period.
+      const contactIds = convos
+        .map((c) => c.contact_id as string)
+        .filter(Boolean);
+      const { data: prior } = await db
+        .from('flow_runs')
+        .select('contact_id')
+        .eq('flow_id', flowRaw.id)
+        .gte('started_at', periodStart.toISOString())
+        .in('contact_id', contactIds);
+      const alreadyRan = new Set(
+        (prior ?? []).map((r) => r.contact_id as string)
+      );
+
+      const nodes = await loadAllNodes(db, flowRaw.id);
+      for (const convo of convos) {
+        const contactId = convo.contact_id as string;
+        if (!contactId || alreadyRan.has(contactId)) continue;
+        const result = await startNewRun(
+          db,
+          flowRaw,
+          {
+            accountId: flowRaw.account_id,
+            userId: flowRaw.user_id,
+            contactId,
+            conversationId: convo.id as string,
+            message: {
+              kind: 'text',
+              text: '',
+              meta_message_id: `sched:${flowRaw.id}:${crypto.randomUUID()}`,
+            },
+          },
+          nodes
+        );
+        if (result.consumed) started += 1;
+      }
+    }
+  } catch (err) {
+    console.error(
+      '[flows] startScheduledFlows threw:',
+      err instanceof Error ? err.message : err
+    );
+  }
+  return { started };
+}
