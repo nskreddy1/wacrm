@@ -138,7 +138,14 @@ export interface CollectInputNodeConfig {
 
 export type ConditionOperator = 'equals' | 'contains' | 'present' | 'absent';
 
-export type ConditionSubject = 'var' | 'tag' | 'contact_field';
+export type ConditionSubject =
+  | 'var'
+  | 'tag'
+  | 'contact_field'
+  /** The triggering message text (stored in vars.__message_text). */
+  | 'message_content'
+  /** subject_key is "HH:mm-HH:mm"; true when now falls inside. */
+  | 'time_of_day';
 
 /**
  * Routes the run based on a predicate over the contact's tags,
@@ -169,6 +176,83 @@ export interface SetTagNodeConfig {
   next_node_key: string;
 }
 
+// ============================================================
+// Absorbed automation actions (Workflows unification).
+// Each was previously an automation step_type; they now run as
+// first-class flow nodes so one engine covers every automation.
+// All are auto-advancing except `wait`, which suspends the run
+// until the cron sweep wakes it at `wake_at`.
+// ============================================================
+
+/** Sends an approved WhatsApp/Twilio template, then advances. */
+export interface SendTemplateNodeConfig {
+  template_name: string;
+  language: string;
+  /** Positional params keyed "1","2",… — emitted in numeric order. */
+  variables?: Record<string, string>;
+  /** 'meta' (default) or 'twilio'. */
+  template_provider?: string;
+  next_node_key: string;
+}
+
+/** Writes a built-in or custom contact field, then advances. */
+export interface UpdateContactFieldNodeConfig {
+  /** 'name' | 'email' | 'company' or 'custom:<custom_field_id>'. */
+  field: string;
+  /** Interpolates {{vars.X}} and {{message.text}}. */
+  value: string;
+  next_node_key: string;
+}
+
+/** Assigns the run's conversation to an agent, then advances. */
+export interface AssignConversationNodeConfig {
+  mode: 'specific' | 'round_robin';
+  /** Required when mode==='specific'. */
+  agent_id?: string;
+  next_node_key: string;
+}
+
+/** Creates a deal in a pipeline stage, then advances. */
+export interface CreateDealNodeConfig {
+  pipeline_id: string;
+  stage_id: string;
+  /** Interpolates {{vars.X}} and {{message.text}}. */
+  title: string;
+  value?: number;
+  next_node_key: string;
+}
+
+/**
+ * POSTs JSON to an external URL (SSRF-guarded, no redirects,
+ * 10s timeout), then advances. `connection_id` optionally
+ * references a stored workflow connection whose secret header is
+ * injected server-side — credentials never live in node config.
+ */
+export interface SendWebhookNodeConfig {
+  url: string;
+  headers?: Record<string, string>;
+  /** Interpolated body; defaults to the run context JSON. */
+  body_template?: string;
+  /** Optional workflow_connections.id for stored auth. */
+  connection_id?: string;
+  next_node_key: string;
+}
+
+/** Closes the run's conversation, then advances. */
+export interface CloseConversationNodeConfig {
+  next_node_key: string;
+}
+
+/**
+ * Suspends the run for a fixed duration. The cron sweep resumes
+ * it at `flow_runs.wake_at` and advances to `next_node_key`.
+ */
+export interface WaitNodeConfig {
+  amount: number;
+  unit: 'minutes' | 'hours' | 'days';
+  next_node_key: string;
+}
+
 // Terminal nodes carry no config — they just stop the run.
 export type EndNodeConfig = Record<string, never>;
 
@@ -189,6 +273,13 @@ export type FlowNodeConfig =
   | { node_type: 'collect_input'; config: CollectInputNodeConfig }
   | { node_type: 'condition'; config: ConditionNodeConfig }
   | { node_type: 'set_tag'; config: SetTagNodeConfig }
+  | { node_type: 'send_template'; config: SendTemplateNodeConfig }
+  | { node_type: 'update_contact_field'; config: UpdateContactFieldNodeConfig }
+  | { node_type: 'assign_conversation'; config: AssignConversationNodeConfig }
+  | { node_type: 'create_deal'; config: CreateDealNodeConfig }
+  | { node_type: 'send_webhook'; config: SendWebhookNodeConfig }
+  | { node_type: 'close_conversation'; config: CloseConversationNodeConfig }
+  | { node_type: 'wait'; config: WaitNodeConfig }
   | { node_type: 'handoff'; config: HandoffNodeConfig }
   | { node_type: 'end'; config: EndNodeConfig };
 
@@ -210,10 +301,66 @@ export interface KeywordTriggerConfig {
 // the no-empty-object-type lint rule.
 export type FirstInboundTriggerConfig = Record<string, never>;
 
+// ============================================================
+// Absorbed event triggers (Workflows unification). These start a
+// flow run from an app event rather than an inbound message. Runs
+// started this way execute action nodes immediately; if the graph
+// reaches a suspending node (buttons/list/collect_input) the run
+// parks and continues conversationally like any other flow.
+// ============================================================
+
+/** Fires when a contact gains a tag. Empty tag_ids = any tag. */
+export interface TagAddedTriggerConfig {
+  tag_ids?: string[];
+}
+
+/** Fires when a conversation is assigned. Empty = any agent. */
+export interface ConversationAssignedTriggerConfig {
+  agent_ids?: string[];
+}
+
+/** Fires when the customer taps a button/list row with one of these ids. */
+export interface InteractiveReplyTriggerConfig {
+  reply_ids: string[];
+}
+
+/**
+ * Fires on a schedule evaluated by the cron sweep. `hour`/`minute`
+ * are in the account's local sense (server TZ in v1); `frequency`
+ * bounds how often a contactless run may start.
+ */
+export interface ScheduleTriggerConfig {
+  frequency: 'daily' | 'weekly';
+  hour: number;
+  minute: number;
+  /** 0 (Sunday) – 6; only for weekly. */
+  weekday?: number;
+}
+
+export type FlowTriggerType =
+  | 'keyword'
+  | 'first_inbound_message'
+  | 'manual'
+  | 'new_message_received'
+  | 'new_contact_created'
+  | 'tag_added'
+  | 'conversation_assigned'
+  | 'interactive_reply'
+  | 'scheduled';
+
 export type FlowTriggerConfig =
   | { trigger_type: 'keyword'; config: KeywordTriggerConfig }
   | { trigger_type: 'first_inbound_message'; config: FirstInboundTriggerConfig }
-  | { trigger_type: 'manual'; config: Record<string, never> };
+  | { trigger_type: 'manual'; config: Record<string, never> }
+  | { trigger_type: 'new_message_received'; config: Record<string, never> }
+  | { trigger_type: 'new_contact_created'; config: Record<string, never> }
+  | { trigger_type: 'tag_added'; config: TagAddedTriggerConfig }
+  | {
+      trigger_type: 'conversation_assigned';
+      config: ConversationAssignedTriggerConfig;
+    }
+  | { trigger_type: 'interactive_reply'; config: InteractiveReplyTriggerConfig }
+  | { trigger_type: 'scheduled'; config: ScheduleTriggerConfig };
 
 // ============================================================
 // DB-row shapes (read by the engine via supabaseAdmin)
@@ -230,7 +377,7 @@ export interface FlowRow {
   name: string;
   description: string | null;
   status: 'draft' | 'active' | 'archived';
-  trigger_type: 'keyword' | 'first_inbound_message' | 'manual';
+  trigger_type: FlowTriggerType;
   trigger_config:
     KeywordTriggerConfig | FirstInboundTriggerConfig | Record<string, unknown>;
   entry_node_id: string | null;
@@ -263,6 +410,8 @@ export interface FlowRunRow {
   conversation_id: string | null;
   status:
     | 'active'
+    /** Parked by a `wait` node until wake_at; resumed by the cron sweep. */
+    | 'waiting'
     | 'completed'
     | 'handed_off'
     | 'timed_out'
@@ -270,6 +419,11 @@ export interface FlowRunRow {
     | 'failed';
   current_node_key: string | null;
   last_prompt_message_id: string | null;
+  /**
+   * Set by the `wait` node: the run is parked ('waiting' status) until
+   * the cron sweep sees wake_at <= now and resumes it. NULL otherwise.
+   */
+  wake_at?: string | null;
   vars: Record<string, unknown>;
   reprompt_count: number;
   started_at: string;
