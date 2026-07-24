@@ -8,6 +8,7 @@ import {
   normalizeConversations,
 } from "@/features/inbox/lib/conversations";
 import { cn } from "@/lib/utils";
+import { RemoteImage } from "@/components/shared/remote-image";
 import type { Conversation, ConversationStatus, Tag } from "@/types";
 import { Search, ChevronDown, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -476,7 +477,7 @@ function ConversationItem({
       {/* Avatar */}
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
         {contact?.avatar_url ? (
-          <img
+          <RemoteImage
             src={contact.avatar_url}
             alt={displayName}
             className="h-10 w-10 rounded-full object-cover"

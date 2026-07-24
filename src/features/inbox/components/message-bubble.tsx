@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { RemoteImage } from "@/components/shared/remote-image";
 import type { Message, MessageReaction } from "@/types";
 import {
   Clock,
@@ -110,7 +111,7 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
   }
 
   return (
-    <img
+    <RemoteImage
       src={src ?? ""}
       alt={alt}
       className="max-h-64 max-w-60 rounded-lg object-cover"
