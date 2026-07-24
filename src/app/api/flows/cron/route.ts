@@ -124,5 +124,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ swept, resumed });
+  return NextResponse.json({ swept, resumed, scheduled });
 }
