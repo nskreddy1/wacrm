@@ -442,49 +442,14 @@ export function WorkspaceProfilesTab({
             </RecordSection>
 
             <RecordSection id="profile-permissions" title="Permissions">
-              {PERMISSION_GROUPS.map((group) => {
-                const slugs = group.permissions.map((p) => p.slug);
-                const onCount = slugs.filter((s) =>
-                  editor.permissions.has(s)
-                ).length;
-                const allOn = onCount === slugs.length;
-                return (
-                  <fieldset key={group.key} className="space-y-2.5">
-                    <legend className="text-foreground flex w-full items-center justify-between text-sm font-semibold">
-                      {group.label}
-                      <button
-                        type="button"
-                        className="text-primary text-xs font-medium hover:underline"
-                        onClick={() => toggleGroup(slugs, allOn)}
-                      >
-                        {allOn ? 'Clear all' : 'Select all'}
-                      </button>
-                    </legend>
-                    <div className="space-y-2 rounded-lg border p-3">
-                      {group.permissions.map((perm) => (
-                        <label
-                          key={perm.slug}
-                          className="flex cursor-pointer items-start gap-2.5"
-                        >
-                          <Checkbox
-                            checked={editor.permissions.has(perm.slug)}
-                            onCheckedChange={() => togglePermission(perm.slug)}
-                            className="mt-0.5"
-                          />
-                          <span className="min-w-0">
-                            <span className="text-foreground block text-sm font-medium">
-                              {perm.label}
-                            </span>
-                            <span className="text-muted-foreground block text-xs leading-relaxed">
-                              {perm.description}
-                            </span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-                );
-              })}
+              <ProfilePermissionEditor
+                permissions={editor.permissions}
+                onChange={(next) =>
+                  setEditor((prev) =>
+                    prev ? { ...prev, permissions: next } : prev
+                  )
+                }
+              />
             </RecordSection>
           </>
         )}
