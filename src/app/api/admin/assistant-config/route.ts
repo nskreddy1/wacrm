@@ -4,6 +4,7 @@ import { toErrorResponse } from '@/features/auth/lib/account';
 import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client';
 import { encrypt } from '@/features/whatsapp/lib/encryption';
 import {
+  ASSISTANT_DEFAULT_MAX_OUTPUT_TOKENS,
   ASSISTANT_DEFAULT_MODEL,
   ASSISTANT_DEFAULT_SYSTEM_PROMPT,
   ASSISTANT_PROVIDERS,
@@ -189,6 +190,8 @@ export async function PATCH(request: Request) {
         api_key: encryptedKey ?? '',
         base_url: baseUrl,
         system_prompt: systemPrompt,
+        temperature,
+        max_output_tokens: maxOutputTokens,
         enabled,
       },
       updated_at: new Date().toISOString(),

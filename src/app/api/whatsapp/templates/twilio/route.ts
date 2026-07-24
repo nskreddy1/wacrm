@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
 import { channelAdmin } from '@/features/channels/lib/admin-client';
-import { decryptProviderCredentials } from '@/features/channels/lib/credentials';
+import { resolveTwilioCredentials } from '@/features/channels/lib/twilio-account';
 import {
   createTwilioContent,
   listTwilioContentAndApprovals,
@@ -28,28 +28,16 @@ const createSchema = z.object({
     .optional(),
 });
 
+/**
+ * Twilio credentials are account-scoped: the Content API works with
+ * ANY enabled Twilio connection (SMS or WhatsApp) on this workspace.
+ * resolveTwilioCredentials prefers the WhatsApp row but falls back
+ * to the SMS row, fixing the "connected for SMS but WhatsApp
+ * templates say not connected" inconsistency.
+ */
 async function connectionFor(accountId: string) {
-  const { data, error } = await channelAdmin()
-    .from('channel_connections')
-    .select('*')
-    .eq('account_id', accountId)
-    .eq('channel', 'whatsapp')
-    .eq('provider', 'twilio')
-    .eq('is_enabled', true)
-    .order('is_primary', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data)
-    throw new Error(
-      'Connect and enable a Twilio WhatsApp channel before managing Twilio templates.'
-    );
-  const credentials = decryptProviderCredentials(
-    data as ChannelConnection & { credentials_encrypted?: string }
-  );
-  if (credentials.provider !== 'twilio')
-    throw new Error('Twilio credentials are unavailable.');
-  return credentials.value;
+  const resolved = await resolveTwilioCredentials(accountId, 'whatsapp');
+  return resolved.credentials;
 }
 
 function approvalStatus(value?: string) {
