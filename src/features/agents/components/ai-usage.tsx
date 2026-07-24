@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { BarChart3, Bot, PencilLine } from 'lucide-react';
 import { useAuth } from '@/features/auth/hooks/use-auth';
-import { canEditSettings } from '@/features/auth/lib/roles';
 import {
   Card,
   CardContent,

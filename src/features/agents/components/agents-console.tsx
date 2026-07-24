@@ -16,7 +16,6 @@ import {
   Loader2,
   MessageCircleReply,
   Plus,
-  RefreshCw,
   Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'

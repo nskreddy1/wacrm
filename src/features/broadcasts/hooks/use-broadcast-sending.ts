@@ -500,7 +500,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
       // ── Step 1: Resolve audience contacts ────────────────────��────
       setProgress(5);
-      const { contacts, externalParams } = await resolveAudience(
+      const { contacts } = await resolveAudience(
         payload.audience,
       );
 
