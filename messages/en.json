@@ -1045,7 +1045,13 @@
       "startClassic": "Prefer a simple trigger-action rule?",
       "createClassic": "Create classic automation",
       "filterLabel": "Filter workflows",
-      "ruleToggleError": "Couldn't update the rule."
+      "ruleToggleError": "Couldn't update the rule.",
+      "triggerAnyMessage": "Runs on any inbound message",
+      "triggerNewContact": "Runs when a new contact is created",
+      "triggerTagAdded": "Runs when a tag is added",
+      "triggerAssigned": "Runs when a conversation is assigned",
+      "triggerInteractive": "Runs on a button or list reply",
+      "triggerScheduled": "Runs on a schedule"
     },
     "edit": {
       "notFound": "Flow not found.",
@@ -1183,7 +1189,8 @@
       "categories": {
         "messaging": "Messaging",
         "logic": "Logic & data",
-        "flow": "Flow control"
+        "flow": "Flow control",
+        "actions": "CRM actions"
       },
       "nodes": {
         "start": {
@@ -1225,6 +1232,34 @@
         "end": {
           "label": "End",
           "blurb": "Ends the flow"
+        },
+        "send_template": {
+          "label": "Send template",
+          "blurb": "Sends an approved WhatsApp template"
+        },
+        "update_contact_field": {
+          "label": "Update contact",
+          "blurb": "Writes a contact field"
+        },
+        "assign_conversation": {
+          "label": "Assign conversation",
+          "blurb": "Routes the chat to an agent"
+        },
+        "create_deal": {
+          "label": "Create deal",
+          "blurb": "Adds a deal to a pipeline stage"
+        },
+        "send_webhook": {
+          "label": "Call webhook",
+          "blurb": "POSTs data to an external URL"
+        },
+        "close_conversation": {
+          "label": "Close conversation",
+          "blurb": "Marks the conversation closed"
+        },
+        "wait": {
+          "label": "Wait",
+          "blurb": "Pauses the flow for a duration"
         }
       },
       "triggerAnyMessageTitle": "Any inbound message",

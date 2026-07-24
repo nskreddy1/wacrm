@@ -18,14 +18,7 @@ import {
   FileText,
 } from 'lucide-react';
 
-import {
-  type FlowRow,
-  type UnifiedFilter,
-  filterUnifiedItems,
-  mergeUnifiedItems,
-} from '@/features/flows/components/unified-items';
-import { AutomationRuleCard } from '@/features/flows/components/automation-rule-card';
-import type { Automation } from '@/types';
+import type { FlowRow } from '@/features/flows/lib/types';
 
 import { useTranslations } from 'next-intl';
 import { useCan } from '@/features/auth/hooks/use-can';
@@ -46,11 +39,12 @@ import { pageContainerClassName } from '@/components/layout/page-container';
 import { CardGridSkeleton } from '@/components/ui/loading-skeletons';
 
 /**
- * Flows list page.
+ * Workflows list page.
  *
- * Open to every authenticated user. Flows is in soft-GA — the "Beta"
- * chip in the header is the only remaining signal that the surface
- * is new. The previous per-account beta gate was removed in PR #134.
+ * The single automation surface: every trigger (keyword, first
+ * message, app events, schedule) and every action (messages, CRM
+ * writes, webhooks, waits) lives in the canvas flow builder. The
+ * legacy Automations module was absorbed into this engine.
  */
 
 const STATUS_LABELS = (
@@ -87,8 +81,6 @@ export default function FlowsPage() {
   const canCreate = useCan('send-messages');
   const t = useTranslations('Flows.list');
   const [flows, setFlows] = useState<FlowRow[]>([]);
-  const [automations, setAutomations] = useState<Automation[]>([]);
-  const [filter, setFilter] = useState<UnifiedFilter>('all');
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -99,12 +91,9 @@ export default function FlowsPage() {
     let cancelled = false;
     (async () => {
       try {
-        // Unified Workflows surface: canvas flows + classic automation
-        // rules load in parallel and merge into one grid.
-        const [flowsRes, tmplRes, autoRes] = await Promise.all([
+        const [flowsRes, tmplRes] = await Promise.all([
           fetch('/api/flows'),
           fetch('/api/flows/templates'),
-          fetch('/api/automations'),
         ]);
         if (!flowsRes.ok) {
           throw new Error(`Failed to load flows: ${flowsRes.status}`);
@@ -119,17 +108,6 @@ export default function FlowsPage() {
           };
           if (!cancelled) setTemplates(tmplJson.templates ?? []);
         }
-        // Classic rules are additive — a failure here must not blank
-        // the whole Workflows page.
-        if (autoRes.ok) {
-          const autoJson = (await autoRes.json()) as {
-            automations?: Automation[];
-            data?: Automation[];
-          };
-          if (!cancelled) {
-            setAutomations(autoJson.automations ?? autoJson.data ?? []);
-          }
-        }
       } catch (err) {
         if (!cancelled) {
           console.error(err);
@@ -143,60 +121,6 @@ export default function FlowsPage() {
       cancelled = true;
     };
   }, [t]);
-
-  async function handleToggleAutomation(a: Automation, next: boolean) {
-    // Optimistic flip — revert on failure.
-    setAutomations((prev) =>
-      prev.map((x) => (x.id === a.id ? { ...x, is_active: next } : x))
-    );
-    try {
-      const res = await fetch(`/api/automations/${a.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: next }),
-      });
-      if (!res.ok) throw new Error(`Toggle failed: ${res.status}`);
-    } catch (err) {
-      console.error(err);
-      setAutomations((prev) =>
-        prev.map((x) => (x.id === a.id ? { ...x, is_active: !next } : x))
-      );
-      toast.error(t('ruleToggleError'));
-    }
-  }
-
-  async function handleDuplicateAutomation(a: Automation) {
-    try {
-      const res = await fetch(`/api/automations/${a.id}/duplicate`, {
-        method: 'POST',
-      });
-      if (!res.ok) throw new Error(`Duplicate failed: ${res.status}`);
-      const json = (await res.json()) as { automation?: Automation };
-      if (json.automation) {
-        setAutomations((prev) => [json.automation as Automation, ...prev]);
-        toast.success(t('ruleDuplicated'));
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error(t('ruleDuplicateError'));
-    }
-  }
-
-  async function handleDeleteAutomation(a: Automation) {
-    const yes = window.confirm(t('deleteConfirm', { name: a.name }));
-    if (!yes) return;
-    try {
-      const res = await fetch(`/api/automations/${a.id}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-      setAutomations((prev) => prev.filter((x) => x.id !== a.id));
-      toast.success(t('deleteSuccess'));
-    } catch (err) {
-      console.error(err);
-      toast.error(t('deleteError'));
-    }
-  }
 
   async function handleCreate() {
     if (!newName.trim()) return;
@@ -293,79 +217,24 @@ export default function FlowsPage() {
         </GatedButton>
       </header>
 
-      {flows.length === 0 && automations.length === 0 ? (
+      {flows.length === 0 ? (
         <EmptyState
           onCreate={() => setCreateOpen(true)}
           canCreate={canCreate}
           t={t}
         />
       ) : (
-        <>
-          {automations.length > 0 && (
-            <div
-              role="tablist"
-              aria-label={t('filterLabel')}
-              className="border-border bg-muted/50 inline-flex items-center gap-1 rounded-lg border p-1"
-            >
-              {(
-                [
-                  ['all', t('filterAll')],
-                  ['flows', t('filterFlows')],
-                  ['rules', t('filterRules')],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  role="tab"
-                  type="button"
-                  aria-selected={filter === key}
-                  onClick={() => setFilter(key)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                    filter === key
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filterUnifiedItems(
-              mergeUnifiedItems(flows, automations),
-              filter
-            ).map((item) =>
-              item.kind === 'flow' ? (
-                <FlowCard
-                  key={`flow-${item.flow.id}`}
-                  flow={item.flow}
-                  onEdit={() => router.push(`/flows/${item.flow.id}`)}
-                  onDelete={() => handleDelete(item.flow)}
-                  t={t}
-                />
-              ) : (
-                <AutomationRuleCard
-                  key={`rule-${item.automation.id}`}
-                  automation={item.automation}
-                  onToggle={(next) =>
-                    handleToggleAutomation(item.automation, next)
-                  }
-                  onEdit={() =>
-                    router.push(`/automations/${item.automation.id}`)
-                  }
-                  onLogs={() =>
-                    router.push(`/automations/${item.automation.id}/logs`)
-                  }
-                  onDuplicate={() => handleDuplicateAutomation(item.automation)}
-                  onDelete={() => handleDeleteAutomation(item.automation)}
-                  t={t}
-                />
-              )
-            )}
-          </div>
-        </>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {flows.map((flow) => (
+            <FlowCard
+              key={flow.id}
+              flow={flow}
+              onEdit={() => router.push(`/flows/${flow.id}`)}
+              onDelete={() => handleDelete(flow)}
+              t={t}
+            />
+          ))}
+        </div>
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -553,19 +422,38 @@ function FlowCard({
   );
 }
 
+/**
+ * One-line trigger summary for the card. Covers every trigger the
+ * unified Workflows engine supports; unknown/future types fall back
+ * to the manual label rather than crashing the list.
+ */
 function describeTrigger(
   flow: FlowRow,
   t: ReturnType<typeof useTranslations>
 ): string {
-  if (flow.trigger_type === 'keyword') {
-    const keywords = Array.isArray(flow.trigger_config.keywords)
-      ? (flow.trigger_config.keywords as string[])
-      : [];
-    if (keywords.length === 0) return t('triggerKeywordNone');
-    return t('triggerKeyword', { keywords: keywords.join(', ') });
+  switch (flow.trigger_type) {
+    case 'keyword': {
+      const keywords = Array.isArray(flow.trigger_config.keywords)
+        ? (flow.trigger_config.keywords as string[])
+        : [];
+      if (keywords.length === 0) return t('triggerKeywordNone');
+      return t('triggerKeyword', { keywords: keywords.join(', ') });
+    }
+    case 'first_inbound_message':
+      return t('triggerFirstInbound');
+    case 'new_message_received':
+      return t('triggerAnyMessage');
+    case 'new_contact_created':
+      return t('triggerNewContact');
+    case 'tag_added':
+      return t('triggerTagAdded');
+    case 'conversation_assigned':
+      return t('triggerAssigned');
+    case 'interactive_reply':
+      return t('triggerInteractive');
+    case 'scheduled':
+      return t('triggerScheduled');
+    default:
+      return t('triggerManual');
   }
-  if (flow.trigger_type === 'first_inbound_message') {
-    return t('triggerFirstInbound');
-  }
-  return t('triggerManual');
 }
