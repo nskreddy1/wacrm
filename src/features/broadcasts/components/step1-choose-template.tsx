@@ -75,7 +75,7 @@ export function Step1ChooseTemplate({
     return () => {
       cancelled = true;
     };
-  }, [channel]);
+  }, [channel, t]);
 
   if (loading) {
     return (

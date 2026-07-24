@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Broadcast } from '@/types';
@@ -43,7 +43,7 @@ export default function BroadcastsPage() {
   const [query, setQuery] = useState('');
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  async function fetchBroadcasts() {
+  const fetchBroadcasts = useCallback(async () => {
     setError(null);
     try {
       const supabase = createClient();
@@ -58,11 +58,11 @@ export default function BroadcastsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [t]);
 
   useEffect(() => {
     fetchBroadcasts();
-  }, []);
+  }, [fetchBroadcasts]);
 
   const anySending = useMemo(
     () => broadcasts.some((broadcast) => broadcast.status === 'sending'),
@@ -95,7 +95,7 @@ export default function BroadcastsPage() {
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [anySending]);
+  }, [anySending, fetchBroadcasts]);
 
   const filteredBroadcasts = useMemo(() => {
     const normalized = query.trim().toLowerCase();

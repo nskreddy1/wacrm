@@ -197,7 +197,7 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     } finally {
       hydratingConvIdsRef.current.delete(convId);
     }
-  }, []);
+  }, [belongsHere]);
 
   // Check this channel's connection status on mount.
   useEffect(() => {

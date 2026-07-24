@@ -31,6 +31,7 @@ export interface AssistantToolContext {
 type CountQuery = {
   eq(column: string, value: string): CountQuery
   gte(column: string, value: string): CountQuery
+  in(column: string, values: string[]): CountQuery
   then<T>(
     onfulfilled: (value: { count: number | null; error: unknown }) => T,
   ): Promise<T>
