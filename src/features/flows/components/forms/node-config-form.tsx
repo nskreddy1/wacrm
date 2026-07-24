@@ -45,6 +45,15 @@ import {
 } from '@/lib/storage/upload-media';
 import { slugify, type BuilderNode } from '../shared';
 import { NextNodeRow, NodeKeySelect, TextRow } from './fields';
+import {
+  AssignConversationForm,
+  CloseConversationForm,
+  CreateDealForm,
+  SendTemplateForm,
+  SendWebhookForm,
+  UpdateContactFieldForm,
+  WaitForm,
+} from './action-node-forms';
 
 interface NodeConfigFormProps {
   node: BuilderNode;
@@ -184,6 +193,79 @@ export function NodeConfigForm({
       return (
         <SetTagForm
           cfg={cfg as SetTagCfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+
+    // ---- Absorbed automation actions (Workflows unification) ----
+    // Shared props object keeps the seven dispatch branches terse.
+    case 'send_template':
+      return (
+        <SendTemplateForm
+          cfg={cfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+    case 'update_contact_field':
+      return (
+        <UpdateContactFieldForm
+          cfg={cfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+    case 'assign_conversation':
+      return (
+        <AssignConversationForm
+          cfg={cfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+    case 'create_deal':
+      return (
+        <CreateDealForm
+          cfg={cfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+    case 'send_webhook':
+      return (
+        <SendWebhookForm
+          cfg={cfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+    case 'close_conversation':
+      return (
+        <CloseConversationForm
+          cfg={cfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+    case 'wait':
+      return (
+        <WaitForm
+          cfg={cfg}
           allNodes={allNodes}
           currentKey={node.node_key}
           onUpdateConfig={onUpdateConfig}
