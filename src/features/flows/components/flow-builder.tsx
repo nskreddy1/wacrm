@@ -270,6 +270,47 @@ function KeywordsInput({
 // Trigger panel
 // ============================================================
 
+/**
+ * Trigger catalog — single source of truth for the picker. Message
+ * triggers start flows from inbound text; event triggers start them
+ * from app events (Workflows unification); schedule runs via cron.
+ */
+const TRIGGER_OPTIONS: {
+  value: BuilderState['trigger_type'];
+  labelKey: string;
+  /** Fresh config seeded when the user switches to this trigger. */
+  seed: Record<string, unknown>;
+}[] = [
+  { value: 'keyword', labelKey: 'triggerKeywordTitle', seed: { keywords: [] } },
+  {
+    value: 'first_inbound_message',
+    labelKey: 'triggerFirstInboundTitle',
+    seed: {},
+  },
+  {
+    value: 'new_message_received',
+    labelKey: 'triggerAnyMessageTitle',
+    seed: {},
+  },
+  {
+    value: 'new_contact_created',
+    labelKey: 'triggerNewContactTitle',
+    seed: {},
+  },
+  { value: 'tag_added', labelKey: 'triggerTagAddedTitle', seed: { tag_ids: [] } },
+  {
+    value: 'conversation_assigned',
+    labelKey: 'triggerAssignedTitle',
+    seed: { agent_ids: [] },
+  },
+  {
+    value: 'scheduled',
+    labelKey: 'triggerScheduledTitle',
+    seed: { frequency: 'daily', hour: 9, minute: 0 },
+  },
+  { value: 'manual', labelKey: 'triggerManualTitle', seed: {} },
+];
+
 function TriggerPanel({
   state,
   setState,
@@ -281,6 +322,12 @@ function TriggerPanel({
   triggerIssues: ValidationIssue[];
   t: ReturnType<typeof useTranslations>;
 }) {
+  const patchConfig = (patch: Record<string, unknown>) =>
+    setState((s) => ({
+      ...s,
+      trigger_config: { ...s.trigger_config, ...patch },
+    }));
+
   return (
     <section className="border-border bg-card rounded-lg border p-4">
       <h2 className="text-foreground mb-3 text-sm font-semibold">
@@ -293,26 +340,24 @@ function TriggerPanel({
           </label>
           <Select
             value={state.trigger_type}
-            onValueChange={(v) =>
+            onValueChange={(v) => {
+              const opt = TRIGGER_OPTIONS.find((o) => o.value === v);
               setState((s) => ({
                 ...s,
                 trigger_type: v as BuilderState['trigger_type'],
-                trigger_config:
-                  v === 'keyword' ? { keywords: [] } : v === 'manual' ? {} : {},
-              }))
-            }
+                trigger_config: { ...(opt?.seed ?? {}) },
+              }));
+            }}
           >
             <SelectTrigger className="bg-muted">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="keyword">
-                {t('triggerKeywordTitle')}
-              </SelectItem>
-              <SelectItem value="first_inbound_message">
-                {t('triggerFirstInboundTitle')}
-              </SelectItem>
-              <SelectItem value="manual">{t('triggerManualTitle')}</SelectItem>
+              {TRIGGER_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {t(o.labelKey)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -327,17 +372,25 @@ function TriggerPanel({
                   ? (state.trigger_config.keywords as string[])
                   : []
               }
-              onChange={(keywords) =>
-                setState((s) => ({
-                  ...s,
-                  trigger_config: { ...s.trigger_config, keywords },
-                }))
-              }
+              onChange={(keywords) => patchConfig({ keywords })}
               t={t}
             />
           </div>
         )}
+        {state.trigger_type === 'scheduled' && (
+          <ScheduleTriggerFields
+            config={state.trigger_config}
+            onPatch={patchConfig}
+            t={t}
+          />
+        )}
       </div>
+      {(state.trigger_type === 'tag_added' ||
+        state.trigger_type === 'conversation_assigned') && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          {t('triggerFilterAnyHint')}
+        </p>
+      )}
       {triggerIssues.length > 0 && (
         <div className="mt-3 flex flex-col gap-1">
           {triggerIssues.map((i, ix) => (
@@ -348,6 +401,98 @@ function TriggerPanel({
     </section>
   );
 }
+
+/** Compact frequency/time fields for the scheduled trigger. */
+function ScheduleTriggerFields({
+  config,
+  onPatch,
+  t,
+}: {
+  config: Record<string, unknown>;
+  onPatch: (patch: Record<string, unknown>) => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const frequency = config.frequency === 'weekly' ? 'weekly' : 'daily';
+  const hour = typeof config.hour === 'number' ? config.hour : 9;
+  const minute = typeof config.minute === 'number' ? config.minute : 0;
+  const weekday = typeof config.weekday === 'number' ? config.weekday : 1;
+  const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <div>
+        <label className="text-muted-foreground mb-1 block text-xs">
+          {t('scheduleFrequencyLabel')}
+        </label>
+        <Select
+          value={frequency}
+          onValueChange={(v) =>
+            onPatch(
+              v === 'weekly'
+                ? { frequency: 'weekly', weekday }
+                : { frequency: 'daily', weekday: undefined }
+            )
+          }
+        >
+          <SelectTrigger className="bg-muted w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="daily">{t('scheduleDaily')}</SelectItem>
+            <SelectItem value="weekly">{t('scheduleWeekly')}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {frequency === 'weekly' && (
+        <div>
+          <label className="text-muted-foreground mb-1 block text-xs">
+            {t('scheduleWeekdayLabel')}
+          </label>
+          <Select
+            value={String(weekday)}
+            onValueChange={(v) => onPatch({ weekday: Number(v) })}
+          >
+            <SelectTrigger className="bg-muted w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WEEKDAY_KEYS.map((k, ix) => (
+                <SelectItem key={k} value={String(ix)}>
+                  {t(k)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <div>
+        <label className="text-muted-foreground mb-1 block text-xs">
+          {t('scheduleTimeLabel')}
+        </label>
+        <Input
+          type="time"
+          value={time}
+          onChange={(e) => {
+            const [h, m] = e.target.value.split(':').map(Number);
+            if (Number.isFinite(h) && Number.isFinite(m)) {
+              onPatch({ hour: h, minute: m });
+            }
+          }}
+          className="bg-muted w-28"
+        />
+      </div>
+    </div>
+  );
+}
+
+const WEEKDAY_KEYS = [
+  'weekdaySun',
+  'weekdayMon',
+  'weekdayTue',
+  'weekdayWed',
+  'weekdayThu',
+  'weekdayFri',
+  'weekdaySat',
+] as const;
 
 // ============================================================
 // Entry-node picker

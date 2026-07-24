@@ -1226,7 +1226,25 @@
           "label": "End",
           "blurb": "Ends the flow"
         }
-      }
+      },
+      "triggerAnyMessageTitle": "Any inbound message",
+      "triggerNewContactTitle": "New contact created",
+      "triggerTagAddedTitle": "Tag added to contact",
+      "triggerAssignedTitle": "Conversation assigned",
+      "triggerScheduledTitle": "On a schedule",
+      "triggerFilterAnyHint": "Fires for any tag/agent. Filters can be narrowed via the API trigger config.",
+      "scheduleFrequencyLabel": "Frequency",
+      "scheduleDaily": "Daily",
+      "scheduleWeekly": "Weekly",
+      "scheduleWeekdayLabel": "Weekday",
+      "scheduleTimeLabel": "Time",
+      "weekdaySun": "Sunday",
+      "weekdayMon": "Monday",
+      "weekdayTue": "Tuesday",
+      "weekdayWed": "Wednesday",
+      "weekdayThu": "Thursday",
+      "weekdayFri": "Friday",
+      "weekdaySat": "Saturday"
     },
     "validation": {
       "noIssues": "No issues. Ready to activate.",
