@@ -64,6 +64,29 @@ function renderTemplateBody(body: string, params: string[]): string {
   });
 }
 
+/**
+ * Builds the optimistic placeholder row shown while a reaction POST is
+ * in flight. The temp id is replaced by the realtime INSERT that follows.
+ * Kept at module level so the impure parts (Date.now) stay out of the
+ * component body, which the React Compiler can then fully memoize.
+ */
+function buildTempReaction(
+  messageId: string,
+  conversationId: string,
+  userId: string,
+  emoji: string,
+): MessageReaction {
+  return {
+    id: `temp-${Date.now()}`,
+    message_id: messageId,
+    conversation_id: conversationId,
+    actor_type: "agent",
+    actor_id: userId,
+    emoji,
+    created_at: new Date().toISOString(),
+  };
+}
+
 interface MessageThreadProps {
   conversation: Conversation | null;
   contact: Contact | null;
