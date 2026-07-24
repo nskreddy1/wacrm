@@ -35,9 +35,11 @@ export interface ValidationIssue {
   message: string;
 }
 
+import type { FlowTriggerType } from './types';
+
 interface FlowInput {
   name: string;
-  trigger_type: 'keyword' | 'first_inbound_message' | 'manual';
+  trigger_type: FlowTriggerType;
   trigger_config: Record<string, unknown>;
   entry_node_id: string | null;
 }
@@ -173,7 +175,64 @@ function validateTrigger(
       }
     }
   }
-  // first_inbound_message / manual have no config; nothing to validate.
+  if (trigger_type === 'interactive_reply') {
+    const ids = Array.isArray(trigger_config.reply_ids)
+      ? (trigger_config.reply_ids as unknown[])
+      : [];
+    if (ids.length === 0 || ids.every((r) => typeof r !== 'string' || !r.trim())) {
+      issues.push({
+        severity: 'error',
+        scope: 'trigger',
+        field: 'trigger_config.reply_ids',
+        message: 'Interactive-reply triggers need at least one reply id.',
+      });
+    }
+  }
+
+  if (trigger_type === 'scheduled') {
+    const freq = trigger_config.frequency;
+    if (freq !== 'daily' && freq !== 'weekly') {
+      issues.push({
+        severity: 'error',
+        scope: 'trigger',
+        field: 'trigger_config.frequency',
+        message: 'Scheduled triggers need a frequency (daily or weekly).',
+      });
+    }
+    const hour = trigger_config.hour;
+    const minute = trigger_config.minute;
+    if (typeof hour !== 'number' || hour < 0 || hour > 23) {
+      issues.push({
+        severity: 'error',
+        scope: 'trigger',
+        field: 'trigger_config.hour',
+        message: 'Scheduled triggers need an hour between 0 and 23.',
+      });
+    }
+    if (typeof minute !== 'number' || minute < 0 || minute > 59) {
+      issues.push({
+        severity: 'error',
+        scope: 'trigger',
+        field: 'trigger_config.minute',
+        message: 'Scheduled triggers need a minute between 0 and 59.',
+      });
+    }
+    if (freq === 'weekly') {
+      const wd = trigger_config.weekday;
+      if (typeof wd !== 'number' || wd < 0 || wd > 6) {
+        issues.push({
+          severity: 'error',
+          scope: 'trigger',
+          field: 'trigger_config.weekday',
+          message: 'Weekly schedules need a weekday (0 = Sunday … 6).',
+        });
+      }
+    }
+  }
+
+  // first_inbound_message / manual / new_message_received /
+  // new_contact_created / tag_added / conversation_assigned accept
+  // empty config (empty filter = match any).
 
   return issues;
 }
@@ -591,7 +650,7 @@ function validateNode(
 
     case 'condition': {
       const cfg = node.config as {
-        subject?: 'var' | 'tag' | 'contact_field';
+        subject?: string;
         subject_key?: string;
         operator?: 'equals' | 'contains' | 'present' | 'absent';
         value?: string;
@@ -600,24 +659,34 @@ function validateNode(
       };
       if (
         !cfg.subject ||
-        !['var', 'tag', 'contact_field'].includes(cfg.subject)
+        ![
+          'var',
+          'tag',
+          'contact_field',
+          'message_content',
+          'time_of_day',
+        ].includes(cfg.subject)
       ) {
         issues.push({
           severity: 'error',
           scope: 'node',
           node_key: node.node_key,
           field: 'subject',
-          message: 'Condition needs a subject (var / tag / contact_field).',
+          message:
+            'Condition needs a subject (var / tag / contact_field / message_content / time_of_day).',
         });
       }
-      if (!cfg.subject_key?.trim()) {
+      // message_content compares the triggering text itself, so no
+      // subject_key is needed. time_of_day encodes its window in
+      // subject_key ("HH:mm-HH:mm") and still requires it.
+      if (cfg.subject !== 'message_content' && !cfg.subject_key?.trim()) {
         issues.push({
           severity: 'error',
           scope: 'node',
           node_key: node.node_key,
           field: 'subject_key',
           message:
-            'Condition needs a subject_key (var name, tag id, or field name).',
+            'Condition needs a subject_key (var name, tag id, field name, or time window).',
         });
       }
       if (
@@ -710,6 +779,182 @@ function validateNode(
       break;
     }
 
+    // ---- Absorbed automation actions (Workflows unification) ----
+
+    case 'send_template': {
+      const cfg = node.config as {
+        template_name?: string;
+        next_node_key?: string;
+      };
+      if (!cfg.template_name?.trim()) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'template_name',
+          message: 'Send-template needs an approved template name.',
+        });
+      }
+      issues.push(...requireNext(node, cfg.next_node_key, knownKeys));
+      break;
+    }
+
+    case 'update_contact_field': {
+      const cfg = node.config as {
+        field?: string;
+        value?: string;
+        next_node_key?: string;
+      };
+      if (!cfg.field?.trim()) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'field',
+          message: 'Update-contact-field needs a target field.',
+        });
+      }
+      if (cfg.value === undefined || cfg.value === '') {
+        issues.push({
+          severity: 'warning',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'value',
+          message: 'Empty value will clear the field for every contact.',
+        });
+      }
+      issues.push(...requireNext(node, cfg.next_node_key, knownKeys));
+      break;
+    }
+
+    case 'assign_conversation': {
+      const cfg = node.config as {
+        mode?: string;
+        agent_id?: string;
+        next_node_key?: string;
+      };
+      if (!cfg.mode || !['specific', 'round_robin'].includes(cfg.mode)) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'mode',
+          message:
+            'Assign-conversation needs a mode (specific or round_robin).',
+        });
+      }
+      if (cfg.mode === 'specific' && !cfg.agent_id) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'agent_id',
+          message: 'Pick an agent for specific assignment.',
+        });
+      }
+      issues.push(...requireNext(node, cfg.next_node_key, knownKeys));
+      break;
+    }
+
+    case 'create_deal': {
+      const cfg = node.config as {
+        pipeline_id?: string;
+        stage_id?: string;
+        title?: string;
+        next_node_key?: string;
+      };
+      if (!cfg.pipeline_id) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'pipeline_id',
+          message: 'Create-deal needs a pipeline.',
+        });
+      }
+      if (!cfg.stage_id) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'stage_id',
+          message: 'Create-deal needs a stage.',
+        });
+      }
+      if (!cfg.title?.trim()) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'title',
+          message: 'Create-deal needs a deal title.',
+        });
+      }
+      issues.push(...requireNext(node, cfg.next_node_key, knownKeys));
+      break;
+    }
+
+    case 'send_webhook': {
+      const cfg = node.config as { url?: string; next_node_key?: string };
+      if (!cfg.url?.trim()) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'url',
+          message: 'Send-webhook needs a URL.',
+        });
+      } else if (!/^https:\/\//i.test(cfg.url.trim())) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'url',
+          message: 'Webhook URLs must use https://.',
+        });
+      }
+      issues.push(...requireNext(node, cfg.next_node_key, knownKeys));
+      break;
+    }
+
+    case 'close_conversation': {
+      const cfg = node.config as { next_node_key?: string };
+      issues.push(...requireNext(node, cfg.next_node_key, knownKeys));
+      break;
+    }
+
+    case 'wait': {
+      const cfg = node.config as {
+        amount?: number;
+        unit?: string;
+        next_node_key?: string;
+      };
+      if (
+        typeof cfg.amount !== 'number' ||
+        !Number.isFinite(cfg.amount) ||
+        cfg.amount <= 0
+      ) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'amount',
+          message: 'Wait needs a positive duration.',
+        });
+      }
+      if (!cfg.unit || !['minutes', 'hours', 'days'].includes(cfg.unit)) {
+        issues.push({
+          severity: 'error',
+          scope: 'node',
+          node_key: node.node_key,
+          field: 'unit',
+          message: 'Wait needs a unit (minutes, hours, or days).',
+        });
+      }
+      issues.push(...requireNext(node, cfg.next_node_key, knownKeys));
+      break;
+    }
+
     case 'handoff':
     case 'end':
       // Terminal nodes have no outgoing edges; nothing to validate
@@ -726,6 +971,40 @@ function validateNode(
   }
 
   return issues;
+}
+
+/**
+ * Shared next_node_key rule for auto-advancing nodes — reusable so
+ * every absorbed action node reports identical, predictable errors.
+ */
+function requireNext(
+  node: NodeInput,
+  nextKey: string | undefined,
+  knownKeys: Set<string>
+): ValidationIssue[] {
+  if (!nextKey) {
+    return [
+      {
+        severity: 'error',
+        scope: 'node',
+        node_key: node.node_key,
+        field: 'next_node_key',
+        message: `${node.node_type} must point to a next node.`,
+      },
+    ];
+  }
+  if (!knownKeys.has(nextKey)) {
+    return [
+      {
+        severity: 'error',
+        scope: 'node',
+        node_key: node.node_key,
+        field: 'next_node_key',
+        message: `${node.node_type} points to non-existent node "${nextKey}".`,
+      },
+    ];
+  }
+  return [];
 }
 
 // ============================================================
@@ -760,7 +1039,15 @@ function outgoingEdges(node: NodeInput): string[] {
     case 'send_message':
     case 'send_media':
     case 'collect_input':
-    case 'set_tag': {
+    case 'set_tag':
+    // Absorbed action nodes are all single-exit.
+    case 'send_template':
+    case 'update_contact_field':
+    case 'assign_conversation':
+    case 'create_deal':
+    case 'send_webhook':
+    case 'close_conversation':
+    case 'wait': {
       const cfg = node.config as { next_node_key?: string };
       return cfg.next_node_key ? [cfg.next_node_key] : [];
     }

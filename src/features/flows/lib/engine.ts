@@ -347,8 +347,15 @@ async function findEntryFlow(
       isFirstInbound
     ) {
       return flow;
+    } else if (flow.trigger_type === 'new_message_received') {
+      // Absorbed automation trigger: fires on ANY inbound text (not
+      // just the first). Keyword flows are checked earlier in the
+      // loop, so a more specific match still wins by flow order.
+      return flow;
     }
-    // 'manual' triggers do not auto-start from inbound messages.
+    // 'manual' / 'tag_added' / 'conversation_assigned' / 'scheduled' /
+    // 'new_contact_created' / 'interactive_reply' start via
+    // dispatchEventToFlows or the cron sweep, not inbound text.
   }
   return null;
 }
@@ -483,6 +490,16 @@ async function evaluateConditionNode(
     const v = run.vars[cfg.subject_key];
     subjectValue =
       typeof v === 'string' ? v : v === undefined ? undefined : String(v);
+  } else if (cfg.subject === 'message_content') {
+    // The triggering message text is mirrored into vars at run start
+    // (`__message_text`), so no extra DB read is needed here.
+    const v = run.vars.__message_text;
+    subjectValue = typeof v === 'string' && v.length > 0 ? v : undefined;
+  } else if (cfg.subject === 'time_of_day') {
+    // subject_key encodes the window as "HH:mm-HH:mm". Inside the
+    // window → subjectValue is set (`present` matches); outside →
+    // undefined (`absent` matches). Midnight-crossing windows work.
+    subjectValue = isNowInWindow(cfg.subject_key) ? cfg.subject_key : undefined;
   } else if (cfg.subject === 'tag') {
     const { count } = await db
       .from('contact_tags')
@@ -513,6 +530,32 @@ async function evaluateConditionNode(
     subjectValue,
     configValue: cfg.value,
   });
+}
+
+/**
+ * Parse "HH:mm-HH:mm" and test whether the current server time falls
+ * inside the window. Windows that cross midnight ("22:00-06:00") are
+ * handled by the wrap-around branch. Exported pure for unit tests.
+ */
+export function isNowInWindow(window: string, now: Date = new Date()): boolean {
+  const m = /^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/.exec(window.trim());
+  if (!m) return false;
+  const startMin = Number(m[1]) * 60 + Number(m[2]);
+  const endMin = Number(m[3]) * 60 + Number(m[4]);
+  if (
+    Number(m[1]) > 23 ||
+    Number(m[3]) > 23 ||
+    Number(m[2]) > 59 ||
+    Number(m[4]) > 59
+  ) {
+    return false;
+  }
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (startMin <= endMin) {
+    return nowMin >= startMin && nowMin < endMin;
+  }
+  // Wrap-around window, e.g. 22:00-06:00.
+  return nowMin >= startMin || nowMin < endMin;
 }
 
 /**
