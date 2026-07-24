@@ -18,7 +18,8 @@
 //     system seeds (Level 1 / Level 2) can't be deleted.
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { toast } from 'sonner';
 import { ChevronDown, ChevronRight, Loader2, Plus, Share2, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -59,8 +60,6 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
   const t = useTranslations('Settings.members');
   const { profile } = useAuth();
 
-  const [roles, setRoles] = useState<WorkspaceRole[]>([]);
-  const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [deleting, setDeleting] = useState<WorkspaceRole | null>(null);
@@ -74,21 +73,25 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!profile?.account_id) return;
-    const supabase = createClient();
-    const { data } = await supabase
-      .from('workspace_roles')
-      .select('id, name, description, parent_role_id, peer_visibility, is_system')
-      .eq('account_id', profile.account_id)
-      .order('created_at', { ascending: true });
-    setRoles(data ?? []);
-    setLoading(false);
-  }, [profile?.account_id]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // SWR owns fetch/loading state; the key is null until the profile
+  // resolves, which pauses fetching (no manual load effect needed).
+  const {
+    data: roles = [],
+    isLoading: loading,
+    mutate,
+  } = useSWR(
+    profile?.account_id ? (['workspace-roles', profile.account_id] as const) : null,
+    async ([, accountId]) => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('workspace_roles')
+        .select('id, name, description, parent_role_id, peer_visibility, is_system')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: true });
+      return (data ?? []) as WorkspaceRole[];
+    },
+  );
+  const load = useCallback(() => mutate(), [mutate]);
 
   // Children lookup for the tree render. Roles whose parent was
   // deleted (SET NULL) surface as roots so nothing disappears.
