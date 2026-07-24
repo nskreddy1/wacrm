@@ -10,7 +10,7 @@
 // so a direct client-side update is safe; non-admins see read-only.
 // ============================================================
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Building2, Loader2 } from "lucide-react";
 
@@ -24,14 +24,14 @@ import { createClient } from "@/lib/supabase/client";
 
 export function WorkspaceNameCard() {
   const { account, canEditSettings, refreshProfile } = useAuth();
-  const [name, setName] = useState("");
+  // null = untouched: derive from the loaded account (friendly derivation,
+  // not the raw email) so saving as-is immediately fixes the sidebar label.
+  // No sync effect needed — the input renders the derived value directly.
+  const [draftName, setDraftName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Seed once the account loads; show the friendly derivation (not the
-  // raw email) so saving as-is immediately fixes the sidebar label.
-  useEffect(() => {
-    if (account) setName(workspaceDisplayName(account.name));
-  }, [account]);
+  const name = draftName ?? (account ? workspaceDisplayName(account.name) : "");
+  const setName = setDraftName;
 
   if (!account) return null;
 
@@ -54,6 +54,7 @@ export function WorkspaceNameCard() {
         .eq("id", account.id);
       if (error) throw new Error(error.message);
       await refreshProfile();
+      setDraftName(null); // back to deriving from the refreshed account
       toast.success("Workspace renamed.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to rename workspace.");

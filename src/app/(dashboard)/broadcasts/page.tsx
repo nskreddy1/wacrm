@@ -33,70 +33,43 @@ function percent(value: number, total: number) {
   return total ? Math.round((value / total) * 100) : 0;
 }
 
+async function fetchBroadcastList(): Promise<Broadcast[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('broadcasts')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export default function BroadcastsPage() {
   const router = useRouter();
   const t = useTranslations('Broadcasts.page');
   const tStatus = useTranslations('Broadcasts.status');
   const canCreate = useCan('send-messages');
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchBroadcasts = useCallback(async () => {
-    try {
-      const supabase = createClient();
-      const { data, error: fetchError } = await supabase
-        .from('broadcasts')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (fetchError) throw fetchError;
-      setBroadcasts(data ?? []);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorLoad'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
-
-  useEffect(() => {
-    fetchBroadcasts();
-  }, [fetchBroadcasts]);
+  // SWR owns fetch/error/polling state. refreshInterval only polls while a
+  // broadcast is sending, and SWR pauses polling automatically when the tab
+  // is hidden (refreshWhenHidden defaults to false) — replacing the previous
+  // hand-rolled interval + visibilitychange bookkeeping.
+  const {
+    data,
+    error: loadError,
+    isLoading,
+    mutate,
+  } = useSWR('broadcasts', fetchBroadcastList, {
+    refreshInterval: (latest) =>
+      latest?.some((broadcast) => broadcast.status === 'sending') ? POLL_INTERVAL_MS : 0,
+  });
+  const broadcasts = useMemo(() => data ?? [], [data]);
+  const error = loadError ? (loadError instanceof Error ? loadError.message : t('errorLoad')) : null;
 
   const anySending = useMemo(
     () => broadcasts.some((broadcast) => broadcast.status === 'sending'),
     [broadcasts],
   );
-
-  useEffect(() => {
-    function stopPolling() {
-      if (!pollTimer.current) return;
-      clearInterval(pollTimer.current);
-      pollTimer.current = null;
-    }
-    function startPolling() {
-      if (!pollTimer.current) {
-        pollTimer.current = setInterval(fetchBroadcasts, POLL_INTERVAL_MS);
-      }
-    }
-    function handleVisibilityChange() {
-      if (!anySending) return;
-      if (document.visibilityState === 'hidden') stopPolling();
-      else {
-        fetchBroadcasts();
-        startPolling();
-      }
-    }
-    if (anySending && document.visibilityState === 'visible') startPolling();
-    else stopPolling();
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [anySending, fetchBroadcasts]);
 
   const filteredBroadcasts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -121,7 +94,7 @@ export default function BroadcastsPage() {
     [broadcasts],
   );
 
-  if (loading) return <FeatureLoading label="Loading broadcast performance" />;
+  if (isLoading) return <FeatureLoading label="Loading broadcast performance" />;
   if (error) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
@@ -129,7 +102,7 @@ export default function BroadcastsPage() {
           icon={RefreshCw}
           title="Broadcasts are temporarily unavailable"
           description={`${error} Your campaign data is safe. Retry the connection without leaving this page.`}
-          action={{ label: t('retry'), onClick: fetchBroadcasts }}
+          action={{ label: t('retry'), onClick: () => mutate() }}
         />
       </div>
     );

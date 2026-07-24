@@ -37,20 +37,20 @@ export function ProfileForm() {
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  // null = untouched: fields derive from the loaded profile directly, so no
+  // seeding effect (and no cascading re-render) is needed when it loads.
+  const [draftFullName, setDraftFullName] = useState<string | null>(null);
+  const [draftEmail, setDraftEmail] = useState<string | null>(null);
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [emailChangePending, setEmailChangePending] = useState(false);
 
-  // Seed form state once the profile loads.
-  useEffect(() => {
-    if (!profile) return;
-    setFullName(profile.full_name ?? '');
-    setEmail(profile.email ?? '');
-  }, [profile]);
+  const fullName = draftFullName ?? profile?.full_name ?? '';
+  const email = draftEmail ?? profile?.email ?? '';
+  const setFullName = setDraftFullName;
+  const setEmail = setDraftEmail;
 
   // Cleanup object URLs to avoid leaks.
   useEffect(() => {
@@ -176,6 +176,10 @@ export function ProfileForm() {
       setPendingAvatar(null);
       setPreviewUrl(null);
       setRemoveAvatar(false);
+      // Name derives from the refreshed profile again; keep the email draft
+      // while a change confirmation is pending (profiles.email lags it).
+      setDraftFullName(null);
+      if (!emailSent) setDraftEmail(null);
       await refreshProfile();
 
       toast.success(
