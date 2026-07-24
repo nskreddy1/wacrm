@@ -15,8 +15,9 @@
 // bug (same lesson as the invite-link flow).
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 import { Copy, KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -69,36 +70,30 @@ function keyStatus(k: ApiKey): 'active' | 'revoked' | 'expired' {
   return 'active';
 }
 
+async function fetchApiKeys(url: string): Promise<ApiKey[]> {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error || 'Failed to load API keys');
+  }
+  const data = (await res.json()) as { keys: ApiKey[] };
+  return data.keys;
+}
+
 export function ApiKeysSettings() {
   const { canEditSettings } = useAuth();
   const t = useTranslations('Settings.apiKeys');
 
-  const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [loading, setLoading] = useState(true);
+  // SWR owns fetch/loading/revalidate state — no manual load effect.
+  const {
+    data: keys = [],
+    isLoading: loading,
+    mutate,
+  } = useSWR('/api/account/api-keys', fetchApiKeys, {
+    onError: () => toast.error(t('loadFailed')),
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/account/api-keys', { cache: 'no-store' });
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        toast.error(payload.error || t('loadFailed'));
-        return;
-      }
-      const data = (await res.json()) as { keys: ApiKey[] };
-      setKeys(data.keys);
-    } catch (err) {
-      console.error('[ApiKeysSettings] load error:', err);
-      toast.error(t('networkError'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   async function handleRevoke(key: ApiKey) {
     setRevoking(key.id);
@@ -113,10 +108,12 @@ export function ApiKeysSettings() {
       }
       toast.success(t('revokeSuccess', { name: key.name }));
       // Reflect the revoke locally without a refetch.
-      setKeys((prev) =>
-        prev.map((k) =>
-          k.id === key.id ? { ...k, revoked_at: new Date().toISOString() } : k
-        )
+      void mutate(
+        (prev) =>
+          prev?.map((k) =>
+            k.id === key.id ? { ...k, revoked_at: new Date().toISOString() } : k
+          ),
+        { revalidate: false }
       );
     } catch (err) {
       console.error('[ApiKeysSettings] revoke error:', err);
@@ -270,7 +267,7 @@ export function ApiKeysSettings() {
       <CreateKeyDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={load}
+        onCreated={() => void mutate()}
       />
     </section>
   );

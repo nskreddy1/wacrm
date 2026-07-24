@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 import { Loader2, Plus, Tag as TagIcon, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -47,8 +48,6 @@ export function TagManager() {
   const supabase = createClient();
   const { user, accountId, loading: authLoading } = useAuth();
 
-  const [loading, setLoading] = useState(true);
-  const [tags, setTags] = useState<Tag[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tagToDelete, setTagToDelete] = useState<Tag | null>(null);
   const [saving, setSaving] = useState(false);
@@ -56,34 +55,27 @@ export function TagManager() {
   const [newTagName, setNewTagName] = useState('');
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[3].value);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    fetchTags(user.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user?.id]);
-
-  async function fetchTags(userId: string) {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('tags')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      setTags(data || []);
-    } catch (err) {
+  // SWR owns fetch/loading state; the key is null until auth resolves,
+  // which pauses fetching (replaces the manual authLoading effect).
+  const {
+    data: tags = [],
+    isLoading,
+    mutate,
+  } = useSWR(user ? (['tags', user.id] as const) : null, async ([, userId]) => {
+    const { data, error } = await supabase
+      .from('tags')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data || []) as Tag[];
+  }, {
+    onError: (err) => {
       console.error('Failed to fetch tags:', err);
       toast.error(t('failedToLoadTags'));
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+  });
+  const loading = authLoading || isLoading;
 
   async function handleCreate() {
     if (!newTagName.trim()) {
@@ -112,7 +104,7 @@ export function TagManager() {
       toast.success(t('tagCreated'));
       setNewTagName('');
       setSelectedColor(PRESET_COLORS[3].value);
-      await fetchTags(user.id);
+      await mutate();
     } catch (err) {
       console.error('Create error:', err);
       toast.error(t('failedToCreateTag'));
@@ -139,7 +131,11 @@ export function TagManager() {
       if (error) throw error;
 
       toast.success(t('tagDeleted'));
-      setTags((prev) => prev.filter((t) => t.id !== tagToDelete.id));
+      // Reflect the delete locally without a refetch.
+      void mutate(
+        (prev) => prev?.filter((tag) => tag.id !== tagToDelete.id),
+        { revalidate: false },
+      );
       setDeleteDialogOpen(false);
       setTagToDelete(null);
     } catch (err) {
