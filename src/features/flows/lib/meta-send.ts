@@ -45,6 +45,53 @@ export async function engineSendText(
   return { whatsapp_message_id: result.externalMessageId };
 }
 
+interface SendTemplateEngineArgs {
+  accountId: string;
+  /** Original author of the flow — audit only, not tenancy. */
+  userId: string;
+  conversationId: string;
+  contactId: string;
+  templateName: string;
+  language?: string;
+  /** Positional body params in strict {{1}}, {{2}}, … order. */
+  params?: string[];
+}
+
+/**
+ * Send an approved WhatsApp template from the Flows engine (used by
+ * the absorbed `send_template` workflow node). Same orchestrator path
+ * as every other sender — persistence + preview updates included.
+ */
+export async function engineSendTemplate(
+  args: SendTemplateEngineArgs
+): Promise<{ whatsapp_message_id: string }> {
+  const components =
+    args.params && args.params.length > 0
+      ? [
+          {
+            type: 'body',
+            parameters: args.params.map((p) => ({
+              type: 'text',
+              text: String(p),
+            })),
+          },
+        ]
+      : undefined;
+  const result = await sendChannelMessage({
+    accountId: args.accountId,
+    conversationId: args.conversationId,
+    contactId: args.contactId,
+    payload: {
+      kind: 'template',
+      templateName: args.templateName,
+      language: args.language || 'en_US',
+      components,
+    },
+    senderType: 'bot',
+  });
+  return { whatsapp_message_id: result.externalMessageId };
+}
+
 interface SendMediaEngineArgs {
   accountId: string;
   userId: string;
