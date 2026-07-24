@@ -207,11 +207,12 @@ export function MembersTab() {
         }
         if (pres && pres.ok) {
           const pdata = (await pres.json()) as {
-            profiles: (WorkspaceProfileOption & Record<string, unknown>)[];
+            data?: (WorkspaceProfileOption & Record<string, unknown>)[];
+            profiles?: (WorkspaceProfileOption & Record<string, unknown>)[];
           };
-          setProfileOptions(
-            pdata.profiles.map((p) => ({ id: p.id, name: p.name }))
-          );
+          // The profiles API returns { data }; tolerate legacy { profiles }.
+          const list = pdata.data ?? pdata.profiles ?? [];
+          setProfileOptions(list.map((p) => ({ id: p.id, name: p.name })));
         }
       } catch (err) {
         console.error('[MembersTab] load error:', err);
@@ -683,7 +684,11 @@ export function MembersTab() {
                           }
                         >
                           <SelectTrigger className="w-40" disabled={isBusy}>
-                            <SelectValue placeholder="—" />
+                            {/* Explicit children so a not-yet-loaded option
+                                list can never surface the raw UUID value. */}
+                            <SelectValue placeholder="—">
+                              {member.workspace_profile?.name ?? '—'}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {profileOptions.map((p) => (
