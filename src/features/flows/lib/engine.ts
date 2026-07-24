@@ -39,6 +39,7 @@ import {
   engineSendText,
 } from './meta-send';
 import { decideFallback, resolveFallbackPolicy } from './fallback';
+import { executeActionNode, isActionNodeType } from './action-nodes';
 import {
   type CollectInputNodeConfig,
   type ConditionNodeConfig,
@@ -770,6 +771,35 @@ async function advanceFromNodeKey(
       }
       return { outcome: 'advanced' };
     }
+    if (isActionNodeType(node.node_type)) {
+      // Absorbed automation actions (Workflows unification) — one
+      // reusable executor covers send_template / update_contact_field /
+      // assign_conversation / create_deal / send_webhook /
+      // close_conversation / wait. See lib/action-nodes.ts.
+      const result = await executeActionNode(db, run, node);
+      if (result.kind === 'advance') {
+        await logEvent(db, run.id, 'node_entered', node.node_key, {
+          node_type: node.node_type,
+          detail: result.detail,
+        });
+        currentKey = result.next_node_key;
+        continue;
+      }
+      if (result.kind === 'suspend') {
+        // Wait node parked the run (status='waiting', wake_at set).
+        await logEvent(db, run.id, 'node_entered', node.node_key, {
+          node_type: 'wait',
+          detail: result.detail,
+        });
+        return { outcome: 'advanced' };
+      }
+      await logEvent(db, run.id, 'error', node.node_key, {
+        reason: result.reason,
+        detail: result.detail,
+      });
+      await endRun(db, run.id, 'failed', result.reason);
+      return { outcome: 'completed' };
+    }
     if (node.node_type === 'handoff') {
       await executeHandoff(db, run, node);
       return { outcome: 'handed_off' };
@@ -1080,6 +1110,12 @@ async function startNewRun(
       conversation_id: input.conversationId,
       status: 'active',
       current_node_key: flow.entry_node_id,
+      // Mirror the triggering text into vars so action nodes can
+      // interpolate {{message.text}} without extra plumbing.
+      vars:
+        input.message.kind === 'text' && input.message.text
+          ? { __message_text: input.message.text }
+          : {},
     })
     .select('*')
     .maybeSingle();
