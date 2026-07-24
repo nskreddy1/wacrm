@@ -82,6 +82,10 @@ export interface AssistantConfig {
   baseUrl: string | null;
   /** Super-admin authored system prompt; null = platform default. */
   systemPrompt: string | null;
+  /** Sampling temperature (0–2); null = provider default. */
+  temperature: number | null;
+  /** Per-response output token cap. */
+  maxOutputTokens: number;
   enabled: boolean;
 }
 
@@ -91,8 +95,13 @@ interface StoredAssistantConfig {
   api_key?: unknown;
   base_url?: unknown;
   system_prompt?: unknown;
+  temperature?: unknown;
+  max_output_tokens?: unknown;
   enabled?: unknown;
 }
+
+/** Default per-response output cap when the admin hasn't set one. */
+export const ASSISTANT_DEFAULT_MAX_OUTPUT_TOKENS = 800;
 
 /**
  * Default persona for the helper agent. Super admins can replace it
@@ -185,6 +194,20 @@ export async function loadAssistantConfig(): Promise<AssistantConfig | null> {
       typeof v.system_prompt === 'string' && v.system_prompt.trim().length > 0
         ? v.system_prompt.trim()
         : null,
+    temperature:
+      typeof v.temperature === 'number' &&
+      Number.isFinite(v.temperature) &&
+      v.temperature >= 0 &&
+      v.temperature <= 2
+        ? v.temperature
+        : null,
+    maxOutputTokens:
+      typeof v.max_output_tokens === 'number' &&
+      Number.isInteger(v.max_output_tokens) &&
+      v.max_output_tokens >= 100 &&
+      v.max_output_tokens <= 8000
+        ? v.max_output_tokens
+        : ASSISTANT_DEFAULT_MAX_OUTPUT_TOKENS,
     enabled: true,
   };
 }

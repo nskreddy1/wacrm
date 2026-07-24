@@ -167,11 +167,11 @@ export function AgentsConsole() {
       toast.success(
         key === 'copilot'
           ? next
-            ? 'AI assistant enabled'
-            : 'AI assistant disabled — auto-reply is paused too'
+            ? 'Support Copilot enabled'
+            : 'Support Copilot disabled — Auto-Reply Agent paused too (it depends on Copilot)'
           : next
-            ? 'Auto-reply enabled'
-            : 'Auto-reply disabled'
+            ? 'Auto-Reply Agent enabled — Support Copilot brought online with it'
+            : 'Auto-Reply Agent disabled — Support Copilot stays on'
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong');
@@ -488,30 +488,47 @@ function OverviewTab({
           ) : null}
         </div>
 
-        {/* Status & controls card */}
+        {/* Status & controls card — each agent surfaces ONLY its own
+            switch. They are separate features sharing one provider
+            connection: Support Copilot gates the whole AI layer, and
+            the Auto-Reply Agent additionally needs Copilot online
+            (it reuses the same key, model and knowledge base). */}
         <div className="border-border bg-muted/40 rounded-lg border p-4">
           <CardLabel>Status &amp; controls</CardLabel>
           <div className="mt-2 flex flex-col">
-            <ControlRow
-              label="AI Assistant"
-              hint="Inbox suggestions & playground"
-              checked={configured && config?.is_active === true}
-              disabled={!canManage}
-              busy={busyToggle === 'copilot'}
-              onChange={(next) => void onToggle('copilot', next)}
-            />
-            <ControlRow
-              label="Auto-reply"
-              hint="Answers customers automatically"
-              checked={
-                configured &&
-                config?.is_active === true &&
-                config?.auto_reply_enabled === true
-              }
-              disabled={!canManage}
-              busy={busyToggle === 'autoreply'}
-              onChange={(next) => void onToggle('autoreply', next)}
-            />
+            {agent.key === 'copilot' ? (
+              <ControlRow
+                label="Support Copilot"
+                hint="Inbox draft suggestions & playground"
+                checked={configured && config?.is_active === true}
+                disabled={!canManage}
+                busy={busyToggle === 'copilot'}
+                onChange={(next) => void onToggle('copilot', next)}
+              />
+            ) : (
+              <>
+                <ControlRow
+                  label="Auto-reply"
+                  hint="Answers customers automatically"
+                  checked={
+                    configured &&
+                    config?.is_active === true &&
+                    config?.auto_reply_enabled === true
+                  }
+                  disabled={!canManage}
+                  busy={busyToggle === 'autoreply'}
+                  onChange={(next) => void onToggle('autoreply', next)}
+                />
+                <FactRow
+                  label="Depends on"
+                  value={
+                    configured && config?.is_active === true
+                      ? 'Support Copilot — online'
+                      : 'Support Copilot — offline (enable it first)'
+                  }
+                />
+              </>
+            )}
             <FactRow
               label="Provider"
               value={configured ? providerLabel(config?.provider) : '—'}
@@ -519,20 +536,25 @@ function OverviewTab({
             <FactRow
               label="Model"
               value={configured ? (config?.model ?? '—') : '—'}
+              last={agent.key === 'copilot'}
             />
-            <FactRow
-              label="Reply cap"
-              value={
-                configured
-                  ? `${config?.auto_reply_max_per_conversation ?? 3} ${config?.auto_reply_limit_mode === 'per_day' ? '/ day' : '/ conversation'}`
-                  : '—'
-              }
-            />
-            <FactRow
-              label="Reply hours"
-              value={configured ? schedule : '—'}
-              last
-            />
+            {agent.key === 'autoreply' ? (
+              <>
+                <FactRow
+                  label="Reply cap"
+                  value={
+                    configured
+                      ? `${config?.auto_reply_max_per_conversation ?? 3} ${config?.auto_reply_limit_mode === 'per_day' ? '/ day' : '/ conversation'}`
+                      : '—'
+                  }
+                />
+                <FactRow
+                  label="Reply hours"
+                  value={configured ? schedule : '—'}
+                  last
+                />
+              </>
+            ) : null}
           </div>
         </div>
       </div>

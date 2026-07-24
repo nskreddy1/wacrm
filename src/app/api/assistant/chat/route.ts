@@ -60,7 +60,11 @@ export async function POST(req: Request) {
       toolApproval: Object.fromEntries(
         WRITE_TOOL_NAMES.map((name) => [name, 'user-approval' as const])
       ),
-      maxOutputTokens: 800,
+      // Admin-tunable generation knobs (Admin → Platform → Mira).
+      ...(config.temperature !== null
+        ? { temperature: config.temperature }
+        : {}),
+      maxOutputTokens: config.maxOutputTokens,
       // Allow tool calls + a follow-up answer (default is one step).
       stopWhen: stepCountIs(5),
     });
