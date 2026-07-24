@@ -308,9 +308,9 @@ function ConnectionRow({
     <article className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
       <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary-soft">
         {connection.provider === 'twilio' ? (
-          <img src="/icons/brands/twilio.svg" alt="" className="size-5" />
+          <BrandIcon src="/icons/brands/twilio.svg" size={20} />
         ) : connection.provider === 'meta' ? (
-          <img src="/icons/brands/whatsapp.svg" alt="" className="size-5" />
+          <BrandIcon src="/icons/brands/whatsapp.svg" size={20} />
         ) : (
           <Icon className="size-4.5 text-primary" aria-hidden />
         )}
