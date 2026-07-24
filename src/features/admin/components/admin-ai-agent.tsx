@@ -12,7 +12,7 @@
 // super admin provisions here is what the customer sees.
 // ============================================================
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
 import {
