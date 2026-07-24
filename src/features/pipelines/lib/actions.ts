@@ -291,15 +291,13 @@ export async function saveDealFieldLayoutAction(
     const layout = dealFieldLayoutSchema.parse(raw);
     const { supabase, accountId, userId } = await requireRole('agent');
     await verifyPipeline(accountId, pipelineId, supabase);
-    const { error } = await supabase
-      .from('deal_field_settings')
-      .upsert({
-        account_id: accountId,
-        pipeline_id: pipelineId,
-        layout,
-        updated_by: userId,
-        updated_at: new Date().toISOString(),
-      });
+    const { error } = await supabase.from('deal_field_settings').upsert({
+      account_id: accountId,
+      pipeline_id: pipelineId,
+      layout,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    });
     if (error) throw new Error(error.message);
     revalidatePath(pipelinePath(accountId, pipelineId, 'board'));
     return { ok: true, data: layout };

@@ -563,16 +563,14 @@ async function runStep(
         // Upsert on the table's UNIQUE(contact_id, custom_field_id) so repeated
         // runs overwrite rather than duplicate. Tenancy is enforced above and,
         // for the contact side, by the entry-point ownership guard.
-        await db
-          .from('contact_custom_values')
-          .upsert(
-            {
-              contact_id: args.contactId,
-              custom_field_id: customFieldId,
-              value,
-            },
-            { onConflict: 'contact_id,custom_field_id' }
-          );
+        await db.from('contact_custom_values').upsert(
+          {
+            contact_id: args.contactId,
+            custom_field_id: customFieldId,
+            value,
+          },
+          { onConflict: 'contact_id,custom_field_id' }
+        );
         return `custom field updated`;
       }
 

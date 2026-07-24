@@ -1055,7 +1055,9 @@ function GovernanceDialog({
             />
             <span className="text-muted-foreground text-xs">
               Shown on the connection in the client&apos;s Settings
-              {canToggle ? '.' : ' and as the reason the toggle is locked.'}{' '}
+              {canToggle
+                ? '.'
+                : ' and as the reason the toggle is locked.'}{' '}
               Leave empty to clear.
             </span>
           </div>
