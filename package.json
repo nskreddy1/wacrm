@@ -34,6 +34,8 @@
     "start": "node --env-file-if-exists=.env.development.local scripts/run-web.mjs start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check": "pnpm typecheck && pnpm lint && pnpm check:boundaries && pnpm test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",

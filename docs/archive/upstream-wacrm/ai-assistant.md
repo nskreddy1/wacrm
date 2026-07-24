@@ -100,11 +100,11 @@ Retrieved excerpts are handed to the model as reference, not as instructions (th
 
 wacrm runs deterministic, explicitly-configured logic first and treats the AI as the fallback:
 
-| Order | Responder | Wins because |
-| --- | --- | --- |
-| 1 | Flows | A button-driven conversation you designed. If a Flow consumes the message, nothing else replies. |
-| 2 | Automations | Keyword/event rules you wrote. If an active message-level automation exists, the AI bot stands down. |
-| 3 | AI auto-reply | The catch-all for everything your Flows and Automations don't cover. |
+| Order | Responder     | Wins because                                                                                         |
+| ----- | ------------- | ---------------------------------------------------------------------------------------------------- |
+| 1     | Flows         | A button-driven conversation you designed. If a Flow consumes the message, nothing else replies.     |
+| 2     | Automations   | Keyword/event rules you wrote. If an active message-level automation exists, the AI bot stands down. |
+| 3     | AI auto-reply | The catch-all for everything your Flows and Automations don't cover.                                 |
 
 Draft replies sit outside this entirely — they're agent-initiated and never send on their own.
 

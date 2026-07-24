@@ -1,11 +1,11 @@
-'use client'
+'use client';
 
-import { useRef, useState, useEffect } from 'react'
-import { useChat } from '@ai-sdk/react'
+import { useRef, useState, useEffect } from 'react';
+import { useChat } from '@ai-sdk/react';
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
-} from 'ai'
+} from 'ai';
 import {
   Bot,
   Check,
@@ -16,10 +16,10 @@ import {
   Sparkles,
   Wrench,
   X,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 // ============================================================
 // Platform helper agent — floating widget.
@@ -52,14 +52,14 @@ const TOOL_LABELS: Record<string, string> = {
   create_task: 'Create a task',
   create_support_ticket: 'Create a support ticket',
   add_contact_note: 'Add a contact note',
-}
+};
 
 const WRITE_TOOLS = new Set([
   'create_contact',
   'create_task',
   'create_support_ticket',
   'add_contact_note',
-])
+]);
 
 /** Notion-style quick suggestions shown on the empty state. */
 const SUGGESTIONS = [
@@ -67,17 +67,17 @@ const SUGGESTIONS = [
   'Summarize my pipeline',
   'What appointments are coming up?',
   'Any open support tickets?',
-]
+];
 
 function toolNameFromPart(type: string): string | null {
-  return type.startsWith('tool-') ? type.slice(5) : null
+  return type.startsWith('tool-') ? type.slice(5) : null;
 }
 
 export function AssistantWidget() {
-  const [open, setOpen] = useState(false)
-  const [input, setInput] = useState('')
-  const [unconfigured, setUnconfigured] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const [unconfigured, setUnconfigured] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const { messages, sendMessage, status, addToolApprovalResponse, error } =
     useChat({
@@ -86,25 +86,25 @@ export function AssistantWidget() {
         lastAssistantMessageIsCompleteWithApprovalResponses,
       onError: (err) => {
         if (err.message.includes('assistant_not_configured')) {
-          setUnconfigured(true)
+          setUnconfigured(true);
         }
       },
-    })
+    });
 
-  const busy = status === 'submitted' || status === 'streaming'
+  const busy = status === 'submitted' || status === 'streaming';
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
       behavior: 'smooth',
-    })
-  }, [messages, open])
+    });
+  }, [messages, open]);
 
   function submit() {
-    const text = input.trim()
-    if (!text || busy) return
-    setInput('')
-    void sendMessage({ text })
+    const text = input.trim();
+    if (!text || busy) return;
+    setInput('');
+    void sendMessage({ text });
   }
 
   return (
@@ -125,18 +125,18 @@ export function AssistantWidget() {
         <div
           role="dialog"
           aria-label="Helper agent chat"
-          className="fixed right-4 bottom-20 z-50 flex h-[min(540px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+          className="border-border bg-background fixed right-4 bottom-20 z-50 flex h-[min(540px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border shadow-2xl"
         >
           {/* Header */}
-          <div className="flex items-center gap-2.5 border-b border-border bg-muted/40 px-4 py-3">
-            <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <div className="border-border bg-muted/40 flex items-center gap-2.5 border-b px-4 py-3">
+            <span className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-full">
               <Bot className="size-4" />
             </span>
             <div className="flex min-w-0 flex-col">
-              <span className="text-sm font-semibold leading-tight">
+              <span className="text-sm leading-tight font-semibold">
                 Helper Agent
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground text-xs">
                 Read access to your workspace - writes need your approval
               </span>
             </div>
@@ -160,13 +160,13 @@ export function AssistantWidget() {
             {messages.length === 0 ? (
               <div className="flex h-full flex-col justify-center gap-4 px-1">
                 <div className="flex flex-col gap-2">
-                  <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
-                    <Sparkles className="size-4.5 text-primary" aria-hidden />
+                  <span className="bg-primary/10 flex size-9 items-center justify-center rounded-lg">
+                    <Sparkles className="text-primary size-4.5" aria-hidden />
                   </span>
                   <h2 className="text-base font-semibold text-balance">
                     How can I help you today?
                   </h2>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
+                  <p className="text-muted-foreground text-xs leading-relaxed">
                     I can read your whole workspace — contacts, deals,
                     conversations, appointments, campaigns and more. Write
                     actions always ask for your approval first.
@@ -178,12 +178,12 @@ export function AssistantWidget() {
                       key={s}
                       type="button"
                       onClick={() => {
-                        if (!busy) void sendMessage({ text: s })
+                        if (!busy) void sendMessage({ text: s });
                       }}
-                      className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                      className="border-border bg-card text-foreground hover:bg-muted flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors"
                     >
                       <Search
-                        className="size-3.5 shrink-0 text-muted-foreground"
+                        className="text-muted-foreground size-3.5 shrink-0"
                         aria-hidden
                       />
                       {s}
@@ -198,32 +198,32 @@ export function AssistantWidget() {
                     key={message.id}
                     className={cn(
                       'flex flex-col gap-2',
-                      message.role === 'user' ? 'items-end' : 'items-start',
+                      message.role === 'user' ? 'items-end' : 'items-start'
                     )}
                   >
                     {message.parts.map((part, i) => {
                       if (part.type === 'text') {
-                        if (!part.text) return null
+                        if (!part.text) return null;
                         return (
                           <div
                             key={`${message.id}-${i}`}
                             className={cn(
-                              'max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-relaxed',
+                              'max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap',
                               message.role === 'user'
                                 ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground',
+                                : 'bg-muted text-foreground'
                             )}
                           >
                             {part.text}
                           </div>
-                        )
+                        );
                       }
 
-                      const toolName = toolNameFromPart(part.type)
-                      if (!toolName || !('state' in part)) return null
-                      const label = TOOL_LABELS[toolName] ?? toolName
-                      const isWrite = WRITE_TOOLS.has(toolName)
-                      const key = `${message.id}-${i}`
+                      const toolName = toolNameFromPart(part.type);
+                      if (!toolName || !('state' in part)) return null;
+                      const label = TOOL_LABELS[toolName] ?? toolName;
+                      const isWrite = WRITE_TOOLS.has(toolName);
+                      const key = `${message.id}-${i}`;
 
                       // Approval card for write tools
                       if (
@@ -235,23 +235,23 @@ export function AssistantWidget() {
                         return (
                           <div
                             key={key}
-                            className="w-full max-w-[95%] rounded-lg border border-border bg-card p-3 shadow-xs"
+                            className="border-border bg-card w-full max-w-[95%] rounded-lg border p-3 shadow-xs"
                           >
                             <div className="flex items-center gap-2">
                               <Wrench
-                                className="size-3.5 text-muted-foreground"
+                                className="text-muted-foreground size-3.5"
                                 aria-hidden
                               />
                               <span className="text-sm font-semibold">
                                 {label}
                               </span>
                             </div>
-                            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
                               This is a write action. Allow the agent to
                               proceed?
                             </p>
                             {'input' in part && part.input ? (
-                              <pre className="app-scrollbar mt-2 max-h-24 overflow-auto rounded-md bg-muted px-2 py-1.5 text-xs">
+                              <pre className="app-scrollbar bg-muted mt-2 max-h-24 overflow-auto rounded-md px-2 py-1.5 text-xs">
                                 {JSON.stringify(part.input, null, 2)}
                               </pre>
                             ) : null}
@@ -284,19 +284,19 @@ export function AssistantWidget() {
                               </Button>
                             </div>
                           </div>
-                        )
+                        );
                       }
 
                       // Tool-usage chip (visible for every tool the agent uses)
                       const running =
                         part.state === 'input-streaming' ||
                         part.state === 'input-available' ||
-                        part.state === 'approval-responded'
-                      const denied = part.state === 'output-denied'
+                        part.state === 'approval-responded';
+                      const denied = part.state === 'output-denied';
                       return (
                         <div
                           key={key}
-                          className="flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
+                          className="border-border bg-muted/60 text-muted-foreground flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"
                         >
                           {running ? (
                             <Loader2
@@ -317,13 +317,12 @@ export function AssistantWidget() {
                                   : '...'}
                           </span>
                         </div>
-                      )
+                      );
                     })}
                   </div>
                 ))}
-                {busy &&
-                messages[messages.length - 1]?.role !== 'assistant' ? (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {busy && messages[messages.length - 1]?.role !== 'assistant' ? (
+                  <div className="text-muted-foreground flex items-center gap-2 text-xs">
                     <Loader2 className="size-3 animate-spin" aria-hidden />
                     Thinking...
                   </div>
@@ -332,12 +331,12 @@ export function AssistantWidget() {
             )}
 
             {unconfigured ? (
-              <div className="mt-3 rounded-lg border border-border bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+              <div className="border-border bg-muted/50 text-muted-foreground mt-3 rounded-lg border p-3 text-xs leading-relaxed">
                 The helper agent is not set up yet. A platform admin needs to
                 add an API key in the Admin console under Platform settings.
               </div>
             ) : error && !unconfigured ? (
-              <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">
+              <div className="border-destructive/30 bg-destructive/10 text-destructive mt-3 rounded-lg border p-3 text-xs leading-relaxed">
                 Something went wrong. Please try again.
               </div>
             ) : null}
@@ -345,10 +344,10 @@ export function AssistantWidget() {
 
           {/* Composer */}
           <form
-            className="flex items-center gap-2 border-t border-border px-3 py-2.5"
+            className="border-border flex items-center gap-2 border-t px-3 py-2.5"
             onSubmit={(e) => {
-              e.preventDefault()
-              submit()
+              e.preventDefault();
+              submit();
             }}
           >
             <Input
@@ -361,8 +360,8 @@ export function AssistantWidget() {
                   !e.nativeEvent.isComposing &&
                   e.keyCode !== 229
                 ) {
-                  e.preventDefault()
-                  submit()
+                  e.preventDefault();
+                  submit();
                 }
               }}
               placeholder="Ask the helper agent..."
@@ -381,5 +380,5 @@ export function AssistantWidget() {
         </div>
       ) : null}
     </>
-  )
+  );
 }

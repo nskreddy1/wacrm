@@ -5,24 +5,30 @@ import {
   streamText,
   toUIMessageStream,
   type UIMessage,
-} from 'ai'
-import { NextResponse } from 'next/server'
-import { getCurrentAccount, toErrorResponse } from '@/features/auth/lib/account'
+} from 'ai';
+import { NextResponse } from 'next/server';
+import {
+  getCurrentAccount,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
 import {
   loadAssistantConfig,
   resolveAssistantModel,
   resolveAssistantSystemPrompt,
-} from '@/features/assistant/lib/config'
-import { buildAssistantTools, WRITE_TOOL_NAMES } from '@/features/assistant/lib/tools'
+} from '@/features/assistant/lib/config';
+import {
+  buildAssistantTools,
+  WRITE_TOOL_NAMES,
+} from '@/features/assistant/lib/tools';
 
-export const runtime = 'nodejs'
-export const maxDuration = 60
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    const ctx = await getCurrentAccount()
+    const ctx = await getCurrentAccount();
 
-    const config = await loadAssistantConfig()
+    const config = await loadAssistantConfig();
     if (!config) {
       return NextResponse.json(
         {
@@ -30,18 +36,18 @@ export async function POST(req: Request) {
           message:
             'The platform assistant has not been configured yet. A platform admin must add an API key in the Admin console.',
         },
-        { status: 503 },
-      )
+        { status: 503 }
+      );
     }
 
-    const body = (await req.json()) as { messages?: UIMessage[] }
-    const messages = Array.isArray(body.messages) ? body.messages : []
+    const body = (await req.json()) as { messages?: UIMessage[] };
+    const messages = Array.isArray(body.messages) ? body.messages : [];
     if (messages.length === 0) {
-      return NextResponse.json({ error: 'messages required' }, { status: 400 })
+      return NextResponse.json({ error: 'messages required' }, { status: 400 });
     }
 
     // Hard cap on transcript size to bound cost on the platform key.
-    const recent = messages.slice(-20)
+    const recent = messages.slice(-20);
 
     const result = streamText({
       model: resolveAssistantModel(config),
@@ -52,17 +58,17 @@ export async function POST(req: Request) {
       // asks the user for permission in the chat (user requirement:
       // read access always, write only after the user grants it).
       toolApproval: Object.fromEntries(
-        WRITE_TOOL_NAMES.map((name) => [name, 'user-approval' as const]),
+        WRITE_TOOL_NAMES.map((name) => [name, 'user-approval' as const])
       ),
       maxOutputTokens: 800,
       // Allow tool calls + a follow-up answer (default is one step).
       stopWhen: stepCountIs(5),
-    })
+    });
 
     return createUIMessageStreamResponse({
       stream: toUIMessageStream({ stream: result.stream }),
-    })
+    });
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 }

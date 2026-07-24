@@ -6,16 +6,16 @@
 // evaluated in the account's own timezone. Null start/end = always on.
 // ============================================================
 
-import type { AiConfig } from './types'
+import type { AiConfig } from './types';
 
 /** 'HH:MM' → minutes since midnight, or null when malformed. */
 function toMinutes(hhmm: string): number | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm)
-  if (!m) return null
-  const h = Number(m[1])
-  const min = Number(m[2])
-  if (h > 23 || min > 59) return null
-  return h * 60 + min
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
 }
 
 /** Current minutes-since-midnight in the given IANA timezone (UTC when
@@ -27,15 +27,15 @@ function nowMinutesInZone(timezone: string | null, now: Date): number {
       hour: '2-digit',
       minute: '2-digit',
       hourCycle: 'h23',
-    })
-    const parts = fmt.formatToParts(now)
-    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? '0')
-    const m = Number(parts.find((p) => p.type === 'minute')?.value ?? '0')
-    return h * 60 + m
+    });
+    const parts = fmt.formatToParts(now);
+    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+    const m = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+    return h * 60 + m;
   } catch {
     // Unknown timezone string — evaluate in UTC rather than blocking
     // every reply (the UI constrains input, this is defense in depth).
-    return now.getUTCHours() * 60 + now.getUTCMinutes()
+    return now.getUTCHours() * 60 + now.getUTCMinutes();
   }
 }
 
@@ -56,22 +56,22 @@ export function isWithinAutoReplySchedule(
     AiConfig,
     'autoReplyScheduleStart' | 'autoReplyScheduleEnd' | 'autoReplyTimezone'
   >,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): boolean {
   const { autoReplyScheduleStart: startRaw, autoReplyScheduleEnd: endRaw } =
-    config
-  if (!startRaw || !endRaw) return true
+    config;
+  if (!startRaw || !endRaw) return true;
 
-  const start = toMinutes(startRaw)
-  const end = toMinutes(endRaw)
+  const start = toMinutes(startRaw);
+  const end = toMinutes(endRaw);
   // Malformed bounds → fail open (same rationale as unknown timezone).
-  if (start === null || end === null) return true
-  if (start === end) return true
+  if (start === null || end === null) return true;
+  if (start === end) return true;
 
-  const current = nowMinutesInZone(config.autoReplyTimezone, now)
-  if (start < end) return current >= start && current < end
+  const current = nowMinutesInZone(config.autoReplyTimezone, now);
+  if (start < end) return current >= start && current < end;
   // Overnight: inside if after start OR before end.
-  return current >= start || current < end
+  return current >= start || current < end;
 }
 
 /**
@@ -81,7 +81,7 @@ export function isWithinAutoReplySchedule(
  */
 export function startOfTodayUtc(
   timezone: string | null,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): Date {
   try {
     const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -93,18 +93,18 @@ export function startOfTodayUtc(
       minute: '2-digit',
       second: '2-digit',
       hourCycle: 'h23',
-    })
+    });
     const p = Object.fromEntries(
-      fmt.formatToParts(now).map((part) => [part.type, part.value]),
-    )
+      fmt.formatToParts(now).map((part) => [part.type, part.value])
+    );
     // Elapsed time since that zone's midnight, subtracted from `now`,
     // lands exactly on the zone-midnight instant in UTC.
     const elapsedMs =
-      (Number(p.hour) * 3600 + Number(p.minute) * 60 + Number(p.second)) * 1000
-    return new Date(now.getTime() - elapsedMs - now.getMilliseconds())
+      (Number(p.hour) * 3600 + Number(p.minute) * 60 + Number(p.second)) * 1000;
+    return new Date(now.getTime() - elapsedMs - now.getMilliseconds());
   } catch {
-    const utc = new Date(now)
-    utc.setUTCHours(0, 0, 0, 0)
-    return utc
+    const utc = new Date(now);
+    utc.setUTCHours(0, 0, 0, 0);
+    return utc;
   }
 }

@@ -12,10 +12,10 @@ The audit found 530 tracked files: 409 under `src`, 40 SQL migrations, 20 local/
 
 Upstream snapshots describe Next.js routes talking directly to Supabase. This fork adds an internal Express 5 business API:
 
-| Process | Location | Default | Role |
-| --- | --- | --- | --- |
-| Web/BFF | `src/`, Next.js 16 | `WEB_PORT=3000` | UI, route handlers, webhooks, OAuth, public API and authenticated BFF |
-| Business API | `server/`, Express 5 | `API_HOST=127.0.0.1`, `API_PORT=4000` | Health probes, middleware and extracted domain APIs |
+| Process      | Location             | Default                               | Role                                                                  |
+| ------------ | -------------------- | ------------------------------------- | --------------------------------------------------------------------- |
+| Web/BFF      | `src/`, Next.js 16   | `WEB_PORT=3000`                       | UI, route handlers, webhooks, OAuth, public API and authenticated BFF |
+| Business API | `server/`, Express 5 | `API_HOST=127.0.0.1`, `API_PORT=4000` | Health probes, middleware and extracted domain APIs                   |
 
 `pnpm dev` and `pnpm start` supervise both. `scripts/run-web.mjs` validates `WEB_PORT`. `/api/service/*` uses `EXPRESS_API_URL` when set and otherwise derives its target from `API_HOST`/`API_PORT`. Express adds Helmet, structured/redacted Pino logging, request IDs, body limits, liveness/readiness and independent Supabase bearer authentication.
 

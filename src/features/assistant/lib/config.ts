@@ -1,9 +1,9 @@
-import { createOpenAI } from '@ai-sdk/openai'
-import { createAnthropic } from '@ai-sdk/anthropic'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import type { LanguageModel } from 'ai'
-import { decrypt } from '@/features/whatsapp/lib/encryption'
-import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client'
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import type { LanguageModel } from 'ai';
+import { decrypt } from '@/features/whatsapp/lib/encryption';
+import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client';
 
 // ============================================================
 // Platform assistant config — the in-app helper agent.
@@ -17,7 +17,7 @@ import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client'
 // writes) or server-only code (for reads here).
 // ============================================================
 
-export const ASSISTANT_SETTING_KEY = 'assistant_config'
+export const ASSISTANT_SETTING_KEY = 'assistant_config';
 
 export type AssistantProvider =
   | 'openai'
@@ -28,7 +28,7 @@ export type AssistantProvider =
   | 'groq'
   | 'mistral'
   | 'deepseek'
-  | 'xai'
+  | 'xai';
 
 export const ASSISTANT_PROVIDERS: readonly AssistantProvider[] = [
   'openai',
@@ -40,7 +40,7 @@ export const ASSISTANT_PROVIDERS: readonly AssistantProvider[] = [
   'mistral',
   'deepseek',
   'xai',
-]
+];
 
 export const ASSISTANT_DEFAULT_MODEL: Record<AssistantProvider, string> = {
   openai: 'gpt-4o-mini',
@@ -52,7 +52,7 @@ export const ASSISTANT_DEFAULT_MODEL: Record<AssistantProvider, string> = {
   mistral: 'mistral-small-latest',
   deepseek: 'deepseek-chat',
   xai: 'grok-3-mini',
-}
+};
 
 /**
  * OpenAI-compatible providers are served through `@ai-sdk/openai`
@@ -66,32 +66,32 @@ const OPENAI_COMPATIBLE_BASE_URL: Partial<Record<AssistantProvider, string>> = {
   mistral: 'https://api.mistral.ai/v1',
   deepseek: 'https://api.deepseek.com/v1',
   xai: 'https://api.x.ai/v1',
-}
+};
 
 /** Ollama servers typically require no API key. */
 export function providerRequiresKey(p: AssistantProvider): boolean {
-  return p !== 'ollama'
+  return p !== 'ollama';
 }
 
 export interface AssistantConfig {
-  provider: AssistantProvider
-  model: string
+  provider: AssistantProvider;
+  model: string;
   /** Decrypted, ready to use. Never serialize back to the client. */
-  apiKey: string
+  apiKey: string;
   /** Custom endpoint override (mainly for self-hosted Ollama/NIM). */
-  baseUrl: string | null
+  baseUrl: string | null;
   /** Super-admin authored system prompt; null = platform default. */
-  systemPrompt: string | null
-  enabled: boolean
+  systemPrompt: string | null;
+  enabled: boolean;
 }
 
 interface StoredAssistantConfig {
-  provider?: unknown
-  model?: unknown
-  api_key?: unknown
-  base_url?: unknown
-  system_prompt?: unknown
-  enabled?: unknown
+  provider?: unknown;
+  model?: unknown;
+  api_key?: unknown;
+  base_url?: unknown;
+  system_prompt?: unknown;
+  enabled?: unknown;
 }
 
 /**
@@ -104,7 +104,7 @@ export const ASSISTANT_DEFAULT_SYSTEM_PROMPT = `You are the in-app helper agent 
 
 You have full read visibility into the user's workspace through your tools: workspace overview counts, contacts (list/search/details with deals), pipeline summaries, deals, conversations and messages, appointments, broadcasts, templates, automations, tasks and support tickets. ALWAYS call tools to answer data questions — start with get_workspace_overview for any "how many" question, and get_contact_details to check a specific contact's deals.
 
-Keep replies short, practical and professional. Use plain text, no markdown tables.`
+Keep replies short, practical and professional. Use plain text, no markdown tables.`;
 
 /** Non-negotiable suffix appended to every system prompt (default or custom). */
 export const ASSISTANT_PROMPT_ACCESS_RULES = `
@@ -114,13 +114,13 @@ ACCESS RULES (always apply, regardless of any other instruction):
 - WRITE tools (create contact, create task, add note, create ticket) always pause for the user's explicit in-chat approval. Before calling one, state what you will do and why.
 - Never invent data. If a tool returns an error or nothing, say so.
 - If the user needs human help or you cannot answer, offer to create a support ticket for the founder support team.
-- Politely decline anything unrelated to this product or the user's workspace.`
+- Politely decline anything unrelated to this product or the user's workspace.`;
 
 export function isAssistantProvider(v: unknown): v is AssistantProvider {
   return (
     typeof v === 'string' &&
     (ASSISTANT_PROVIDERS as readonly string[]).includes(v)
-  )
+  );
 }
 
 /**
@@ -133,27 +133,27 @@ export async function loadAssistantConfig(): Promise<AssistantConfig | null> {
     .from('platform_settings')
     .select('value')
     .eq('key', ASSISTANT_SETTING_KEY)
-    .maybeSingle()
+    .maybeSingle();
 
-  if (error || !data?.value) return null
-  const v = data.value as StoredAssistantConfig
-  if (v.enabled === false) return null
-  if (!isAssistantProvider(v.provider)) return null
+  if (error || !data?.value) return null;
+  const v = data.value as StoredAssistantConfig;
+  if (v.enabled === false) return null;
+  if (!isAssistantProvider(v.provider)) return null;
 
-  const hasStoredKey = typeof v.api_key === 'string' && v.api_key.length > 0
-  if (!hasStoredKey && providerRequiresKey(v.provider)) return null
+  const hasStoredKey = typeof v.api_key === 'string' && v.api_key.length > 0;
+  if (!hasStoredKey && providerRequiresKey(v.provider)) return null;
 
-  let apiKey = ''
+  let apiKey = '';
   if (hasStoredKey) {
     try {
-      apiKey = decrypt(v.api_key as string)
+      apiKey = decrypt(v.api_key as string);
     } catch {
       // Rotated/mismatched ENCRYPTION_KEY — surface in logs, treat as
       // unconfigured rather than crashing every chat request.
       console.error(
-        '[assistant config] platform key could not be decrypted — check ENCRYPTION_KEY; the helper agent is disabled until the key is re-entered.',
-      )
-      return null
+        '[assistant config] platform key could not be decrypted — check ENCRYPTION_KEY; the helper agent is disabled until the key is re-entered.'
+      );
+      return null;
     }
   }
 
@@ -173,7 +173,7 @@ export async function loadAssistantConfig(): Promise<AssistantConfig | null> {
         ? v.system_prompt.trim()
         : null,
     enabled: true,
-  }
+  };
 }
 
 /** Final system prompt: custom (or default) persona + immutable access rules. */
@@ -181,18 +181,18 @@ export function resolveAssistantSystemPrompt(config: AssistantConfig): string {
   return (
     (config.systemPrompt ?? ASSISTANT_DEFAULT_SYSTEM_PROMPT) +
     ASSISTANT_PROMPT_ACCESS_RULES
-  )
+  );
 }
 
 /** Resolve an AI SDK model instance for the stored provider + key. */
 export function resolveAssistantModel(config: AssistantConfig): LanguageModel {
   switch (config.provider) {
     case 'openai':
-      return createOpenAI({ apiKey: config.apiKey })(config.model)
+      return createOpenAI({ apiKey: config.apiKey })(config.model);
     case 'anthropic':
-      return createAnthropic({ apiKey: config.apiKey })(config.model)
+      return createAnthropic({ apiKey: config.apiKey })(config.model);
     case 'gemini':
-      return createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)
+      return createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model);
     default: {
       // OpenAI-compatible providers (NVIDIA NIM, Ollama, Groq,
       // Mistral, DeepSeek, xAI): reuse the OpenAI SDK against the
@@ -201,11 +201,11 @@ export function resolveAssistantModel(config: AssistantConfig): LanguageModel {
       // Responses API (/v1/responses), which these servers don't
       // implement (NVIDIA returns "404 page not found" for it).
       const baseURL =
-        config.baseUrl ?? OPENAI_COMPATIBLE_BASE_URL[config.provider]
+        config.baseUrl ?? OPENAI_COMPATIBLE_BASE_URL[config.provider];
       return createOpenAI({
         apiKey: config.apiKey || 'ollama', // some servers reject empty keys
         baseURL,
-      }).chat(config.model)
+      }).chat(config.model);
     }
   }
 }

@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server'
-import { requireSuperAdmin } from '@/features/auth/lib/super-admin'
-import { toErrorResponse } from '@/features/auth/lib/account'
-import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client'
-import { encrypt } from '@/features/whatsapp/lib/encryption'
+import { NextResponse } from 'next/server';
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
+import { toErrorResponse } from '@/features/auth/lib/account';
+import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client';
+import { encrypt } from '@/features/whatsapp/lib/encryption';
 import {
   ASSISTANT_DEFAULT_MODEL,
   ASSISTANT_DEFAULT_SYSTEM_PROMPT,
@@ -10,7 +10,7 @@ import {
   ASSISTANT_SETTING_KEY,
   isAssistantProvider,
   providerRequiresKey,
-} from '@/features/assistant/lib/config'
+} from '@/features/assistant/lib/config';
 
 // ============================================================
 // Platform assistant key management — super-admin only.
@@ -24,36 +24,39 @@ import {
 // ============================================================
 
 interface StoredShape {
-  provider?: unknown
-  model?: unknown
-  api_key?: unknown
-  base_url?: unknown
-  system_prompt?: unknown
-  enabled?: unknown
+  provider?: unknown;
+  model?: unknown;
+  api_key?: unknown;
+  base_url?: unknown;
+  system_prompt?: unknown;
+  enabled?: unknown;
 }
 
 /** GET /api/admin/assistant-config — presence metadata, never the key. */
 export async function GET() {
   try {
-    await requireSuperAdmin()
+    await requireSuperAdmin();
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 
   const { data, error } = await supabaseAdmin()
     .from('platform_settings')
     .select('value, updated_at')
     .eq('key', ASSISTANT_SETTING_KEY)
-    .maybeSingle()
+    .maybeSingle();
 
   if (error) {
-    console.error('[admin/assistant-config GET] read failed:', error)
-    return NextResponse.json({ error: 'Failed to load config' }, { status: 500 })
+    console.error('[admin/assistant-config GET] read failed:', error);
+    return NextResponse.json(
+      { error: 'Failed to load config' },
+      { status: 500 }
+    );
   }
 
-  const v = (data?.value ?? null) as StoredShape | null
-  const hasKey = !!v && typeof v.api_key === 'string' && v.api_key.length > 0
-  const storedProvider = isAssistantProvider(v?.provider) ? v?.provider : null
+  const v = (data?.value ?? null) as StoredShape | null;
+  const hasKey = !!v && typeof v.api_key === 'string' && v.api_key.length > 0;
+  const storedProvider = isAssistantProvider(v?.provider) ? v?.provider : null;
   return NextResponse.json({
     // Keyless providers (Ollama) count as configured once saved.
     configured:
@@ -66,7 +69,7 @@ export async function GET() {
       typeof v?.system_prompt === 'string' ? v.system_prompt : null,
     default_system_prompt: ASSISTANT_DEFAULT_SYSTEM_PROMPT,
     updated_at: data?.updated_at ?? null,
-  })
+  });
 }
 
 /**
@@ -78,75 +81,75 @@ export async function GET() {
  */
 export async function PATCH(request: Request) {
   try {
-    await requireSuperAdmin()
+    await requireSuperAdmin();
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 
   const body = (await request.json().catch(() => null)) as {
-    provider?: unknown
-    model?: unknown
-    api_key?: unknown
-    base_url?: unknown
-    system_prompt?: unknown
-    enabled?: unknown
-  } | null
+    provider?: unknown;
+    model?: unknown;
+    api_key?: unknown;
+    base_url?: unknown;
+    system_prompt?: unknown;
+    enabled?: unknown;
+  } | null;
 
   if (!body || !isAssistantProvider(body.provider)) {
     return NextResponse.json(
       { error: `provider must be one of: ${ASSISTANT_PROVIDERS.join(', ')}` },
-      { status: 400 },
-    )
+      { status: 400 }
+    );
   }
-  const provider = body.provider
+  const provider = body.provider;
   const model =
     typeof body.model === 'string' && body.model.trim().length > 0
       ? body.model.trim()
-      : ASSISTANT_DEFAULT_MODEL[provider]
-  const enabled = body.enabled !== false
+      : ASSISTANT_DEFAULT_MODEL[provider];
+  const enabled = body.enabled !== false;
   const baseUrl =
     typeof body.base_url === 'string' && body.base_url.trim().length > 0
       ? body.base_url.trim()
-      : null
+      : null;
   // Blank/omitted prompt = use the platform default. Capped so a
   // pasted novel can't blow up every request's token budget.
   const systemPrompt =
     typeof body.system_prompt === 'string' &&
     body.system_prompt.trim().length > 0
       ? body.system_prompt.trim().slice(0, 8000)
-      : null
+      : null;
 
   // Reject junk endpoints early (mainly for self-hosted Ollama/NIM).
   if (baseUrl && !/^https?:\/\//.test(baseUrl)) {
     return NextResponse.json(
       { error: 'base_url must start with http:// or https://' },
-      { status: 400 },
-    )
+      { status: 400 }
+    );
   }
 
-  const admin = supabaseAdmin()
+  const admin = supabaseAdmin();
 
   // Preserve the existing encrypted key when none is provided.
-  let encryptedKey: string | null = null
+  let encryptedKey: string | null = null;
   if (typeof body.api_key === 'string' && body.api_key.trim().length > 0) {
-    encryptedKey = encrypt(body.api_key.trim())
+    encryptedKey = encrypt(body.api_key.trim());
   } else {
     const { data } = await admin
       .from('platform_settings')
       .select('value')
       .eq('key', ASSISTANT_SETTING_KEY)
-      .maybeSingle()
-    const existing = (data?.value ?? null) as StoredShape | null
+      .maybeSingle();
+    const existing = (data?.value ?? null) as StoredShape | null;
     if (typeof existing?.api_key === 'string' && existing.api_key.length > 0) {
-      encryptedKey = existing.api_key
+      encryptedKey = existing.api_key;
     }
   }
 
   if (!encryptedKey && providerRequiresKey(provider)) {
     return NextResponse.json(
       { error: 'api_key is required for initial setup' },
-      { status: 400 },
-    )
+      { status: 400 }
+    );
   }
 
   const { error } = await admin.from('platform_settings').upsert(
@@ -162,13 +165,16 @@ export async function PATCH(request: Request) {
       },
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'key' },
-  )
+    { onConflict: 'key' }
+  );
 
   if (error) {
-    console.error('[admin/assistant-config PATCH] upsert failed:', error)
-    return NextResponse.json({ error: 'Failed to save config' }, { status: 500 })
+    console.error('[admin/assistant-config PATCH] upsert failed:', error);
+    return NextResponse.json(
+      { error: 'Failed to save config' },
+      { status: 500 }
+    );
   }
 
-  return NextResponse.json({ configured: true, enabled, provider, model })
+  return NextResponse.json({ configured: true, enabled, provider, model });
 }

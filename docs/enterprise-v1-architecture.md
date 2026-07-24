@@ -84,83 +84,83 @@ This catalog analyzes every meaningful source-controlled area. Closely related f
 
 ### Root and operational files
 
-| File/group | Responsibility and architecture impact |
-| --- | --- |
-| `package.json`, `pnpm-lock.yaml`, `package-lock.json` | Runtime/dependency contract. pnpm is canonical in active scripts; retaining two lockfiles risks version drift. |
-| `scripts/run-web.mjs` | Cross-platform launcher; validates `WEB_PORT`, invokes the installed Next CLI, forwards termination signals. |
-| `.env.local.example` | Public configuration contract. Separates web/API ports, optional explicit BFF target, Supabase, Meta, encryption, cron, AI tuning. |
-| `next.config.ts` | Next behavior, experimental settings, image/security response behavior. Build currently emits an ES-module package-type warning. |
-| `tsconfig.json`, `next-env.d.ts` | Strict TypeScript, bundler resolution, JSX and `@/*` source alias. |
-| `eslint.config.mjs`, `.prettierrc`, `.prettierignore`, `.editorconfig` | Static quality and formatting policy. Repository-wide historical lint debt remains. |
-| `vitest.config.ts` | Colocated TypeScript unit tests. |
-| `components.json`, `src/app/globals.css` | shadcn/Tailwind v4 component and token foundation. |
-| `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE` | Product, release, contribution and legal contracts; some upstream claims are more aspirational than the audited fork state. |
-| `.github/*` | CI, dependency updates, security policy, templates, CODEOWNERS and deployment artwork. |
+| File/group                                                             | Responsibility and architecture impact                                                                                             |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`, `pnpm-lock.yaml`, `package-lock.json`                  | Runtime/dependency contract. pnpm is canonical in active scripts; retaining two lockfiles risks version drift.                     |
+| `scripts/run-web.mjs`                                                  | Cross-platform launcher; validates `WEB_PORT`, invokes the installed Next CLI, forwards termination signals.                       |
+| `.env.local.example`                                                   | Public configuration contract. Separates web/API ports, optional explicit BFF target, Supabase, Meta, encryption, cron, AI tuning. |
+| `next.config.ts`                                                       | Next behavior, experimental settings, image/security response behavior. Build currently emits an ES-module package-type warning.   |
+| `tsconfig.json`, `next-env.d.ts`                                       | Strict TypeScript, bundler resolution, JSX and `@/*` source alias.                                                                 |
+| `eslint.config.mjs`, `.prettierrc`, `.prettierignore`, `.editorconfig` | Static quality and formatting policy. Repository-wide historical lint debt remains.                                                |
+| `vitest.config.ts`                                                     | Colocated TypeScript unit tests.                                                                                                   |
+| `components.json`, `src/app/globals.css`                               | shadcn/Tailwind v4 component and token foundation.                                                                                 |
+| `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`              | Product, release, contribution and legal contracts; some upstream claims are more aspirational than the audited fork state.        |
+| `.github/*`                                                            | CI, dependency updates, security policy, templates, CODEOWNERS and deployment artwork.                                             |
 
 ### `src/app`: routes and composition
 
-| Area | Files/responsibility |
-| --- | --- |
-| Root | `layout.tsx`, `page.tsx`, `icon.tsx`, `globals.css` establish metadata, global providers/theme, root redirect and visual system. |
-| Auth | `(auth)/login`, `signup`, `forgot-password`, `reset-password`, plus `/auth/callback`; Supabase Auth is the only auth provider. |
-| Dashboard shell | `(dashboard)/layout.tsx` resolves membership/account context and composes navigation/header. |
-| Core pages | `/dashboard`, `/inbox`, `/contacts`, `/pipelines`, `/broadcasts`, `/automations`, `/flows`, `/agents`, `/bookings`, `/notifications`, `/settings`. |
-| Detail/editor pages | Broadcast detail/new, automation new/edit/logs, flow editor/runs and invitation join. |
-| Compatibility pages | `/bigin/org/[accountId]/...` and `/org/[accountId]/pipelines/...`; these preserve older account-prefixed URLs and should become validated redirects after canonical routes are complete. |
-| Account APIs | `/api/account/*` manages account metadata, members, invitations, ownership and API keys with role checks. |
-| AI APIs | `/api/ai/*` manages provider config, drafts, auto-reply, knowledge, reindexing, playground, testing and usage. |
-| Automation/Flow APIs | CRUD, activation, run logs, templates, execution and secret-protected cron drains. |
-| Channel APIs | `/api/settings/channels` manages provider-neutral connections; `/api/channels/webhooks/{meta,twilio}` are new normalized boundaries. |
-| WhatsApp APIs | Legacy/mature Meta config, send, media, reactions, templates, broadcasts and webhook lifecycle. |
-| Public API | `/api/v1/*` exposes scoped contacts, conversations, messages, broadcasts, identity and outbound webhook configuration. |
-| Service BFF | `/api/service/[...path]` authenticates and proxies to Express without exposing the internal API. |
-| Demo APIs | `/api/demo/*` use demo/repository paths and are not the source of truth for production persistence. |
+| Area                 | Files/responsibility                                                                                                                                                                     |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Root                 | `layout.tsx`, `page.tsx`, `icon.tsx`, `globals.css` establish metadata, global providers/theme, root redirect and visual system.                                                         |
+| Auth                 | `(auth)/login`, `signup`, `forgot-password`, `reset-password`, plus `/auth/callback`; Supabase Auth is the only auth provider.                                                           |
+| Dashboard shell      | `(dashboard)/layout.tsx` resolves membership/account context and composes navigation/header.                                                                                             |
+| Core pages           | `/dashboard`, `/inbox`, `/contacts`, `/pipelines`, `/broadcasts`, `/automations`, `/flows`, `/agents`, `/bookings`, `/notifications`, `/settings`.                                       |
+| Detail/editor pages  | Broadcast detail/new, automation new/edit/logs, flow editor/runs and invitation join.                                                                                                    |
+| Compatibility pages  | `/bigin/org/[accountId]/...` and `/org/[accountId]/pipelines/...`; these preserve older account-prefixed URLs and should become validated redirects after canonical routes are complete. |
+| Account APIs         | `/api/account/*` manages account metadata, members, invitations, ownership and API keys with role checks.                                                                                |
+| AI APIs              | `/api/ai/*` manages provider config, drafts, auto-reply, knowledge, reindexing, playground, testing and usage.                                                                           |
+| Automation/Flow APIs | CRUD, activation, run logs, templates, execution and secret-protected cron drains.                                                                                                       |
+| Channel APIs         | `/api/settings/channels` manages provider-neutral connections; `/api/channels/webhooks/{meta,twilio}` are new normalized boundaries.                                                     |
+| WhatsApp APIs        | Legacy/mature Meta config, send, media, reactions, templates, broadcasts and webhook lifecycle.                                                                                          |
+| Public API           | `/api/v1/*` exposes scoped contacts, conversations, messages, broadcasts, identity and outbound webhook configuration.                                                                   |
+| Service BFF          | `/api/service/[...path]` authenticates and proxies to Express without exposing the internal API.                                                                                         |
+| Demo APIs            | `/api/demo/*` use demo/repository paths and are not the source of truth for production persistence.                                                                                      |
 
 ### `src/components`: UI boundaries
 
-| Group | Responsibility |
-| --- | --- |
-| `ui/` (25 files) | Accessible shadcn-style primitives: buttons, inputs, dialogs, tables, navigation, feedback and overlays. |
-| `settings/` (22) | Profile, account/team, WhatsApp, AI, API keys and channel connection setup; the channel panel exposes real SMTP/Resend/Twilio setup and explicit unavailable states for unfinished providers. |
-| `inbox/` (11) | Conversation list, message timeline, composer, assignments, notes/actions and responsive inbox shell. |
-| `pipelines/` (11) | Kanban/workspace, filters, forms, drag/drop and SQLite/demo repository integration points. |
-| `flows/` (9) | React Flow editor, node palette/configuration, state and run views. |
-| `dashboard/` (8) | Metrics, charts, activity and date-range presentation. |
-| `contacts/` (6) | List/detail/import/filter/contact interactions. |
-| `broadcasts/` (4) | Campaign creation, recipient/template configuration and result presentation. |
-| `layout/`, `providers/`, `presence/` | Global shell/navigation, SWR/theme providers and member presence. |
-| `agents/`, `automations/`, `bookings/`, `auth/`, `interactive/` | Feature-specific page shells and controls. Some are early-stage UI surfaces relative to persisted domain depth. |
+| Group                                                           | Responsibility                                                                                                                                                                                |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ui/` (25 files)                                                | Accessible shadcn-style primitives: buttons, inputs, dialogs, tables, navigation, feedback and overlays.                                                                                      |
+| `settings/` (22)                                                | Profile, account/team, WhatsApp, AI, API keys and channel connection setup; the channel panel exposes real SMTP/Resend/Twilio setup and explicit unavailable states for unfinished providers. |
+| `inbox/` (11)                                                   | Conversation list, message timeline, composer, assignments, notes/actions and responsive inbox shell.                                                                                         |
+| `pipelines/` (11)                                               | Kanban/workspace, filters, forms, drag/drop and SQLite/demo repository integration points.                                                                                                    |
+| `flows/` (9)                                                    | React Flow editor, node palette/configuration, state and run views.                                                                                                                           |
+| `dashboard/` (8)                                                | Metrics, charts, activity and date-range presentation.                                                                                                                                        |
+| `contacts/` (6)                                                 | List/detail/import/filter/contact interactions.                                                                                                                                               |
+| `broadcasts/` (4)                                               | Campaign creation, recipient/template configuration and result presentation.                                                                                                                  |
+| `layout/`, `providers/`, `presence/`                            | Global shell/navigation, SWR/theme providers and member presence.                                                                                                                             |
+| `agents/`, `automations/`, `bookings/`, `auth/`, `interactive/` | Feature-specific page shells and controls. Some are early-stage UI surfaces relative to persisted domain depth.                                                                               |
 
 ### `src/lib`: domain and infrastructure
 
-| Group | Responsibility, persistence and status |
-| --- | --- |
-| `supabase/` | Browser/server clients. Server client participates in cookie-backed Auth; service-role use must remain server-only. |
-| `auth/`, `account/` | Membership context, roles, invitation safety, API context and account operations. Tests cover role and invitation logic. |
-| `whatsapp/` (33 files) | Mature Meta transport: encryption, registration, sending, media, templates, webhook normalization, interactive messages, reactions, contact/conversation resolution and delivery state. |
-| `channels/` (11) | Provider-neutral types, capability registry, credential envelopes and adapters. Foundation is implemented; provider parity is not. |
-| `ai/` (27) | OpenAI/Anthropic BYO-key generation, encrypted configuration, knowledge retrieval/embeddings, draft/auto-reply, usage, handoff and safety rules. |
-| `flows/` (14) | Graph validation/layout, execution, fallback and deterministic routing. |
-| `automations/` (9) | Trigger/action validation, engine and scheduled continuation. Required precedence is Flows → Automations → AI. |
-| `api/`, `api-keys/`, `webhooks/` | Public API auth/pagination/errors, key hashing/scopes and signed retrying outbound delivery. |
-| `pipelines/` (10) | Pipeline/deal models, validation, workspace operations and SQLite-backed/demo persistence. SQLite is an architectural exception and not a replacement for Supabase production state. |
-| `contacts/`, `inbox/`, `dashboard/` | Domain projections, filters, date/metric helpers and view models. |
-| `storage/`, `cache/`, `rate-limit.ts` | Server-side storage/cache/rate controls; in-memory implementations are instance-local and unsuitable for strict multi-instance guarantees. |
-| `routing/`, `routes/` | Canonical simple routes plus legacy account-prefixed generators; consolidation remains incomplete. |
-| `demo/` | Seed/demo data and repositories; not production authority. |
-| `service-api-url.ts` | Single tested resolver for Express BFF target and port synchronization. |
+| Group                                 | Responsibility, persistence and status                                                                                                                                                  |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/`                           | Browser/server clients. Server client participates in cookie-backed Auth; service-role use must remain server-only.                                                                     |
+| `auth/`, `account/`                   | Membership context, roles, invitation safety, API context and account operations. Tests cover role and invitation logic.                                                                |
+| `whatsapp/` (33 files)                | Mature Meta transport: encryption, registration, sending, media, templates, webhook normalization, interactive messages, reactions, contact/conversation resolution and delivery state. |
+| `channels/` (11)                      | Provider-neutral types, capability registry, credential envelopes and adapters. Foundation is implemented; provider parity is not.                                                      |
+| `ai/` (27)                            | OpenAI/Anthropic BYO-key generation, encrypted configuration, knowledge retrieval/embeddings, draft/auto-reply, usage, handoff and safety rules.                                        |
+| `flows/` (14)                         | Graph validation/layout, execution, fallback and deterministic routing.                                                                                                                 |
+| `automations/` (9)                    | Trigger/action validation, engine and scheduled continuation. Required precedence is Flows → Automations → AI.                                                                          |
+| `api/`, `api-keys/`, `webhooks/`      | Public API auth/pagination/errors, key hashing/scopes and signed retrying outbound delivery.                                                                                            |
+| `pipelines/` (10)                     | Pipeline/deal models, validation, workspace operations and SQLite-backed/demo persistence. SQLite is an architectural exception and not a replacement for Supabase production state.    |
+| `contacts/`, `inbox/`, `dashboard/`   | Domain projections, filters, date/metric helpers and view models.                                                                                                                       |
+| `storage/`, `cache/`, `rate-limit.ts` | Server-side storage/cache/rate controls; in-memory implementations are instance-local and unsuitable for strict multi-instance guarantees.                                              |
+| `routing/`, `routes/`                 | Canonical simple routes plus legacy account-prefixed generators; consolidation remains incomplete.                                                                                      |
+| `demo/`                               | Seed/demo data and repositories; not production authority.                                                                                                                              |
+| `service-api-url.ts`                  | Single tested resolver for Express BFF target and port synchronization.                                                                                                                 |
 
 ### Express internal API
 
-| File | Responsibility |
-| --- | --- |
-| `server/index.ts` | Loads validated config, binds host/port and performs graceful shutdown. |
-| `server/config.ts` | Zod validation for API host/port and Supabase public credentials. |
-| `server/app.ts` | Express composition, Helmet, JSON limits, structured logging/redaction, health probes and domain routers. |
-| `server/http/auth.ts` | Supabase bearer-token authentication. |
-| `server/http/context.ts` | Request/account context and request ID propagation. |
-| `server/http/errors.ts` | Stable HTTP error translation. |
-| `server/domains/account/routes.ts` | First extracted domain router; most business logic still lives in Next route handlers. |
+| File                               | Responsibility                                                                                            |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `server/index.ts`                  | Loads validated config, binds host/port and performs graceful shutdown.                                   |
+| `server/config.ts`                 | Zod validation for API host/port and Supabase public credentials.                                         |
+| `server/app.ts`                    | Express composition, Helmet, JSON limits, structured logging/redaction, health probes and domain routers. |
+| `server/http/auth.ts`              | Supabase bearer-token authentication.                                                                     |
+| `server/http/context.ts`           | Request/account context and request ID propagation.                                                       |
+| `server/http/errors.ts`            | Stable HTTP error translation.                                                                            |
+| `server/domains/account/routes.ts` | First extracted domain router; most business logic still lives in Next route handlers.                    |
 
 ### MCP package
 
@@ -184,18 +184,18 @@ The build exposes 29 page files and 60 route-handler files. Pages include four a
 
 Supabase is the sole production data/auth platform. Tenant data is keyed by `account_id`; authorization combines Auth users, membership helpers, RLS and explicit account filters in service-role paths. Storage covers private profile/chat/flow assets; Realtime supports inbox/presence updates.
 
-| Migrations | Capability introduced |
-| --- | --- |
-| `001`–`005` | Core CRM, pipelines, broadcast identifiers/counting and contact deletion behavior. |
-| `006`–`009` | Automations, counters, avatar storage and message actions. |
-| `010`–`016` | Flows, feature flags, Meta template/registration lifecycle and flow media. |
-| `017`–`020` | Shared accounts, memberships, invitations and follow-up RLS/RPC corrections. |
-| `021`–`025` | Currency, phone dedupe, chat media, presence and tag filtering. |
-| `026`–`030` | API keys, notifications, outbound webhooks, AI reply and knowledge/pgvector support. |
-| `031`–`037` | AI grants/polish, RLS correction, interactive messages, contact/conversation dedupe and pipeline workspace. |
-| `038` | Omnichannel connections/identities, OAuth state, webhook receipts, channel-aware records and notification delivery/preferences. |
-| `039` | Omnichannel conversation uniqueness correction. |
-| `040` | SMTP and Microsoft 365 provider enum/constraint expansion. |
+| Migrations  | Capability introduced                                                                                                           |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `001`–`005` | Core CRM, pipelines, broadcast identifiers/counting and contact deletion behavior.                                              |
+| `006`–`009` | Automations, counters, avatar storage and message actions.                                                                      |
+| `010`–`016` | Flows, feature flags, Meta template/registration lifecycle and flow media.                                                      |
+| `017`–`020` | Shared accounts, memberships, invitations and follow-up RLS/RPC corrections.                                                    |
+| `021`–`025` | Currency, phone dedupe, chat media, presence and tag filtering.                                                                 |
+| `026`–`030` | API keys, notifications, outbound webhooks, AI reply and knowledge/pgvector support.                                            |
+| `031`–`037` | AI grants/polish, RLS correction, interactive messages, contact/conversation dedupe and pipeline workspace.                     |
+| `038`       | Omnichannel connections/identities, OAuth state, webhook receipts, channel-aware records and notification delivery/preferences. |
+| `039`       | Omnichannel conversation uniqueness correction.                                                                                 |
+| `040`       | SMTP and Microsoft 365 provider enum/constraint expansion.                                                                      |
 
 ### Live-schema blocker
 
@@ -216,14 +216,14 @@ At the last integration inspection, the connected Supabase project exposed zero 
 
 ## 8. Provider implementation matrix
 
-| Provider | Contract/schema | Settings | Outbound | Inbound/webhook | OAuth/sync | Production status |
-| --- | --- | --- | --- | --- | --- | --- |
-| Meta WhatsApp | Mature legacy + neutral foundation | Existing WhatsApp + staged Channels | Implemented | HMAC webhook implemented | Registration, not OAuth | Most complete provider; neutral migration/backfill still pending live DB. |
-| Twilio WhatsApp | Types/capabilities/credentials present | Functional credential setup/test path | Partial/not end-to-end proven | Signed boundary exists | N/A | Incomplete transport lifecycle. |
-| Gmail | Types/schema/capabilities present | Explicitly unavailable | Not implemented end-to-end | Not implemented | Not implemented | Target only beyond foundation. |
-| Microsoft 365 | Enum/schema/capabilities present | Explicitly unavailable | Not implemented | Not implemented | Not implemented | Target only. |
-| Resend | Types/schema/settings path present | Functional setup surface | Partial/staged | Not complete | N/A | Not release-ready end to end. |
-| SMTP | Adapter and encrypted settings implemented | Functional setup/test | Nodemailer adapter implemented | Not applicable | N/A | Most complete new email sender; live DB/provider verification pending. |
+| Provider        | Contract/schema                            | Settings                              | Outbound                       | Inbound/webhook          | OAuth/sync              | Production status                                                         |
+| --------------- | ------------------------------------------ | ------------------------------------- | ------------------------------ | ------------------------ | ----------------------- | ------------------------------------------------------------------------- |
+| Meta WhatsApp   | Mature legacy + neutral foundation         | Existing WhatsApp + staged Channels   | Implemented                    | HMAC webhook implemented | Registration, not OAuth | Most complete provider; neutral migration/backfill still pending live DB. |
+| Twilio WhatsApp | Types/capabilities/credentials present     | Functional credential setup/test path | Partial/not end-to-end proven  | Signed boundary exists   | N/A                     | Incomplete transport lifecycle.                                           |
+| Gmail           | Types/schema/capabilities present          | Explicitly unavailable                | Not implemented end-to-end     | Not implemented          | Not implemented         | Target only beyond foundation.                                            |
+| Microsoft 365   | Enum/schema/capabilities present           | Explicitly unavailable                | Not implemented                | Not implemented          | Not implemented         | Target only.                                                              |
+| Resend          | Types/schema/settings path present         | Functional setup surface              | Partial/staged                 | Not complete             | N/A                     | Not release-ready end to end.                                             |
+| SMTP            | Adapter and encrypted settings implemented | Functional setup/test                 | Nodemailer adapter implemented | Not applicable           | N/A                     | Most complete new email sender; live DB/provider verification pending.    |
 
 No provider silently falls back to another. A connection must pass health verification before enablement, secrets remain encrypted/write-only, and switching providers requires appropriate new credentials.
 
@@ -256,18 +256,18 @@ The UI uses semantic shadcn primitives and has responsive shells, but full keybo
 
 ## 10. Current risks and technical debt
 
-| Priority | Risk | Consequence | Required action |
-| --- | --- | --- | --- |
-| Critical | Supabase baseline absent in connected environment | Persistence and RLS cannot be trusted or provider settings exercised | Apply `001`–`040` in order to a controlled project; run role/cross-account probes. |
-| High | Docs/target exceed implemented provider behavior | False release confidence | Keep provider matrix evidence-based; gate UI on implemented capabilities. |
-| High | Canonical and legacy routes coexist | Duplicate maintenance and account-ID URL leakage | Replace legacy page bodies with validated redirects after parity tests. |
-| High | SQLite/demo/in-memory paths coexist with Supabase | Restart/multi-instance data inconsistency | Converge production paths on Supabase or clearly isolate demo mode. |
-| High | Email OAuth/sync/webhook lifecycle missing | Omnichannel target incomplete | Implement one provider vertically before adding breadth. |
-| Medium | Two lockfiles | Non-reproducible installs | Retain pnpm lock only after deployment tooling confirms pnpm. |
-| Medium | Next dev lock blocks two servers from one checkout | Alternate-port verification can be confused with port collision | Stop the existing Next dev process or use a separate worktree/build for concurrent testing. |
-| Medium | Repository-wide lint debt | Signal dilution and CI risk | Establish lint baseline and burn down by domain without suppressing new errors. |
-| Medium | Next config ESM warning | Startup noise and parsing overhead | Align package/config module format. |
-| Medium | Express extraction is shallow | Duplicate Next/Express business boundaries | Define which domains move to Express; avoid two implementations. |
+| Priority | Risk                                               | Consequence                                                          | Required action                                                                             |
+| -------- | -------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Critical | Supabase baseline absent in connected environment  | Persistence and RLS cannot be trusted or provider settings exercised | Apply `001`–`040` in order to a controlled project; run role/cross-account probes.          |
+| High     | Docs/target exceed implemented provider behavior   | False release confidence                                             | Keep provider matrix evidence-based; gate UI on implemented capabilities.                   |
+| High     | Canonical and legacy routes coexist                | Duplicate maintenance and account-ID URL leakage                     | Replace legacy page bodies with validated redirects after parity tests.                     |
+| High     | SQLite/demo/in-memory paths coexist with Supabase  | Restart/multi-instance data inconsistency                            | Converge production paths on Supabase or clearly isolate demo mode.                         |
+| High     | Email OAuth/sync/webhook lifecycle missing         | Omnichannel target incomplete                                        | Implement one provider vertically before adding breadth.                                    |
+| Medium   | Two lockfiles                                      | Non-reproducible installs                                            | Retain pnpm lock only after deployment tooling confirms pnpm.                               |
+| Medium   | Next dev lock blocks two servers from one checkout | Alternate-port verification can be confused with port collision      | Stop the existing Next dev process or use a separate worktree/build for concurrent testing. |
+| Medium   | Repository-wide lint debt                          | Signal dilution and CI risk                                          | Establish lint baseline and burn down by domain without suppressing new errors.             |
+| Medium   | Next config ESM warning                            | Startup noise and parsing overhead                                   | Align package/config module format.                                                         |
+| Medium   | Express extraction is shallow                      | Duplicate Next/Express business boundaries                           | Define which domains move to Express; avoid two implementations.                            |
 
 ## 11. Approved Enterprise V1 target
 

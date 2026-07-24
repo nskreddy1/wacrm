@@ -119,7 +119,7 @@ export function resolveVariables(
   variables: Record<string, VariableMapping>,
   contact: Contact,
   customValues?: Map<string, string>,
-  externalParams?: Record<string, string>,
+  externalParams?: Record<string, string>
 ): string[] {
   // Keys are typically "1","2",... — numeric-aware sort keeps
   // {{1}} before {{10}}.
@@ -166,7 +166,7 @@ export function renderSmsBody(
   variables: Record<string, VariableMapping>,
   contact: Contact,
   customValues?: Map<string, string>,
-  externalParams?: Record<string, string>,
+  externalParams?: Record<string, string>
 ): string {
   return bodyText.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, key: string) => {
     const mapping = variables[key];
@@ -194,7 +194,7 @@ export function renderSmsBody(
  */
 async function fetchCustomValueIndex(
   supabase: ReturnType<typeof createClient>,
-  contactIds: string[],
+  contactIds: string[]
 ): Promise<CustomValueIndex> {
   const index: CustomValueIndex = new Map();
   if (contactIds.length === 0) return index;
@@ -229,7 +229,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     externalParams: Map<string, Record<string, string>> | null;
   }
 
-  async function resolveAudience(audience: AudienceConfig): Promise<ResolvedAudience> {
+  async function resolveAudience(
+    audience: AudienceConfig
+  ): Promise<ResolvedAudience> {
     const supabase = createClient();
 
     let contacts: Contact[] = [];
@@ -264,11 +266,15 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           .from('contacts')
           .select('*')
           .in('id', uniqueContactIds);
-        if (error) throw new Error(`Failed to fetch contacts: ${error.message}`);
+        if (error)
+          throw new Error(`Failed to fetch contacts: ${error.message}`);
         contacts = data ?? [];
       }
     } else if (audience.type === 'custom_field' && audience.customField) {
-      contacts = await resolveCustomFieldAudience(supabase, audience.customField);
+      contacts = await resolveCustomFieldAudience(
+        supabase,
+        audience.customField
+      );
     } else if (audience.type === 'csv' && audience.csvContacts) {
       contacts = await upsertCsvContacts(supabase, audience.csvContacts);
     }
@@ -298,22 +304,25 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
    */
   async function resolveExternalAudience(
     supabase: ReturnType<typeof createClient>,
-    audience: AudienceConfig,
+    audience: AudienceConfig
   ): Promise<{
     contacts: Contact[];
     externalParams: Map<string, Record<string, string>>;
   }> {
     const res = await fetch(
       `/api/external-sources/${audience.externalSourceId}/recipients`,
-      { method: 'POST' },
+      { method: 'POST' }
     );
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || 'Failed to fetch external recipients');
     }
 
-    const fetched: { phone: string; name?: string; params: Record<string, string> }[] =
-      data.recipients ?? [];
+    const fetched: {
+      phone: string;
+      name?: string;
+      params: Record<string, string>;
+    }[] = data.recipients ?? [];
     if (fetched.length === 0) {
       throw new Error('The external source returned no valid recipients.');
     }
@@ -327,12 +336,13 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
     const contacts = await upsertCsvContacts(
       supabase,
-      fetched.map((r) => ({ phone: r.phone, name: r.name })),
+      fetched.map((r) => ({ phone: r.phone, name: r.name }))
     );
 
     // Best-effort src: tag — RLS may deny tag creation for
     // member-level users; a failure here never blocks the send.
-    const sourceName = (data.sourceName as string) || audience.externalSourceName;
+    const sourceName =
+      (data.sourceName as string) || audience.externalSourceName;
     if (sourceName) {
       try {
         const {
@@ -349,7 +359,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           await assignImportedContactTags(
             supabase,
             contacts.map((c) => ({ contactId: c.id, tagNames: [tagName] })),
-            tagIdByKey,
+            tagIdByKey
           );
         }
       } catch (err) {
@@ -373,7 +383,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
    */
   async function upsertCsvContacts(
     supabase: ReturnType<typeof createClient>,
-    csvRows: { phone: string; name?: string }[],
+    csvRows: { phone: string; name?: string }[]
   ): Promise<Contact[]> {
     if (csvRows.length === 0) return [];
 
@@ -444,7 +454,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
   async function resolveCustomFieldAudience(
     supabase: ReturnType<typeof createClient>,
-    filter: CustomFieldFilter,
+    filter: CustomFieldFilter
   ): Promise<Contact[]> {
     const { fieldId, operator, value } = filter;
 
@@ -458,7 +468,8 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
     if (operator === 'is') query = query.eq('value', value);
     else if (operator === 'is_not') query = query.neq('value', value);
-    else if (operator === 'contains') query = query.ilike('value', `%${value}%`);
+    else if (operator === 'contains')
+      query = query.ilike('value', `%${value}%`);
 
     const { data: matches, error: matchErr } = await query;
     if (matchErr)
@@ -475,7 +486,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     return data ?? [];
   }
 
-  async function createAndSendBroadcast(payload: BroadcastPayload): Promise<string> {
+  async function createAndSendBroadcast(
+    payload: BroadcastPayload
+  ): Promise<string> {
     setIsProcessing(true);
     setProgress(0);
 
@@ -500,9 +513,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
       // ── Step 1: Resolve audience contacts ────────────────────��────
       setProgress(5);
-      const { contacts } = await resolveAudience(
-        payload.audience,
-      );
+      const { contacts } = await resolveAudience(payload.audience);
 
       if (contacts.length === 0) {
         throw new Error('No contacts found for this audience.');
@@ -539,7 +550,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
       if (broadcastError || !broadcast) {
         throw new Error(
-          `Failed to create broadcast: ${broadcastError?.message ?? 'unknown error'}`,
+          `Failed to create broadcast: ${broadcastError?.message ?? 'unknown error'}`
         );
       }
 
@@ -570,7 +581,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
             })
             .eq('id', broadcast.id);
           throw new Error(
-            `Failed to insert recipient batch ${i / INSERT_BATCH_SIZE + 1}: ${recipientError.message}`,
+            `Failed to insert recipient batch ${i / INSERT_BATCH_SIZE + 1}: ${recipientError.message}`
           );
         }
       }
@@ -593,7 +604,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         .filter((id): id is string => Boolean(id));
       const customValueIndex = await fetchCustomValueIndex(
         supabase,
-        contactIds,
+        contactIds
       );
 
       let failedCount = 0;
@@ -630,7 +641,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                     payload.template.body_text ?? '',
                     payload.variables,
                     r.contact!,
-                    customValueIndex.get(r.contact!.id),
+                    customValueIndex.get(r.contact!.id)
                   ),
                 }))
             : batch
@@ -641,7 +652,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                     ? resolveVariables(
                         payload.variables,
                         r.contact,
-                        customValueIndex.get(r.contact.id),
+                        customValueIndex.get(r.contact.id)
                       )
                     : [],
                   ...(messageParams ? { messageParams } : {}),
@@ -651,7 +662,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
         try {
           const res = await fetch(
-            channel === 'sms' ? '/api/sms/broadcast' : '/api/whatsapp/broadcast',
+            channel === 'sms'
+              ? '/api/sms/broadcast'
+              : '/api/whatsapp/broadcast',
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -662,9 +675,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                       recipients: apiRecipients,
                       template_name: payload.template.name,
                       template_language: payload.template.language ?? 'en_US',
-                    },
+                    }
               ),
-            },
+            }
           );
 
           const data = await res.json();
@@ -726,7 +739,8 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
               .from('broadcast_recipients')
               .update({
                 status: 'failed',
-                error_message: err instanceof Error ? err.message : 'Unknown error',
+                error_message:
+                  err instanceof Error ? err.message : 'Unknown error',
               })
               .eq('id', recipient.id);
           }

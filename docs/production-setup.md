@@ -10,51 +10,51 @@ Set these in Vercel → Project → Settings → Environment Variables (Producti
 
 ### Required — Core (app will not run without these)
 
-| Variable | Purpose | How to get it |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Supabase dashboard → Project Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public (anon) client key | Supabase dashboard → Project Settings → API |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only admin key (webhooks, admin console, automations) | Supabase dashboard → Project Settings → API. **Never expose to the client.** |
-| `NEXT_PUBLIC_SITE_URL` | Canonical production URL, e.g. `https://app.yourdomain.com` | Used for invite links, Twilio callbacks, OAuth redirects. No trailing slash. |
-| `ENCRYPTION_KEY` | Encrypts WhatsApp/channel credentials and AI key validation proofs at rest | Generate: `openssl rand -hex 32`. **Losing it makes stored credentials unreadable.** Back it up securely. |
+| Variable                        | Purpose                                                                    | How to get it                                                                                             |
+| ------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL                                                       | Supabase dashboard → Project Settings → API                                                               |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public (anon) client key                                                   | Supabase dashboard → Project Settings → API                                                               |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Server-only admin key (webhooks, admin console, automations)               | Supabase dashboard → Project Settings → API. **Never expose to the client.**                              |
+| `NEXT_PUBLIC_SITE_URL`          | Canonical production URL, e.g. `https://app.yourdomain.com`                | Used for invite links, Twilio callbacks, OAuth redirects. No trailing slash.                              |
+| `ENCRYPTION_KEY`                | Encrypts WhatsApp/channel credentials and AI key validation proofs at rest | Generate: `openssl rand -hex 32`. **Losing it makes stored credentials unreadable.** Back it up securely. |
 
 ### Required — Channels (WhatsApp via Meta Cloud API)
 
-| Variable | Purpose |
-|---|---|
+| Variable          | Purpose                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
 | `META_APP_SECRET` | Verifies `X-Hub-Signature-256` on incoming WhatsApp webhooks. Meta App dashboard → App Settings → Basic. |
-| `META_APP_ID` | Needed for template header media uploads. Same page as above. |
+| `META_APP_ID`     | Needed for template header media uploads. Same page as above.                                            |
 
 ### Required — Super Admin Console
 
-| Variable | Purpose |
-|---|---|
-| `SUPER_ADMIN_EMAILS` | Comma-separated bootstrap allowlist (fallback OR-check with the `profiles.is_super_admin` DB flag). Example: `you@company.com` |
+| Variable                  | Purpose                                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `SUPER_ADMIN_EMAILS`      | Comma-separated bootstrap allowlist (fallback OR-check with the `profiles.is_super_admin` DB flag). Example: `you@company.com`     |
 | `CHANNEL_CREDENTIALS_KEY` | Encrypts per-tenant channel credentials saved from `/admin/channels`. Generate: `openssl rand -hex 32` (min 16 chars). Back it up. |
 
 ### Required — Automations / Cron
 
-| Variable | Purpose |
-|---|---|
+| Variable                 | Purpose                                                                                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AUTOMATION_CRON_SECRET` | Shared secret checked by `/api/automations/cron` and `/api/flows/cron`. Generate: `openssl rand -hex 24`. Use it in the cron job's Authorization header. |
 
 ### Optional — AI
 
-| Variable | Purpose |
-|---|---|
-| `GEMINI_API_KEY` | Shared fallback Gemini key. Tenants without their own key (set in `/admin/ai-agent`) fall back to this. |
-| `AI_ENGINE` | Global AI engine flag override. |
-| `OLLAMA_BASE_URL` | Only if using a self-hosted Ollama endpoint. |
-| `AI_REQUEST_TIMEOUT_MS` | Override AI request timeout. |
-| `AI_CONTEXT_MESSAGE_LIMIT` | Override how many messages of context AI receives. |
+| Variable                   | Purpose                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`           | Shared fallback Gemini key. Tenants without their own key (set in `/admin/ai-agent`) fall back to this. |
+| `AI_ENGINE`                | Global AI engine flag override.                                                                         |
+| `OLLAMA_BASE_URL`          | Only if using a self-hosted Ollama endpoint.                                                            |
+| `AI_REQUEST_TIMEOUT_MS`    | Override AI request timeout.                                                                            |
+| `AI_CONTEXT_MESSAGE_LIMIT` | Override how many messages of context AI receives.                                                      |
 
 ### Optional — Misc
 
-| Variable | Purpose |
-|---|---|
-| `ALLOWED_INVITE_HOSTS` | Extra allowed hostnames for invite links (defense against host-header spoofing). |
+| Variable                     | Purpose                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| `ALLOWED_INVITE_HOSTS`       | Extra allowed hostnames for invite links (defense against host-header spoofing).                    |
 | `WHATSAPP_TEMPLATES_DRY_RUN` | Set `true` to test template submission without hitting Meta. **Must be unset/false in production.** |
-| `NEXT_PUBLIC_APP_LOCALE` | Default locale (defaults to `en`). |
+| `NEXT_PUBLIC_APP_LOCALE`     | Default locale (defaults to `en`).                                                                  |
 
 ---
 
@@ -103,10 +103,10 @@ See `docs/twilio-setup.md` for details. In short:
 
 Create these in Vercel → Project → Settings → Cron Jobs (or `vercel.json`), sending the secret:
 
-| Path | Suggested schedule | Purpose |
-|---|---|---|
-| `/api/automations/cron?secret=<AUTOMATION_CRON_SECRET>` | every 5 min | Time-based automations |
-| `/api/flows/cron?secret=<AUTOMATION_CRON_SECRET>` | every 5 min | Scheduled flow steps |
+| Path                                                    | Suggested schedule | Purpose                |
+| ------------------------------------------------------- | ------------------ | ---------------------- |
+| `/api/automations/cron?secret=<AUTOMATION_CRON_SECRET>` | every 5 min        | Time-based automations |
+| `/api/flows/cron?secret=<AUTOMATION_CRON_SECRET>`       | every 5 min        | Scheduled flow steps   |
 
 ---
 
@@ -181,7 +181,12 @@ Expose a JSON endpoint returning an array of records (directly or under a key se
 ```json
 {
   "data": [
-    { "parent_phone": "+15551234567", "parent_name": "Jane Doe", "student_name": "Sam", "class_room": "4B" }
+    {
+      "parent_phone": "+15551234567",
+      "parent_name": "Jane Doe",
+      "student_name": "Sam",
+      "class_room": "4B"
+    }
   ],
   "next": "https://school.example.com/api/parents?page=2"
 }

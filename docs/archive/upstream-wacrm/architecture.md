@@ -10,14 +10,14 @@ One-page tour of the codebase — so you know where to look when you want to cha
 
 ## Stack
 
-| Layer | Tool | Why |
-| --- | --- | --- |
-| Rendering | Next.js 16 (App Router) | Server components for data-fetch pages; client components where interactivity's needed. React 19. |
-| UI | Tailwind v4 + shadcn/base-ui primitives | Tailwind's zero-runtime styling, shadcn patterns for composable, dark-theme-first components. |
-| Data + Auth | Supabase | Postgres with Row-Level Security, built-in email/password auth, Storage for avatars, Realtime for the inbox. |
-| WhatsApp | Meta Cloud API | Official Business API. No third-party gateway. |
-| Encryption | `node:crypto` AES-256-GCM | Per-user WhatsApp access + verify tokens at rest. |
-| Scheduler | External HTTP pinger | Hits `GET /api/automations/cron` to drain Wait-step executions. |
+| Layer       | Tool                                    | Why                                                                                                          |
+| ----------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Rendering   | Next.js 16 (App Router)                 | Server components for data-fetch pages; client components where interactivity's needed. React 19.            |
+| UI          | Tailwind v4 + shadcn/base-ui primitives | Tailwind's zero-runtime styling, shadcn patterns for composable, dark-theme-first components.                |
+| Data + Auth | Supabase                                | Postgres with Row-Level Security, built-in email/password auth, Storage for avatars, Realtime for the inbox. |
+| WhatsApp    | Meta Cloud API                          | Official Business API. No third-party gateway.                                                               |
+| Encryption  | `node:crypto` AES-256-GCM               | Per-user WhatsApp access + verify tokens at rest.                                                            |
+| Scheduler   | External HTTP pinger                    | Hits `GET /api/automations/cron` to drain Wait-step executions.                                              |
 
 No ORM, no GraphQL layer, no dedicated backend. The Next server-side routes read and write Supabase directly via `@supabase/ssr`.
 
@@ -136,13 +136,13 @@ UI:
 
 ## Where to change things
 
-| Want to change… | Start here |
-| --- | --- |
-| Marketing copy / landing page | `src/app/page.tsx` + `src/components/landing/*` |
-| Dashboard metrics | `src/lib/dashboard/queries.ts` + `src/components/dashboard/*` |
-| Inbox behaviour | `src/app/(dashboard)/inbox/page.tsx` + `src/components/inbox/*` |
-| Automation triggers / actions | `src/lib/automations/engine.ts`, `steps-tree.ts`, `meta-send.ts` |
-| Add a DB column | new migration in `supabase/migrations/NNN_*.sql`, then update the matching `src/types/*.ts` |
-| Change auth provider | `src/lib/supabase/{client,server}.ts` + `src/hooks/use-auth.tsx` + `middleware.ts` |
-| Add a new API route | `src/app/api/<segment>/route.ts`, pattern after existing routes |
-| Tweak rate limits | `RATE_LIMITS` in `src/lib/rate-limit.ts` |
+| Want to change…               | Start here                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------- |
+| Marketing copy / landing page | `src/app/page.tsx` + `src/components/landing/*`                                             |
+| Dashboard metrics             | `src/lib/dashboard/queries.ts` + `src/components/dashboard/*`                               |
+| Inbox behaviour               | `src/app/(dashboard)/inbox/page.tsx` + `src/components/inbox/*`                             |
+| Automation triggers / actions | `src/lib/automations/engine.ts`, `steps-tree.ts`, `meta-send.ts`                            |
+| Add a DB column               | new migration in `supabase/migrations/NNN_*.sql`, then update the matching `src/types/*.ts` |
+| Change auth provider          | `src/lib/supabase/{client,server}.ts` + `src/hooks/use-auth.tsx` + `middleware.ts`          |
+| Add a new API route           | `src/app/api/<segment>/route.ts`, pattern after existing routes                             |
+| Tweak rate limits             | `RATE_LIMITS` in `src/lib/rate-limit.ts`                                                    |

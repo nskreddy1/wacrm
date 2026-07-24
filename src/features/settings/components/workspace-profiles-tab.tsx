@@ -16,7 +16,15 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import useSWR from 'swr';
-import { Copy, Loader2, Lock, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  Copy,
+  Loader2,
+  Lock,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -77,12 +85,18 @@ async function fetchProfiles(url: string): Promise<WorkspaceProfile[]> {
   return json.data ?? [];
 }
 
-export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) {
+export function WorkspaceProfilesTab({
+  onChanged,
+}: {
+  onChanged?: () => void;
+}) {
   const canManage = useCan('manage-members');
 
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<WorkspaceProfile | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<WorkspaceProfile | null>(
+    null
+  );
   const [deleting, setDeleting] = useState(false);
 
   // SWR owns fetch/loading/revalidate state — no manual load effect.
@@ -164,15 +178,21 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
               body: JSON.stringify(payload),
             });
       if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as { error?: string } | null;
+        const json = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(json?.error ?? 'Failed to save profile');
       }
-      toast.success(editor.mode === 'create' ? 'Profile created' : 'Profile updated');
+      toast.success(
+        editor.mode === 'create' ? 'Profile created' : 'Profile updated'
+      );
       setEditor(null);
       await load();
       onChanged?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save profile');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to save profile'
+      );
     } finally {
       setSaving(false);
     }
@@ -186,7 +206,9 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
         method: 'DELETE',
       });
       if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as { error?: string } | null;
+        const json = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(json?.error ?? 'Failed to delete profile');
       }
       toast.success('Profile deleted');
@@ -194,7 +216,9 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
       await load();
       onChanged?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to delete profile');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to delete profile'
+      );
     } finally {
       setDeleting(false);
     }
@@ -204,17 +228,19 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">Profiles</h2>
-          <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-muted-foreground">
-            Profiles help you define a set of permissions for each user as well as the
-            actions they can perform. When you invite users, you assign a profile to each
-            of them.
+          <h2 className="text-foreground text-lg font-semibold tracking-tight">
+            Profiles
+          </h2>
+          <p className="text-muted-foreground mt-1 max-w-[62ch] text-sm leading-relaxed">
+            Profiles help you define a set of permissions for each user as well
+            as the actions they can perform. When you invite users, you assign a
+            profile to each of them.
           </p>
         </div>
         {canManage && (
           <Button
             onClick={() => openCreate()}
-            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full"
           >
             <Plus className="size-4" />
             Create New Profile
@@ -224,7 +250,7 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
 
       {loading ? (
         <div className="flex items-center justify-center rounded-lg border py-16">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <Loader2 className="text-muted-foreground size-5 animate-spin" />
         </div>
       ) : (
         <DataTable
@@ -234,10 +260,13 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
               header: 'Profile Name',
               className: 'w-[22%]',
               cell: (p: WorkspaceProfile) => (
-                <span className="flex items-center gap-2 font-semibold text-foreground">
+                <span className="text-foreground flex items-center gap-2 font-semibold">
                   {p.name}
                   {p.is_system && (
-                    <Lock className="size-3.5 text-muted-foreground" aria-label="System profile" />
+                    <Lock
+                      className="text-muted-foreground size-3.5"
+                      aria-label="System profile"
+                    />
                   )}
                 </span>
               ),
@@ -246,7 +275,7 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
               id: 'description',
               header: 'Profile Description',
               cell: (p: WorkspaceProfile) => (
-                <span className="line-clamp-1 text-muted-foreground">
+                <span className="text-muted-foreground line-clamp-1">
                   {p.description ?? '—'}
                 </span>
               ),
@@ -282,7 +311,10 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
                             </Button>
                           }
                         />
-                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuContent
+                          align="end"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {!p.is_system && (
                             <DropdownMenuItem onClick={() => openEdit(p)}>
                               <Pencil className="size-4" />
@@ -302,7 +334,9 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
                                 onClick={() => setConfirmDelete(p)}
                               >
                                 <Trash2 className="size-4" />
-                                {p.member_count > 0 ? 'Delete (has users)' : 'Delete profile'}
+                                {p.member_count > 0
+                                  ? 'Delete (has users)'
+                                  : 'Delete profile'}
                               </DropdownMenuItem>
                             </>
                           )}
@@ -315,7 +349,11 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
           ]}
           rows={profiles}
           rowKey={(p) => p.id}
-          onRowClick={canManage ? (p) => (p.is_system ? openCreate(p) : openEdit(p)) : undefined}
+          onRowClick={
+            canManage
+              ? (p) => (p.is_system ? openCreate(p) : openEdit(p))
+              : undefined
+          }
           empty="No profiles yet."
         />
       )}
@@ -324,7 +362,11 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
               with Create Contact / Create Deal / Create Role / New User ---- */}
       <RecordSheet
         open={editor !== null}
-        title={editor?.mode === 'create' ? 'Create New Profile' : `Edit ${editor?.profile?.name ?? ''}`}
+        title={
+          editor?.mode === 'create'
+            ? 'Create New Profile'
+            : `Edit ${editor?.profile?.name ?? ''}`
+        }
         description="Choose what users assigned to this profile can see and do."
         saving={saving}
         isCreate={editor?.mode === 'create'}
@@ -344,7 +386,9 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
                   value={editor.name}
                   maxLength={80}
                   onChange={(e) =>
-                    setEditor((prev) => (prev ? { ...prev, name: e.target.value } : prev))
+                    setEditor((prev) =>
+                      prev ? { ...prev, name: e.target.value } : prev
+                    )
                   }
                   placeholder="e.g. Sales Agent"
                   className="h-11"
@@ -359,7 +403,7 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
                   rows={2}
                   onChange={(e) =>
                     setEditor((prev) =>
-                      prev ? { ...prev, description: e.target.value } : prev,
+                      prev ? { ...prev, description: e.target.value } : prev
                     )
                   }
                   placeholder="What is this profile for?"
@@ -385,10 +429,10 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
                             ? {
                                 ...prev,
                                 permissions: new Set(
-                                  source.permissions as PermissionSlug[],
+                                  source.permissions as PermissionSlug[]
                                 ),
                               }
-                            : prev,
+                            : prev
                         );
                       }
                     }}
@@ -400,15 +444,17 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
             <RecordSection id="profile-permissions" title="Permissions">
               {PERMISSION_GROUPS.map((group) => {
                 const slugs = group.permissions.map((p) => p.slug);
-                const onCount = slugs.filter((s) => editor.permissions.has(s)).length;
+                const onCount = slugs.filter((s) =>
+                  editor.permissions.has(s)
+                ).length;
                 const allOn = onCount === slugs.length;
                 return (
                   <fieldset key={group.key} className="space-y-2.5">
-                    <legend className="flex w-full items-center justify-between text-sm font-semibold text-foreground">
+                    <legend className="text-foreground flex w-full items-center justify-between text-sm font-semibold">
                       {group.label}
                       <button
                         type="button"
-                        className="text-xs font-medium text-primary hover:underline"
+                        className="text-primary text-xs font-medium hover:underline"
                         onClick={() => toggleGroup(slugs, allOn)}
                       >
                         {allOn ? 'Clear all' : 'Select all'}
@@ -426,10 +472,10 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
                             className="mt-0.5"
                           />
                           <span className="min-w-0">
-                            <span className="block text-sm font-medium text-foreground">
+                            <span className="text-foreground block text-sm font-medium">
                               {perm.label}
                             </span>
-                            <span className="block text-xs leading-relaxed text-muted-foreground">
+                            <span className="text-muted-foreground block text-xs leading-relaxed">
                               {perm.description}
                             </span>
                           </span>
@@ -457,10 +503,18 @@ export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) 
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDelete(null)}
+              disabled={deleting}
+            >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => void remove()} disabled={deleting}>
+            <Button
+              variant="destructive"
+              onClick={() => void remove()}
+              disabled={deleting}
+            >
               {deleting && <Loader2 className="size-4 animate-spin" />}
               Delete
             </Button>

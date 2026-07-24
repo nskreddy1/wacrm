@@ -26,12 +26,12 @@ The selected template's body is previewed in the wizard with `{{1}}`, `{{2}}` pl
 
 Four ways to pick recipients:
 
-| Mode | What it does |
-| --- | --- |
-| All contacts | Every contact in your tenant. |
-| By tag(s) | One or more tags. AND logic — a contact must have all selected tags to be included. |
-| By contact field | Filter on `name` / `email` / `company` with operators `is`, `is not`, `contains`. |
-| CSV upload | `.csv` file with a `phone` column (and optional `name`). Phones not in your tenant are skipped — the broadcast only sends to contacts you've already added. |
+| Mode             | What it does                                                                                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| All contacts     | Every contact in your tenant.                                                                                                                               |
+| By tag(s)        | One or more tags. AND logic — a contact must have all selected tags to be included.                                                                         |
+| By contact field | Filter on `name` / `email` / `company` with operators `is`, `is not`, `contains`.                                                                           |
+| CSV upload       | `.csv` file with a `phone` column (and optional `name`). Phones not in your tenant are skipped — the broadcast only sends to contacts you've already added. |
 
 The wizard shows the estimated recipient count under the picker so you don't accidentally blast 12,000 people instead of 12.
 
@@ -59,27 +59,27 @@ Scheduled sends require the same `/api/automations/cron` drain as Automation Wai
 
 Shows every broadcast you've sent or scheduled. Columns:
 
-| Column | Notes |
-| --- | --- |
-| Name | What you called it. Click to open the detail view. |
-| Template | Which Meta template was used. |
-| Recipients | Total count. |
-| Delivery | `delivered_count / total_recipients` as a percentage. |
-| Read | `read_count / delivered_count` — Meta's read-receipt deliveries. |
-| Status | Badge + colour. Pulses while `sending`. |
-| Date | When it sent (or is scheduled to send). |
+| Column     | Notes                                                            |
+| ---------- | ---------------------------------------------------------------- |
+| Name       | What you called it. Click to open the detail view.               |
+| Template   | Which Meta template was used.                                    |
+| Recipients | Total count.                                                     |
+| Delivery   | `delivered_count / total_recipients` as a percentage.            |
+| Read       | `read_count / delivered_count` — Meta's read-receipt deliveries. |
+| Status     | Badge + colour. Pulses while `sending`.                          |
+| Date       | When it sent (or is scheduled to send).                          |
 
 If any broadcast is `sending`, an indeterminate progress bar shows at the top of the list and the page polls every 5 seconds for status updates. Polling pauses when the tab is hidden.
 
 ## Statuses
 
-| Status | Means | Next transition |
-| --- | --- | --- |
-| Draft | Saved from the wizard but never sent. Editable. | → Scheduled or Sending on send. |
-| Scheduled | Queued for a future send time. | → Sending when the cron fires. |
-| Sending | Actively dispatching to recipients. | → Sent when all recipients have a terminal status. |
-| Sent | Every recipient is delivered, read, replied, or failed. | Terminal. |
-| Failed | The broadcast itself errored (e.g. template revoked). Individual failed recipients don't bubble up here — just total broadcast failures. | Terminal. |
+| Status    | Means                                                                                                                                    | Next transition                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Draft     | Saved from the wizard but never sent. Editable.                                                                                          | → Scheduled or Sending on send.                    |
+| Scheduled | Queued for a future send time.                                                                                                           | → Sending when the cron fires.                     |
+| Sending   | Actively dispatching to recipients.                                                                                                      | → Sent when all recipients have a terminal status. |
+| Sent      | Every recipient is delivered, read, replied, or failed.                                                                                  | Terminal.                                          |
+| Failed    | The broadcast itself errored (e.g. template revoked). Individual failed recipients don't bubble up here — just total broadcast failures. | Terminal.                                          |
 
 ## Detail view
 

@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 /**
  * Remote image from an arbitrary, untrusted host (WhatsApp/Twilio CDN
@@ -24,6 +24,11 @@ export function RemoteImage({
 }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote hosts can't be allow-listed for next/image
-    <img src={src || "/placeholder.svg"} alt={alt} className={cn(className)} onError={onError} />
+    <img
+      src={src || '/placeholder.svg'}
+      alt={alt}
+      className={cn(className)}
+      onError={onError}
+    />
   );
 }

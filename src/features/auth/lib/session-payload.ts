@@ -1,8 +1,8 @@
-import "server-only";
+import 'server-only';
 
-import { getCurrentAccount } from "@/features/auth/lib/account";
-import type { AccountRole } from "@/features/auth/lib/roles";
-import { getDataSource } from "@/lib/data/runtime";
+import { getCurrentAccount } from '@/features/auth/lib/account';
+import type { AccountRole } from '@/features/auth/lib/roles';
+import { getDataSource } from '@/lib/data/runtime';
 
 export type SessionProfile = {
   id: string;
@@ -42,7 +42,7 @@ export type SessionPayload = {
     profile: SessionProfile;
     account: SessionAccount;
   };
-  meta: { source: "mock" | "supabase" };
+  meta: { source: 'mock' | 'supabase' };
 };
 
 /**
@@ -68,16 +68,16 @@ export async function getSessionPayload(): Promise<SessionPayload> {
 
   const [profileResult, accountResult] = await Promise.all([
     context.supabase
-      .from("profiles")
+      .from('profiles')
       .select(
-        "user_id, full_name, email, avatar_url, role, beta_features, account_id, account_role, is_super_admin, created_at",
+        'user_id, full_name, email, avatar_url, role, beta_features, account_id, account_role, is_super_admin, created_at'
       )
-      .eq("user_id", context.userId)
+      .eq('user_id', context.userId)
       .single(),
     context.supabase
-      .from("accounts")
-      .select("id, name, default_currency")
-      .eq("id", context.accountId)
+      .from('accounts')
+      .select('id, name, default_currency')
+      .eq('id', context.accountId)
       .single(),
   ]);
 

@@ -17,7 +17,7 @@
 // can still surface the copyable link.
 // ============================================================
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
 
 export interface InviteEmailParams {
   to: string;
@@ -34,12 +34,12 @@ export interface InviteEmailParams {
 
 export interface InviteEmailResult {
   sent: boolean;
-  provider: "resend" | "supabase" | null;
+  provider: 'resend' | 'supabase' | null;
   error?: string;
 }
 
 function greetingName(p: InviteEmailParams): string {
-  const name = [p.firstName, p.lastName].filter(Boolean).join(" ").trim();
+  const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
   return name || p.to;
 }
 
@@ -68,7 +68,7 @@ function renderHtml(p: InviteEmailParams): string {
                 ${escapeHtml(p.inviterName)} has invited you to join
                 <strong>${escapeHtml(p.accountName)}</strong>. Click the button below to
                 accept the invitation and set up your account. This link expires in
-                ${p.expiresInDays} day${p.expiresInDays === 1 ? "" : "s"}.
+                ${p.expiresInDays} day${p.expiresInDays === 1 ? '' : 's'}.
               </p>
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
                 <tr>
@@ -102,11 +102,11 @@ function renderHtml(p: InviteEmailParams): string {
 
 function escapeHtml(s: string): string {
   return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 // ------------------------------------------------------------
@@ -114,20 +114,21 @@ function escapeHtml(s: string): string {
 // ------------------------------------------------------------
 async function sendViaResend(p: InviteEmailParams): Promise<InviteEmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return { sent: false, provider: null, error: "no api key" };
+  if (!apiKey) return { sent: false, provider: null, error: 'no api key' };
 
   // Without a verified domain Resend only allows onboarding@resend.dev,
   // which can only deliver to the account owner's address. EMAIL_FROM
   // lets operators plug in their verified sender.
   const from =
-    process.env.EMAIL_FROM?.trim() || "Workspace Invites <onboarding@resend.dev>";
+    process.env.EMAIL_FROM?.trim() ||
+    'Workspace Invites <onboarding@resend.dev>';
 
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         from,
@@ -138,21 +139,23 @@ async function sendViaResend(p: InviteEmailParams): Promise<InviteEmailResult> {
     });
 
     if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      console.error("[invite-email] resend send failed:", res.status, detail);
-      return { sent: false, provider: "resend", error: `resend ${res.status}` };
+      const detail = await res.text().catch(() => '');
+      console.error('[invite-email] resend send failed:', res.status, detail);
+      return { sent: false, provider: 'resend', error: `resend ${res.status}` };
     }
-    return { sent: true, provider: "resend" };
+    return { sent: true, provider: 'resend' };
   } catch (err) {
-    console.error("[invite-email] resend network error:", err);
-    return { sent: false, provider: "resend", error: "network error" };
+    console.error('[invite-email] resend network error:', err);
+    return { sent: false, provider: 'resend', error: 'network error' };
   }
 }
 
 // ------------------------------------------------------------
 // Provider: Supabase (default / testing)
 // ------------------------------------------------------------
-async function sendViaSupabase(p: InviteEmailParams): Promise<InviteEmailResult> {
+async function sendViaSupabase(
+  p: InviteEmailParams
+): Promise<InviteEmailResult> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
   const serviceKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ??
@@ -161,7 +164,11 @@ async function sendViaSupabase(p: InviteEmailParams): Promise<InviteEmailResult>
     process.env.SUPABASE_SECRET_KEY;
 
   if (!url || !serviceKey) {
-    return { sent: false, provider: null, error: "supabase admin not configured" };
+    return {
+      sent: false,
+      provider: null,
+      error: 'supabase admin not configured',
+    };
   }
 
   try {
@@ -175,7 +182,9 @@ async function sendViaSupabase(p: InviteEmailParams): Promise<InviteEmailResult>
     const { error } = await admin.auth.admin.inviteUserByEmail(p.to, {
       redirectTo: p.inviteUrl,
       data: {
-        full_name: [p.firstName, p.lastName].filter(Boolean).join(" ").trim() || undefined,
+        full_name:
+          [p.firstName, p.lastName].filter(Boolean).join(' ').trim() ||
+          undefined,
         invited_to_account: p.accountName,
       },
     });
@@ -184,13 +193,13 @@ async function sendViaSupabase(p: InviteEmailParams): Promise<InviteEmailResult>
       // Most common: the auth user already exists (they have an
       // account elsewhere). Not fatal — the admin still has the
       // copyable link to share directly.
-      console.error("[invite-email] supabase invite failed:", error.message);
-      return { sent: false, provider: "supabase", error: error.message };
+      console.error('[invite-email] supabase invite failed:', error.message);
+      return { sent: false, provider: 'supabase', error: error.message };
     }
-    return { sent: true, provider: "supabase" };
+    return { sent: true, provider: 'supabase' };
   } catch (err) {
-    console.error("[invite-email] supabase invite error:", err);
-    return { sent: false, provider: "supabase", error: "unexpected error" };
+    console.error('[invite-email] supabase invite error:', err);
+    return { sent: false, provider: 'supabase', error: 'unexpected error' };
   }
 }
 
@@ -200,7 +209,7 @@ async function sendViaSupabase(p: InviteEmailParams): Promise<InviteEmailResult>
  * Never throws — delivery is best-effort.
  */
 export async function sendInviteEmail(
-  p: InviteEmailParams,
+  p: InviteEmailParams
 ): Promise<InviteEmailResult> {
   if (process.env.RESEND_API_KEY) {
     const result = await sendViaResend(p);

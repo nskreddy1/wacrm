@@ -1,14 +1,17 @@
-import type { Metadata } from "next";
-import type { NavAccess } from "@/lib/navigation/config";
-import { getSessionPayload, type SessionPayload } from "@/features/auth/lib/session-payload";
-import { DashboardShell } from "./dashboard-shell";
+import type { Metadata } from 'next';
+import type { NavAccess } from '@/lib/navigation/config';
+import {
+  getSessionPayload,
+  type SessionPayload,
+} from '@/features/auth/lib/session-payload';
+import { DashboardShell } from './dashboard-shell';
 
 // Server layout whose only job is to declare "do not index" metadata
 // for the authed app. robots.ts already disallows these paths at the
 // crawler-level and middleware redirects unauthenticated visitors, so
 // this is belt-and-suspenders — but SEO-critical if a URL ever leaks
 // via a link shared externally.
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   robots: {
@@ -50,7 +53,10 @@ export default async function DashboardLayout({
   }
 
   return (
-    <DashboardShell initialAccess={initialAccess} initialSession={initialSession}>
+    <DashboardShell
+      initialAccess={initialAccess}
+      initialSession={initialSession}
+    >
       {children}
     </DashboardShell>
   );

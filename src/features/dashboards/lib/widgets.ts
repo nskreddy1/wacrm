@@ -10,11 +10,11 @@
 // (picker, config forms, renderers).
 // ============================================================
 
-export const WIDGET_SIZES = ['sm', 'md', 'lg', 'full'] as const
-export type WidgetSize = (typeof WIDGET_SIZES)[number]
+export const WIDGET_SIZES = ['sm', 'md', 'lg', 'full'] as const;
+export type WidgetSize = (typeof WIDGET_SIZES)[number];
 
-export const WIDGET_TYPES = ['kpi', 'chart', 'target', 'panel'] as const
-export type WidgetType = (typeof WIDGET_TYPES)[number]
+export const WIDGET_TYPES = ['kpi', 'chart', 'target', 'panel'] as const;
+export type WidgetType = (typeof WIDGET_TYPES)[number];
 
 // ------------------------------------------------------------
 // KPI metrics — single-number cards (with delta when available).
@@ -82,9 +82,9 @@ export const KPI_METRICS = {
     format: 'number',
     hasDelta: false,
   },
-} as const
+} as const;
 
-export type KpiMetric = keyof typeof KPI_METRICS
+export type KpiMetric = keyof typeof KPI_METRICS;
 
 // ------------------------------------------------------------
 // Charts — time series / distribution visualizations.
@@ -111,9 +111,9 @@ export const CHART_KINDS = {
     label: 'Broadcast funnel',
     description: 'Sent, delivered, read, replied, failed',
   },
-} as const
+} as const;
 
-export type ChartKind = keyof typeof CHART_KINDS
+export type ChartKind = keyof typeof CHART_KINDS;
 
 // ------------------------------------------------------------
 // Target meters — gauge of a metric against a user-set goal.
@@ -126,9 +126,9 @@ export const TARGET_METRICS = {
   wonCount30d: { label: 'Deals won (30d)', format: 'number' },
   activeDeals: { label: 'Active deals', format: 'number' },
   responseRatePct: { label: 'Response rate (%)', format: 'percent' },
-} as const
+} as const;
 
-export type TargetMetric = keyof typeof TARGET_METRICS
+export type TargetMetric = keyof typeof TARGET_METRICS;
 
 // ------------------------------------------------------------
 // Panels — prebuilt list/table blocks reused from the overview.
@@ -152,9 +152,9 @@ export const PANEL_KINDS = {
     label: 'Recent broadcasts',
     description: 'Latest campaigns with delivery stats',
   },
-} as const
+} as const;
 
-export type PanelKind = keyof typeof PANEL_KINDS
+export type PanelKind = keyof typeof PANEL_KINDS;
 
 // ------------------------------------------------------------
 // Widget instance stored in user_dashboards.widgets.
@@ -162,25 +162,25 @@ export type PanelKind = keyof typeof PANEL_KINDS
 
 export interface DashboardWidget {
   /** Client-generated uuid — stable identity for dnd + updates. */
-  id: string
-  type: WidgetType
-  size: WidgetSize
+  id: string;
+  type: WidgetType;
+  size: WidgetSize;
   /** Optional custom title; falls back to the registry label. */
-  title?: string
+  title?: string;
   config: {
     /** kpi + target */
-    metric?: KpiMetric | TargetMetric
+    metric?: KpiMetric | TargetMetric;
     /** chart */
-    kind?: ChartKind
+    kind?: ChartKind;
     /** panel */
-    panel?: PanelKind
+    panel?: PanelKind;
     /** target */
-    goal?: number
-  }
+    goal?: number;
+  };
 }
 
-export const MAX_WIDGETS_PER_DASHBOARD = 24
-export const MAX_DASHBOARDS_PER_USER = 12
+export const MAX_WIDGETS_PER_DASHBOARD = 24;
+export const MAX_DASHBOARDS_PER_USER = 12;
 
 /** Default size per widget type when added from the picker. */
 export const DEFAULT_SIZE: Record<WidgetType, WidgetSize> = {
@@ -188,10 +188,10 @@ export const DEFAULT_SIZE: Record<WidgetType, WidgetSize> = {
   chart: 'md',
   target: 'sm',
   panel: 'md',
-}
+};
 
 function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /**
@@ -201,88 +201,102 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * registry changes.
  */
 export function sanitizeWidget(raw: unknown): DashboardWidget | null {
-  if (!isRecord(raw)) return null
-  const { id, type, size, title, config } = raw
+  if (!isRecord(raw)) return null;
+  const { id, type, size, title, config } = raw;
 
-  if (typeof id !== 'string' || id.length === 0 || id.length > 64) return null
-  if (typeof type !== 'string' || !(WIDGET_TYPES as readonly string[]).includes(type)) return null
-  const widgetType = type as WidgetType
+  if (typeof id !== 'string' || id.length === 0 || id.length > 64) return null;
+  if (
+    typeof type !== 'string' ||
+    !(WIDGET_TYPES as readonly string[]).includes(type)
+  )
+    return null;
+  const widgetType = type as WidgetType;
 
   const widgetSize: WidgetSize =
-    typeof size === 'string' && (WIDGET_SIZES as readonly string[]).includes(size)
+    typeof size === 'string' &&
+    (WIDGET_SIZES as readonly string[]).includes(size)
       ? (size as WidgetSize)
-      : DEFAULT_SIZE[widgetType]
+      : DEFAULT_SIZE[widgetType];
 
-  const cfg = isRecord(config) ? config : {}
-  const out: DashboardWidget = { id, type: widgetType, size: widgetSize, config: {} }
+  const cfg = isRecord(config) ? config : {};
+  const out: DashboardWidget = {
+    id,
+    type: widgetType,
+    size: widgetSize,
+    config: {},
+  };
 
   if (typeof title === 'string' && title.trim().length > 0) {
-    out.title = title.trim().slice(0, 80)
+    out.title = title.trim().slice(0, 80);
   }
 
   switch (widgetType) {
     case 'kpi': {
-      const metric = cfg.metric
-      if (typeof metric !== 'string' || !(metric in KPI_METRICS)) return null
-      out.config.metric = metric as KpiMetric
-      break
+      const metric = cfg.metric;
+      if (typeof metric !== 'string' || !(metric in KPI_METRICS)) return null;
+      out.config.metric = metric as KpiMetric;
+      break;
     }
     case 'chart': {
-      const kind = cfg.kind
-      if (typeof kind !== 'string' || !(kind in CHART_KINDS)) return null
-      out.config.kind = kind as ChartKind
-      break
+      const kind = cfg.kind;
+      if (typeof kind !== 'string' || !(kind in CHART_KINDS)) return null;
+      out.config.kind = kind as ChartKind;
+      break;
     }
     case 'target': {
-      const metric = cfg.metric
-      if (typeof metric !== 'string' || !(metric in TARGET_METRICS)) return null
-      const goal = typeof cfg.goal === 'number' && Number.isFinite(cfg.goal) ? cfg.goal : 0
-      if (goal <= 0 || goal > 1_000_000_000) return null
-      out.config.metric = metric as TargetMetric
-      out.config.goal = goal
-      break
+      const metric = cfg.metric;
+      if (typeof metric !== 'string' || !(metric in TARGET_METRICS))
+        return null;
+      const goal =
+        typeof cfg.goal === 'number' && Number.isFinite(cfg.goal)
+          ? cfg.goal
+          : 0;
+      if (goal <= 0 || goal > 1_000_000_000) return null;
+      out.config.metric = metric as TargetMetric;
+      out.config.goal = goal;
+      break;
     }
     case 'panel': {
-      const panel = cfg.panel
-      if (typeof panel !== 'string' || !(panel in PANEL_KINDS)) return null
-      out.config.panel = panel as PanelKind
-      break
+      const panel = cfg.panel;
+      if (typeof panel !== 'string' || !(panel in PANEL_KINDS)) return null;
+      out.config.panel = panel as PanelKind;
+      break;
     }
   }
 
-  return out
+  return out;
 }
 
 /** Validate a whole widgets array; drops invalid entries, dedupes ids. */
 export function sanitizeWidgets(raw: unknown): DashboardWidget[] {
-  if (!Array.isArray(raw)) return []
-  const seen = new Set<string>()
-  const out: DashboardWidget[] = []
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: DashboardWidget[] = [];
   for (const entry of raw) {
-    if (out.length >= MAX_WIDGETS_PER_DASHBOARD) break
-    const w = sanitizeWidget(entry)
-    if (!w || seen.has(w.id)) continue
-    seen.add(w.id)
-    out.push(w)
+    if (out.length >= MAX_WIDGETS_PER_DASHBOARD) break;
+    const w = sanitizeWidget(entry);
+    if (!w || seen.has(w.id)) continue;
+    seen.add(w.id);
+    out.push(w);
   }
-  return out
+  return out;
 }
 
 /** Registry-driven display title for a widget. */
 export function widgetTitle(w: DashboardWidget): string {
-  if (w.title) return w.title
+  if (w.title) return w.title;
   switch (w.type) {
     case 'kpi':
       return w.config.metric && w.config.metric in KPI_METRICS
         ? KPI_METRICS[w.config.metric as KpiMetric].label
-        : 'KPI'
+        : 'KPI';
     case 'chart':
-      return w.config.kind ? CHART_KINDS[w.config.kind].label : 'Chart'
+      return w.config.kind ? CHART_KINDS[w.config.kind].label : 'Chart';
     case 'target':
       return w.config.metric && w.config.metric in TARGET_METRICS
         ? `${TARGET_METRICS[w.config.metric as TargetMetric].label} target`
-        : 'Target meter'
+        : 'Target meter';
     case 'panel':
-      return w.config.panel ? PANEL_KINDS[w.config.panel].label : 'Panel'
+      return w.config.panel ? PANEL_KINDS[w.config.panel].label : 'Panel';
   }
 }

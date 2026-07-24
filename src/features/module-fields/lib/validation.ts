@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from 'zod';
 
 /**
  * Bigin-style "Customize Fields" layout for non-pipeline modules
@@ -8,10 +8,10 @@ import { z } from "zod"
  *   { hidden: ["location"], custom: [{ id, label, type }] }
  */
 
-export const MODULE_KEYS = ["appointments", "catalog"] as const
-export type ModuleKey = (typeof MODULE_KEYS)[number]
+export const MODULE_KEYS = ['appointments', 'catalog'] as const;
+export type ModuleKey = (typeof MODULE_KEYS)[number];
 
-export const moduleKeySchema = z.enum(MODULE_KEYS)
+export const moduleKeySchema = z.enum(MODULE_KEYS);
 
 export const moduleFieldLayoutSchema = z.object({
   hidden: z.array(z.string().max(40)).max(30).default([]),
@@ -19,14 +19,17 @@ export const moduleFieldLayoutSchema = z.object({
     .array(
       z.object({
         id: z.string().min(1).max(40),
-        label: z.string().trim().min(1, "Field label is required").max(60),
-        type: z.enum(["text", "number", "date"]).default("text"),
-      }),
+        label: z.string().trim().min(1, 'Field label is required').max(60),
+        type: z.enum(['text', 'number', 'date']).default('text'),
+      })
     )
-    .max(10, "You can add up to 10 custom fields")
+    .max(10, 'You can add up to 10 custom fields')
     .default([]),
-})
+});
 
-export type ModuleFieldLayout = z.infer<typeof moduleFieldLayoutSchema>
+export type ModuleFieldLayout = z.infer<typeof moduleFieldLayoutSchema>;
 
-export const EMPTY_MODULE_FIELD_LAYOUT: ModuleFieldLayout = { hidden: [], custom: [] }
+export const EMPTY_MODULE_FIELD_LAYOUT: ModuleFieldLayout = {
+  hidden: [],
+  custom: [],
+};

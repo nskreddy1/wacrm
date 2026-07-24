@@ -28,7 +28,7 @@ beyond the window.
      customer-facing reply).
    - Summary is prepended to the system prompt ("Earlier in this
      conversation: ..."), so the provider only ever receives ~10 raw messages
-     + a short summary. Token-optimal long-term memory.
+     - a short summary. Token-optimal long-term memory.
 
 ## Verification
 

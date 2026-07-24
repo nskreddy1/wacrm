@@ -10,15 +10,15 @@ The Settings surface configures your account, your WhatsApp connection, your mes
 
 ## Tabs
 
-| Tab | What it controls |
-| --- | --- |
-| Profile | Your name, email, password, active sessions. |
-| WhatsApp Config | Phone number, access token, webhook URL. |
-| Templates | Build, submit, edit, and delete WhatsApp message templates. |
-| Tags | The shared tag library used across Contacts, Inbox, Flows, Automations. |
-| Deals | The account's default deal currency. |
-| Appearance | Color theme picker (5 themes). |
-| Members | Invite teammates, assign roles, transfer ownership. |
+| Tab             | What it controls                                                        |
+| --------------- | ----------------------------------------------------------------------- |
+| Profile         | Your name, email, password, active sessions.                            |
+| WhatsApp Config | Phone number, access token, webhook URL.                                |
+| Templates       | Build, submit, edit, and delete WhatsApp message templates.             |
+| Tags            | The shared tag library used across Contacts, Inbox, Flows, Automations. |
+| Deals           | The account's default deal currency.                                    |
+| Appearance      | Color theme picker (5 themes).                                          |
+| Members         | Invite teammates, assign roles, transfer ownership.                     |
 
 ## Profile
 
@@ -84,7 +84,7 @@ The shared tag library. Tags are account-scoped (every member of the account see
 
 ### Creating
 
-+ New tag → form with name + colour picker → Save. Appears in the list immediately.
+- New tag → form with name + colour picker → Save. Appears in the list immediately.
 
 ### Editing
 
@@ -96,13 +96,13 @@ Confirm → hard-delete. The tag is removed from every contact it was applied to
 
 ### Where tags appear
 
-| Surface | What tags do there |
-| --- | --- |
-| Contacts | Chips on contact rows + detail view. |
-| Inbox | Filter conversations by tag (sidebar). |
-| Broadcasts | Audience targeting in step 2. |
-| Flows | `condition` node (test for tag presence), `set_tag` node (add / remove). |
-| Automations | `add_tag` / `remove_tag` steps; `tag_added` trigger. |
+| Surface     | What tags do there                                                       |
+| ----------- | ------------------------------------------------------------------------ |
+| Contacts    | Chips on contact rows + detail view.                                     |
+| Inbox       | Filter conversations by tag (sidebar).                                   |
+| Broadcasts  | Audience targeting in step 2.                                            |
+| Flows       | `condition` node (test for tag presence), `set_tag` node (add / remove). |
+| Automations | `add_tag` / `remove_tag` steps; `tag_added` trigger.                     |
 
 ## Deals
 
@@ -131,13 +131,13 @@ The setting is stored on the account row (`accounts.default_currency`, added by 
 
 5 dark color themes, swap any time. Click a card → applied instantly across the entire app, persisted to this device.
 
-| Theme | Vibe |
-| --- | --- |
-| Violet (default) | The original — confident, slightly playful. |
-| Emerald | Growth-coded. Nods at messaging without copying WhatsApp green. |
-| Cobalt | Clean B2B-SaaS blue. Calm and product-y. |
-| Amber | Warm and friendly. Good for SMB teams. |
-| Rose | Bold and modern. D2C, creator-economy, lifestyle. |
+| Theme            | Vibe                                                            |
+| ---------------- | --------------------------------------------------------------- |
+| Violet (default) | The original — confident, slightly playful.                     |
+| Emerald          | Growth-coded. Nods at messaging without copying WhatsApp green. |
+| Cobalt           | Clean B2B-SaaS blue. Calm and product-y.                        |
+| Amber            | Warm and friendly. Good for SMB teams.                          |
+| Rose             | Bold and modern. D2C, creator-economy, lifestyle.               |
 
 ### How the picker works
 

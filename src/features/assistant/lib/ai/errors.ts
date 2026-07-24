@@ -1,4 +1,4 @@
-import { AiError, type AiProvider } from './types'
+import { AiError, type AiProvider } from './types';
 
 // ============================================================
 // Engine-agnostic error mapping + provider labels.
@@ -25,23 +25,24 @@ const PROVIDER_ERROR_LABEL: Partial<Record<AiProvider, string>> = {
   xai: 'xAI',
   ollama: 'Ollama',
   custom: 'Custom endpoint',
-}
+};
 
 export function providerLabel(provider: AiProvider): string {
-  return PROVIDER_ERROR_LABEL[provider] ?? provider
+  return PROVIDER_ERROR_LABEL[provider] ?? provider;
 }
 
 /** Best-effort HTTP status from a provider SDK error. The OpenAI,
  *  Anthropic, and Google GenAI SDK errors all surface the response
  *  status as `status` (or `statusCode`), which LangChain rethrows. */
 function errorStatus(err: unknown): number | null {
-  if (typeof err !== 'object' || err === null) return null
-  const e = err as { status?: unknown; statusCode?: unknown }
-  if (typeof e.status === 'number' && Number.isFinite(e.status)) return e.status
+  if (typeof err !== 'object' || err === null) return null;
+  const e = err as { status?: unknown; statusCode?: unknown };
+  if (typeof e.status === 'number' && Number.isFinite(e.status))
+    return e.status;
   if (typeof e.statusCode === 'number' && Number.isFinite(e.statusCode)) {
-    return e.statusCode
+    return e.statusCode;
   }
-  return null
+  return null;
 }
 
 /**
@@ -51,7 +52,7 @@ function errorStatus(err: unknown): number | null {
  * `network_error`, `provider_error`.
  */
 export function toAiError(err: unknown, provider: string): AiError {
-  if (err instanceof AiError) return err
+  if (err instanceof AiError) return err;
 
   // AbortSignal.timeout() fires as a TimeoutError/AbortError
   // DOMException; the OpenAI SDK also has its own timeout error class.
@@ -65,35 +66,35 @@ export function toAiError(err: unknown, provider: string): AiError {
     return new AiError('The AI provider took too long to respond.', {
       code: 'timeout',
       status: 504,
-    })
+    });
   }
 
-  const status = errorStatus(err)
-  const msg = err instanceof Error ? err.message : String(err)
+  const status = errorStatus(err);
+  const msg = err instanceof Error ? err.message : String(err);
 
   if (status === 401 || status === 403) {
     return new AiError(`${provider} rejected the API key: ${msg}`, {
       // 401 so the settings "Test key" button can show "invalid key".
       code: 'invalid_key',
       status: 401,
-    })
+    });
   }
   if (status === 429) {
     return new AiError(`${provider} rate limit reached: ${msg}`, {
       code: 'rate_limited',
       status: 502,
-    })
+    });
   }
   if (typeof status === 'number') {
     return new AiError(`${provider} API error (${status}): ${msg}`, {
       code: 'provider_error',
       status: 502,
-    })
+    });
   }
 
   // No status → the request never got a response (DNS, refused, …).
   return new AiError(`Could not reach the AI provider: ${msg}`, {
     code: 'network_error',
     status: 502,
-  })
+  });
 }

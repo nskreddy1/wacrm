@@ -12,14 +12,14 @@ The Contacts view is the address book for your WhatsApp business. Every inbound 
 
 A paginated table — 25 contacts per page — with the columns:
 
-| Column | Notes |
-| --- | --- |
-| Name | Free-text. Auto-filled from WhatsApp's profile name if available; you can override. |
-| Phone | E.164 (`+44…`). Required, unique per tenant. |
-| Email | Optional. Useful for downstream CRM sync. |
-| Company | Optional. |
-| Tags | Up to 3 chips visible inline; an overflow counter ("+ 2 more") if there are extras. |
-| Created | When the row appeared in your tenant. |
+| Column  | Notes                                                                               |
+| ------- | ----------------------------------------------------------------------------------- |
+| Name    | Free-text. Auto-filled from WhatsApp's profile name if available; you can override. |
+| Phone   | E.164 (`+44…`). Required, unique per tenant.                                        |
+| Email   | Optional. Useful for downstream CRM sync.                                           |
+| Company | Optional.                                                                           |
+| Tags    | Up to 3 chips visible inline; an overflow counter ("+ 2 more") if there are extras. |
+| Created | When the row appeared in your tenant.                                               |
 
 The header has a search box (filters across name / phone / email via `ilike`) and an Add contact button. Each row has a kebab menu with Edit and Delete.
 

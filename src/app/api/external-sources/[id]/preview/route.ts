@@ -13,7 +13,10 @@
 
 import { NextResponse } from 'next/server';
 
-import { getCurrentAccount, toErrorResponse } from '@/features/auth/lib/account';
+import {
+  getCurrentAccount,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
 import { decrypt } from '@/features/whatsapp/lib/encryption';
 import {
   ExternalSourceError,
@@ -76,7 +79,10 @@ export async function POST(
       } catch (err) {
         console.error('[POST …/preview] decrypt error:', err);
         return NextResponse.json(
-          { error: 'Stored credential could not be decrypted — re-save the secret' },
+          {
+            error:
+              'Stored credential could not be decrypted — re-save the secret',
+          },
           { status: 500 }
         );
       }

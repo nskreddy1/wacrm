@@ -4,14 +4,14 @@ This reference groups the repository’s exported methods by domain while preser
 
 ## Cross-cutting methods
 
-| Method | Location | Called by / calls | Behavior and failure |
-| --- | --- | --- | --- |
-| `proxy` | `src/proxy.ts` | Next request pipeline → Supabase SSR client | Refreshes auth and gates protected paths; missing public Supabase config prevents backend-backed auth. |
-| `createClient` | `src/lib/supabase/{client,server}.ts` | pages, hooks, route handlers | Creates browser or cookie-aware server client. Server variant awaits cookie APIs. |
-| `AuthProvider`, `useAuth` | `src/hooks/use-auth.tsx` | root/dashboard clients → SWR `/api/v1/session` | Supplies user/account/membership/capabilities; hook throws outside provider. |
-| `DashboardCacheProvider` | `src/components/providers/dashboard-cache-provider.tsx` | dashboard layout → SWRConfig | Namespaces cache by account/path and provides shared JSON fetch/error rules. |
-| `checkRateLimit` | `src/lib/rate-limit.ts` | send/sensitive routes | Fixed-window process-local map; returns/rejects on quota, not durable across instances. |
-| `resolveServiceApiUrl` | `src/lib/service-api-url.ts` | service BFF | Validates explicit Express URL or derives host/port; invalid configuration fails before proxying. |
+| Method                    | Location                                                | Called by / calls                              | Behavior and failure                                                                                   |
+| ------------------------- | ------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `proxy`                   | `src/proxy.ts`                                          | Next request pipeline → Supabase SSR client    | Refreshes auth and gates protected paths; missing public Supabase config prevents backend-backed auth. |
+| `createClient`            | `src/lib/supabase/{client,server}.ts`                   | pages, hooks, route handlers                   | Creates browser or cookie-aware server client. Server variant awaits cookie APIs.                      |
+| `AuthProvider`, `useAuth` | `src/hooks/use-auth.tsx`                                | root/dashboard clients → SWR `/api/v1/session` | Supplies user/account/membership/capabilities; hook throws outside provider.                           |
+| `DashboardCacheProvider`  | `src/components/providers/dashboard-cache-provider.tsx` | dashboard layout → SWRConfig                   | Namespaces cache by account/path and provides shared JSON fetch/error rules.                           |
+| `checkRateLimit`          | `src/lib/rate-limit.ts`                                 | send/sensitive routes                          | Fixed-window process-local map; returns/rejects on quota, not durable across instances.                |
+| `resolveServiceApiUrl`    | `src/lib/service-api-url.ts`                            | service BFF                                    | Validates explicit Express URL or derives host/port; invalid configuration fails before proxying.      |
 
 ## Auth, account and authorization
 
@@ -28,12 +28,12 @@ Account route methods:
 
 ## AI methods
 
-| Module | Principal exported methods | Invocation/data flow |
-| --- | --- | --- |
-| `config.ts`, `validate.ts`, `defaults.ts` | provider config read/write/validation and timeout/context defaults | Settings APIs → encrypted config table; invalid provider/model/key fails before generation. |
-| `generate.ts`, providers | generation abstraction | draft/playground/auto-reply → selected OpenAI/Anthropic provider → timeout/structured result → usage log. |
-| `context.ts`, `query.ts`, `knowledge.ts`, `chunk.ts`, `embeddings.ts` | context assembly, retrieval, indexing/chunking/embedding | knowledge API/reindex → document/chunk tables and pgvector/FTS RPCs; retrieval is account-scoped. |
-| `auto-reply.ts`, `handoff.ts`, `usage.ts` | reply eligibility/slot, handoff decision, quotas/logging | inbound orchestration → claim slot RPC → grounded generation → send or human handoff. |
+| Module                                                                | Principal exported methods                                         | Invocation/data flow                                                                                      |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `config.ts`, `validate.ts`, `defaults.ts`                             | provider config read/write/validation and timeout/context defaults | Settings APIs → encrypted config table; invalid provider/model/key fails before generation.               |
+| `generate.ts`, providers                                              | generation abstraction                                             | draft/playground/auto-reply → selected OpenAI/Anthropic provider → timeout/structured result → usage log. |
+| `context.ts`, `query.ts`, `knowledge.ts`, `chunk.ts`, `embeddings.ts` | context assembly, retrieval, indexing/chunking/embedding           | knowledge API/reindex → document/chunk tables and pgvector/FTS RPCs; retrieval is account-scoped.         |
+| `auto-reply.ts`, `handoff.ts`, `usage.ts`                             | reply eligibility/slot, handoff decision, quotas/logging           | inbound orchestration → claim slot RPC → grounded generation → send or human handoff.                     |
 
 Routes expose config `GET/POST/DELETE`, draft/playground/test/autoreply `POST`, knowledge CRUD/reindex, and usage `GET`. Errors use authenticated JSON responses; provider/network failures must not be presented as successful sends.
 
@@ -58,18 +58,18 @@ Flow editor methods (`FlowEditorProvider`, `useFlowEditor`, reducer-like callbac
 
 ## Public API contract
 
-| Family | Methods | Scope/purpose |
-| --- | --- | --- |
-| `/api/v1/me` | GET | authenticated key/session identity and account. |
-| `/api/v1/contacts`, `/[id]` | GET, POST, PATCH | contacts read/write with pagination/validation. |
-| `/api/v1/conversations`, `/[id]`, `/messages` | GET | conversation/thread reads. |
-| `/api/v1/messages` | POST | outbound message request. |
-| `/api/v1/broadcasts`, `/[id]` | POST, GET | campaign create/status. |
-| `/api/v1/webhooks`, `/[id]` | GET, POST, PATCH, DELETE | signed outbound webhook configuration. |
-| `/api/v1/dashboard` | GET | dashboard projection. |
-| `/api/v1/session` | GET, DELETE | browser session payload/sign-out. |
-| `/api/v1/notifications` | GET, PATCH | list/mark notification state. |
-| `/api/v1/workspace/*` | CRUD/read | UI-oriented contacts, inbox summary and automation resources. |
+| Family                                        | Methods                  | Scope/purpose                                                 |
+| --------------------------------------------- | ------------------------ | ------------------------------------------------------------- |
+| `/api/v1/me`                                  | GET                      | authenticated key/session identity and account.               |
+| `/api/v1/contacts`, `/[id]`                   | GET, POST, PATCH         | contacts read/write with pagination/validation.               |
+| `/api/v1/conversations`, `/[id]`, `/messages` | GET                      | conversation/thread reads.                                    |
+| `/api/v1/messages`                            | POST                     | outbound message request.                                     |
+| `/api/v1/broadcasts`, `/[id]`                 | POST, GET                | campaign create/status.                                       |
+| `/api/v1/webhooks`, `/[id]`                   | GET, POST, PATCH, DELETE | signed outbound webhook configuration.                        |
+| `/api/v1/dashboard`                           | GET                      | dashboard projection.                                         |
+| `/api/v1/session`                             | GET, DELETE              | browser session payload/sign-out.                             |
+| `/api/v1/notifications`                       | GET, PATCH               | list/mark notification state.                                 |
+| `/api/v1/workspace/*`                         | CRUD/read                | UI-oriented contacts, inbox summary and automation resources. |
 
 `createApiContext` accepts session or API key, verifies hash/status/scope, resolves account, and provides request context. Pagination methods parse bounded cursors/limits. `respond` helpers standardize data/error JSON. Webhook `sign` creates request signatures; delivery validates destinations against SSRF rules, applies retries and records failures.
 

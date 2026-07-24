@@ -61,23 +61,34 @@ export default function BroadcastsPage() {
     mutate,
   } = useSWR('broadcasts', fetchBroadcastList, {
     refreshInterval: (latest) =>
-      latest?.some((broadcast) => broadcast.status === 'sending') ? POLL_INTERVAL_MS : 0,
+      latest?.some((broadcast) => broadcast.status === 'sending')
+        ? POLL_INTERVAL_MS
+        : 0,
   });
   const broadcasts = useMemo(() => data ?? [], [data]);
-  const error = loadError ? (loadError instanceof Error ? loadError.message : t('errorLoad')) : null;
+  const error = loadError
+    ? loadError instanceof Error
+      ? loadError.message
+      : t('errorLoad')
+    : null;
 
   const anySending = useMemo(
     () => broadcasts.some((broadcast) => broadcast.status === 'sending'),
-    [broadcasts],
+    [broadcasts]
   );
 
   const filteredBroadcasts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return broadcasts;
     return broadcasts.filter((broadcast) =>
-      [broadcast.name, broadcast.template_name, broadcast.channel, broadcast.status]
+      [
+        broadcast.name,
+        broadcast.template_name,
+        broadcast.channel,
+        broadcast.status,
+      ]
         .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(normalized)),
+        .some((value) => value!.toLowerCase().includes(normalized))
     );
   }, [broadcasts, query]);
 
@@ -89,12 +100,13 @@ export default function BroadcastsPage() {
           sent: summary.sent + broadcast.sent_count,
           delivered: summary.delivered + broadcast.delivered_count,
         }),
-        { recipients: 0, sent: 0, delivered: 0 },
+        { recipients: 0, sent: 0, delivered: 0 }
       ),
-    [broadcasts],
+    [broadcasts]
   );
 
-  if (isLoading) return <FeatureLoading label="Loading broadcast performance" />;
+  if (isLoading)
+    return <FeatureLoading label="Loading broadcast performance" />;
   if (error) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
@@ -110,118 +122,303 @@ export default function BroadcastsPage() {
 
   return (
     <PageContainer className="gap-8">
-      <header className="flex flex-col gap-5 border-b border-border pb-7 lg:flex-row lg:items-end lg:justify-between">
+      <header className="border-border flex flex-col gap-5 border-b pb-7 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex max-w-2xl flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-primary">
+          <div className="text-primary flex items-center gap-2 text-sm font-medium">
             <Radio className="size-4" aria-hidden="true" />
             Campaign operations
           </div>
-          <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">Broadcasts</h1>
-          <p className="text-pretty text-sm leading-6 text-muted-foreground">
-            Plan, send, and measure every customer message from one dependable workspace.
+          <h1 className="text-foreground text-3xl font-semibold tracking-tight text-balance">
+            Broadcasts
+          </h1>
+          <p className="text-muted-foreground text-sm leading-6 text-pretty">
+            Plan, send, and measure every customer message from one dependable
+            workspace.
           </p>
         </div>
-        <GatedButton canAct={canCreate} gateReason="create broadcasts" onClick={() => router.push('/broadcasts/new')}>
+        <GatedButton
+          canAct={canCreate}
+          gateReason="create broadcasts"
+          onClick={() => router.push('/broadcasts/new')}
+        >
           <Plus data-icon="inline-start" />
           New broadcast
         </GatedButton>
       </header>
 
       {anySending && (
-        <section className="flex items-center gap-4 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3" aria-live="polite">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+        <section
+          className="border-primary/25 bg-primary/5 flex items-center gap-4 rounded-xl border px-4 py-3"
+          aria-live="polite"
+        >
+          <div className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-lg">
             <Send className="size-4" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">A broadcast is sending</p>
-            <p className="text-xs text-muted-foreground">Delivery data refreshes automatically.</p>
+            <p className="text-foreground text-sm font-medium">
+              A broadcast is sending
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Delivery data refreshes automatically.
+            </p>
           </div>
-          <span className="size-2 animate-pulse rounded-full bg-primary" aria-hidden="true" />
+          <span
+            className="bg-primary size-2 animate-pulse rounded-full"
+            aria-hidden="true"
+          />
         </section>
       )}
 
-      <section className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3">
+      <section className="border-border bg-border grid gap-px overflow-hidden rounded-xl border sm:grid-cols-3">
         {[
           { label: 'Total reach', value: totals.recipients, icon: Users },
           { label: 'Messages sent', value: totals.sent, icon: Send },
-          { label: 'Delivery rate', value: `${percent(totals.delivered, totals.sent)}%`, icon: BarChart3 },
+          {
+            label: 'Delivery rate',
+            value: `${percent(totals.delivered, totals.sent)}%`,
+            icon: BarChart3,
+          },
         ].map((metric) => (
-          <div key={metric.label} className="flex items-center gap-4 bg-card p-5">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          <div
+            key={metric.label}
+            className="bg-card flex items-center gap-4 p-5"
+          >
+            <div className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-lg">
               <metric.icon className="size-5" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-2xl font-semibold tabular-nums text-foreground">
-                {typeof metric.value === 'number' ? metric.value.toLocaleString() : metric.value}
+              <p className="text-foreground text-2xl font-semibold tabular-nums">
+                {typeof metric.value === 'number'
+                  ? metric.value.toLocaleString()
+                  : metric.value}
               </p>
-              <p className="text-xs text-muted-foreground">{metric.label}</p>
+              <p className="text-muted-foreground text-xs">{metric.label}</p>
             </div>
           </div>
         ))}
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="border-border bg-card overflow-hidden rounded-xl border">
+        <div className="border-border flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-medium text-foreground">Campaign history</h2>
-            <p className="text-xs text-muted-foreground">{broadcasts.length} broadcasts across every connected channel</p>
+            <h2 className="text-foreground font-medium">Campaign history</h2>
+            <p className="text-muted-foreground text-xs">
+              {broadcasts.length} broadcasts across every connected channel
+            </p>
           </div>
           <div className="relative w-full sm:w-72">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search broadcasts" className="pl-9" aria-label="Search broadcasts" />
+            <Search
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              aria-hidden="true"
+            />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search broadcasts"
+              className="pl-9"
+              aria-label="Search broadcasts"
+            />
           </div>
         </div>
 
         {broadcasts.length === 0 ? (
           <div className="flex min-h-80 flex-col items-center justify-center gap-4 p-8 text-center">
-            <div className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground"><Radio className="size-6" /></div>
-            <div className="flex max-w-sm flex-col gap-1"><h2 className="font-medium text-foreground">No broadcasts yet</h2><p className="text-sm leading-6 text-muted-foreground">Create your first campaign to reach contacts with an approved template.</p></div>
-            <GatedButton canAct={canCreate} gateReason="create broadcasts" onClick={() => router.push('/broadcasts/new')}><Plus data-icon="inline-start" />New broadcast</GatedButton>
+            <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-xl">
+              <Radio className="size-6" />
+            </div>
+            <div className="flex max-w-sm flex-col gap-1">
+              <h2 className="text-foreground font-medium">No broadcasts yet</h2>
+              <p className="text-muted-foreground text-sm leading-6">
+                Create your first campaign to reach contacts with an approved
+                template.
+              </p>
+            </div>
+            <GatedButton
+              canAct={canCreate}
+              gateReason="create broadcasts"
+              onClick={() => router.push('/broadcasts/new')}
+            >
+              <Plus data-icon="inline-start" />
+              New broadcast
+            </GatedButton>
           </div>
         ) : filteredBroadcasts.length === 0 ? (
-          <div className="flex min-h-56 flex-col items-center justify-center gap-2 p-8 text-center"><Search className="size-6 text-muted-foreground" /><p className="font-medium text-foreground">No matching broadcasts</p><Button variant="ghost" onClick={() => setQuery('')}>Clear search</Button></div>
+          <div className="flex min-h-56 flex-col items-center justify-center gap-2 p-8 text-center">
+            <Search className="text-muted-foreground size-6" />
+            <p className="text-foreground font-medium">
+              No matching broadcasts
+            </p>
+            <Button variant="ghost" onClick={() => setQuery('')}>
+              Clear search
+            </Button>
+          </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-border divide-y">
             {filteredBroadcasts.map((broadcast) => {
               const status = getBroadcastStatus(broadcast.status);
-              const deliveryRate = percent(broadcast.delivered_count, broadcast.total_recipients);
-              const readRate = percent(broadcast.read_count, broadcast.delivered_count);
-              const replyRate = percent(broadcast.replied_count, broadcast.delivered_count);
+              const deliveryRate = percent(
+                broadcast.delivered_count,
+                broadcast.total_recipients
+              );
+              const readRate = percent(
+                broadcast.read_count,
+                broadcast.delivered_count
+              );
+              const replyRate = percent(
+                broadcast.replied_count,
+                broadcast.delivered_count
+              );
               const isSms = (broadcast.channel ?? 'whatsapp') === 'sms';
 
               if (isSms) {
                 return (
-                  <button key={broadcast.id} type="button" onClick={() => router.push(`/broadcasts/${broadcast.id}`)} className="group flex w-full flex-col gap-4 p-4 text-left transition-colors duration-150 hover:bg-muted/50 sm:flex-row sm:items-center sm:p-5">
+                  <button
+                    key={broadcast.id}
+                    type="button"
+                    onClick={() => router.push(`/broadcasts/${broadcast.id}`)}
+                    className="group hover:bg-muted/50 flex w-full flex-col gap-4 p-4 text-left transition-colors duration-150 sm:flex-row sm:items-center sm:p-5"
+                  >
                     <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground"><MessageSquare className="size-4" /></div>
-                      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-medium text-foreground">{broadcast.name}</h3><Badge variant="outline" className="text-[10px] uppercase tracking-wider">SMS</Badge></div><p className="mt-1 truncate text-xs text-muted-foreground">{broadcast.template_name} · {new Date(broadcast.created_at).toLocaleDateString()}</p></div>
+                      <div className="border-border bg-background text-muted-foreground flex size-10 shrink-0 items-center justify-center rounded-full border">
+                        <MessageSquare className="size-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-foreground truncate font-medium">
+                            {broadcast.name}
+                          </h3>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] tracking-wider uppercase"
+                          >
+                            SMS
+                          </Badge>
+                        </div>
+                        <p className="text-muted-foreground mt-1 truncate text-xs">
+                          {broadcast.template_name} ·{' '}
+                          {new Date(broadcast.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex w-full items-center gap-5 rounded-lg border border-border bg-background px-4 py-3 sm:w-80">
-                      <div className="min-w-16"><p className="text-xs text-muted-foreground">Sent</p><p className="mt-0.5 font-medium tabular-nums text-foreground">{broadcast.sent_count.toLocaleString()}</p></div>
-                      <div className="min-w-0 flex-1"><div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Carrier delivery</span><span className="font-medium tabular-nums text-foreground">{deliveryRate}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${deliveryRate}%` }} /></div></div>
+                    <div className="border-border bg-background flex w-full items-center gap-5 rounded-lg border px-4 py-3 sm:w-80">
+                      <div className="min-w-16">
+                        <p className="text-muted-foreground text-xs">Sent</p>
+                        <p className="text-foreground mt-0.5 font-medium tabular-nums">
+                          {broadcast.sent_count.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            Carrier delivery
+                          </span>
+                          <span className="text-foreground font-medium tabular-nums">
+                            {deliveryRate}%
+                          </span>
+                        </div>
+                        <div className="bg-muted mt-2 h-1.5 overflow-hidden rounded-full">
+                          <div
+                            className="bg-primary h-full rounded-full"
+                            style={{ width: `${deliveryRate}%` }}
+                          />
+                        </div>
+                      </div>
                       {broadcast.failed_count > 0 ? (
                         <div className="text-right">
-                          <p className="text-xs text-muted-foreground">Failed</p>
-                          <p className="mt-0.5 font-medium tabular-nums text-destructive">{broadcast.failed_count}</p>
+                          <p className="text-muted-foreground text-xs">
+                            Failed
+                          </p>
+                          <p className="text-destructive mt-0.5 font-medium tabular-nums">
+                            {broadcast.failed_count}
+                          </p>
                         </div>
                       ) : null}
                     </div>
                     <div className="flex items-center justify-between gap-3 sm:w-36 sm:justify-end">
                       <Badge variant="secondary">{tStatus(status.label)}</Badge>
-                      <ArrowRight className="size-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5" />
+                      <ArrowRight className="text-muted-foreground size-4 transition-transform duration-150 group-hover:translate-x-0.5" />
                     </div>
                   </button>
                 );
               }
 
               return (
-                <button key={broadcast.id} type="button" onClick={() => router.push(`/broadcasts/${broadcast.id}`)} className="group flex w-full flex-col gap-4 p-4 text-left transition-colors duration-150 hover:bg-muted/50 sm:p-5">
+                <button
+                  key={broadcast.id}
+                  type="button"
+                  onClick={() => router.push(`/broadcasts/${broadcast.id}`)}
+                  className="group hover:bg-muted/50 flex w-full flex-col gap-4 p-4 text-left transition-colors duration-150 sm:p-5"
+                >
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-start gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><MessageCircle className="size-5" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-medium text-foreground">{broadcast.name}</h3><Badge variant="outline" className="text-[10px] uppercase tracking-wider">WhatsApp</Badge><Badge variant="secondary">{tStatus(status.label)}</Badge></div><p className="mt-1 truncate text-xs text-muted-foreground">{broadcast.template_name} · {new Date(broadcast.created_at).toLocaleDateString()}</p></div></div>
-                    <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5" />
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
+                        <MessageCircle className="size-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-foreground truncate font-medium">
+                            {broadcast.name}
+                          </h3>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] tracking-wider uppercase"
+                          >
+                            WhatsApp
+                          </Badge>
+                          <Badge variant="secondary">
+                            {tStatus(status.label)}
+                          </Badge>
+                        </div>
+                        <p className="text-muted-foreground mt-1 truncate text-xs">
+                          {broadcast.template_name} ·{' '}
+                          {new Date(broadcast.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="text-muted-foreground size-4 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5" />
                   </div>
-                  <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
-                    {[{ label: 'Recipients', value: broadcast.total_recipients, rate: 100 }, { label: 'Delivered', value: broadcast.delivered_count, rate: deliveryRate }, { label: 'Read', value: broadcast.read_count, rate: readRate }, { label: 'Replied', value: broadcast.replied_count, rate: replyRate }].map((metric) => <div key={metric.label} className="bg-background px-4 py-3"><div className="flex items-center justify-between gap-3"><span className="text-xs text-muted-foreground">{metric.label}</span>{metric.label !== 'Recipients' && <span className="text-[10px] tabular-nums text-muted-foreground">{metric.rate}%</span>}</div><p className="mt-1 text-lg font-semibold tabular-nums text-foreground">{metric.value.toLocaleString()}</p></div>)}
+                  <div className="border-border bg-border grid gap-px overflow-hidden rounded-lg border sm:grid-cols-4">
+                    {[
+                      {
+                        label: 'Recipients',
+                        value: broadcast.total_recipients,
+                        rate: 100,
+                      },
+                      {
+                        label: 'Delivered',
+                        value: broadcast.delivered_count,
+                        rate: deliveryRate,
+                      },
+                      {
+                        label: 'Read',
+                        value: broadcast.read_count,
+                        rate: readRate,
+                      },
+                      {
+                        label: 'Replied',
+                        value: broadcast.replied_count,
+                        rate: replyRate,
+                      },
+                    ].map((metric) => (
+                      <div
+                        key={metric.label}
+                        className="bg-background px-4 py-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground text-xs">
+                            {metric.label}
+                          </span>
+                          {metric.label !== 'Recipients' && (
+                            <span className="text-muted-foreground text-[10px] tabular-nums">
+                              {metric.rate}%
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-foreground mt-1 text-lg font-semibold tabular-nums">
+                          {metric.value.toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </button>
               );

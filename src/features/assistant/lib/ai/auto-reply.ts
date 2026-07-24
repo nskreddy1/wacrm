@@ -1,25 +1,25 @@
-import { supabaseAdmin } from './admin-client'
-import { loadAiConfig } from './config'
-import { buildConversationContext } from './context'
-import { retrieveKnowledge } from './knowledge'
-import { buildCrmContext } from './crm-context'
-import { generateReply } from './generate'
-import { buildPromptParts } from './defaults'
-import { buildHandoffSummary } from './handoff'
-import { logAiUsage } from './usage'
-import { latestUserMessage } from './query'
-import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule'
-import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound'
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { supabaseAdmin } from './admin-client';
+import { loadAiConfig } from './config';
+import { buildConversationContext } from './context';
+import { retrieveKnowledge } from './knowledge';
+import { buildCrmContext } from './crm-context';
+import { generateReply } from './generate';
+import { buildPromptParts } from './defaults';
+import { buildHandoffSummary } from './handoff';
+import { logAiUsage } from './usage';
+import { latestUserMessage } from './query';
+import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule';
+import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
-  accountId: string
-  conversationId: string
-  contactId: string
+  accountId: string;
+  conversationId: string;
+  contactId: string;
   /** The account's WhatsApp config owner, used for the outbound send's
    *  audit columns (mirrors how the flow runner passes it through). */
-  configOwnerUserId: string
+  configOwnerUserId: string;
 }
 
 /**
@@ -42,22 +42,22 @@ interface DispatchArgs {
  * window check is needed.
  */
 export async function dispatchInboundToAiReply(
-  args: DispatchArgs,
+  args: DispatchArgs
 ): Promise<void> {
-  const { accountId, conversationId, contactId } = args
+  const { accountId, conversationId, contactId } = args;
 
   try {
-    const db = supabaseAdmin()
+    const db = supabaseAdmin();
 
     // Auto-reply is independent from the inbox "Draft with AI" master
     // switch. Load the saved provider config even when `is_active` is off;
     // this worker is governed exclusively by `auto_reply_enabled`.
-    const config = await loadAiConfig(db, accountId, { requireActive: false })
-    if (!config || !config.autoReplyEnabled) return
+    const config = await loadAiConfig(db, accountId, { requireActive: false });
+    if (!config || !config.autoReplyEnabled) return;
 
     // Reply-hours window: outside the configured schedule the bot stands
     // down entirely and the inbound waits in the inbox for a human.
-    if (!isWithinAutoReplySchedule(config)) return
+    if (!isWithinAutoReplySchedule(config)) return;
 
     // Deterministic, user-configured responders win over the LLM — the
     // caller already excludes messages a Flow consumed. Message-level
@@ -73,17 +73,17 @@ export async function dispatchInboundToAiReply(
       .eq('account_id', accountId)
       .eq('is_active', true)
       .in('trigger_type', ['new_message_received', 'keyword_match'])
-      .limit(1)
-    if (autoResponders && autoResponders.length > 0) return
+      .limit(1);
+    if (autoResponders && autoResponders.length > 0) return;
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
       .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
       .eq('id', conversationId)
-      .maybeSingle()
-    if (convErr || !conv) return
-    if (conv.assigned_agent_id) return // a human owns this thread
-    if (conv.ai_autoreply_disabled) return // handed off / turned off here
+      .maybeSingle();
+    if (convErr || !conv) return;
+    if (conv.assigned_agent_id) return; // a human owns this thread
+    if (conv.ai_autoreply_disabled) return; // handed off / turned off here
     // Reply-cap gate, by limit mode:
     //  - never:            no cap — the bot always replies.
     //  - per_conversation: lifetime cap; cheap early-out here, the
@@ -94,28 +94,28 @@ export async function dispatchInboundToAiReply(
       config.autoReplyLimitMode === 'per_conversation' &&
       conv.ai_reply_count >= config.autoReplyMaxPerConversation
     ) {
-      return
+      return;
     }
     if (config.autoReplyLimitMode === 'per_day') {
-      const dayStart = startOfTodayUtc(config.autoReplyTimezone)
+      const dayStart = startOfTodayUtc(config.autoReplyTimezone);
       const { count, error: cntErr } = await db
         .from('messages')
         .select('id', { count: 'exact', head: true })
         .eq('conversation_id', conversationId)
         .eq('sender_type', 'bot')
         .eq('ai_generated', true)
-        .gte('created_at', dayStart.toISOString())
+        .gte('created_at', dayStart.toISOString());
       if (cntErr) {
         // Can't establish today's count — fail safe (don't reply) so a
         // transient DB error can never blow past the cap.
-        console.error('[ai auto-reply] per-day count failed:', cntErr)
-        return
+        console.error('[ai auto-reply] per-day count failed:', cntErr);
+        return;
       }
-      if ((count ?? 0) >= config.autoReplyMaxPerConversation) return
+      if ((count ?? 0) >= config.autoReplyMaxPerConversation) return;
     }
 
-    const messages = await buildConversationContext(db, conversationId)
-    if (messages.length === 0) return
+    const messages = await buildConversationContext(db, conversationId);
+    if (messages.length === 0) return;
 
     // Account-wide throttle on the shared BYO key. The per-conversation
     // cap bounds one thread; this bounds a burst across many threads (a
@@ -124,13 +124,13 @@ export async function dispatchInboundToAiReply(
     // the auto-reply; the inbound still sits in the inbox for a human.
     const acctLimit = checkRateLimit(
       `ai-autoreply:${accountId}`,
-      RATE_LIMITS.aiAutoReplyAccount,
-    )
+      RATE_LIMITS.aiAutoReplyAccount
+    );
     if (!acctLimit.success) {
       console.warn(
-        `[ai auto-reply] account ${accountId} hit the per-account rate limit — skipping this inbound.`,
-      )
-      return
+        `[ai auto-reply] account ${accountId} hit the per-account rate limit — skipping this inbound.`
+      );
+      return;
     }
 
     // Ground the reply in the account's knowledge base and the
@@ -138,7 +138,7 @@ export async function dispatchInboundToAiReply(
     const [knowledge, crmContext] = await Promise.all([
       retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
       buildCrmContext(db, contactId),
-    ])
+    ]);
 
     // Cache-aligned prompt (the only path — benchmarked at ~70% fewer
     // full-price input tokens than the legacy single-string prompt):
@@ -156,7 +156,7 @@ export async function dispatchInboundToAiReply(
           crmContext,
         }),
         cacheKey: conversationId,
-      })
+      });
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
     // never adds latency to the customer-facing send: `logAiUsage`
@@ -171,7 +171,7 @@ export async function dispatchInboundToAiReply(
       model: config.model,
       usage,
       keySource: config.keySource,
-    })
+    });
 
     if (handoff || !text) {
       // The model can't (or shouldn't) answer — stop auto-replying on
@@ -184,44 +184,45 @@ export async function dispatchInboundToAiReply(
       // `on_conversation_assigned` trigger, which notifies the agent;
       // an unassigned escalation fans out to every member instead so an
       // empty queue never goes silent.
-      const reason = escalationReason ?? (handoff ? 'human_requested' : 'out_of_scope')
+      const reason =
+        escalationReason ?? (handoff ? 'human_requested' : 'out_of_scope');
       const summary = buildHandoffSummary({
         messages,
         replyCount: conv.ai_reply_count ?? 0,
         sentiment,
         escalationReason: reason,
-      })
+      });
       const update: Record<string, unknown> = {
         ai_autoreply_disabled: true,
         ai_handoff_summary: summary,
         ai_sentiment: sentiment,
         ai_escalation_reason: reason,
         ai_escalated_at: new Date().toISOString(),
-      }
+      };
       // Never stomp an existing human assignment.
-      let assignee: string | null = null
+      let assignee: string | null = null;
       if (!conv.assigned_agent_id) {
         if (config.handoffAgentId) {
-          assignee = config.handoffAgentId
+          assignee = config.handoffAgentId;
         } else {
           // Round-robin over the account's members. A missing RPC (mig-
           // ration not applied) or empty account degrades to unassigned.
           const { data: rrAgent, error: rrErr } = await db.rpc(
             'claim_round_robin_agent',
-            { p_account_id: accountId },
-          )
+            { p_account_id: accountId }
+          );
           if (rrErr) {
             console.error(
               '[ai auto-reply] claim_round_robin_agent failed (leaving unassigned):',
-              rrErr,
-            )
+              rrErr
+            );
           } else if (typeof rrAgent === 'string' && rrAgent) {
-            assignee = rrAgent
+            assignee = rrAgent;
           }
         }
       }
-      if (assignee) update.assigned_agent_id = assignee
-      await db.from('conversations').update(update).eq('id', conversationId)
+      if (assignee) update.assigned_agent_id = assignee;
+      await db.from('conversations').update(update).eq('id', conversationId);
 
       // Unassigned escalation → notify every member of the account so
       // someone sees it (the assignment trigger only fires on assign).
@@ -232,9 +233,9 @@ export async function dispatchInboundToAiReply(
           contactId,
           sentiment,
           reason,
-        })
+        });
       }
-      return
+      return;
     }
 
     // Non-escalated turn: keep the latest classified sentiment on the
@@ -245,9 +246,9 @@ export async function dispatchInboundToAiReply(
       .eq('id', conversationId)
       .then(({ error }) => {
         if (error) {
-          console.error('[ai auto-reply] sentiment update failed:', error)
+          console.error('[ai auto-reply] sentiment update failed:', error);
         }
-      })
+      });
 
     // Atomically claim a reply slot: the cap check + increment happen in
     // one UPDATE, so concurrent inbounds can never overshoot the cap. If
@@ -260,23 +261,23 @@ export async function dispatchInboundToAiReply(
     const lifetimeCap =
       config.autoReplyLimitMode === 'per_conversation'
         ? config.autoReplyMaxPerConversation
-        : 2147483647
+        : 2147483647;
     const { data: claimed, error: claimErr } = await db.rpc(
       'claim_ai_reply_slot',
       {
         conversation_id: conversationId,
         max_replies: lifetimeCap,
-      },
-    )
+      }
+    );
     if (claimErr) {
       // A real error here (vs. losing the cap race) is almost always a
       // deploy issue — e.g. `claim_ai_reply_slot` not EXECUTE-able by the
       // service role, or the migration not applied. Log it loudly: a
       // silent return makes "auto-reply never fires" undiagnosable.
-      console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr)
-      return
+      console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr);
+      return;
     }
-    if (claimed !== true) return // lost the per-conversation cap race
+    if (claimed !== true) return; // lost the per-conversation cap race
 
     // Channel-agnostic send: the orchestrator resolves the conversation's
     // channel connection (Meta / Twilio / legacy config) and persists the
@@ -288,9 +289,9 @@ export async function dispatchInboundToAiReply(
       payload: { kind: 'text', text },
       senderType: 'bot',
       aiGenerated: true,
-    })
+    });
   } catch (err) {
-    console.error('[ai auto-reply] dispatch failed:', err)
+    console.error('[ai auto-reply] dispatch failed:', err);
   }
 }
 
@@ -304,25 +305,25 @@ export async function dispatchInboundToAiReply(
 async function notifyAllMembersOfEscalation(
   db: ReturnType<typeof supabaseAdmin>,
   args: {
-    accountId: string
-    conversationId: string
-    contactId: string
-    sentiment: string
-    reason: string
-  },
+    accountId: string;
+    conversationId: string;
+    contactId: string;
+    sentiment: string;
+    reason: string;
+  }
 ): Promise<void> {
   try {
     const { data: members, error } = await db
       .from('profiles')
       .select('user_id')
-      .eq('account_id', args.accountId)
-    if (error || !members || members.length === 0) return
+      .eq('account_id', args.accountId);
+    if (error || !members || members.length === 0) return;
 
-    const readable = args.reason.replace(/_/g, ' ')
+    const readable = args.reason.replace(/_/g, ' ');
     const feeling =
       args.sentiment && args.sentiment !== 'neutral'
         ? ` — customer seems ${args.sentiment}`
-        : ''
+        : '';
     const rows = members.map((m) => ({
       account_id: args.accountId,
       user_id: m.user_id,
@@ -332,12 +333,15 @@ async function notifyAllMembersOfEscalation(
       actor_user_id: null,
       title: 'Customer needs help',
       body: `AI escalated a conversation (${readable})${feeling} — unassigned in the shared queue.`,
-    }))
-    const { error: insErr } = await db.from('notifications').insert(rows)
+    }));
+    const { error: insErr } = await db.from('notifications').insert(rows);
     if (insErr) {
-      console.error('[ai auto-reply] escalation fan-out insert failed:', insErr)
+      console.error(
+        '[ai auto-reply] escalation fan-out insert failed:',
+        insErr
+      );
     }
   } catch (err) {
-    console.error('[ai auto-reply] escalation fan-out threw:', err)
+    console.error('[ai auto-reply] escalation fan-out threw:', err);
   }
 }

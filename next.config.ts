@@ -1,7 +1,7 @@
-import type { NextConfig } from "next";
-import createNextIntlPlugin from "next-intl/plugin";
+import type { NextConfig } from 'next';
+import createNextIntlPlugin from 'next-intl/plugin';
 
-const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 /**
  * Baseline security headers applied to every response.
@@ -26,18 +26,18 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
  */
 const SECURITY_HEADERS = [
   {
-    key: "Strict-Transport-Security",
-    value: "max-age=63072000; includeSubDomains; preload",
+    key: 'Strict-Transport-Security',
+    value: 'max-age=63072000; includeSubDomains; preload',
   },
-  { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   {
     // Microphone is allowed for same-origin (`self`) so the inbox
     // composer can record voice notes via MediaRecorder. Everything
     // else stays denied — a compromised dependency can't silently grab
     // the camera / geolocation / etc.
-    key: "Permissions-Policy",
-    value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
+    key: 'Permissions-Policy',
+    value: 'camera=(), microphone=(self), geolocation=(), payment=(), usb=()',
   },
 ] as const;
 
@@ -93,37 +93,61 @@ const nextConfig: NextConfig = {
    */
   async redirects() {
     return [
-      { source: "/bigin/org/:accountId/home/deals", destination: "/pipelines", permanent: false },
-      { source: "/bigin/org/:accountId/home/deals/:path*", destination: "/pipelines", permanent: false },
-      { source: "/org/:accountId/pipelines", destination: "/pipelines", permanent: false },
-      { source: "/org/:accountId/pipelines/:path*", destination: "/pipelines", permanent: false },
-      { source: "/bigin/org/:accountId/home/contacts", destination: "/contacts", permanent: false },
-      { source: "/bigin/org/:accountId/home/contacts/:path*", destination: "/contacts", permanent: false },
-    ]
+      {
+        source: '/bigin/org/:accountId/home/deals',
+        destination: '/pipelines',
+        permanent: false,
+      },
+      {
+        source: '/bigin/org/:accountId/home/deals/:path*',
+        destination: '/pipelines',
+        permanent: false,
+      },
+      {
+        source: '/org/:accountId/pipelines',
+        destination: '/pipelines',
+        permanent: false,
+      },
+      {
+        source: '/org/:accountId/pipelines/:path*',
+        destination: '/pipelines',
+        permanent: false,
+      },
+      {
+        source: '/bigin/org/:accountId/home/contacts',
+        destination: '/contacts',
+        permanent: false,
+      },
+      {
+        source: '/bigin/org/:accountId/home/contacts/:path*',
+        destination: '/contacts',
+        permanent: false,
+      },
+    ];
   },
   async headers() {
     return [
       {
-        source: "/api/:path*",
+        source: '/api/:path*',
         headers: [
-          { key: "Cache-Control", value: "private, no-store, max-age=0" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
-          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
+          { key: 'Vercel-CDN-Cache-Control', value: 'no-store' },
+          { key: 'CDN-Cache-Control', value: 'no-store' },
         ],
       },
       {
-        source: "/:path((?!_next/static|_next/image|api).*)",
+        source: '/:path((?!_next/static|_next/image|api).*)',
         headers: [
-          { key: "Cache-Control", value: "private, no-store, max-age=0" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
-          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
+          { key: 'Vercel-CDN-Cache-Control', value: 'no-store' },
+          { key: 'CDN-Cache-Control', value: 'no-store' },
         ],
       },
       {
         // Security headers on every response, including /_next/static
         // assets (nosniff matters there) and /api/* (HSTS + referrer-
         // policy don't hurt).
-        source: "/:path*",
+        source: '/:path*',
         headers: [...SECURITY_HEADERS],
       },
     ];

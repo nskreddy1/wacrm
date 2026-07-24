@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
-import { useAuth } from "@/features/auth/hooks/use-auth";
-import type { AccountRole } from "@/features/auth/lib/roles";
-import type { PermissionSlug } from "@/features/auth/lib/permissions";
+import { useAuth } from '@/features/auth/hooks/use-auth';
+import type { AccountRole } from '@/features/auth/lib/roles';
+import type { PermissionSlug } from '@/features/auth/lib/permissions';
 
 interface RequireRoleProps {
   /** Legacy minimum-tier gate. Maps onto permission-derived
@@ -60,11 +60,11 @@ export function RequireRole({
   }
 
   const ok =
-    !min || min === "viewer"
+    !min || min === 'viewer'
       ? true
-      : min === "agent"
+      : min === 'agent'
         ? canSendMessages
-        : min === "admin"
+        : min === 'admin'
           ? canEditSettings
           : isOwner;
 

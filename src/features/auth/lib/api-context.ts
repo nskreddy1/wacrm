@@ -30,7 +30,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { supabaseAdmin } from '@/features/flows/lib/admin-client';
-import { findActiveKeyByHash, touchLastUsed } from '@/features/api-keys/lib/store';
+import {
+  findActiveKeyByHash,
+  touchLastUsed,
+} from '@/features/api-keys/lib/store';
 import { hashApiKey, looksLikeApiKey } from '@/features/api-keys/lib/keys';
 import { hasScope, type ApiScope } from '@/features/api-keys/lib/scopes';
 import { forbidden, rateLimited, unauthorized } from '@/lib/api/v1/respond';

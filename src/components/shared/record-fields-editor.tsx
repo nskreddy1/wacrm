@@ -1,12 +1,33 @@
-"use client"
+'use client';
 
-import { useMemo, useState } from "react"
-import { Check, ChevronDown, GripVertical, Info, Loader2, Pencil, Plus, Search } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { useMemo, useState } from 'react';
+import {
+  Check,
+  ChevronDown,
+  GripVertical,
+  Info,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 
 /**
  * Generic "Edit X Fields" editor, extracted from the contact Edit Fields
@@ -22,29 +43,29 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
  */
 
 export type RecordEditorField = {
-  id: string
-  label: string
+  id: string;
+  label: string;
   /** Human readable kind, e.g. "Single Line", "Lookup", "Currency" */
-  typeLabel: string
+  typeLabel: string;
   /** Removable fields can be moved to the Unused rail (standard required fields are not) */
-  removable?: boolean
+  removable?: boolean;
   /** Editable fields show the pencil action and open the custom field panel */
-  editable?: boolean
+  editable?: boolean;
   /** Counts toward the custom-field limit shown in the footer */
-  countsTowardLimit?: boolean
-  required?: boolean
-  unique?: boolean
+  countsTowardLimit?: boolean;
+  required?: boolean;
+  unique?: boolean;
   /** Current definition used to prefill the edit panel */
-  draft?: RecordCustomFieldDraft
-}
+  draft?: RecordCustomFieldDraft;
+};
 
 export type RecordCustomFieldDraft = {
-  label: string
-  type: string
-  options: string[]
-  required: boolean
-  unique: boolean
-}
+  label: string;
+  type: string;
+  options: string[];
+  required: boolean;
+  unique: boolean;
+};
 
 export function RecordFieldsEditor({
   open,
@@ -64,142 +85,185 @@ export function RecordFieldsEditor({
   onEditField,
   validateField,
 }: {
-  open: boolean
-  title: string
-  badge?: string
-  sectionTitle: string
+  open: boolean;
+  title: string;
+  badge?: string;
+  sectionTitle: string;
   /** Every field available on this record type (used + unused) */
-  fields: RecordEditorField[]
+  fields: RecordEditorField[];
   /** Ordered ids of the fields currently shown on the record form */
-  initialUsed: string[]
+  initialUsed: string[];
   /** Type key -> label offered when creating a custom field */
-  fieldTypes: Record<string, string>
+  fieldTypes: Record<string, string>;
   /** Type keys that require an options list (pick lists) */
-  optionTypes?: string[]
+  optionTypes?: string[];
   /** Show "Mandatory" / "No duplicates" checkboxes in the panel */
-  showFieldFlags?: boolean
-  maxCustom?: number
-  saving: boolean
-  onOpenChange: (open: boolean) => void
+  showFieldFlags?: boolean;
+  maxCustom?: number;
+  saving: boolean;
+  onOpenChange: (open: boolean) => void;
   /** Persist the ordered used field ids */
-  onSave: (usedIds: string[]) => Promise<void>
+  onSave: (usedIds: string[]) => Promise<void>;
   /** Create a custom field; return its id to append it to the used list, or null on failure */
-  onCreateField?: (draft: RecordCustomFieldDraft) => Promise<string | null>
+  onCreateField?: (draft: RecordCustomFieldDraft) => Promise<string | null>;
   /** Update an existing custom field */
-  onEditField?: (id: string, draft: RecordCustomFieldDraft) => Promise<void>
+  onEditField?: (id: string, draft: RecordCustomFieldDraft) => Promise<void>;
   /** Return an error message to block the panel save, or empty string when valid */
-  validateField?: (draft: RecordCustomFieldDraft, editingId?: string) => string
+  validateField?: (draft: RecordCustomFieldDraft, editingId?: string) => string;
 }) {
-  const [used, setUsed] = useState<string[]>([])
-  const [initialized, setInitialized] = useState(false)
-  const [search, setSearch] = useState("")
-  const [persisting, setPersisting] = useState(false)
-  const [dragId, setDragId] = useState<string | null>(null)
+  const [used, setUsed] = useState<string[]>([]);
+  const [initialized, setInitialized] = useState(false);
+  const [search, setSearch] = useState('');
+  const [persisting, setPersisting] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   // Stacked panel state: create a new custom field or edit an existing one
-  const [panel, setPanel] = useState<{ mode: "create" } | { mode: "edit"; fieldId: string } | null>(null)
-  const [label, setLabel] = useState("")
-  const [type, setType] = useState(Object.keys(fieldTypes)[0] ?? "text")
-  const [options, setOptions] = useState("")
-  const [mandatory, setMandatory] = useState(false)
-  const [noDuplicates, setNoDuplicates] = useState(false)
-  const [formError, setFormError] = useState("")
-  const [creating, setCreating] = useState(false)
+  const [panel, setPanel] = useState<
+    { mode: 'create' } | { mode: 'edit'; fieldId: string } | null
+  >(null);
+  const [label, setLabel] = useState('');
+  const [type, setType] = useState(Object.keys(fieldTypes)[0] ?? 'text');
+  const [options, setOptions] = useState('');
+  const [mandatory, setMandatory] = useState(false);
+  const [noDuplicates, setNoDuplicates] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields])
+  const fieldById = useMemo(
+    () => new Map(fields.map((field) => [field.id, field])),
+    [fields]
+  );
 
   if (open && !initialized) {
-    setUsed(initialUsed.filter((id) => fieldById.has(id)))
-    setInitialized(true)
+    setUsed(initialUsed.filter((id) => fieldById.has(id)));
+    setInitialized(true);
   }
   if (!open && initialized) {
-    setInitialized(false)
-    setPanel(null)
-    setSearch("")
+    setInitialized(false);
+    setPanel(null);
+    setSearch('');
   }
 
   const unused = useMemo(
-    () => fields.filter((field) => !used.includes(field.id) && field.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())),
-    [fields, used, search],
-  )
-  const usedCustomCount = used.filter((id) => fieldById.get(id)?.countsTowardLimit).length
+    () =>
+      fields.filter(
+        (field) =>
+          !used.includes(field.id) &&
+          field.label
+            .toLocaleLowerCase()
+            .includes(search.trim().toLocaleLowerCase())
+      ),
+    [fields, used, search]
+  );
+  const usedCustomCount = used.filter(
+    (id) => fieldById.get(id)?.countsTowardLimit
+  ).length;
 
-  function openPanel(target: { mode: "create" } | { mode: "edit"; fieldId: string }) {
-    const editing = target.mode === "edit" ? fieldById.get(target.fieldId)?.draft : null
-    setLabel(editing?.label ?? "")
-    setType(editing?.type ?? Object.keys(fieldTypes)[0] ?? "text")
-    setOptions(editing?.options?.join(", ") ?? "")
-    setMandatory(editing?.required === true)
-    setNoDuplicates(editing?.unique === true)
-    setFormError("")
-    setPanel(target)
+  function openPanel(
+    target: { mode: 'create' } | { mode: 'edit'; fieldId: string }
+  ) {
+    const editing =
+      target.mode === 'edit' ? fieldById.get(target.fieldId)?.draft : null;
+    setLabel(editing?.label ?? '');
+    setType(editing?.type ?? Object.keys(fieldTypes)[0] ?? 'text');
+    setOptions(editing?.options?.join(', ') ?? '');
+    setMandatory(editing?.required === true);
+    setNoDuplicates(editing?.unique === true);
+    setFormError('');
+    setPanel(target);
   }
 
   function moveField(sourceId: string, targetId: string) {
     setUsed((current) => {
-      const next = current.filter((id) => id !== sourceId)
-      const index = next.indexOf(targetId)
-      next.splice(index < 0 ? next.length : index, 0, sourceId)
-      return next
-    })
+      const next = current.filter((id) => id !== sourceId);
+      const index = next.indexOf(targetId);
+      next.splice(index < 0 ? next.length : index, 0, sourceId);
+      return next;
+    });
   }
 
   async function save() {
-    setPersisting(true)
+    setPersisting(true);
     try {
-      await onSave(used)
+      await onSave(used);
     } finally {
-      setPersisting(false)
+      setPersisting(false);
     }
   }
 
   async function saveField(addAnother: boolean) {
-    const editingId = panel?.mode === "edit" ? panel.fieldId : undefined
+    const editingId = panel?.mode === 'edit' ? panel.fieldId : undefined;
     const draft: RecordCustomFieldDraft = {
       label: label.trim(),
       type,
-      options: options.split(",").map((item) => item.trim()).filter(Boolean),
+      options: options
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
       required: mandatory,
       unique: noDuplicates,
+    };
+    if (!draft.label) {
+      setFormError('Enter a field label');
+      return;
     }
-    if (!draft.label) { setFormError("Enter a field label"); return }
-    const validationError = validateField?.(draft, editingId) ?? ""
-    if (validationError) { setFormError(validationError); return }
+    const validationError = validateField?.(draft, editingId) ?? '';
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
     if (!editingId && usedCustomCount >= maxCustom) {
-      setFormError(`You can use up to ${maxCustom} custom fields.`)
-      return
+      setFormError(`You can use up to ${maxCustom} custom fields.`);
+      return;
     }
-    setCreating(true)
+    setCreating(true);
     try {
       if (editingId && onEditField) {
-        await onEditField(editingId, draft)
-        setPanel(null)
+        await onEditField(editingId, draft);
+        setPanel(null);
       } else if (onCreateField) {
-        const createdId = await onCreateField(draft)
-        if (createdId) setUsed((current) => (current.includes(createdId) ? current : [...current, createdId]))
-        setLabel("")
-        setOptions("")
-        setMandatory(false)
-        setNoDuplicates(false)
-        if (!addAnother) setPanel(null)
+        const createdId = await onCreateField(draft);
+        if (createdId)
+          setUsed((current) =>
+            current.includes(createdId) ? current : [...current, createdId]
+          );
+        setLabel('');
+        setOptions('');
+        setMandatory(false);
+        setNoDuplicates(false);
+        if (!addAnother) setPanel(null);
       }
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Unable to save field")
+      setFormError(
+        error instanceof Error ? error.message : 'Unable to save field'
+      );
     } finally {
-      setCreating(false)
+      setCreating(false);
     }
   }
 
-  const busy = saving || persisting
+  const busy = saving || persisting;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" showCloseButton={false} className="w-full gap-0 overflow-hidden bg-background p-0 data-[side=right]:sm:w-[min(1080px,78vw)] data-[side=right]:sm:max-w-none">
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="bg-background w-full gap-0 overflow-hidden p-0 data-[side=right]:sm:w-[min(1080px,78vw)] data-[side=right]:sm:max-w-none"
+      >
         <div className="relative flex min-h-0 flex-1 flex-col">
           <SheetHeader className="flex-row items-center gap-3 border-b px-8 py-4 text-left">
-            <SheetTitle className="text-xl font-semibold tracking-tight">{title}</SheetTitle>
-            {badge ? <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">{badge}</span> : null}
-            <SheetDescription className="sr-only">Choose, reorder, and create the fields shown on these records</SheetDescription>
+            <SheetTitle className="text-xl font-semibold tracking-tight">
+              {title}
+            </SheetTitle>
+            {badge ? (
+              <span className="bg-primary/10 text-primary rounded-full px-3 py-1 text-sm font-medium">
+                {badge}
+              </span>
+            ) : null}
+            <SheetDescription className="sr-only">
+              Choose, reorder, and create the fields shown on these records
+            </SheetDescription>
           </SheetHeader>
 
           <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1.4fr_1fr]">
@@ -209,8 +273,8 @@ export function RecordFieldsEditor({
                 <h2 className="text-lg font-semibold">{sectionTitle}</h2>
                 <ul className="flex flex-col gap-2">
                   {used.map((id) => {
-                    const field = fieldById.get(id)
-                    if (!field) return null
+                    const field = fieldById.get(id);
+                    if (!field) return null;
                     return (
                       <li
                         key={id}
@@ -219,27 +283,68 @@ export function RecordFieldsEditor({
                         onDragEnd={() => setDragId(null)}
                         onDragOver={(event) => event.preventDefault()}
                         onDrop={(event) => {
-                          event.preventDefault()
-                          if (dragId && dragId !== id) moveField(dragId, id)
-                          setDragId(null)
+                          event.preventDefault();
+                          if (dragId && dragId !== id) moveField(dragId, id);
+                          setDragId(null);
                         }}
-                        className={`group flex items-center gap-2 ${dragId === id ? "opacity-50" : ""}`}
+                        className={`group flex items-center gap-2 ${dragId === id ? 'opacity-50' : ''}`}
                       >
-                        <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground/60 group-hover:text-muted-foreground" aria-hidden="true" />
-                        <div className="flex h-11 flex-1 items-center justify-between rounded-lg border bg-card px-3">
-                          <span className="text-sm font-medium">{field.label}{field.required ? <span aria-hidden="true" className="ml-0.5 text-destructive">*</span> : null}</span>
-                          <span className="text-xs text-muted-foreground">{field.typeLabel}{field.unique ? "  (Unique)" : ""}</span>
+                        <GripVertical
+                          className="text-muted-foreground/60 group-hover:text-muted-foreground size-4 shrink-0 cursor-grab"
+                          aria-hidden="true"
+                        />
+                        <div className="bg-card flex h-11 flex-1 items-center justify-between rounded-lg border px-3">
+                          <span className="text-sm font-medium">
+                            {field.label}
+                            {field.required ? (
+                              <span
+                                aria-hidden="true"
+                                className="text-destructive ml-0.5"
+                              >
+                                *
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            {field.typeLabel}
+                            {field.unique ? '  (Unique)' : ''}
+                          </span>
                         </div>
                         {field.removable || field.editable ? (
                           <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                             {field.editable && onEditField ? (
-                              <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`Edit ${field.label}`} onClick={() => openPanel({ mode: "edit", fieldId: id })}>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-muted-foreground"
+                                aria-label={`Edit ${field.label}`}
+                                onClick={() =>
+                                  openPanel({ mode: 'edit', fieldId: id })
+                                }
+                              >
                                 <Pencil className="size-3.5" />
                               </Button>
                             ) : null}
                             {field.removable ? (
-                              <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`Remove ${field.label}`} onClick={() => setUsed((current) => current.filter((item) => item !== id))}>
-                                <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full bg-destructive/15 text-destructive">−</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-muted-foreground"
+                                aria-label={`Remove ${field.label}`}
+                                onClick={() =>
+                                  setUsed((current) =>
+                                    current.filter((item) => item !== id)
+                                  )
+                                }
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className="bg-destructive/15 text-destructive flex size-4 items-center justify-center rounded-full"
+                                >
+                                  −
+                                </span>
                               </Button>
                             ) : null}
                           </span>
@@ -247,40 +352,62 @@ export function RecordFieldsEditor({
                           <span className="w-16" aria-hidden="true" />
                         )}
                       </li>
-                    )
+                    );
                   })}
                 </ul>
               </div>
             </ScrollArea>
 
             {/* Unused fields rail */}
-            <ScrollArea className="min-h-0 bg-muted/20">
+            <ScrollArea className="bg-muted/20 min-h-0">
               <div className="flex flex-col gap-4 px-6 py-6">
                 {onCreateField ? (
-                  <Button type="button" variant="outline" className="self-start rounded-full border-primary/40 text-primary hover:bg-primary/5 hover:text-primary" onClick={() => openPanel({ mode: "create" })}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-primary/40 text-primary hover:bg-primary/5 hover:text-primary self-start rounded-full"
+                    onClick={() => openPanel({ mode: 'create' })}
+                  >
                     <Plus data-icon="inline-start" /> Custom Field
                   </Button>
                 ) : null}
                 <div className="flex flex-col gap-3">
                   <h3 className="font-semibold">Unused Fields</h3>
                   <div className="relative">
-                    <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" className="h-10 pr-9" aria-label="Search unused fields" />
-                    <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search"
+                      className="h-10 pr-9"
+                      aria-label="Search unused fields"
+                    />
+                    <Search className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2" />
                   </div>
                   <ul className="flex flex-col gap-2">
                     {unused.length === 0 ? (
-                      <li className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">No unused fields</li>
+                      <li className="text-muted-foreground rounded-lg border border-dashed p-4 text-center text-sm">
+                        No unused fields
+                      </li>
                     ) : (
                       unused.map((field) => (
                         <li key={field.id}>
                           <button
                             type="button"
-                            onClick={() => setUsed((current) => [...current, field.id])}
-                            className="flex h-11 w-full items-center gap-2 rounded-lg border bg-card px-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                            onClick={() =>
+                              setUsed((current) => [...current, field.id])
+                            }
+                            className="bg-card hover:border-primary/40 hover:bg-primary/5 flex h-11 w-full items-center gap-2 rounded-lg border px-3 text-left transition-colors"
                           >
-                            <GripVertical className="size-4 shrink-0 text-muted-foreground/60" aria-hidden="true" />
-                            <span className="flex-1 truncate text-sm font-medium">{field.label}</span>
-                            <span className="text-xs text-muted-foreground">{field.typeLabel}</span>
+                            <GripVertical
+                              className="text-muted-foreground/60 size-4 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <span className="flex-1 truncate text-sm font-medium">
+                              {field.label}
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              {field.typeLabel}
+                            </span>
                           </button>
                         </li>
                       ))
@@ -291,15 +418,36 @@ export function RecordFieldsEditor({
             </ScrollArea>
           </div>
 
-          <SheetFooter className="flex-row items-center justify-between border-t bg-background px-8 py-3">
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span aria-hidden="true" className="size-2 rounded-full bg-primary" />
-              Used Custom Fields: <span className="font-semibold text-foreground">{usedCustomCount}/{maxCustom}</span>
+          <SheetFooter className="bg-background flex-row items-center justify-between border-t px-8 py-3">
+            <p className="text-muted-foreground flex items-center gap-2 text-sm">
+              <span
+                aria-hidden="true"
+                className="bg-primary size-2 rounded-full"
+              />
+              Used Custom Fields:{' '}
+              <span className="text-foreground font-semibold">
+                {usedCustomCount}/{maxCustom}
+              </span>
             </p>
             <div className="ml-auto flex gap-2">
-              <Button type="button" variant="outline" className="rounded-full px-6" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
-              <Button type="button" className="rounded-full px-6" onClick={save} disabled={busy}>
-                {busy ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full px-6"
+                onClick={() => onOpenChange(false)}
+                disabled={busy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="rounded-full px-6"
+                onClick={save}
+                disabled={busy}
+              >
+                {busy ? (
+                  <Loader2 data-icon="inline-start" className="animate-spin" />
+                ) : null}
                 Save
               </Button>
             </div>
@@ -308,50 +456,90 @@ export function RecordFieldsEditor({
           {/* Stacked Create / Edit Custom Field panel */}
           <div
             aria-hidden={!panel}
-            className={`absolute inset-y-0 right-0 z-10 flex w-full flex-col bg-background shadow-2xl transition-transform duration-300 ease-out sm:w-[min(560px,90%)] sm:border-l ${panel ? "translate-x-0" : "pointer-events-none translate-x-full"}`}
+            className={`bg-background absolute inset-y-0 right-0 z-10 flex w-full flex-col shadow-2xl transition-transform duration-300 ease-out sm:w-[min(560px,90%)] sm:border-l ${panel ? 'translate-x-0' : 'pointer-events-none translate-x-full'}`}
           >
             <div className="flex items-center gap-3 border-b px-8 py-4">
-              <h2 className="text-xl font-semibold tracking-tight">{panel?.mode === "edit" ? "Edit Custom Field" : "Create Custom Field"}</h2>
-              {badge ? <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">{badge}</span> : null}
+              <h2 className="text-xl font-semibold tracking-tight">
+                {panel?.mode === 'edit'
+                  ? 'Edit Custom Field'
+                  : 'Create Custom Field'}
+              </h2>
+              {badge ? (
+                <span className="bg-primary/10 text-primary rounded-full px-3 py-1 text-sm font-medium">
+                  {badge}
+                </span>
+              ) : null}
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-4 px-8 py-6">
-              <div className="grid grid-cols-[7rem_1fr] items-center gap-4 rounded-lg border px-4 py-3 focus-within:border-primary">
-                <label htmlFor="new-field-label" className="text-sm font-medium">Field Label</label>
+              <div className="focus-within:border-primary grid grid-cols-[7rem_1fr] items-center gap-4 rounded-lg border px-4 py-3">
+                <label
+                  htmlFor="new-field-label"
+                  className="text-sm font-medium"
+                >
+                  Field Label
+                </label>
                 <Input
                   id="new-field-label"
                   value={label}
                   maxLength={80}
-                  onChange={(event) => { setLabel(event.target.value); setFormError("") }}
+                  onChange={(event) => {
+                    setLabel(event.target.value);
+                    setFormError('');
+                  }}
                   placeholder="Enter Field Label"
                   className="border-0 p-0 shadow-none focus-visible:ring-0"
                 />
               </div>
               <div className="grid grid-cols-[7rem_1fr] items-center gap-4 rounded-lg border px-4 py-3">
-                <span id="new-field-type-label" className="text-sm font-medium">Field Type</span>
+                <span id="new-field-type-label" className="text-sm font-medium">
+                  Field Type
+                </span>
                 <DropdownMenu>
                   <DropdownMenuTrigger
-                    render={<button type="button" aria-labelledby="new-field-type-label" className="flex w-full items-center justify-between text-left text-sm" />}
+                    render={
+                      <button
+                        type="button"
+                        aria-labelledby="new-field-type-label"
+                        className="flex w-full items-center justify-between text-left text-sm"
+                      />
+                    }
                   >
                     <span>{fieldTypes[type] ?? type}</span>
-                    <ChevronDown className="size-4 text-muted-foreground" />
+                    <ChevronDown className="text-muted-foreground size-4" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-56">
                     {Object.entries(fieldTypes).map(([key, typeLabel]) => (
-                      <DropdownMenuItem key={key} onClick={() => { setType(key); setFormError("") }}>
+                      <DropdownMenuItem
+                        key={key}
+                        onClick={() => {
+                          setType(key);
+                          setFormError('');
+                        }}
+                      >
                         <span className="flex-1">{typeLabel}</span>
-                        {key === type ? <Check className="size-4 text-primary" /> : null}
+                        {key === type ? (
+                          <Check className="text-primary size-4" />
+                        ) : null}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
               {optionTypes.includes(type) ? (
-                <div className="grid grid-cols-[7rem_1fr] items-center gap-4 rounded-lg border px-4 py-3 focus-within:border-primary">
-                  <label htmlFor="new-field-options" className="text-sm font-medium">Options</label>
+                <div className="focus-within:border-primary grid grid-cols-[7rem_1fr] items-center gap-4 rounded-lg border px-4 py-3">
+                  <label
+                    htmlFor="new-field-options"
+                    className="text-sm font-medium"
+                  >
+                    Options
+                  </label>
                   <Input
                     id="new-field-options"
                     value={options}
-                    onChange={(event) => { setOptions(event.target.value); setFormError("") }}
+                    onChange={(event) => {
+                      setOptions(event.target.value);
+                      setFormError('');
+                    }}
                     placeholder="Lead, Qualified, Customer"
                     className="border-0 p-0 shadow-none focus-visible:ring-0"
                   />
@@ -360,25 +548,75 @@ export function RecordFieldsEditor({
               {showFieldFlags ? (
                 <div className="flex flex-col gap-3 pt-1">
                   <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm">
-                    <input type="checkbox" checked={mandatory} onChange={(event) => setMandatory(event.target.checked)} className="size-4 accent-primary" />
+                    <input
+                      type="checkbox"
+                      checked={mandatory}
+                      onChange={(event) => setMandatory(event.target.checked)}
+                      className="accent-primary size-4"
+                    />
                     Mandatory Field
                   </label>
                   <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm">
-                    <input type="checkbox" checked={noDuplicates} onChange={(event) => setNoDuplicates(event.target.checked)} className="size-4 accent-primary" />
+                    <input
+                      type="checkbox"
+                      checked={noDuplicates}
+                      onChange={(event) =>
+                        setNoDuplicates(event.target.checked)
+                      }
+                      className="accent-primary size-4"
+                    />
                     Do not allow duplicate values
-                    <span title="Two records cannot share the same value for this field"><Info className="size-3.5 text-muted-foreground" aria-hidden="true" /></span>
+                    <span title="Two records cannot share the same value for this field">
+                      <Info
+                        className="text-muted-foreground size-3.5"
+                        aria-hidden="true"
+                      />
+                    </span>
                   </label>
                 </div>
               ) : null}
-              {formError ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</p> : null}
+              {formError ? (
+                <p
+                  role="alert"
+                  className="border-destructive/30 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm"
+                >
+                  {formError}
+                </p>
+              ) : null}
             </div>
             <div className="flex items-center justify-end gap-2 border-t px-8 py-3">
-              <Button type="button" variant="outline" className="rounded-full px-6" onClick={() => { setPanel(null); setFormError("") }} disabled={creating}>Cancel</Button>
-              {panel?.mode !== "edit" ? (
-                <Button type="button" variant="outline" className="rounded-full border-primary/40 px-6 text-primary hover:bg-primary/5 hover:text-primary" onClick={() => saveField(true)} disabled={creating || !label.trim()}>Save &amp; New</Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full px-6"
+                onClick={() => {
+                  setPanel(null);
+                  setFormError('');
+                }}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+              {panel?.mode !== 'edit' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-primary/40 text-primary hover:bg-primary/5 hover:text-primary rounded-full px-6"
+                  onClick={() => saveField(true)}
+                  disabled={creating || !label.trim()}
+                >
+                  Save &amp; New
+                </Button>
               ) : null}
-              <Button type="button" className="rounded-full px-6" onClick={() => saveField(false)} disabled={creating || !label.trim()}>
-                {creating ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
+              <Button
+                type="button"
+                className="rounded-full px-6"
+                onClick={() => saveField(false)}
+                disabled={creating || !label.trim()}
+              >
+                {creating ? (
+                  <Loader2 data-icon="inline-start" className="animate-spin" />
+                ) : null}
                 Save
               </Button>
             </div>
@@ -386,5 +624,5 @@ export function RecordFieldsEditor({
         </div>
       </SheetContent>
     </Sheet>
-  )
+  );
 }

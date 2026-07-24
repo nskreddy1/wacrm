@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import useSWR from "swr";
+import useSWR from 'swr';
 
-import { useRealtime } from "@/features/inbox/hooks/use-realtime";
+import { useRealtime } from '@/features/inbox/hooks/use-realtime';
 
 type InboxSummaryPayload = {
   data?: { unreadConversations?: number };
@@ -10,7 +10,7 @@ type InboxSummaryPayload = {
 
 async function fetchInboxSummary(url: string): Promise<InboxSummaryPayload> {
   const response = await fetch(url);
-  if (!response.ok) throw new Error("Unable to load inbox summary");
+  if (!response.ok) throw new Error('Unable to load inbox summary');
   return response.json() as Promise<InboxSummaryPayload>;
 }
 
@@ -24,13 +24,13 @@ async function fetchInboxSummary(url: string): Promise<InboxSummaryPayload> {
  */
 export function useTotalUnread(): number {
   const { data, mutate } = useSWR<InboxSummaryPayload>(
-    "/api/v1/workspace/inbox/summary",
+    '/api/v1/workspace/inbox/summary',
     fetchInboxSummary,
-    { refreshInterval: 300_000, revalidateOnFocus: true },
+    { refreshInterval: 300_000, revalidateOnFocus: true }
   );
 
   useRealtime({
-    channelName: "unread-badge",
+    channelName: 'unread-badge',
     onMessageEvent: () => void mutate(),
     onConversationEvent: () => void mutate(),
   });

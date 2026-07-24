@@ -99,6 +99,7 @@ conversation (merged into existing updates — no extra round trip).
 Test user: `admin@gmail.com` / `admin`.
 
 Phase 1 (auto-reply end-to-end):
+
 1. Send an inbound WhatsApp sandbox message with a question covered by the
    knowledge base → verify a grounded AI reply is delivered over WhatsApp.
 2. Ask an off-topic question ("what's the weather?") → verify a polite
@@ -106,6 +107,7 @@ Phase 1 (auto-reply end-to-end):
 3. Verify an `ai_usage_log` row with the correct `key_source`.
 
 Phase 2 (escalation):
+
 1. Send "I want to talk to a human, this is terrible" → verify escalation:
    bot paused, round-robin assignment (or member-wide notification when the
    account has no other member), sentiment + reason on the conversation, and

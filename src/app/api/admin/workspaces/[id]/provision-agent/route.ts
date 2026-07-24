@@ -18,24 +18,23 @@
 // should change it via the normal reset flow.
 // ============================================================
 
-import { randomBytes } from "node:crypto";
-import { NextResponse } from "next/server";
+import { randomBytes } from 'node:crypto';
+import { NextResponse } from 'next/server';
 
-import { toErrorResponse } from "@/features/auth/lib/account";
-import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
-import { logPlatformAudit } from "@/features/admin/lib/platform/audit";
-import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
+import { toErrorResponse } from '@/features/auth/lib/account';
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
+import { logPlatformAudit } from '@/features/admin/lib/platform/audit';
+import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** URL-safe temp password: 3 groups of 6, e.g. "kD9mQ2-xW4pL7-nB5cF8". */
 function tempPassword(): string {
-  const alphabet =
-    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   const bytes = randomBytes(18);
-  let out = "";
+  let out = '';
   for (let i = 0; i < 18; i++) {
-    if (i > 0 && i % 6 === 0) out += "-";
+    if (i > 0 && i % 6 === 0) out += '-';
     out += alphabet[bytes[i] % alphabet.length];
   }
   return out;
@@ -43,7 +42,7 @@ function tempPassword(): string {
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const ctx = await requireSuperAdmin();
@@ -56,46 +55,46 @@ export async function POST(
     } | null;
 
     const email =
-      typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+      typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const fullName =
-      typeof body?.full_name === "string" ? body.full_name.trim() : "";
+      typeof body?.full_name === 'string' ? body.full_name.trim() : '';
 
     if (!EMAIL_RE.test(email)) {
       return NextResponse.json(
-        { error: "A valid email is required" },
-        { status: 400 },
+        { error: 'A valid email is required' },
+        { status: 400 }
       );
     }
     if (!fullName || fullName.length > 120) {
       return NextResponse.json(
-        { error: "A name (max 120 chars) is required" },
-        { status: 400 },
+        { error: 'A name (max 120 chars) is required' },
+        { status: 400 }
       );
     }
 
     // Target workspace must exist.
     const { data: account } = await admin
-      .from("accounts")
-      .select("id, name")
-      .eq("id", accountId)
+      .from('accounts')
+      .select('id, name')
+      .eq('id', accountId)
       .maybeSingle();
     if (!account) {
       return NextResponse.json(
-        { error: "Workspace not found" },
-        { status: 404 },
+        { error: 'Workspace not found' },
+        { status: 404 }
       );
     }
 
     // Refuse duplicate identities up front (clearer than auth's error).
     const { data: existing } = await admin
-      .from("profiles")
-      .select("user_id")
-      .eq("email", email)
+      .from('profiles')
+      .select('user_id')
+      .eq('email', email)
       .maybeSingle();
     if (existing) {
       return NextResponse.json(
-        { error: "A user with this email already exists" },
-        { status: 409 },
+        { error: 'A user with this email already exists' },
+        { status: 409 }
       );
     }
 
@@ -109,10 +108,10 @@ export async function POST(
       });
 
     if (createErr || !created?.user) {
-      console.error("[provision-agent] createUser failed:", createErr);
+      console.error('[provision-agent] createUser failed:', createErr);
       return NextResponse.json(
-        { error: "Failed to create the user" },
-        { status: 500 },
+        { error: 'Failed to create the user' },
+        { status: 500 }
       );
     }
     const userId = created.user.id;
@@ -120,47 +119,47 @@ export async function POST(
     // The signup trigger gave them a personal account; capture it,
     // move the profile into the target workspace, then clean up.
     const { data: profile } = await admin
-      .from("profiles")
-      .select("account_id")
-      .eq("user_id", userId)
+      .from('profiles')
+      .select('account_id')
+      .eq('user_id', userId)
       .maybeSingle();
     const orphanAccountId = profile?.account_id ?? null;
 
     const { error: moveErr } = await admin
-      .from("profiles")
-      .update({ account_id: accountId, account_role: "agent" })
-      .eq("user_id", userId);
+      .from('profiles')
+      .update({ account_id: accountId, account_role: 'agent' })
+      .eq('user_id', userId);
 
     if (moveErr) {
-      console.error("[provision-agent] profile move failed:", moveErr);
+      console.error('[provision-agent] profile move failed:', moveErr);
       // Compensate: remove the half-provisioned auth user.
       await admin.auth.admin.deleteUser(userId).catch(() => undefined);
       return NextResponse.json(
-        { error: "Failed to attach the agent to the workspace" },
-        { status: 500 },
+        { error: 'Failed to attach the agent to the workspace' },
+        { status: 500 }
       );
     }
 
     if (orphanAccountId && orphanAccountId !== accountId) {
-      await admin.from("accounts").delete().eq("id", orphanAccountId);
+      await admin.from('accounts').delete().eq('id', orphanAccountId);
     }
 
     await logPlatformAudit(admin, {
       actorId: ctx.userId,
       accountId,
-      action: "workspace.agent_provisioned",
+      action: 'workspace.agent_provisioned',
       entity: `user:${userId}`,
-      after: { email, full_name: fullName, role: "agent" },
+      after: { email, full_name: fullName, role: 'agent' },
     });
 
     return NextResponse.json(
       {
-        agent: { user_id: userId, email, full_name: fullName, role: "agent" },
+        agent: { user_id: userId, email, full_name: fullName, role: 'agent' },
         // One-time reveal — the operator hands this to the agent, who
         // should immediately change it via the reset-password flow.
         temporary_password: password,
       },
-      { status: 201 },
+      { status: 201 }
     );
   } catch (err) {
     return toErrorResponse(err);

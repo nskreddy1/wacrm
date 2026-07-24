@@ -21,7 +21,14 @@
 import { useCallback, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronRight, Loader2, Plus, Share2, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Plus,
+  Share2,
+  Trash2,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import {
@@ -80,16 +87,20 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
     isLoading: loading,
     mutate,
   } = useSWR(
-    profile?.account_id ? (['workspace-roles', profile.account_id] as const) : null,
+    profile?.account_id
+      ? (['workspace-roles', profile.account_id] as const)
+      : null,
     async ([, accountId]) => {
       const supabase = createClient();
       const { data } = await supabase
         .from('workspace_roles')
-        .select('id, name, description, parent_role_id, peer_visibility, is_system')
+        .select(
+          'id, name, description, parent_role_id, peer_visibility, is_system'
+        )
         .eq('account_id', accountId)
         .order('created_at', { ascending: true });
       return (data ?? []) as WorkspaceRole[];
-    },
+    }
   );
   const load = useCallback(() => mutate(), [mutate]);
 
@@ -184,7 +195,7 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
     return (
       <div key={role.id}>
         <div
-          className="group flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/60"
+          className="group hover:bg-muted/60 flex items-center gap-2 rounded-md px-2 py-2"
           style={{ paddingLeft: `${depth * 28 + 8}px` }}
         >
           {children.length > 0 ? (
@@ -198,7 +209,7 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
                   return next;
                 })
               }
-              className="flex size-5 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground"
+              className="border-border text-muted-foreground hover:text-foreground flex size-5 shrink-0 items-center justify-center rounded border"
               aria-label={isCollapsed ? t('expandAll') : t('collapseAll')}
             >
               {isCollapsed ? (
@@ -208,17 +219,22 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
               )}
             </button>
           ) : (
-            <span className="size-5 shrink-0 border-l border-dashed border-border/70" aria-hidden />
+            <span
+              className="border-border/70 size-5 shrink-0 border-l border-dashed"
+              aria-hidden
+            />
           )}
 
-          <span className="text-sm font-medium text-foreground">{role.name}</span>
+          <span className="text-foreground text-sm font-medium">
+            {role.name}
+          </span>
           {role.is_system && (
             <Badge variant="secondary" className="text-[10px]">
               {t('roleSystemBadge')}
             </Badge>
           )}
           {role.description && (
-            <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+            <span className="text-muted-foreground hidden truncate text-xs sm:inline">
               — {role.description}
             </span>
           )}
@@ -227,7 +243,7 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
             <Button
               variant="ghost"
               size="icon"
-              className="ml-auto size-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+              className="text-muted-foreground hover:text-destructive ml-auto size-7 opacity-0 transition-opacity group-hover:opacity-100"
               onClick={() => setDeleting(role)}
               aria-label={t('roleDeleteBtn')}
             >
@@ -250,7 +266,7 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
           <button
             type="button"
             onClick={() => setCollapsed(new Set())}
-            className="font-medium text-primary hover:underline"
+            className="text-primary font-medium hover:underline"
           >
             {t('expandAll')}
           </button>
@@ -258,7 +274,7 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
           <button
             type="button"
             onClick={() => setCollapsed(new Set(roles.map((r) => r.id)))}
-            className="font-medium text-primary hover:underline"
+            className="text-primary font-medium hover:underline"
           >
             {t('collapseAll')}
           </button>
@@ -277,11 +293,13 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
       {/* Role hierarchy tree */}
       <div className="mt-2">
         {loading ? (
-          <div className="flex items-center gap-2 px-2 py-6 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 px-2 py-6 text-sm">
             <Loader2 className="size-4 animate-spin" />
           </div>
         ) : roots.length === 0 ? (
-          <p className="px-2 py-6 text-sm text-muted-foreground">{t('noRoles')}</p>
+          <p className="text-muted-foreground px-2 py-6 text-sm">
+            {t('noRoles')}
+          </p>
         ) : (
           roots.map((role) => renderNode(role, 0))
         )}
@@ -320,19 +338,29 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
             value={parentId || null}
             options={roles.map((r) => ({ id: r.id, label: r.name }))}
             placeholder={t('selectPlaceholder')}
-            icon={<Share2 className="size-4 shrink-0 rotate-90 text-muted-foreground" aria-hidden="true" />}
+            icon={
+              <Share2
+                className="text-muted-foreground size-4 shrink-0 rotate-90"
+                aria-hidden="true"
+              />
+            }
             onSelect={(id) => setParentId(id ?? '')}
           />
         </RecordField>
 
-        <RecordField label={t('peerVisibilityLabel')} htmlFor="role-peer-visibility">
-          <div className="flex min-h-11 items-center gap-2 rounded-md bg-muted/50 px-3">
+        <RecordField
+          label={t('peerVisibilityLabel')}
+          htmlFor="role-peer-visibility"
+        >
+          <div className="bg-muted/50 flex min-h-11 items-center gap-2 rounded-md px-3">
             <Switch
               id="role-peer-visibility"
               checked={peerVisibility}
               onCheckedChange={setPeerVisibility}
             />
-            <span className="text-sm text-foreground">{t('peerVisibilityText')}</span>
+            <span className="text-foreground text-sm">
+              {t('peerVisibilityText')}
+            </span>
           </div>
         </RecordField>
 
@@ -360,13 +388,17 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
               {t.rich('roleDeleteDesc', {
                 name: deleting?.name ?? '',
                 bold: (chunks) => (
-                  <span className="font-semibold text-foreground">{chunks}</span>
+                  <span className="text-foreground font-semibold">
+                    {chunks}
+                  </span>
                 ),
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteBusy}>{t('cancel')}</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteBusy}>
+              {t('cancel')}
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();

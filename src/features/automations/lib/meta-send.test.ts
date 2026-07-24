@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The automation senders must route through the unified outbound
 // orchestrator so accounts configured via channel_connections (e.g.
@@ -11,27 +11,27 @@ vi.mock('@/features/admin/lib/orchestration/outbound', () => ({
     dbMessageInserted: true,
     dbMessageId: 'db-1',
   })),
-}))
+}));
 
-import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound'
-import { engineSendText, engineSendTemplate } from './meta-send'
+import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
+import { engineSendText, engineSendTemplate } from './meta-send';
 
 const baseArgs = {
   accountId: 'acct-1',
   userId: 'user-1',
   conversationId: 'conv-1',
   contactId: 'contact-1',
-}
+};
 
 describe('automations meta-send (orchestrator wrapper)', () => {
   beforeEach(() => {
-    vi.mocked(sendChannelMessage).mockClear()
-  })
+    vi.mocked(sendChannelMessage).mockClear();
+  });
 
   it('engineSendText delegates to sendChannelMessage with a text payload', async () => {
-    const result = await engineSendText({ ...baseArgs, text: 'hello' })
+    const result = await engineSendText({ ...baseArgs, text: 'hello' });
 
-    expect(sendChannelMessage).toHaveBeenCalledTimes(1)
+    expect(sendChannelMessage).toHaveBeenCalledTimes(1);
     expect(sendChannelMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         accountId: 'acct-1',
@@ -39,10 +39,10 @@ describe('automations meta-send (orchestrator wrapper)', () => {
         contactId: 'contact-1',
         payload: { kind: 'text', text: 'hello' },
         senderType: 'bot',
-      }),
-    )
-    expect(result).toEqual({ whatsapp_message_id: 'ext-123' })
-  })
+      })
+    );
+    expect(result).toEqual({ whatsapp_message_id: 'ext-123' });
+  });
 
   it('engineSendTemplate delegates to sendChannelMessage with a template payload', async () => {
     const result = await engineSendTemplate({
@@ -50,9 +50,9 @@ describe('automations meta-send (orchestrator wrapper)', () => {
       templateName: 'welcome',
       language: 'en_US',
       params: ['Sunil'],
-    })
+    });
 
-    expect(sendChannelMessage).toHaveBeenCalledTimes(1)
+    expect(sendChannelMessage).toHaveBeenCalledTimes(1);
     expect(sendChannelMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         accountId: 'acct-1',
@@ -64,8 +64,8 @@ describe('automations meta-send (orchestrator wrapper)', () => {
           language: 'en_US',
         }),
         senderType: 'bot',
-      }),
-    )
-    expect(result).toEqual({ whatsapp_message_id: 'ext-123' })
-  })
-})
+      })
+    );
+    expect(result).toEqual({ whatsapp_message_id: 'ext-123' });
+  });
+});

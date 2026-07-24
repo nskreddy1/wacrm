@@ -1,14 +1,14 @@
-import { createBrowserClient } from '@supabase/ssr'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { authCookieOptions } from './cookie-options'
+import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { authCookieOptions } from './cookie-options';
 
 // Singleton instance — one client shared across the whole browser session.
 // Creating multiple clients causes auth-lock contention ("Lock was released
 // because another request stole it") and intermittent fetch failures.
-let browserClient: SupabaseClient | undefined
+let browserClient: SupabaseClient | undefined;
 
 export function createClient() {
-  if (browserClient) return browserClient
+  if (browserClient) return browserClient;
 
   browserClient = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,7 +17,7 @@ export function createClient() {
     // the app runs inside an embedded preview iframe (third-party cookie
     // context). See cookie-options.ts for the full rationale.
     { cookieOptions: authCookieOptions }
-  )
+  );
 
-  return browserClient
+  return browserClient;
 }

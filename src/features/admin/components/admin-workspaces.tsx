@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 // ============================================================
 // AdminWorkspaces — /admin/workspaces (platform directory).
@@ -12,14 +12,14 @@
 // the route then `mutate()` so the cache stays canonical.
 // ============================================================
 
-import { useState } from "react";
-import useSWR from "swr";
-import useSWRInfinite from "swr/infinite";
-import { toast } from "sonner";
-import { Copy, Loader2, Search, UserPlus } from "lucide-react";
+import { useState } from 'react';
+import useSWR from 'swr';
+import useSWRInfinite from 'swr/infinite';
+import { toast } from 'sonner';
+import { Copy, Loader2, Search, UserPlus } from 'lucide-react';
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -27,16 +27,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from '@/components/ui/sheet';
 import {
   Table,
   TableBody,
@@ -44,8 +44,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
+} from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface WorkspaceRow {
   id: string;
@@ -78,21 +78,21 @@ interface WorkspaceDetail {
 const jsonFetcher = async (url: string) => {
   const res = await fetch(url);
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error ?? "Request failed");
+  if (!res.ok) throw new Error(body?.error ?? 'Request failed');
   return body;
 };
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   });
 }
 
 export function AdminWorkspaces() {
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Keyset pagination via SWR Infinite: page N's key derives from
@@ -100,19 +100,16 @@ export function AdminWorkspaces() {
   const { data, isLoading, isValidating, size, setSize } = useSWRInfinite<{
     workspaces: WorkspaceRow[];
     next_cursor: string | null;
-  }>(
-    (index, previous) => {
-      if (previous && !previous.next_cursor) return null; // reached the end
-      const p = new URLSearchParams();
-      if (query) p.set("q", query);
-      if (index > 0 && previous?.next_cursor) {
-        p.set("cursor", previous.next_cursor);
-      }
-      const s = p.toString();
-      return `/api/admin/workspaces${s ? `?${s}` : ""}`;
-    },
-    jsonFetcher,
-  );
+  }>((index, previous) => {
+    if (previous && !previous.next_cursor) return null; // reached the end
+    const p = new URLSearchParams();
+    if (query) p.set('q', query);
+    if (index > 0 && previous?.next_cursor) {
+      p.set('cursor', previous.next_cursor);
+    }
+    const s = p.toString();
+    return `/api/admin/workspaces${s ? `?${s}` : ''}`;
+  }, jsonFetcher);
 
   const rows = (data ?? []).flatMap((p) => p.workspaces);
   const nextCursor = data?.[data.length - 1]?.next_cursor ?? null;
@@ -134,7 +131,7 @@ export function AdminWorkspaces() {
       >
         <div className="relative w-full max-w-sm">
           <Search
-            className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
             aria-hidden="true"
           />
           <Input
@@ -174,7 +171,7 @@ export function AdminWorkspaces() {
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="py-8 text-center text-muted-foreground"
+                  className="text-muted-foreground py-8 text-center"
                 >
                   No workspaces match this search.
                 </TableCell>
@@ -188,7 +185,7 @@ export function AdminWorkspaces() {
                 >
                   <TableCell className="font-medium">{w.name}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {w.owner_name ?? "—"}
+                    {w.owner_name ?? '—'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {w.member_count}
@@ -248,7 +245,7 @@ function WorkspaceDetailSheet({
 }) {
   const { data, isLoading, mutate } = useSWR<WorkspaceDetail>(
     workspaceId ? `/api/admin/workspaces/${workspaceId}` : null,
-    jsonFetcher,
+    jsonFetcher
   );
   const [provisionOpen, setProvisionOpen] = useState(false);
 
@@ -257,12 +254,12 @@ function WorkspaceDetailSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
           <SheetTitle className="text-balance">
-            {data?.workspace.name ?? "Workspace"}
+            {data?.workspace.name ?? 'Workspace'}
           </SheetTitle>
           <SheetDescription>
             {data
-              ? `Created ${formatDate(data.workspace.created_at)} · ${data.members.length} member${data.members.length === 1 ? "" : "s"}`
-              : "Loading workspace details…"}
+              ? `Created ${formatDate(data.workspace.created_at)} · ${data.members.length} member${data.members.length === 1 ? '' : 's'}`
+              : 'Loading workspace details…'}
           </SheetDescription>
         </SheetHeader>
 
@@ -298,10 +295,10 @@ function WorkspaceDetailSheet({
                           <TableCell>
                             <span className="grid leading-tight">
                               <span className="truncate font-medium">
-                                {m.full_name || m.email || "Unknown"}
+                                {m.full_name || m.email || 'Unknown'}
                               </span>
                               {m.full_name && m.email && (
-                                <span className="truncate text-xs text-muted-foreground">
+                                <span className="text-muted-foreground truncate text-xs">
                                   {m.email}
                                 </span>
                               )}
@@ -323,7 +320,7 @@ function WorkspaceDetailSheet({
               <section aria-label="Channels" className="flex flex-col gap-2">
                 <h3 className="text-sm font-semibold">Channels</h3>
                 {data.channels.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     No channels configured yet. Use the Channels tab to add
                     provider credentials for this workspace.
                   </p>
@@ -338,13 +335,13 @@ function WorkspaceDetailSheet({
                           <span className="text-sm font-medium capitalize">
                             {c.channel}
                           </span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-muted-foreground text-xs">
                             {c.provider}
-                            {c.masked_preview ? ` · ${c.masked_preview}` : ""}
+                            {c.masked_preview ? ` · ${c.masked_preview}` : ''}
                           </span>
                         </span>
-                        <Badge variant={c.is_active ? "default" : "secondary"}>
-                          {c.is_active ? "Active" : "Inactive"}
+                        <Badge variant={c.is_active ? 'default' : 'secondary'}>
+                          {c.is_active ? 'Active' : 'Inactive'}
                         </Badge>
                       </li>
                     ))}
@@ -353,7 +350,7 @@ function WorkspaceDetailSheet({
               </section>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Could not load this workspace.
             </p>
           )}
@@ -383,8 +380,8 @@ function ProvisionAgentDialog({
   onOpenChange: (open: boolean) => void;
   onProvisioned: () => void;
 }) {
-  const [email, setEmail] = useState("");
-  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
 
@@ -394,20 +391,20 @@ function ProvisionAgentDialog({
       const res = await fetch(
         `/api/admin/workspaces/${workspaceId}/provision-agent`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, full_name: fullName }),
-        },
+        }
       );
       const body = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(body?.error ?? "Failed to provision the agent");
+        throw new Error(body?.error ?? 'Failed to provision the agent');
       }
       setTempPassword(body.temporary_password as string);
       onProvisioned();
-      toast.success("Agent provisioned");
+      toast.success('Agent provisioned');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setSubmitting(false);
     }
@@ -416,8 +413,8 @@ function ProvisionAgentDialog({
   function reset(next: boolean) {
     onOpenChange(next);
     if (!next) {
-      setEmail("");
-      setFullName("");
+      setEmail('');
+      setFullName('');
       setTempPassword(null);
     }
   }
@@ -429,8 +426,8 @@ function ProvisionAgentDialog({
           <DialogTitle>Provision agent</DialogTitle>
           <DialogDescription>
             Creates a new user in this workspace with the agent role. The
-            temporary password is shown once — hand it to the agent and ask
-            them to change it immediately.
+            temporary password is shown once — hand it to the agent and ask them
+            to change it immediately.
           </DialogDescription>
         </DialogHeader>
 
@@ -439,7 +436,7 @@ function ProvisionAgentDialog({
             <p className="text-sm">
               Agent created. This temporary password will not be shown again:
             </p>
-            <div className="flex items-center gap-2 rounded-lg border bg-muted p-3">
+            <div className="bg-muted flex items-center gap-2 rounded-lg border p-3">
               <code className="flex-1 font-mono text-sm break-all">
                 {tempPassword}
               </code>
@@ -450,7 +447,7 @@ function ProvisionAgentDialog({
                 aria-label="Copy temporary password"
                 onClick={() => {
                   navigator.clipboard.writeText(tempPassword);
-                  toast.success("Copied to clipboard");
+                  toast.success('Copied to clipboard');
                 }}
               >
                 <Copy className="size-4" aria-hidden="true" />
@@ -500,10 +497,7 @@ function ProvisionAgentDialog({
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting && (
-                  <Loader2
-                    className="size-4 animate-spin"
-                    aria-hidden="true"
-                  />
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 )}
                 Create agent
               </Button>

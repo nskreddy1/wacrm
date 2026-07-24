@@ -61,20 +61,24 @@ export function TagManager() {
     data: tags = [],
     isLoading,
     mutate,
-  } = useSWR(user ? (['tags', user.id] as const) : null, async ([, userId]) => {
-    const { data, error } = await supabase
-      .from('tags')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true });
-    if (error) throw error;
-    return (data || []) as Tag[];
-  }, {
-    onError: (err) => {
-      console.error('Failed to fetch tags:', err);
-      toast.error(t('failedToLoadTags'));
+  } = useSWR(
+    user ? (['tags', user.id] as const) : null,
+    async ([, userId]) => {
+      const { data, error } = await supabase
+        .from('tags')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []) as Tag[];
     },
-  });
+    {
+      onError: (err) => {
+        console.error('Failed to fetch tags:', err);
+        toast.error(t('failedToLoadTags'));
+      },
+    }
+  );
   const loading = authLoading || isLoading;
 
   async function handleCreate() {
@@ -132,10 +136,9 @@ export function TagManager() {
 
       toast.success(t('tagDeleted'));
       // Reflect the delete locally without a refetch.
-      void mutate(
-        (prev) => prev?.filter((tag) => tag.id !== tagToDelete.id),
-        { revalidate: false },
-      );
+      void mutate((prev) => prev?.filter((tag) => tag.id !== tagToDelete.id), {
+        revalidate: false,
+      });
       setDeleteDialogOpen(false);
       setTagToDelete(null);
     } catch (err) {
@@ -149,8 +152,8 @@ export function TagManager() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <TagIcon className="size-4 text-primary" />
+        <CardTitle className="text-foreground flex items-center gap-2">
+          <TagIcon className="text-primary size-4" />
           {t('tagsTitle')}
         </CardTitle>
         <CardDescription className="text-muted-foreground">
@@ -160,7 +163,7 @@ export function TagManager() {
       <CardContent className="space-y-4">
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="size-6 animate-spin text-primary" />
+            <Loader2 className="text-primary size-6 animate-spin" />
           </div>
         ) : (
           <>
@@ -193,9 +196,7 @@ export function TagManager() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                {t('noTags')}
-              </p>
+              <p className="text-muted-foreground text-sm">{t('noTags')}</p>
             )}
 
             {/* Inline create row */}
@@ -217,12 +218,16 @@ export function TagManager() {
                     key={color.value}
                     type="button"
                     onClick={() => setSelectedColor(color.value)}
-                    aria-label={t('useColor', { color: t(`colors.${color.name}` as Parameters<typeof t>[0]) })}
+                    aria-label={t('useColor', {
+                      color: t(
+                        `colors.${color.name}` as Parameters<typeof t>[0]
+                      ),
+                    })}
                     aria-pressed={selectedColor === color.value}
                     className={cn(
                       'size-6 rounded-md transition-transform hover:scale-110',
                       selectedColor === color.value &&
-                        'outline outline-2 outline-offset-2 outline-primary',
+                        'outline-primary outline outline-2 outline-offset-2'
                     )}
                     style={{ backgroundColor: color.value }}
                     title={t(`colors.${color.name}` as Parameters<typeof t>[0])}
@@ -253,7 +258,9 @@ export function TagManager() {
           <DialogHeader>
             <DialogTitle>{t('deleteTag')}</DialogTitle>
             <DialogDescription>
-              {tagToDelete ? t('deleteConfirm', { name: tagToDelete.name }) : null}
+              {tagToDelete
+                ? t('deleteConfirm', { name: tagToDelete.name })
+                : null}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

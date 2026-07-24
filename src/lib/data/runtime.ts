@@ -1,4 +1,4 @@
-import "server-only"
+import 'server-only';
 
 /**
  * Production data source: Supabase only.
@@ -8,13 +8,13 @@ import "server-only"
  * now fails fast with a clear server error instead of silently serving
  * demo data.
  */
-export type DataSource = "supabase"
+export type DataSource = 'supabase';
 
 export function hasSupabaseDataConfig() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  )
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
 }
 
 /**
@@ -26,8 +26,8 @@ export function hasSupabaseDataConfig() {
 export function getDataSource(): DataSource {
   if (!hasSupabaseDataConfig()) {
     throw new Error(
-      "Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are required). Demo mode has been removed.",
-    )
+      'Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are required). Demo mode has been removed.'
+    );
   }
-  return "supabase"
+  return 'supabase';
 }

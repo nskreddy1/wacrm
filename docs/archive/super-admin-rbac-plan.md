@@ -23,6 +23,7 @@ SUPER ADMIN (env allowlist)          — platform operator, sees /admin console
 ```
 
 Feature gating is enforced at 3 layers (fail closed):
+
 1. **Nav** — disabled features filtered out of the sidebar (server-side, in the navigation API).
 2. **API** — `requireRole()` extended to also check org status + feature access for the route's feature.
 3. **Page** — dashboard layout/pages redirect when the feature is disabled or org suspended.
@@ -122,17 +123,17 @@ Own minimal layout (no workspace sidebar), server-gated: layout calls the super-
 
 ## Key files
 
-| File | Change |
-|---|---|
-| `supabase/migrations/047_org_administration.sql` | new — status, disabled_features, audit log |
-| `src/lib/features/registry.ts` | new — feature keys |
-| `src/lib/auth/account.ts` | extend context; `requireFeature`; suspended check |
-| `src/lib/auth/super-admin-context.ts` | new — reusable `requireSuperAdmin()` |
-| `src/lib/navigation/config.ts` | feature-aware filtering |
-| `src/app/api/v1/workspace/navigation/route.ts` | pass disabledFeatures |
-| `src/app/api/admin/orgs/**` | new — list/detail/patch/create |
-| `src/app/admin/**` | new — console UI |
-| Toggleable feature API routes + pages | swap to `requireFeature` |
+| File                                             | Change                                            |
+| ------------------------------------------------ | ------------------------------------------------- |
+| `supabase/migrations/047_org_administration.sql` | new — status, disabled_features, audit log        |
+| `src/lib/features/registry.ts`                   | new — feature keys                                |
+| `src/lib/auth/account.ts`                        | extend context; `requireFeature`; suspended check |
+| `src/lib/auth/super-admin-context.ts`            | new — reusable `requireSuperAdmin()`              |
+| `src/lib/navigation/config.ts`                   | feature-aware filtering                           |
+| `src/app/api/v1/workspace/navigation/route.ts`   | pass disabledFeatures                             |
+| `src/app/api/admin/orgs/**`                      | new — list/detail/patch/create                    |
+| `src/app/admin/**`                               | new — console UI                                  |
+| Toggleable feature API routes + pages            | swap to `requireFeature`                          |
 
 ## Order of execution
 

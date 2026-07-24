@@ -1,15 +1,15 @@
-import { AiError, type AiConfig, type ChatMessage } from '../../types'
+import { AiError, type AiConfig, type ChatMessage } from '../../types';
 import {
   OPENAI_COMPAT_BASE_URL,
   OLLAMA_PLACEHOLDER_KEY,
   aiRequestTimeoutMs,
   resolveOllamaBaseUrl,
-} from '../../defaults'
-import { providerLabel } from '../../errors'
-import { generateOpenAi } from './openai'
-import { generateAnthropic } from './anthropic'
-import { generateGemini } from './gemini'
-import type { ProviderResult } from './shared'
+} from '../../defaults';
+import { providerLabel } from '../../errors';
+import { generateOpenAi } from './openai';
+import { generateAnthropic } from './anthropic';
+import { generateGemini } from './gemini';
+import type { ProviderResult } from './shared';
 
 // ============================================================
 // Direct engine — the original hand-rolled fetch adapters,
@@ -19,17 +19,17 @@ import type { ProviderResult } from './shared'
 // ============================================================
 
 export interface DirectGenerateArgs {
-  config: AiConfig
+  config: AiConfig;
   /** Fully-built system prompt (see `buildSystemPrompt`). */
-  systemPrompt: string
+  systemPrompt: string;
   /** Recent conversation turns, oldest first. */
-  messages: ChatMessage[]
+  messages: ChatMessage[];
   /** Cache-aligned system blocks (stable-prefix order). When present,
    *  Anthropic marks each block with `cache_control`; the other
    *  adapters keep using the joined `systemPrompt`. */
-  systemBlocks?: string[]
+  systemBlocks?: string[];
   /** Per-conversation cache-routing hint → OpenAI `prompt_cache_key`. */
-  cacheKey?: string
+  cacheKey?: string;
 }
 
 /**
@@ -40,10 +40,10 @@ export interface DirectGenerateArgs {
  * failure.
  */
 export async function generateReplyDirect(
-  args: DirectGenerateArgs,
+  args: DirectGenerateArgs
 ): Promise<ProviderResult> {
-  const { config, systemPrompt, messages, systemBlocks, cacheKey } = args
-  const timeoutMs = aiRequestTimeoutMs()
+  const { config, systemPrompt, messages, systemBlocks, cacheKey } = args;
+  const timeoutMs = aiRequestTimeoutMs();
   const providerArgs = {
     apiKey: config.apiKey,
     model: config.model,
@@ -52,15 +52,15 @@ export async function generateReplyDirect(
     timeoutMs,
     systemBlocks,
     cacheKey,
-  }
+  };
 
   switch (config.provider) {
     case 'openai':
-      return generateOpenAi(providerArgs)
+      return generateOpenAi(providerArgs);
     case 'anthropic':
-      return generateAnthropic(providerArgs)
+      return generateAnthropic(providerArgs);
     case 'gemini':
-      return generateGemini(providerArgs)
+      return generateGemini(providerArgs);
     case 'ollama': {
       // Self-hosted Ollama — OpenAI-compatible /v1 endpoint, no real
       // API key (the daemon ignores auth, adapters need a non-empty one).
@@ -72,37 +72,37 @@ export async function generateReplyDirect(
         {
           baseUrl: resolveOllamaBaseUrl(config.baseUrl),
           providerLabel: providerLabel('ollama'),
-        },
-      )
+        }
+      );
     }
     case 'custom': {
       // Bring-your-own OpenAI-compatible endpoint, per-account base URL.
-      const baseUrl = config.baseUrl?.trim()
+      const baseUrl = config.baseUrl?.trim();
       if (!baseUrl) {
         throw new AiError(
           'A base URL is required for the custom OpenAI-compatible provider.',
-          { code: 'missing_base_url', status: 400 },
-        )
+          { code: 'missing_base_url', status: 400 }
+        );
       }
       return generateOpenAi(providerArgs, {
         baseUrl,
         providerLabel: providerLabel('custom'),
-      })
+      });
     }
     default: {
       // OpenAI-compatible presets (NVIDIA NIM, Groq, OpenRouter, Together,
       // Mistral, DeepSeek, xAI) — same protocol, registry-provided URL.
-      const baseUrl = OPENAI_COMPAT_BASE_URL[config.provider]
+      const baseUrl = OPENAI_COMPAT_BASE_URL[config.provider];
       if (!baseUrl) {
         throw new AiError(`Unsupported AI provider: ${config.provider}`, {
           code: 'unsupported_provider',
           status: 400,
-        })
+        });
       }
       return generateOpenAi(providerArgs, {
         baseUrl,
         providerLabel: providerLabel(config.provider),
-      })
+      });
     }
   }
 }

@@ -6,18 +6,21 @@
 // and does pure in-memory filtering.
 // ============================================================
 
-import { NextResponse } from "next/server"
+import { NextResponse } from 'next/server';
 
-import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account"
-import { getDataSource } from "@/lib/data/runtime"
-import { navigationForAccess } from "@/lib/navigation/config"
+import {
+  getCurrentAccount,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
+import { getDataSource } from '@/lib/data/runtime';
+import { navigationForAccess } from '@/lib/navigation/config';
 
-export const dynamic = "force-dynamic"
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const source = getDataSource()
-    const context = await getCurrentAccount()
+    const source = getDataSource();
+    const context = await getCurrentAccount();
     return NextResponse.json({
       data: {
         groups: navigationForAccess({
@@ -26,8 +29,8 @@ export async function GET() {
         }),
       },
       meta: { source },
-    })
+    });
   } catch (error) {
-    return toErrorResponse(error)
+    return toErrorResponse(error);
   }
 }

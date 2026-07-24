@@ -4,38 +4,38 @@ All paths are App Router paths under `src/app`. Parenthesized route groups do no
 
 ## Public and authentication pages
 
-| URL | Page/method | Flow |
-| --- | --- | --- |
-| `/` | `RootPage` | Resolves entry behavior and sends users toward the application/auth surface. |
-| `/login` | `LoginPage` | Validates Supabase public configuration, accepts credentials, calls Supabase password sign-in, then enters the protected application. The observed 403 “Signup is not allowed” is a Supabase Auth project policy response, not an MCP connection error. |
-| `/signup` | `SignupPage` | Calls Supabase sign-up; succeeds only if project Auth allows signups. Email confirmation behavior is controlled in Supabase. |
-| `/forgot-password` | `ForgotPasswordPage` | Requests a Supabase recovery email with the configured site/callback URL. |
-| `/reset-password` | `ResetPasswordPage` | Consumes recovery session and updates the password. |
-| `/auth/callback` | route `GET` | Exchanges Supabase auth code for a cookie-backed session and redirects. |
-| `/join/[token]` | join page | Calls invitation peek, authenticates if needed, then redeems into the target account. |
+| URL                | Page/method          | Flow                                                                                                                                                                                                                                                    |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                | `RootPage`           | Resolves entry behavior and sends users toward the application/auth surface.                                                                                                                                                                            |
+| `/login`           | `LoginPage`          | Validates Supabase public configuration, accepts credentials, calls Supabase password sign-in, then enters the protected application. The observed 403 “Signup is not allowed” is a Supabase Auth project policy response, not an MCP connection error. |
+| `/signup`          | `SignupPage`         | Calls Supabase sign-up; succeeds only if project Auth allows signups. Email confirmation behavior is controlled in Supabase.                                                                                                                            |
+| `/forgot-password` | `ForgotPasswordPage` | Requests a Supabase recovery email with the configured site/callback URL.                                                                                                                                                                               |
+| `/reset-password`  | `ResetPasswordPage`  | Consumes recovery session and updates the password.                                                                                                                                                                                                     |
+| `/auth/callback`   | route `GET`          | Exchanges Supabase auth code for a cookie-backed session and redirects.                                                                                                                                                                                 |
+| `/join/[token]`    | join page            | Calls invitation peek, authenticates if needed, then redeems into the target account.                                                                                                                                                                   |
 
 ## Canonical application pages
 
-| URL | Main composition | Data/actions and states |
-| --- | --- | --- |
-| `/dashboard` | `DashboardWorkspace`, metric cards/charts/activity/quick actions | SWR `GET /api/v1/dashboard`; loading skeleton, error and empty states; navigation to core workspaces. |
-| `/inbox` | conversation list, thread, composer, contact sidebar | Conversation/message queries, Realtime hooks, media relay, send/react/quick-reply APIs; optimistic send and unread updates. |
-| `/contacts` | `ContactWorkspace`, form/filter/import/detail/custom fields | Workspace contacts API and repository filters; create/update/delete/import/tag flows; loading/empty/error handling. |
-| `/pipelines` | pipeline workspace/board/sheets/editor/settings | Repository runtime selects Supabase/SQLite/demo behavior; drag/drop and editor mutate snapshots and SWR cache. |
-| `/broadcasts` | campaign list | Reads campaigns/status; links to creation/detail. |
-| `/broadcasts/new` | four-step builder | Choose template → audience → personalize → schedule/send → WhatsApp broadcast route. |
-| `/broadcasts/[id]` | detail/status | Campaign and recipient delivery state; status normalization/counters. |
-| `/automations` | automation list | CRUD through `/api/automations`; enablement and navigation. |
-| `/automations/new` | `AutomationBuilder` | Resource context loads tags/templates/pipelines; validates trigger/action tree; persists automation and steps. |
-| `/automations/[id]/edit` | builder with existing graph/tree | Fetch → edit → validate → PATCH; duplicate/delete routes are separate actions. |
-| `/automations/[id]/logs` | execution log view | Reads execution history and pending outcomes. |
-| `/flows` | flow list/templates | CRUD and template creation; activate/edit/run navigation. |
-| `/flows/[id]` | `FlowEditorShell`, canvas/list, config form, validation panel | `FlowEditorProvider` owns graph/editor state; PUT saves nodes/edges; activate validates; view mode is browser-local preference. |
-| `/flows/[id]/runs` | run history | `GET /api/flows/[id]/runs`; event/run inspection. |
-| `/agents` | AI playground and usage | Calls playground/test/config/usage/knowledge APIs; requires configured provider credentials. |
-| `/bookings` | booking workspace | Early feature surface; source has less persisted domain depth than core CRM. |
-| `/notifications` | notification list | SWR/read API; PATCH marks state; unread hook keeps shell badge synchronized. |
-| `/settings` | rail/sections for profile, account, members, security, appearance, WhatsApp, channels, templates, replies, tags, fields, AI and API keys | Each panel calls its domain API/Supabase method; unavailable provider lifecycle is shown rather than silently emulated. |
+| URL                      | Main composition                                                                                                                         | Data/actions and states                                                                                                         |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `/dashboard`             | `DashboardWorkspace`, metric cards/charts/activity/quick actions                                                                         | SWR `GET /api/v1/dashboard`; loading skeleton, error and empty states; navigation to core workspaces.                           |
+| `/inbox`                 | conversation list, thread, composer, contact sidebar                                                                                     | Conversation/message queries, Realtime hooks, media relay, send/react/quick-reply APIs; optimistic send and unread updates.     |
+| `/contacts`              | `ContactWorkspace`, form/filter/import/detail/custom fields                                                                              | Workspace contacts API and repository filters; create/update/delete/import/tag flows; loading/empty/error handling.             |
+| `/pipelines`             | pipeline workspace/board/sheets/editor/settings                                                                                          | Repository runtime selects Supabase/SQLite/demo behavior; drag/drop and editor mutate snapshots and SWR cache.                  |
+| `/broadcasts`            | campaign list                                                                                                                            | Reads campaigns/status; links to creation/detail.                                                                               |
+| `/broadcasts/new`        | four-step builder                                                                                                                        | Choose template → audience → personalize → schedule/send → WhatsApp broadcast route.                                            |
+| `/broadcasts/[id]`       | detail/status                                                                                                                            | Campaign and recipient delivery state; status normalization/counters.                                                           |
+| `/automations`           | automation list                                                                                                                          | CRUD through `/api/automations`; enablement and navigation.                                                                     |
+| `/automations/new`       | `AutomationBuilder`                                                                                                                      | Resource context loads tags/templates/pipelines; validates trigger/action tree; persists automation and steps.                  |
+| `/automations/[id]/edit` | builder with existing graph/tree                                                                                                         | Fetch → edit → validate → PATCH; duplicate/delete routes are separate actions.                                                  |
+| `/automations/[id]/logs` | execution log view                                                                                                                       | Reads execution history and pending outcomes.                                                                                   |
+| `/flows`                 | flow list/templates                                                                                                                      | CRUD and template creation; activate/edit/run navigation.                                                                       |
+| `/flows/[id]`            | `FlowEditorShell`, canvas/list, config form, validation panel                                                                            | `FlowEditorProvider` owns graph/editor state; PUT saves nodes/edges; activate validates; view mode is browser-local preference. |
+| `/flows/[id]/runs`       | run history                                                                                                                              | `GET /api/flows/[id]/runs`; event/run inspection.                                                                               |
+| `/agents`                | AI playground and usage                                                                                                                  | Calls playground/test/config/usage/knowledge APIs; requires configured provider credentials.                                    |
+| `/bookings`              | booking workspace                                                                                                                        | Early feature surface; source has less persisted domain depth than core CRM.                                                    |
+| `/notifications`         | notification list                                                                                                                        | SWR/read API; PATCH marks state; unread hook keeps shell badge synchronized.                                                    |
+| `/settings`              | rail/sections for profile, account, members, security, appearance, WhatsApp, channels, templates, replies, tags, fields, AI and API keys | Each panel calls its domain API/Supabase method; unavailable provider lifecycle is shown rather than silently emulated.         |
 
 ## Compatibility pages
 

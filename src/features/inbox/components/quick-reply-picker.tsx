@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import { Loader2, MessageSquare, Zap } from "lucide-react";
-import { useTranslations } from "next-intl";
-import useSWR from "swr";
+import { Loader2, MessageSquare, Zap } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import useSWR from 'swr';
 
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import type { QuickReply } from "@/types";
-import { interactivePayloadPreviewText } from "@/features/whatsapp/lib/interactive";
+} from '@/components/ui/dialog';
+import type { QuickReply } from '@/types';
+import { interactivePayloadPreviewText } from '@/features/whatsapp/lib/interactive';
 
 interface QuickReplyPickerProps {
   open: boolean;
@@ -29,34 +29,35 @@ export function QuickReplyPicker({
   onOpenChange,
   onPick,
 }: QuickReplyPickerProps) {
-  const t = useTranslations("Inbox.composer");
+  const t = useTranslations('Inbox.composer');
 
   // SWR with a conditional key: fetching pauses while the dialog is
   // closed and revalidates on open — no manual effect/cancel bookkeeping.
   const { data: items = [], isLoading: loading } = useSWR(
-    open ? "/api/quick-replies" : null,
+    open ? '/api/quick-replies' : null,
     async (url: string) => {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Failed to load quick replies");
+      if (!res.ok)
+        throw new Error(data.error ?? 'Failed to load quick replies');
       return (data.quick_replies as QuickReply[]) ?? [];
-    },
+    }
   );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("quickReplies")}</DialogTitle>
+          <DialogTitle>{t('quickReplies')}</DialogTitle>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto">
           {loading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
             </div>
           ) : items.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              {t("quickRepliesEmpty")}
+            <p className="text-muted-foreground py-8 text-center text-sm">
+              {t('quickRepliesEmpty')}
             </p>
           ) : (
             <ul className="flex flex-col gap-1">
@@ -65,20 +66,22 @@ export function QuickReplyPicker({
                   <button
                     type="button"
                     onClick={() => onPick(qr)}
-                    className="flex w-full items-start gap-2 rounded-md border border-border bg-muted/40 p-2.5 text-left hover:border-primary/50 hover:bg-muted"
+                    className="border-border bg-muted/40 hover:border-primary/50 hover:bg-muted flex w-full items-start gap-2 rounded-md border p-2.5 text-left"
                   >
-                    {qr.kind === "interactive" ? (
-                      <Zap className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    {qr.kind === 'interactive' ? (
+                      <Zap className="text-primary mt-0.5 h-4 w-4 shrink-0" />
                     ) : (
-                      <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     )}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-foreground">
+                      <span className="text-foreground block truncate text-sm font-medium">
                         {qr.title}
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {qr.kind === "interactive" && qr.interactive_payload
-                          ? interactivePayloadPreviewText(qr.interactive_payload)
+                      <span className="text-muted-foreground block truncate text-xs">
+                        {qr.kind === 'interactive' && qr.interactive_payload
+                          ? interactivePayloadPreviewText(
+                              qr.interactive_payload
+                            )
                           : qr.content_text}
                       </span>
                     </span>

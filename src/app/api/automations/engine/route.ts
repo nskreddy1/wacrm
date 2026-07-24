@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
-import { runAutomationsForTrigger } from '@/features/automations/lib/engine'
-import type { AutomationTriggerType } from '@/types'
+import { NextResponse } from 'next/server';
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
+import { runAutomationsForTrigger } from '@/features/automations/lib/engine';
+import type { AutomationTriggerType } from '@/types';
 
 /**
  * Manual trigger for testing or for external integrations that want
@@ -17,22 +17,22 @@ const SUPPORTED_TRIGGER_TYPES = new Set<AutomationTriggerType>([
   'tag_added',
   'time_based',
   'interactive_reply',
-])
+]);
 
 export async function POST(request: Request) {
   // Firing automations sends outbound WhatsApp — a write action. Require
   // at least `agent`; a viewer must not be able to trigger sends.
-  let accountId: string
+  let accountId: string;
   try {
-    const ctx = await requireRole('agent')
-    accountId = ctx.accountId
+    const ctx = await requireRole('agent');
+    accountId = ctx.accountId;
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 
-  const body = await request.json().catch(() => null)
+  const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
   if (
     typeof body.trigger_type !== 'string' ||
@@ -40,17 +40,23 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json(
       { error: 'trigger_type is missing or unsupported' },
-      { status: 400 },
-    )
+      { status: 400 }
+    );
   }
   if (body.contact_id != null && typeof body.contact_id !== 'string') {
-    return NextResponse.json({ error: 'contact_id must be a string' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'contact_id must be a string' },
+      { status: 400 }
+    );
   }
   if (
     body.context != null &&
     (typeof body.context !== 'object' || Array.isArray(body.context))
   ) {
-    return NextResponse.json({ error: 'context must be an object' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'context must be an object' },
+      { status: 400 }
+    );
   }
 
   await runAutomationsForTrigger({
@@ -58,7 +64,7 @@ export async function POST(request: Request) {
     triggerType: body.trigger_type as AutomationTriggerType,
     contactId: body.contact_id ?? null,
     context: body.context ?? {},
-  })
+  });
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true });
 }

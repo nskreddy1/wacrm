@@ -14,14 +14,14 @@ This is the pinned, source-linked documentation set for WACRM. It separates the 
 
 Evidence is ranked: live connected Supabase schema/RLS, ordered SQL migrations, executable source and tests, current local reports, then upstream snapshots. At audit time the connected Supabase state could not be proven as containing the repository baseline; migrations `001`–`040` therefore describe repository intent until applied and checked live.
 
-| Status | Meaning |
-| --- | --- |
-| Implemented | Executable source exists and the flow is wired. |
-| Partial | Some contracts/UI/adapter code exists, but the end-to-end lifecycle is incomplete or unverified. |
-| Demo/mock | Process-local, seeded, SQLite, or test-oriented behavior; not production authority. |
-| Compatibility | Retained to support older URLs or data shapes. |
-| Target-only | Described or typed, but not operational end-to-end. |
-| Blocked | Cannot be verified from the available repository/integration state. |
+| Status        | Meaning                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| Implemented   | Executable source exists and the flow is wired.                                                  |
+| Partial       | Some contracts/UI/adapter code exists, but the end-to-end lifecycle is incomplete or unverified. |
+| Demo/mock     | Process-local, seeded, SQLite, or test-oriented behavior; not production authority.              |
+| Compatibility | Retained to support older URLs or data shapes.                                                   |
+| Target-only   | Described or typed, but not operational end-to-end.                                              |
+| Blocked       | Cannot be verified from the available repository/integration state.                              |
 
 ## Documentation map
 

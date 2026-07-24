@@ -1,52 +1,56 @@
-"use client"
+'use client';
 
-import { useMemo, type ReactNode } from "react"
-import { SWRConfig, type State } from "swr"
+import { useMemo, type ReactNode } from 'react';
+import { SWRConfig, type State } from 'swr';
 
-const DEFAULT_DEDUPE_MS = 15_000
-const MAX_CACHE_ENTRIES = 150
+const DEFAULT_DEDUPE_MS = 15_000;
+const MAX_CACHE_ENTRIES = 150;
 
 export class BoundedMemoryCache<Value = State> extends Map<string, Value> {
   constructor(private readonly limit = MAX_CACHE_ENTRIES) {
-    super()
+    super();
   }
 
   override get(key: string) {
-    const value = super.get(key)
+    const value = super.get(key);
     if (value !== undefined) {
-      super.delete(key)
-      super.set(key, value)
+      super.delete(key);
+      super.set(key, value);
     }
-    return value
+    return value;
   }
 
   override set(key: string, value: Value) {
-    if (super.has(key)) super.delete(key)
-    super.set(key, value)
+    if (super.has(key)) super.delete(key);
+    super.set(key, value);
     while (this.size > this.limit) {
-      const oldest = this.keys().next().value
-      if (oldest === undefined) break
-      super.delete(oldest)
+      const oldest = this.keys().next().value;
+      if (oldest === undefined) break;
+      super.delete(oldest);
     }
-    return this
+    return this;
   }
 }
 
 async function dashboardFetcher<T>(resource: RequestInfo | URL): Promise<T> {
   const response = await fetch(resource, {
-    cache: "no-store",
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-  })
+    cache: 'no-store',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  });
   if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(payload?.error ?? `Request failed with status ${response.status}`)
+    const payload = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    throw new Error(
+      payload?.error ?? `Request failed with status ${response.status}`
+    );
   }
-  return response.json() as Promise<T>
+  return response.json() as Promise<T>;
 }
 
 export function DashboardCacheProvider({ children }: { children: ReactNode }) {
-  const provider = useMemo(() => new BoundedMemoryCache(), [])
+  const provider = useMemo(() => new BoundedMemoryCache(), []);
 
   return (
     <SWRConfig
@@ -68,5 +72,5 @@ export function DashboardCacheProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </SWRConfig>
-  )
+  );
 }

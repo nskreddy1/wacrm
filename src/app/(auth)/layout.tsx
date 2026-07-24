@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
-import { AuthShell } from "@/features/auth/components/auth-shell";
+import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
+import { AuthShell } from '@/features/auth/components/auth-shell';
 
 // Shared metadata for auth pages (login / signup / forgot-password).
 // None of these should be indexed — they'd compete with the marketing

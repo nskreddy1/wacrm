@@ -1,55 +1,55 @@
 export type FieldType =
-  | "text"
-  | "number"
-  | "date"
-  | "email"
-  | "phone"
-  | "url"
-  | "single_select"
-  | "multi_select"
-  | "checkbox"
-  | "currency"
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'email'
+  | 'phone'
+  | 'url'
+  | 'single_select'
+  | 'multi_select'
+  | 'checkbox'
+  | 'currency';
 
 export type ContactField = {
-  id: string
-  label: string
-  type: FieldType
-  required?: boolean
-  unique?: boolean
-  readOnly?: boolean
-  options?: string[]
-  width: number
-  custom?: boolean
-}
+  id: string;
+  label: string;
+  type: FieldType;
+  required?: boolean;
+  unique?: boolean;
+  readOnly?: boolean;
+  options?: string[];
+  width: number;
+  custom?: boolean;
+};
 
-export type ContactValue = string | number | boolean | string[]
+export type ContactValue = string | number | boolean | string[];
 
 export type WorkspaceContact = {
-  id: string
-  accountId: string
-  ownerId: string
-  createdAt: string
-  updatedAt: string
-  values: Record<string, ContactValue>
-}
+  id: string;
+  accountId: string;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  values: Record<string, ContactValue>;
+};
 
 export type ContactOwner = {
-  userId: string
-  name: string
-  avatarUrl: string | null
-}
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+};
 
 export type ContactPreferences = {
-  visible: string[]
-  order: string[]
-  frozen: string[]
-  widths: Record<string, number>
-}
+  visible: string[];
+  order: string[];
+  frozen: string[];
+  widths: Record<string, number>;
+};
 
 export type ContactWorkspaceData = {
-  contacts: WorkspaceContact[]
-  fields: ContactField[]
-  preferences: ContactPreferences
-  owners: ContactOwner[]
-  currentUserId: string
-}
+  contacts: WorkspaceContact[];
+  fields: ContactField[];
+  preferences: ContactPreferences;
+  owners: ContactOwner[];
+  currentUserId: string;
+};

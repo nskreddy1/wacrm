@@ -20,8 +20,14 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { findExistingContact, isUniqueViolation } from '@/features/contacts/lib/dedupe';
-import { sanitizePhoneForMeta, isValidE164 } from '@/features/whatsapp/lib/phone-utils';
+import {
+  findExistingContact,
+  isUniqueViolation,
+} from '@/features/contacts/lib/dedupe';
+import {
+  sanitizePhoneForMeta,
+  isValidE164,
+} from '@/features/whatsapp/lib/phone-utils';
 import { SendMessageError } from '@/features/whatsapp/lib/send-message';
 import { resolveAuditUserId, ContactError } from '@/lib/api/v1/contacts';
 
@@ -174,7 +180,11 @@ async function findOrCreateConversationRow(
 
   if (findErr) {
     console.error('[resolve-conversation] conversation lookup error:', findErr);
-    throw new SendMessageError('db_error', 'Failed to resolve conversation', 500);
+    throw new SendMessageError(
+      'db_error',
+      'Failed to resolve conversation',
+      500
+    );
   }
 
   if (existing && existing.length > 0) {
@@ -205,7 +215,11 @@ async function findOrCreateConversationRow(
       }
     }
     console.error('[resolve-conversation] conversation create error:', convErr);
-    throw new SendMessageError('db_error', 'Failed to create conversation', 500);
+    throw new SendMessageError(
+      'db_error',
+      'Failed to create conversation',
+      500
+    );
   }
 
   return newConv.id;

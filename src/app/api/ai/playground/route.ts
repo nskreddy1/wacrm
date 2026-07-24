@@ -1,15 +1,19 @@
-import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/features/auth/lib/account'
-import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
-import { loadAiConfig } from '@/features/assistant/lib/ai/config'
-import { retrieveKnowledge } from '@/features/assistant/lib/ai/knowledge'
-import { generateReply } from '@/features/assistant/lib/ai/generate'
-import { buildPromptParts } from '@/features/assistant/lib/ai/defaults'
-import { latestUserMessage } from '@/features/assistant/lib/ai/query'
-import { AiError, type ChatMessage } from '@/features/assistant/lib/ai/types'
+import { NextResponse } from 'next/server';
+import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  RATE_LIMITS,
+} from '@/lib/rate-limit';
+import { loadAiConfig } from '@/features/assistant/lib/ai/config';
+import { retrieveKnowledge } from '@/features/assistant/lib/ai/knowledge';
+import { generateReply } from '@/features/assistant/lib/ai/generate';
+import { buildPromptParts } from '@/features/assistant/lib/ai/defaults';
+import { latestUserMessage } from '@/features/assistant/lib/ai/query';
+import { AiError, type ChatMessage } from '@/features/assistant/lib/ai/types';
 
 // Keep the tested transcript bounded, mirroring the live context window.
-const MAX_TURNS = 20
+const MAX_TURNS = 20;
 
 /**
  * POST /api/ai/playground  (agent+)
@@ -23,15 +27,21 @@ const MAX_TURNS = 20
  */
 export async function POST(request: Request) {
   try {
-    const { supabase, accountId, userId } = await requireRole('agent')
+    const { supabase, accountId, userId } = await requireRole('agent');
 
-    const limit = checkRateLimit(`ai-playground:${userId}`, RATE_LIMITS.aiDraft)
-    if (!limit.success) return rateLimitResponse(limit)
+    const limit = checkRateLimit(
+      `ai-playground:${userId}`,
+      RATE_LIMITS.aiDraft
+    );
+    if (!limit.success) return rateLimitResponse(limit);
 
-    const body = await request.json().catch(() => null)
-    const rawMessages = Array.isArray(body?.messages) ? body.messages : null
+    const body = await request.json().catch(() => null);
+    const rawMessages = Array.isArray(body?.messages) ? body.messages : null;
     if (!rawMessages) {
-      return NextResponse.json({ error: 'messages is required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'messages is required' },
+        { status: 400 }
+      );
     }
 
     const messages: ChatMessage[] = rawMessages
@@ -42,42 +52,42 @@ export async function POST(request: Request) {
           ((m as ChatMessage).role === 'user' ||
             (m as ChatMessage).role === 'assistant') &&
           typeof (m as ChatMessage).content === 'string' &&
-          (m as ChatMessage).content.trim().length > 0,
+          (m as ChatMessage).content.trim().length > 0
       )
-      .slice(-MAX_TURNS)
+      .slice(-MAX_TURNS);
 
     if (messages.length === 0) {
       return NextResponse.json(
         { error: 'Send a message to test the agent.' },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
 
     const config = await loadAiConfig(supabase, accountId, {
       requireActive: false,
     }).catch((err) => {
-      console.error('[ai/playground] loadAiConfig error:', err)
+      console.error('[ai/playground] loadAiConfig error:', err);
       throw new AiError('Stored API key could not be decrypted.', {
         code: 'key_decrypt_failed',
         status: 400,
-      })
-    })
+      });
+    });
     if (!config) {
       return NextResponse.json(
         {
           error: 'No agent configured yet. Add your provider key in Setup.',
           code: 'ai_not_configured',
         },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
 
     const knowledge = await retrieveKnowledge(
       supabase,
       accountId,
       config,
-      latestUserMessage(messages),
-    )
+      latestUserMessage(messages)
+    );
     // Mirror the live auto-reply path exactly, including its
     // cache-aligned prompt — the playground must exercise what
     // customers will hit. The transcript is stateless client-side, but
@@ -93,15 +103,15 @@ export async function POST(request: Request) {
         knowledge,
       }),
       cacheKey: `playground:${accountId}`,
-    })
-    return NextResponse.json({ reply: text, handoff })
+    });
+    return NextResponse.json({ reply: text, handoff });
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(
         { error: err.message, code: err.code },
-        { status: err.status },
-      )
+        { status: err.status }
+      );
     }
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 }

@@ -1,8 +1,8 @@
-import { timingSafeEqual } from 'node:crypto'
-import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/features/automations/lib/admin-client'
-import { resumePendingExecution } from '@/features/automations/lib/engine'
-import type { AutomationContext } from '@/features/automations/lib/engine'
+import { timingSafeEqual } from 'node:crypto';
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/features/automations/lib/admin-client';
+import { resumePendingExecution } from '@/features/automations/lib/engine';
+import type { AutomationContext } from '@/features/automations/lib/engine';
 
 /**
  * Drain due `automation_pending_executions` rows. Meant to be hit
@@ -16,32 +16,36 @@ import type { AutomationContext } from '@/features/automations/lib/engine'
  * two-step UPDATE-by-id.
  */
 export async function GET(request: Request) {
-  const expected = process.env.AUTOMATION_CRON_SECRET
+  const expected = process.env.AUTOMATION_CRON_SECRET;
   if (!expected) {
-    return NextResponse.json({ error: 'cron not configured' }, { status: 503 })
+    return NextResponse.json({ error: 'cron not configured' }, { status: 503 });
   }
-  const supplied = request.headers.get('x-cron-secret') ?? ''
+  const supplied = request.headers.get('x-cron-secret') ?? '';
   // Length pre-check is required by timingSafeEqual (throws otherwise);
   // matches the flows/cron route's timing-safe pattern.
-  const suppliedBuf = Buffer.from(supplied)
-  const expectedBuf = Buffer.from(expected)
-  if (suppliedBuf.length !== expectedBuf.length || !timingSafeEqual(suppliedBuf, expectedBuf)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const suppliedBuf = Buffer.from(supplied);
+  const expectedBuf = Buffer.from(expected);
+  if (
+    suppliedBuf.length !== expectedBuf.length ||
+    !timingSafeEqual(suppliedBuf, expectedBuf)
+  ) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const admin = supabaseAdmin()
+  const admin = supabaseAdmin();
   const { data: due, error } = await admin
     .from('automation_pending_executions')
     .select('*')
     .eq('status', 'pending')
     .lte('run_at', new Date().toISOString())
     .order('run_at', { ascending: true })
-    .limit(50)
+    .limit(50);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!due || due.length === 0) return NextResponse.json({ processed: 0 })
+  if (error)
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!due || due.length === 0) return NextResponse.json({ processed: 0 });
 
-  let processed = 0
+  let processed = 0;
   for (const row of due) {
     const { data: claim } = await admin
       .from('automation_pending_executions')
@@ -49,8 +53,8 @@ export async function GET(request: Request) {
       .eq('id', row.id)
       .eq('status', 'pending')
       .select('id')
-      .maybeSingle()
-    if (!claim) continue
+      .maybeSingle();
+    if (!claim) continue;
 
     await resumePendingExecution({
       id: row.id as string,
@@ -65,9 +69,9 @@ export async function GET(request: Request) {
       branch: (row.branch as 'yes' | 'no' | null) ?? null,
       next_step_position: row.next_step_position as number,
       context: (row.context as AutomationContext) ?? {},
-    })
-    processed++
+    });
+    processed++;
   }
 
-  return NextResponse.json({ processed })
+  return NextResponse.json({ processed });
 }

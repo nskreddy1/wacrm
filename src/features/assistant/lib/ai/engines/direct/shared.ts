@@ -1,4 +1,4 @@
-import { AiError, type AiUsage, type ChatMessage } from '../../types'
+import { AiError, type AiUsage, type ChatMessage } from '../../types';
 
 // ============================================================
 // Bits shared by the direct (hand-rolled fetch) provider adapters.
@@ -6,24 +6,24 @@ import { AiError, type AiUsage, type ChatMessage } from '../../types'
 // ============================================================
 
 export interface ProviderArgs {
-  apiKey: string
-  model: string
-  systemPrompt: string
-  messages: ChatMessage[]
-  timeoutMs: number
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  messages: ChatMessage[];
+  timeoutMs: number;
   /** Cache-aligned system blocks (stable → semi-stable). Set only when
    *  the account's `prompt_caching` flag is on. Anthropic turns each
    *  block into a `cache_control`-marked segment; other adapters ignore
    *  this and use the joined `systemPrompt`. */
-  systemBlocks?: string[]
+  systemBlocks?: string[];
   /** Per-conversation cache-routing hint (OpenAI `prompt_cache_key`). */
-  cacheKey?: string
+  cacheKey?: string;
 }
 
 /** Raw text + usage a provider adapter returns before handoff parsing. */
 export interface ProviderResult {
-  text: string
-  usage: AiUsage | null
+  text: string;
+  usage: AiUsage | null;
 }
 
 /**
@@ -34,36 +34,44 @@ export interface ProviderResult {
  * to prompt + completion when the provider doesn't send it (Anthropic).
  */
 export function normalizeUsage(raw: {
-  prompt?: unknown
-  completion?: unknown
-  total?: unknown
+  prompt?: unknown;
+  completion?: unknown;
+  total?: unknown;
   /** Provider-reported cached (discounted) prompt tokens. */
-  cached?: unknown
+  cached?: unknown;
   /** Anthropic cache_creation_input_tokens (one-time +25% write). */
-  cacheWrite?: unknown
+  cacheWrite?: unknown;
 }): AiUsage | null {
   const num = (v: unknown): number =>
-    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0
-  const promptTokens = num(raw.prompt)
-  const completionTokens = num(raw.completion)
-  const total = num(raw.total)
-  const totalTokens = total > 0 ? total : promptTokens + completionTokens
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+  const promptTokens = num(raw.prompt);
+  const completionTokens = num(raw.completion);
+  const total = num(raw.total);
+  const totalTokens = total > 0 ? total : promptTokens + completionTokens;
   if (promptTokens === 0 && completionTokens === 0 && totalTokens === 0) {
-    return null
+    return null;
   }
   // Cache counts: keep null (not 0) when the provider didn't report,
   // so telemetry can tell "no caching info" apart from "0% hit".
   const cachedTokens =
-    typeof raw.cached === 'number' && Number.isFinite(raw.cached) && raw.cached >= 0
+    typeof raw.cached === 'number' &&
+    Number.isFinite(raw.cached) &&
+    raw.cached >= 0
       ? Math.floor(raw.cached)
-      : null
+      : null;
   const cacheWriteTokens =
     typeof raw.cacheWrite === 'number' &&
     Number.isFinite(raw.cacheWrite) &&
     raw.cacheWrite >= 0
       ? Math.floor(raw.cacheWrite)
-      : null
-  return { promptTokens, completionTokens, totalTokens, cachedTokens, cacheWriteTokens }
+      : null;
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cachedTokens,
+    cacheWriteTokens,
+  };
 }
 
 /** Map a fetch rejection (timeout / DNS / offline) to a typed AiError. */
@@ -72,52 +80,54 @@ export function toNetworkError(err: unknown): AiError {
     return new AiError('The AI provider took too long to respond.', {
       code: 'timeout',
       status: 504,
-    })
+    });
   }
-  const msg = err instanceof Error ? err.message : String(err)
+  const msg = err instanceof Error ? err.message : String(err);
   return new AiError(`Could not reach the AI provider: ${msg}`, {
     code: 'network_error',
     status: 502,
-  })
+  });
 }
 
 /** Build a typed AiError from a non-2xx provider response, pulling the
  *  provider's own error message out of the JSON body when present. */
 export async function providerHttpError(
   provider: string,
-  res: Response,
+  res: Response
 ): Promise<AiError> {
-  let detail = ''
+  let detail = '';
   try {
-    const body = (await res.json()) as { error?: { message?: string } | string }
+    const body = (await res.json()) as {
+      error?: { message?: string } | string;
+    };
     detail =
       typeof body?.error === 'string'
         ? body.error
-        : (body?.error?.message ?? '')
+        : (body?.error?.message ?? '');
   } catch {
     // Non-JSON error body — fall back to the status line.
   }
 
-  const { status } = res
+  const { status } = res;
   const code =
     status === 401 || status === 403
       ? 'invalid_key'
       : status === 429
         ? 'rate_limited'
-        : 'provider_error'
+        : 'provider_error';
   const base =
     code === 'invalid_key'
       ? `${provider} rejected the API key`
       : code === 'rate_limited'
         ? `${provider} rate limit reached`
-        : `${provider} API error (${status})`
+        : `${provider} API error (${status})`;
 
   return new AiError(detail ? `${base}: ${detail}` : base, {
     code,
     // Surface an auth failure as 401 so the settings "Test key" button
     // can show "invalid key"; everything else is an upstream 502.
     status: code === 'invalid_key' ? 401 : 502,
-  })
+  });
 }
 
 /**
@@ -126,14 +136,14 @@ export async function providerHttpError(
  * also harmless for OpenAI and keeps the transcript compact.
  */
 export function mergeConsecutive(messages: ChatMessage[]): ChatMessage[] {
-  const out: ChatMessage[] = []
+  const out: ChatMessage[] = [];
   for (const m of messages) {
-    const last = out[out.length - 1]
+    const last = out[out.length - 1];
     if (last && last.role === m.role) {
-      last.content = `${last.content}\n\n${m.content}`
+      last.content = `${last.content}\n\n${m.content}`;
     } else {
-      out.push({ role: m.role, content: m.content })
+      out.push({ role: m.role, content: m.content });
     }
   }
-  return out
+  return out;
 }

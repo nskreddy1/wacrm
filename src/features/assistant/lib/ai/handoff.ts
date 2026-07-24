@@ -1,8 +1,8 @@
-import type { ChatMessage } from './types'
+import type { ChatMessage } from './types';
 
 /** Longest the quoted customer message runs before we ellipsize it —
  *  keeps the internal note to a glanceable one-liner. */
-const MAX_QUOTE_LEN = 160
+const MAX_QUOTE_LEN = 160;
 
 /**
  * Build the short internal note the auto-reply bot leaves on a
@@ -18,39 +18,41 @@ const MAX_QUOTE_LEN = 160
  * bailed on the very first inbound without answering).
  */
 export function buildHandoffSummary(args: {
-  messages: ChatMessage[]
-  replyCount: number
+  messages: ChatMessage[];
+  replyCount: number;
   /** Classified customer sentiment for this thread, when available. */
-  sentiment?: string | null
+  sentiment?: string | null;
   /** Why the model escalated (e.g. 'human_requested'), when available. */
-  escalationReason?: string | null
+  escalationReason?: string | null;
 }): string {
-  const { messages, replyCount, sentiment, escalationReason } = args
+  const { messages, replyCount, sentiment, escalationReason } = args;
 
   const lastCustomer = [...messages]
     .reverse()
-    .find((m) => m.role === 'user' && m.content.trim())
+    .find((m) => m.role === 'user' && m.content.trim());
 
   const replies =
     replyCount === 0
       ? 'without replying'
-      : `after ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`
+      : `after ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`;
 
-  let base = `🤖 AI agent handed off ${replies}.`
+  let base = `🤖 AI agent handed off ${replies}.`;
 
-  const context: string[] = []
-  if (escalationReason) context.push(`Reason: ${escalationReason.replace(/_/g, ' ')}`)
-  if (sentiment && sentiment !== 'neutral') context.push(`customer seems ${sentiment}`)
-  if (context.length > 0) base += ` ${context.join('; ')}.`
+  const context: string[] = [];
+  if (escalationReason)
+    context.push(`Reason: ${escalationReason.replace(/_/g, ' ')}`);
+  if (sentiment && sentiment !== 'neutral')
+    context.push(`customer seems ${sentiment}`);
+  if (context.length > 0) base += ` ${context.join('; ')}.`;
 
-  if (!lastCustomer) return base
+  if (!lastCustomer) return base;
 
-  const quote = truncate(lastCustomer.content.trim(), MAX_QUOTE_LEN)
-  return `${base} Last customer message: “${quote}”`
+  const quote = truncate(lastCustomer.content.trim(), MAX_QUOTE_LEN);
+  return `${base} Last customer message: “${quote}”`;
 }
 
 function truncate(text: string, max: number): string {
-  const collapsed = text.replace(/\s+/g, ' ')
-  if (collapsed.length <= max) return collapsed
-  return `${collapsed.slice(0, max - 1).trimEnd()}…`
+  const collapsed = text.replace(/\s+/g, ' ');
+  if (collapsed.length <= max) return collapsed;
+  return `${collapsed.slice(0, max - 1).trimEnd()}…`;
 }

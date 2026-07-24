@@ -33,12 +33,12 @@ New Template (or Edit / Resubmit on an existing row) opens a single dialog that 
 
 Pick one format:
 
-| Format | What you provide |
-| --- | --- |
-| None | No header. |
-| Text | A short heading (≤ 60 chars). May contain one `{{1}}` variable — if it does, you supply a sample value for review. |
-| Image | Upload a JPEG/PNG (≤ 5 MB) or paste a public HTTPS URL to a sample. |
-| Video / Document | A public HTTPS URL to a sample asset. |
+| Format           | What you provide                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| None             | No header.                                                                                                         |
+| Text             | A short heading (≤ 60 chars). May contain one `{{1}}` variable — if it does, you supply a sample value for review. |
+| Image            | Upload a JPEG/PNG (≤ 5 MB) or paste a public HTTPS URL to a sample.                                                |
+| Video / Document | A public HTTPS URL to a sample asset.                                                                              |
 
 For an image header you can now upload the file directly in the builder (it's stored in your account's media bucket and previewed inline), or paste a public link. Either way, on submit the app uploads the image to Meta's Resumable Upload API and attaches the returned handle as the review sample — Meta does not accept a plain URL for an image-header template, so this step is required.
 
@@ -60,12 +60,12 @@ A short line under the body (≤ 60 chars). No variables allowed — Meta's rule
 
 Up to 10 buttons. Four types:
 
-| Type | What it does | Notes |
-| --- | --- | --- |
-| Quick Reply | Sends a canned reply back to you when tapped. | Must come before any action buttons. |
-| URL | Opens a link. | Max 2. The URL may end in `{{1}}` for a per-message suffix — if it does, supply an example value. |
-| Phone | Dials a number. | Max 1. |
-| Copy Code | Copies a code (coupon, OTP) to the clipboard. | Max 1. Needs an example code. |
+| Type        | What it does                                  | Notes                                                                                             |
+| ----------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Quick Reply | Sends a canned reply back to you when tapped. | Must come before any action buttons.                                                              |
+| URL         | Opens a link.                                 | Max 2. The URL may end in `{{1}}` for a per-message suffix — if it does, supply an example value. |
+| Phone       | Dials a number.                               | Max 1.                                                                                            |
+| Copy Code   | Copies a code (coupon, OTP) to the clipboard. | Max 1. Needs an example code.                                                                     |
 
 The builder enforces Meta's button rules as you go — quick-reply buttons grouped first, per-type caps, required examples — so you hit fewer rejections.
 
@@ -79,16 +79,16 @@ If something is wrong with the submission (a missing PIN-level config, a rate li
 
 wacrm stores Meta's status verbatim, so what you see matches the WhatsApp Manager exactly.
 
-| Status | Means | What you can do |
-| --- | --- | --- |
-| Draft | Saved locally, never submitted (or a submission failed). | Edit and submit. |
-| Pending | Submitted, awaiting Meta's review. | Wait. No edits while pending. |
-| Approved | Live — usable in inbox, broadcasts, automations. | Edit (re-triggers review), delete. |
-| Rejected | Meta declined it. The reason is shown on the card. | Fix and resubmit. |
-| Paused | Meta paused it for poor quality. Recoverable. | Fix and resubmit. |
-| Disabled | Meta disabled it (severe quality / policy). | Delete; the name is reserved by Meta for ~30 days. |
-| In Appeal | An appeal is in progress on Meta's side. | Wait. |
-| Pending Deletion | Queued for removal. | — |
+| Status           | Means                                                    | What you can do                                    |
+| ---------------- | -------------------------------------------------------- | -------------------------------------------------- |
+| Draft            | Saved locally, never submitted (or a submission failed). | Edit and submit.                                   |
+| Pending          | Submitted, awaiting Meta's review.                       | Wait. No edits while pending.                      |
+| Approved         | Live — usable in inbox, broadcasts, automations.         | Edit (re-triggers review), delete.                 |
+| Rejected         | Meta declined it. The reason is shown on the card.       | Fix and resubmit.                                  |
+| Paused           | Meta paused it for poor quality. Recoverable.            | Fix and resubmit.                                  |
+| Disabled         | Meta disabled it (severe quality / policy).              | Delete; the name is reserved by Meta for ~30 days. |
+| In Appeal        | An appeal is in progress on Meta's side.                 | Wait.                                              |
+| Pending Deletion | Queued for removal.                                      | —                                                  |
 
 Approved templates also show a quality score chip — green, yellow, or red — reflecting how recipients have engaged. A sliding score is Meta's early warning before a Pause.
 

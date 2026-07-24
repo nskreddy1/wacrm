@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 // ============================================================
 // "Configure New Agent" wizard — Lumis-reference 3-step modal:
@@ -12,29 +12,29 @@
 // pre-seeded from step 1 but stays fully editable.
 // ============================================================
 
-import { useState } from 'react'
-import { toast } from 'sonner'
-import { Loader2, ArrowRight, ArrowLeft } from 'lucide-react'
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 const AGENT_TYPES = [
   {
     value: 'support',
     label: 'Customer Support',
     prompt:
-      'You handle customer support for our business on WhatsApp. Answer questions about our products, orders and policies briefly and politely, in the customer\'s language.',
+      "You handle customer support for our business on WhatsApp. Answer questions about our products, orders and policies briefly and politely, in the customer's language.",
   },
   {
     value: 'sales',
@@ -59,73 +59,74 @@ const AGENT_TYPES = [
     label: 'Custom',
     prompt: '',
   },
-] as const
+] as const;
 
 const PROVIDERS = [
   { value: 'openai', label: 'OpenAI', placeholder: 'gpt-4o-mini' },
   { value: 'anthropic', label: 'Claude', placeholder: 'claude-sonnet-4-5' },
   { value: 'gemini', label: 'Gemini', placeholder: 'gemini-2.5-flash' },
   { value: 'groq', label: 'Groq', placeholder: 'llama-3.3-70b-versatile' },
-] as const
+] as const;
 
-const STEPS = ['Identity', 'Model & Prompt', 'Triggers'] as const
+const STEPS = ['Identity', 'Model & Prompt', 'Triggers'] as const;
 
 export function ConfigureAgentWizard({
   open,
   onOpenChange,
   onSaved,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSaved: () => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
 }) {
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(0);
   // Step 1
-  const [name, setName] = useState('')
-  const [purpose, setPurpose] = useState('')
-  const [agentType, setAgentType] = useState<string>('support')
+  const [name, setName] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [agentType, setAgentType] = useState<string>('support');
   // Step 2
-  const [provider, setProvider] = useState<string>('openai')
-  const [model, setModel] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [prompt, setPrompt] = useState('')
-  const [promptTouched, setPromptTouched] = useState(false)
+  const [provider, setProvider] = useState<string>('openai');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [promptTouched, setPromptTouched] = useState(false);
   // Step 3
-  const [assistantOn, setAssistantOn] = useState(true)
-  const [autoReplyOn, setAutoReplyOn] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [assistantOn, setAssistantOn] = useState(true);
+  const [autoReplyOn, setAutoReplyOn] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const providerMeta = PROVIDERS.find((p) => p.value === provider) ?? PROVIDERS[0]
+  const providerMeta =
+    PROVIDERS.find((p) => p.value === provider) ?? PROVIDERS[0];
 
   // Compose the default prompt from identity whenever the user hasn't
   // hand-edited it (keeps steps 1 → 2 feeling connected).
   function composedPrompt(): string {
-    const typeMeta = AGENT_TYPES.find((t) => t.value === agentType)
+    const typeMeta = AGENT_TYPES.find((t) => t.value === agentType);
     const parts = [
       name.trim() ? `You are "${name.trim()}".` : null,
       typeMeta?.prompt || null,
       purpose.trim() ? `Purpose: ${purpose.trim()}` : null,
-    ].filter(Boolean)
-    return parts.join(' ')
+    ].filter(Boolean);
+    return parts.join(' ');
   }
 
   function goNext() {
     if (step === 0) {
       if (!name.trim()) {
-        toast.error('Give the agent a name')
-        return
+        toast.error('Give the agent a name');
+        return;
       }
-      if (!promptTouched) setPrompt(composedPrompt())
+      if (!promptTouched) setPrompt(composedPrompt());
     }
     if (step === 1 && !model.trim()) {
-      toast.error('Enter a model name')
-      return
+      toast.error('Enter a model name');
+      return;
     }
-    setStep((s) => Math.min(s + 1, STEPS.length - 1))
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
 
   async function save() {
-    setSaving(true)
+    setSaving(true);
     try {
       const res = await fetch('/api/ai/config', {
         method: 'POST',
@@ -138,26 +139,31 @@ export function ConfigureAgentWizard({
           is_active: assistantOn,
           auto_reply_enabled: autoReplyOn,
         }),
-      })
-      const body = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(body?.error ?? 'Failed to create the agent')
-      toast.success(`Agent "${name.trim()}" configured`)
-      onOpenChange(false)
-      setStep(0)
-      onSaved()
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Failed to create the agent');
+      toast.success(`Agent "${name.trim()}" configured`);
+      onOpenChange(false);
+      setStep(0);
+      onSaved();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create the agent')
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to create the agent'
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl gap-0 overflow-hidden rounded-xl p-0 shadow-2xl">
-        <DialogHeader className="border-b border-border px-6 py-5">
+        <DialogHeader className="border-border border-b px-6 py-5">
           <DialogTitle className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
-            <span className="block h-2.5 w-2.5 shrink-0 rounded-[2px] bg-primary" aria-hidden />
+            <span
+              className="bg-primary block h-2.5 w-2.5 shrink-0 rounded-[2px]"
+              aria-hidden
+            />
             Configure New Agent
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -167,12 +173,16 @@ export function ConfigureAgentWizard({
 
         {/* Stepper — elevated strip for clearer visual layering */}
         <div
-          className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-6 py-3.5"
+          className="border-border bg-muted/40 flex items-center justify-between gap-2 border-b px-6 py-3.5"
           role="list"
           aria-label="Wizard steps"
         >
           {STEPS.map((label, i) => (
-            <div key={label} role="listitem" className="flex items-center gap-2">
+            <div
+              key={label}
+              role="listitem"
+              className="flex items-center gap-2"
+            >
               <span
                 aria-current={i === step ? 'step' : undefined}
                 className={cn(
@@ -181,15 +191,17 @@ export function ConfigureAgentWizard({
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : i < step
                       ? 'bg-foreground text-background'
-                      : 'border border-border bg-background text-muted-foreground',
+                      : 'border-border bg-background text-muted-foreground border'
                 )}
               >
                 {i + 1}
               </span>
               <span
                 className={cn(
-                  'whitespace-nowrap text-sm leading-relaxed',
-                  i === step ? 'font-semibold text-foreground' : 'text-muted-foreground',
+                  'text-sm leading-relaxed whitespace-nowrap',
+                  i === step
+                    ? 'text-foreground font-semibold'
+                    : 'text-muted-foreground'
                 )}
               >
                 {label}
@@ -211,7 +223,9 @@ export function ConfigureAgentWizard({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="wizard-agent-purpose">Purpose / Description</Label>
+                <Label htmlFor="wizard-agent-purpose">
+                  Purpose / Description
+                </Label>
                 <Textarea
                   id="wizard-agent-purpose"
                   value={purpose}
@@ -221,7 +235,9 @@ export function ConfigureAgentWizard({
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-foreground">Agent Type:</span>
+                <span className="text-foreground text-sm font-medium">
+                  Agent Type:
+                </span>
                 <div className="flex flex-wrap gap-2">
                   {AGENT_TYPES.map((t) => (
                     <button
@@ -233,13 +249,15 @@ export function ConfigureAgentWizard({
                         'flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm leading-relaxed transition-all',
                         agentType === t.value
                           ? 'border-primary bg-primary text-primary-foreground shadow-md'
-                          : 'border-border bg-card text-foreground shadow-xs hover:bg-muted hover:shadow-sm',
+                          : 'border-border bg-card text-foreground hover:bg-muted shadow-xs hover:shadow-sm'
                       )}
                     >
                       <span
                         className={cn(
                           'size-1.5 shrink-0 rounded-[1px]',
-                          agentType === t.value ? 'bg-primary-foreground' : 'bg-foreground',
+                          agentType === t.value
+                            ? 'bg-primary-foreground'
+                            : 'bg-foreground'
                         )}
                         aria-hidden
                       />
@@ -254,7 +272,9 @@ export function ConfigureAgentWizard({
           {step === 1 ? (
             <>
               <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-foreground">AI Provider</span>
+                <span className="text-foreground text-sm font-medium">
+                  AI Provider
+                </span>
                 <div className="flex flex-wrap gap-2">
                   {PROVIDERS.map((p) => (
                     <button
@@ -263,10 +283,10 @@ export function ConfigureAgentWizard({
                       onClick={() => setProvider(p.value)}
                       aria-pressed={provider === p.value}
                       className={cn(
-                        'rounded-lg border px-4 py-2 text-sm font-medium leading-relaxed transition-all',
+                        'rounded-lg border px-4 py-2 text-sm leading-relaxed font-medium transition-all',
                         provider === p.value
                           ? 'border-primary bg-primary text-primary-foreground shadow-md'
-                          : 'border-border bg-card text-foreground shadow-xs hover:bg-muted hover:shadow-sm',
+                          : 'border-border bg-card text-foreground hover:bg-muted shadow-xs hover:shadow-sm'
                       )}
                     >
                       {p.label}
@@ -300,8 +320,8 @@ export function ConfigureAgentWizard({
                   id="wizard-prompt"
                   value={prompt}
                   onChange={(e) => {
-                    setPrompt(e.target.value)
-                    setPromptTouched(true)
+                    setPrompt(e.target.value);
+                    setPromptTouched(true);
                   }}
                   rows={5}
                   className="min-h-28"
@@ -326,20 +346,24 @@ export function ConfigureAgentWizard({
                 checked={autoReplyOn}
                 onCheckedChange={setAutoReplyOn}
               />
-              <p className="text-xs text-muted-foreground">
-                Active hours, escalation handoff and the knowledge base can be tuned any time in the Configuration and Knowledge Base tabs.
+              <p className="text-muted-foreground text-xs">
+                Active hours, escalation handoff and the knowledge base can be
+                tuned any time in the Configuration and Knowledge Base tabs.
               </p>
             </>
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border bg-muted/40 px-6 py-4">
+        <div className="border-border bg-muted/40 flex items-center justify-between border-t px-6 py-4">
           {step === 0 ? (
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
           ) : (
-            <Button variant="outline" onClick={() => setStep((s) => Math.max(0, s - 1))}>
+            <Button
+              variant="outline"
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
+            >
               <ArrowLeft data-icon="inline-start" aria-hidden />
               Back
             </Button>
@@ -351,14 +375,20 @@ export function ConfigureAgentWizard({
             </Button>
           ) : (
             <Button onClick={() => void save()} disabled={saving}>
-              {saving ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : null}
+              {saving ? (
+                <Loader2
+                  data-icon="inline-start"
+                  className="animate-spin"
+                  aria-hidden
+                />
+              ) : null}
               Create Agent
             </Button>
           )}
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 function ToggleRow({
@@ -368,21 +398,28 @@ function ToggleRow({
   checked,
   onCheckedChange,
 }: {
-  id: string
-  title: string
-  description: string
-  checked: boolean
-  onCheckedChange: (v: boolean) => void
+  id: string;
+  title: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3.5 shadow-xs">
+    <div className="border-border bg-card flex items-start justify-between gap-4 rounded-lg border px-4 py-3.5 shadow-xs">
       <div className="flex flex-col gap-1">
-        <Label htmlFor={id} className="text-sm font-semibold text-foreground">
+        <Label htmlFor={id} className="text-foreground text-sm font-semibold">
           {title}
         </Label>
-        <span className="text-xs leading-relaxed text-muted-foreground">{description}</span>
+        <span className="text-muted-foreground text-xs leading-relaxed">
+          {description}
+        </span>
       </div>
-      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} aria-label={title} />
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        aria-label={title}
+      />
     </div>
-  )
+  );
 }

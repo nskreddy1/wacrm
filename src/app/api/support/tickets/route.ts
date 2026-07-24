@@ -13,41 +13,44 @@
 // with tenant-scoped ones.
 // ============================================================
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { getCurrentAccount, toErrorResponse } from "@/features/auth/lib/account";
-import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
+import {
+  getCurrentAccount,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
+import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
 import {
   BODY_MAX,
   SUBJECT_MAX,
   SUBJECT_MIN,
   isTicketCategory,
   isTicketPriority,
-} from "@/features/support/lib/tickets";
+} from '@/features/support/lib/tickets';
 import {
   checkRateLimit,
   rateLimitResponse,
   RATE_LIMITS,
-} from "@/lib/rate-limit";
+} from '@/lib/rate-limit';
 
 export async function GET() {
   try {
     const ctx = await getCurrentAccount();
 
     const { data, error } = await ctx.supabase
-      .from("support_tickets")
+      .from('support_tickets')
       .select(
-        "id, subject, category, priority, status, created_by, created_at, updated_at",
+        'id, subject, category, priority, status, created_by, created_at, updated_at'
       )
-      .eq("account_id", ctx.accountId)
-      .order("updated_at", { ascending: false })
+      .eq('account_id', ctx.accountId)
+      .order('updated_at', { ascending: false })
       .limit(100);
 
     if (error) {
-      console.error("[GET /api/support/tickets] fetch error:", error);
+      console.error('[GET /api/support/tickets] fetch error:', error);
       return NextResponse.json(
-        { error: "Failed to load tickets" },
-        { status: 500 },
+        { error: 'Failed to load tickets' },
+        { status: 500 }
       );
     }
 
@@ -63,7 +66,7 @@ export async function POST(request: Request) {
 
     const limit = checkRateLimit(
       `support:create:${ctx.userId}`,
-      RATE_LIMITS.supportTicketCreate,
+      RATE_LIMITS.supportTicketCreate
     );
     if (!limit.success) return rateLimitResponse(limit);
 
@@ -75,32 +78,32 @@ export async function POST(request: Request) {
     } | null;
 
     const subject =
-      typeof body?.subject === "string" ? body.subject.trim() : "";
+      typeof body?.subject === 'string' ? body.subject.trim() : '';
     if (subject.length < SUBJECT_MIN || subject.length > SUBJECT_MAX) {
       return NextResponse.json(
         {
           error: `Subject must be between ${SUBJECT_MIN} and ${SUBJECT_MAX} characters`,
         },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
     const description =
-      typeof body?.description === "string" ? body.description.trim() : "";
+      typeof body?.description === 'string' ? body.description.trim() : '';
     if (description.length < 1 || description.length > BODY_MAX) {
       return NextResponse.json(
         { error: `Description must be 1–${BODY_MAX} characters` },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
-    const category = isTicketCategory(body?.category) ? body.category : "other";
+    const category = isTicketCategory(body?.category) ? body.category : 'other';
     const priority = isTicketPriority(body?.priority)
       ? body.priority
-      : "normal";
+      : 'normal';
 
     const { data: ticket, error: ticketErr } = await ctx.supabase
-      .from("support_tickets")
+      .from('support_tickets')
       .insert({
         account_id: ctx.accountId,
         created_by: ctx.userId,
@@ -109,20 +112,20 @@ export async function POST(request: Request) {
         priority,
       })
       .select(
-        "id, subject, category, priority, status, created_by, created_at, updated_at",
+        'id, subject, category, priority, status, created_by, created_at, updated_at'
       )
       .single();
 
     if (ticketErr || !ticket) {
-      console.error("[POST /api/support/tickets] insert error:", ticketErr);
+      console.error('[POST /api/support/tickets] insert error:', ticketErr);
       return NextResponse.json(
-        { error: "Failed to create ticket" },
-        { status: 500 },
+        { error: 'Failed to create ticket' },
+        { status: 500 }
       );
     }
 
     const { error: msgErr } = await ctx.supabase
-      .from("support_ticket_messages")
+      .from('support_ticket_messages')
       .insert({
         ticket_id: ticket.id,
         author_id: ctx.userId,
@@ -136,14 +139,14 @@ export async function POST(request: Request) {
       // deliberately grants nobody DELETE on tickets, so this
       // server-internal compensation uses the service-role client —
       // scoped to the exact row we just created in this request.
-      console.error("[POST /api/support/tickets] message error:", msgErr);
+      console.error('[POST /api/support/tickets] message error:', msgErr);
       await platformAdmin()
-        .from("support_tickets")
+        .from('support_tickets')
         .delete()
-        .eq("id", ticket.id);
+        .eq('id', ticket.id);
       return NextResponse.json(
-        { error: "Failed to create ticket" },
-        { status: 500 },
+        { error: 'Failed to create ticket' },
+        { status: 500 }
       );
     }
 

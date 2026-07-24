@@ -12,22 +12,22 @@
 // workspace exactly like the in-app helper agent.
 // ============================================================
 
-import { createMcpHandler, withMcpAuth } from 'mcp-handler'
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
-import { z } from 'zod'
+import { createMcpHandler, withMcpAuth } from 'mcp-handler';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { z } from 'zod';
 
-import { requireApiKey } from '@/features/auth/lib/api-context'
-import { hasScope } from '@/features/api-keys/lib/scopes'
+import { requireApiKey } from '@/features/auth/lib/api-context';
+import { hasScope } from '@/features/api-keys/lib/scopes';
 import {
   buildAssistantTools,
   WRITE_TOOL_NAMES,
   type AssistantToolContext,
-} from '@/features/assistant/lib/tools'
+} from '@/features/assistant/lib/tools';
 
-export const runtime = 'nodejs'
-export const maxDuration = 60
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
-const WRITE_NAMES: readonly string[] = WRITE_TOOL_NAMES
+const WRITE_NAMES: readonly string[] = WRITE_TOOL_NAMES;
 
 // Schemas/descriptions don't depend on the caller — build one
 // template set for registration. `execute` is never invoked on it.
@@ -35,32 +35,31 @@ const TOOL_TEMPLATE = buildAssistantTools({
   supabase: null as never,
   accountId: '',
   userId: null,
-})
+});
 
-type ToolName = keyof typeof TOOL_TEMPLATE
+type ToolName = keyof typeof TOOL_TEMPLATE;
 
 const handler = createMcpHandler(
   (server) => {
     for (const [name, def] of Object.entries(TOOL_TEMPLATE)) {
-      const schema = def.inputSchema as z.ZodObject<z.ZodRawShape>
+      const schema = def.inputSchema as z.ZodObject<z.ZodRawShape>;
       server.tool(
         name,
         typeof def.description === 'string' ? def.description : name,
         schema instanceof z.ZodObject ? schema.shape : {},
         async (args: Record<string, unknown>, extra) => {
-          const auth = extra.authInfo
+          const auth = extra.authInfo;
           const accountId =
             typeof auth?.extra?.accountId === 'string'
               ? auth.extra.accountId
-              : null
+              : null;
           const supabase = auth?.extra?.supabase as
-            | AssistantToolContext['supabase']
-            | undefined
+            AssistantToolContext['supabase'] | undefined;
           if (!auth || !accountId || !supabase) {
             return {
               content: [{ type: 'text' as const, text: 'Unauthorized' }],
               isError: true,
-            }
+            };
           }
 
           // Write tools need the write scope; in-chat approval doesn't
@@ -78,29 +77,29 @@ const handler = createMcpHandler(
                 },
               ],
               isError: true,
-            }
+            };
           }
 
           const tools = buildAssistantTools({
             supabase,
             accountId,
             userId: null,
-          })
-          const impl = tools[name as ToolName]
+          });
+          const impl = tools[name as ToolName];
           if (!impl?.execute) {
             return {
               content: [{ type: 'text' as const, text: 'Unknown tool' }],
               isError: true,
-            }
+            };
           }
 
           try {
             const result = await (
               impl.execute as unknown as (
                 a: Record<string, unknown>,
-                o: { toolCallId: string; messages: never[] },
+                o: { toolCallId: string; messages: never[] }
               ) => Promise<unknown>
-            )(args, { toolCallId: `mcp_${Date.now()}`, messages: [] })
+            )(args, { toolCallId: `mcp_${Date.now()}`, messages: [] });
             return {
               content: [
                 {
@@ -111,18 +110,18 @@ const handler = createMcpHandler(
                       : JSON.stringify(result, null, 2),
                 },
               ],
-            }
+            };
           } catch (err) {
-            console.error(`[mcp] tool ${name} failed:`, err)
+            console.error(`[mcp] tool ${name} failed:`, err);
             return {
               content: [
                 { type: 'text' as const, text: 'Tool execution failed' },
               ],
               isError: true,
-            }
+            };
           }
-        },
-      )
+        }
+      );
     }
   },
   {
@@ -132,15 +131,15 @@ const handler = createMcpHandler(
     basePath: '/api/mcp',
     maxDuration: 60,
     verboseLogs: false,
-  },
-)
+  }
+);
 
 // Reuse the platform API-key auth (hashing, revocation, expiry, per-key
 // rate limiting). Read scope is the entry requirement; write scope is
 // checked per-tool above.
 const verifyToken = async (req: Request): Promise<AuthInfo | undefined> => {
   try {
-    const ctx = await requireApiKey(req, 'contacts:read')
+    const ctx = await requireApiKey(req, 'contacts:read');
     return {
       token: 'redacted', // never re-expose the presented key
       clientId: ctx.keyId,
@@ -150,14 +149,14 @@ const verifyToken = async (req: Request): Promise<AuthInfo | undefined> => {
         keyId: ctx.keyId,
         supabase: ctx.supabase,
       },
-    }
+    };
   } catch {
-    return undefined
+    return undefined;
   }
-}
+};
 
 const authHandler = withMcpAuth(handler, verifyToken, {
   required: true,
-})
+});
 
-export { authHandler as GET, authHandler as POST }
+export { authHandler as GET, authHandler as POST };

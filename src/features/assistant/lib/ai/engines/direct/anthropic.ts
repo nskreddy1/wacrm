@@ -1,5 +1,5 @@
-import { AiError, type ChatMessage } from '../../types'
-import { MAX_OUTPUT_TOKENS } from '../../defaults'
+import { AiError, type ChatMessage } from '../../types';
+import { MAX_OUTPUT_TOKENS } from '../../defaults';
 import {
   mergeConsecutive,
   normalizeUsage,
@@ -7,19 +7,19 @@ import {
   toNetworkError,
   type ProviderArgs,
   type ProviderResult,
-} from './shared'
+} from './shared';
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
-const ANTHROPIC_VERSION = '2023-06-01'
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_VERSION = '2023-06-01';
 
 interface AnthropicResponse {
-  content?: { type?: string; text?: string }[]
+  content?: { type?: string; text?: string }[];
   usage?: {
-    input_tokens?: number
-    output_tokens?: number
-    cache_read_input_tokens?: number
-    cache_creation_input_tokens?: number
-  }
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
 }
 
 /**
@@ -30,14 +30,16 @@ interface AnthropicResponse {
  * non-empty payload.
  */
 function normalizeForAnthropic(messages: ChatMessage[]): ChatMessage[] {
-  const merged = mergeConsecutive(messages)
+  const merged = mergeConsecutive(messages);
   while (merged.length > 0 && merged[0].role === 'assistant') {
-    merged.shift()
+    merged.shift();
   }
   if (merged.length === 0) {
-    return [{ role: 'user', content: '(The customer has not sent a message yet.)' }]
+    return [
+      { role: 'user', content: '(The customer has not sent a message yet.)' },
+    ];
   }
-  return merged
+  return merged;
 }
 
 /**
@@ -45,8 +47,11 @@ function normalizeForAnthropic(messages: ChatMessage[]): ChatMessage[] {
  * Returns the raw assistant text + token usage (handoff parsing happens
  * in the shared dispatch layer).
  */
-export async function generateAnthropic(args: ProviderArgs): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs, systemBlocks } = args
+export async function generateAnthropic(
+  args: ProviderArgs
+): Promise<ProviderResult> {
+  const { apiKey, model, systemPrompt, messages, timeoutMs, systemBlocks } =
+    args;
 
   // Cache-aligned path: send the system prompt as an array of blocks,
   // each ending in a `cache_control` breakpoint — block 0 (platform
@@ -60,9 +65,9 @@ export async function generateAnthropic(args: ProviderArgs): Promise<ProviderRes
           text,
           cache_control: { type: 'ephemeral' as const },
         }))
-      : systemPrompt
+      : systemPrompt;
 
-  let res: Response
+  let res: Response;
   try {
     res = await fetch(ANTHROPIC_URL, {
       method: 'POST',
@@ -78,36 +83,36 @@ export async function generateAnthropic(args: ProviderArgs): Promise<ProviderRes
         messages: normalizeForAnthropic(messages),
       }),
       signal: AbortSignal.timeout(timeoutMs),
-    })
+    });
   } catch (err) {
-    throw toNetworkError(err)
+    throw toNetworkError(err);
   }
 
   if (!res.ok) {
-    throw await providerHttpError('Anthropic', res)
+    throw await providerHttpError('Anthropic', res);
   }
 
-  const data = (await res.json().catch(() => null)) as AnthropicResponse | null
+  const data = (await res.json().catch(() => null)) as AnthropicResponse | null;
   const text = data?.content
     ?.filter((b) => b.type === 'text' && typeof b.text === 'string')
     .map((b) => b.text)
     .join('')
-    .trim()
+    .trim();
   if (!text) {
     throw new AiError('Anthropic returned an empty response.', {
       code: 'empty_response',
-    })
+    });
   }
   // Anthropic reports input/output but no total — normalizeUsage sums.
   // Note: input_tokens EXCLUDES cache reads/writes, so add them back
   // for a comparable "full prompt size" number across providers.
-  const cacheRead = data?.usage?.cache_read_input_tokens ?? 0
-  const cacheWrite = data?.usage?.cache_creation_input_tokens ?? 0
+  const cacheRead = data?.usage?.cache_read_input_tokens ?? 0;
+  const cacheWrite = data?.usage?.cache_creation_input_tokens ?? 0;
   const usage = normalizeUsage({
     prompt: (data?.usage?.input_tokens ?? 0) + cacheRead + cacheWrite,
     completion: data?.usage?.output_tokens,
     cached: data?.usage?.cache_read_input_tokens,
     cacheWrite: data?.usage?.cache_creation_input_tokens,
-  })
-  return { text, usage }
+  });
+  return { text, usage };
 }

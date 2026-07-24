@@ -75,7 +75,10 @@ export async function PATCH(
       .maybeSingle();
 
     if (fetchError) {
-      console.error('[PATCH /api/external-sources/[id]] fetch error:', fetchError);
+      console.error(
+        '[PATCH /api/external-sources/[id]] fetch error:',
+        fetchError
+      );
       return NextResponse.json(
         { error: 'Failed to load external source' },
         { status: 500 }

@@ -15,22 +15,22 @@ Do not treat any statement in this directory as a fact about this fork without v
 
 ## Snapshot index
 
-| File | Source URL | Retrieved | Section |
-| --- | --- | --- | --- |
-| `architecture.md` | https://wacrm.tech/docs/architecture | 2026-07-13 | Reference |
-| `supabase-setup.md` | https://wacrm.tech/docs/supabase-setup | 2026-07-13 | Setup |
-| `environment-variables.md` | https://wacrm.tech/docs/environment-variables | 2026-07-13 | Setup |
-| `deployment-hostinger.md` | https://wacrm.tech/docs/deployment-hostinger | 2026-07-13 | Deploy |
-| `inbox.md` | https://wacrm.tech/docs/inbox | 2026-07-13 | Features |
-| `contacts.md` | https://wacrm.tech/docs/contacts | 2026-07-13 | Features |
-| `pipelines.md` | https://wacrm.tech/docs/pipelines | 2026-07-13 | Features |
-| `templates.md` | https://wacrm.tech/docs/templates | 2026-07-13 | Features |
-| `broadcasts.md` | https://wacrm.tech/docs/broadcasts | 2026-07-13 | Features |
-| `ai-assistant.md` | https://wacrm.tech/docs/ai-assistant | 2026-07-13 | Features |
-| `settings.md` | https://wacrm.tech/docs/settings | 2026-07-13 | Features |
-| `members.md` | https://wacrm.tech/docs/members | 2026-07-13 | Features |
-| `public-api.md` | https://wacrm.tech/docs/public-api | 2026-07-13 | Reference |
-| `changelog.md` | https://wacrm.tech/docs/changelog | 2026-07-13 | Reference |
+| File                       | Source URL                                    | Retrieved  | Section   |
+| -------------------------- | --------------------------------------------- | ---------- | --------- |
+| `architecture.md`          | https://wacrm.tech/docs/architecture          | 2026-07-13 | Reference |
+| `supabase-setup.md`        | https://wacrm.tech/docs/supabase-setup        | 2026-07-13 | Setup     |
+| `environment-variables.md` | https://wacrm.tech/docs/environment-variables | 2026-07-13 | Setup     |
+| `deployment-hostinger.md`  | https://wacrm.tech/docs/deployment-hostinger  | 2026-07-13 | Deploy    |
+| `inbox.md`                 | https://wacrm.tech/docs/inbox                 | 2026-07-13 | Features  |
+| `contacts.md`              | https://wacrm.tech/docs/contacts              | 2026-07-13 | Features  |
+| `pipelines.md`             | https://wacrm.tech/docs/pipelines             | 2026-07-13 | Features  |
+| `templates.md`             | https://wacrm.tech/docs/templates             | 2026-07-13 | Features  |
+| `broadcasts.md`            | https://wacrm.tech/docs/broadcasts            | 2026-07-13 | Features  |
+| `ai-assistant.md`          | https://wacrm.tech/docs/ai-assistant          | 2026-07-13 | Features  |
+| `settings.md`              | https://wacrm.tech/docs/settings              | 2026-07-13 | Features  |
+| `members.md`               | https://wacrm.tech/docs/members               | 2026-07-13 | Features  |
+| `public-api.md`            | https://wacrm.tech/docs/public-api            | 2026-07-13 | Reference |
+| `changelog.md`             | https://wacrm.tech/docs/changelog             | 2026-07-13 | Reference |
 
 ## Notes
 

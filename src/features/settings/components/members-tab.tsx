@@ -39,11 +39,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -120,7 +116,10 @@ function fmtDate(iso: string): string {
   });
 }
 
-function fmtExpiresIn(iso: string, t: (key: string, values?: Record<string, string | number>) => string): string {
+function fmtExpiresIn(
+  iso: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
   const ms = new Date(iso).getTime() - Date.now();
   if (ms <= 0) return t('expired');
   const days = Math.floor(ms / (24 * 60 * 60 * 1000));
@@ -135,7 +134,9 @@ export function MembersTab() {
 
   const [members, setMembers] = useState<AccountMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [profileOptions, setProfileOptions] = useState<WorkspaceProfileOption[]>([]);
+  const [profileOptions, setProfileOptions] = useState<
+    WorkspaceProfileOption[]
+  >([]);
   const [summary, setSummary] = useState<StatusSummary | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -143,13 +144,17 @@ export function MembersTab() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [tab, setTab] = useState<'users' | 'profiles' | 'roles' | 'workspace'>('users');
+  const [tab, setTab] = useState<'users' | 'profiles' | 'roles' | 'workspace'>(
+    'users'
+  );
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
-  const [confirmAction, setConfirmAction] = useState<
-    | { kind: 'deactivate' | 'delete' | 'reactivate'; member: AccountMember }
-    | null
-  >(null);
-  const [pendingMemberAction, setPendingMemberAction] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    kind: 'deactivate' | 'delete' | 'reactivate';
+    member: AccountMember;
+  } | null>(null);
+  const [pendingMemberAction, setPendingMemberAction] = useState<string | null>(
+    null
+  );
 
   // Monotonically increasing request id — a stale response arriving
   // after a newer one must not clobber the newer page.
@@ -204,7 +209,7 @@ export function MembersTab() {
             profiles: (WorkspaceProfileOption & Record<string, unknown>)[];
           };
           setProfileOptions(
-            pdata.profiles.map((p) => ({ id: p.id, name: p.name })),
+            pdata.profiles.map((p) => ({ id: p.id, name: p.name }))
           );
         }
       } catch (err) {
@@ -214,14 +219,17 @@ export function MembersTab() {
         if (seq === requestSeq.current) setLoading(false);
       }
     },
-    [canManageMembers],
+    [canManageMembers]
   );
 
   // Initial load + debounced server-side search (300ms).
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void loadEverything(search.trim(), statusFilter);
-    }, search ? 300 : 0);
+    const timer = setTimeout(
+      () => {
+        void loadEverything(search.trim(), statusFilter);
+      },
+      search ? 300 : 0
+    );
     return () => clearTimeout(timer);
   }, [search, statusFilter, loadEverything]);
 
@@ -233,10 +241,15 @@ export function MembersTab() {
         limit: String(PAGE_SIZE),
         cursor: nextCursor,
       });
-      params.set('status', statusFilter === 'invited' ? 'active' : statusFilter);
+      params.set(
+        'status',
+        statusFilter === 'invited' ? 'active' : statusFilter
+      );
       const q = search.trim();
       if (q) params.set('q', q);
-      const res = await fetch(`/api/account/members?${params}`, { cache: 'no-store' });
+      const res = await fetch(`/api/account/members?${params}`, {
+        cache: 'no-store',
+      });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         toast.error(payload.error || 'Failed to load more members');
@@ -267,8 +280,10 @@ export function MembersTab() {
     setPendingMemberAction(member.user_id);
     setMembers((prev) =>
       prev.map((m) =>
-        m.user_id === member.user_id ? { ...m, workspace_profile: nextProfile } : m,
-      ),
+        m.user_id === member.user_id
+          ? { ...m, workspace_profile: nextProfile }
+          : m
+      )
     );
     try {
       const res = await fetch(`/api/account/members/${member.user_id}`, {
@@ -279,8 +294,10 @@ export function MembersTab() {
       if (!res.ok) {
         setMembers((prev) =>
           prev.map((m) =>
-            m.user_id === member.user_id ? { ...m, workspace_profile: previous } : m,
-          ),
+            m.user_id === member.user_id
+              ? { ...m, workspace_profile: previous }
+              : m
+          )
         );
         const payload = await res.json().catch(() => ({}));
         toast.error(payload.error || 'Failed to update profile');
@@ -290,13 +307,15 @@ export function MembersTab() {
         t('profileUpdatedToast', {
           name: member.full_name || t('unnamed'),
           profile: nextProfile?.name ?? '',
-        }),
+        })
       );
     } catch (err) {
       setMembers((prev) =>
         prev.map((m) =>
-          m.user_id === member.user_id ? { ...m, workspace_profile: previous } : m,
-        ),
+          m.user_id === member.user_id
+            ? { ...m, workspace_profile: previous }
+            : m
+        )
       );
       console.error('[MembersTab] profile change error:', err);
       toast.error('Could not reach the server');
@@ -310,7 +329,11 @@ export function MembersTab() {
     if (!confirmAction) return;
     const { kind, member } = confirmAction;
     const nextStatus =
-      kind === 'deactivate' ? 'inactive' : kind === 'delete' ? 'deleted' : 'active';
+      kind === 'deactivate'
+        ? 'inactive'
+        : kind === 'delete'
+          ? 'deleted'
+          : 'active';
     setPendingMemberAction(member.user_id);
     try {
       const res = await fetch(`/api/account/members/${member.user_id}`, {
@@ -330,8 +353,8 @@ export function MembersTab() {
             : kind === 'delete'
               ? 'deletedToast'
               : 'reactivatedToast',
-          { name: member.full_name || t('unnamed') },
-        ),
+          { name: member.full_name || t('unnamed') }
+        )
       );
       // The row leaves the current status slice; refresh counts too.
       setConfirmAction(null);
@@ -357,7 +380,7 @@ export function MembersTab() {
       toast.success(t('revokedToast'));
       setInvitations((prev) => prev.filter((i) => i.id !== invite.id));
       setSummary((prev) =>
-        prev ? { ...prev, invited: Math.max(0, prev.invited - 1) } : prev,
+        prev ? { ...prev, invited: Math.max(0, prev.invited - 1) } : prev
       );
     } catch (err) {
       console.error('[MembersTab] revoke error:', err);
@@ -368,17 +391,29 @@ export function MembersTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="size-6 animate-spin text-primary" />
+        <Loader2 className="text-primary size-6 animate-spin" />
       </div>
     );
   }
 
   const confirmCopy =
     confirmAction?.kind === 'deactivate'
-      ? { title: t('deactivateDialogTitle'), desc: 'deactivateDialogDesc', btn: t('deactivateBtn') }
+      ? {
+          title: t('deactivateDialogTitle'),
+          desc: 'deactivateDialogDesc',
+          btn: t('deactivateBtn'),
+        }
       : confirmAction?.kind === 'delete'
-        ? { title: t('deleteDialogTitle'), desc: 'deleteDialogDesc', btn: t('deleteBtn') }
-        : { title: t('reactivateDialogTitle'), desc: 'reactivateDialogDesc', btn: t('reactivateBtn') };
+        ? {
+            title: t('deleteDialogTitle'),
+            desc: 'deleteDialogDesc',
+            btn: t('deleteBtn'),
+          }
+        : {
+            title: t('reactivateDialogTitle'),
+            desc: 'reactivateDialogDesc',
+            btn: t('reactivateBtn'),
+          };
 
   return (
     <section className="animate-in fade-in-50 space-y-5 duration-200">
@@ -386,7 +421,9 @@ export function MembersTab() {
       <SectionTabs
         tabs={[
           { id: 'users', label: t('tabUsers') },
-          ...(canManageMembers ? [{ id: 'profiles', label: t('tabProfiles') }] : []),
+          ...(canManageMembers
+            ? [{ id: 'profiles', label: t('tabProfiles') }]
+            : []),
           { id: 'roles', label: t('tabRoles') },
           { id: 'workspace', label: t('tabWorkspace') },
         ]}
@@ -396,7 +433,9 @@ export function MembersTab() {
 
       {tab === 'workspace' && <WorkspaceNameCard />}
       {tab === 'profiles' && canManageMembers && (
-        <WorkspaceProfilesTab onChanged={() => void loadEverything(search.trim(), statusFilter)} />
+        <WorkspaceProfilesTab
+          onChanged={() => void loadEverything(search.trim(), statusFilter)}
+        />
       )}
       {tab === 'roles' && <WorkspaceRolesTab canManage={canManageMembers} />}
 
@@ -407,12 +446,30 @@ export function MembersTab() {
             left={
               <FilterChips
                 chips={[
-                  { id: 'active', label: t('statusActive'), count: summary?.active },
-                  { id: 'inactive', label: t('statusInactive'), count: summary?.inactive },
+                  {
+                    id: 'active',
+                    label: t('statusActive'),
+                    count: summary?.active,
+                  },
+                  {
+                    id: 'inactive',
+                    label: t('statusInactive'),
+                    count: summary?.inactive,
+                  },
                   ...(canManageMembers
-                    ? [{ id: 'invited', label: t('statusInvited'), count: summary?.invited }]
+                    ? [
+                        {
+                          id: 'invited',
+                          label: t('statusInvited'),
+                          count: summary?.invited,
+                        },
+                      ]
                     : []),
-                  { id: 'deleted', label: t('statusDeleted'), count: summary?.deleted },
+                  {
+                    id: 'deleted',
+                    label: t('statusDeleted'),
+                    count: summary?.deleted,
+                  },
                 ]}
                 active={statusFilter}
                 onSelect={(id) => {
@@ -457,11 +514,13 @@ export function MembersTab() {
                     return (
                       <div className="flex min-w-0 items-center gap-3">
                         <Avatar className="size-8 shrink-0">
-                          <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                            {(name || inv.invited_email || inv.label || 'U').charAt(0).toUpperCase()}
+                          <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                            {(name || inv.invited_email || inv.label || 'U')
+                              .charAt(0)
+                              .toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="truncate font-medium text-foreground">
+                        <span className="text-foreground truncate font-medium">
                           {name || inv.label || t('untitledInvite')}
                         </span>
                       </div>
@@ -473,7 +532,9 @@ export function MembersTab() {
                   header: t('colEmail'),
                   className: 'w-[30%]',
                   cell: (inv) => (
-                    <span className="truncate text-muted-foreground">{inv.invited_email ?? '—'}</span>
+                    <span className="text-muted-foreground truncate">
+                      {inv.invited_email ?? '—'}
+                    </span>
                   ),
                 },
                 {
@@ -489,8 +550,9 @@ export function MembersTab() {
                   id: 'expires',
                   header: t('colExpires'),
                   cell: (inv) => (
-                    <span className="text-xs text-muted-foreground">
-                      {t('created', { date: fmtDate(inv.created_at) })} · {fmtExpiresIn(inv.expires_at, t)}
+                    <span className="text-muted-foreground text-xs">
+                      {t('created', { date: fmtDate(inv.created_at) })} ·{' '}
+                      {fmtExpiresIn(inv.expires_at, t)}
                     </span>
                   ),
                 },
@@ -521,7 +583,9 @@ export function MembersTab() {
                 empty={
                   <span className="inline-flex flex-col items-center gap-2">
                     <UsersRound className="size-6" />
-                    {search.trim() ? t('noSearchResults') : t('memberCount', { count: 0 })}
+                    {search.trim()
+                      ? t('noSearchResults')
+                      : t('memberCount', { count: 0 })}
                   </span>
                 }
                 columns={[
@@ -535,17 +599,22 @@ export function MembersTab() {
                         <div className="flex min-w-0 items-center gap-3">
                           <Avatar className="size-8 shrink-0">
                             {member.avatar_url ? (
-                              <AvatarImage src={member.avatar_url} alt={member.full_name || 'Member'} />
+                              <AvatarImage
+                                src={member.avatar_url}
+                                alt={member.full_name || 'Member'}
+                              />
                             ) : null}
-                            <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                              {(member.full_name || member.email || 'U').charAt(0).toUpperCase()}
+                            <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                              {(member.full_name || member.email || 'U')
+                                .charAt(0)
+                                .toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="truncate font-medium text-foreground">
+                          <span className="text-foreground truncate font-medium">
                             {personDisplayName(member.full_name, member.email)}
                           </span>
                           {isSelf && (
-                            <Badge className="bg-muted text-muted-foreground border-border text-[10px] uppercase tracking-wide">
+                            <Badge className="bg-muted text-muted-foreground border-border text-[10px] tracking-wide uppercase">
                               {t('you')}
                             </Badge>
                           )}
@@ -558,7 +627,9 @@ export function MembersTab() {
                     header: t('colEmail'),
                     className: 'w-[32%]',
                     cell: (member) => (
-                      <span className="truncate text-muted-foreground">{member.email ?? '—'}</span>
+                      <span className="text-muted-foreground truncate">
+                        {member.email ?? '—'}
+                      </span>
                     ),
                   },
                   {
@@ -566,7 +637,9 @@ export function MembersTab() {
                     header: t('colRole'),
                     className: 'w-[16%]',
                     cell: (member) => (
-                      <span className="text-foreground">{member.workspace_role?.name ?? '—'}</span>
+                      <span className="text-foreground">
+                        {member.workspace_role?.name ?? '—'}
+                      </span>
                     ),
                   },
                   {
@@ -579,9 +652,17 @@ export function MembersTab() {
                       // Owner is the immutable Super Admin; self can't
                       // edit own profile; non-managers see text only.
                       if (member.is_owner) {
-                        return <span className="font-medium text-foreground">{t('superAdmin')}</span>;
+                        return (
+                          <span className="text-foreground font-medium">
+                            {t('superAdmin')}
+                          </span>
+                        );
                       }
-                      if (!canManageMembers || isSelf || statusFilter !== 'active') {
+                      if (
+                        !canManageMembers ||
+                        isSelf ||
+                        statusFilter !== 'active'
+                      ) {
                         return (
                           <span className="text-foreground">
                             {member.workspace_profile?.name ?? '—'}
@@ -591,7 +672,9 @@ export function MembersTab() {
                       return (
                         <Select
                           value={member.workspace_profile?.id ?? ''}
-                          onValueChange={(v) => v && handleProfileChange(member, v)}
+                          onValueChange={(v) =>
+                            v && handleProfileChange(member, v)
+                          }
                         >
                           <SelectTrigger className="w-40" disabled={isBusy}>
                             <SelectValue placeholder="—" />
@@ -614,7 +697,8 @@ export function MembersTab() {
                     cell: (member) => {
                       const isSelf = member.user_id === user?.id;
                       const isBusy = pendingMemberAction === member.user_id;
-                      if (!canManageMembers || member.is_owner || isSelf) return null;
+                      if (!canManageMembers || member.is_owner || isSelf)
+                        return null;
                       return (
                         <DropdownMenu>
                           <DropdownMenuTrigger
@@ -632,15 +716,26 @@ export function MembersTab() {
                           <DropdownMenuContent align="end">
                             {member.status === 'active' && (
                               <DropdownMenuItem
-                                onClick={() => setConfirmAction({ kind: 'deactivate', member })}
+                                onClick={() =>
+                                  setConfirmAction({
+                                    kind: 'deactivate',
+                                    member,
+                                  })
+                                }
                               >
                                 <UserRoundX className="size-4" />
                                 {t('deactivateBtn')}
                               </DropdownMenuItem>
                             )}
-                            {(member.status === 'inactive' || member.status === 'deleted') && (
+                            {(member.status === 'inactive' ||
+                              member.status === 'deleted') && (
                               <DropdownMenuItem
-                                onClick={() => setConfirmAction({ kind: 'reactivate', member })}
+                                onClick={() =>
+                                  setConfirmAction({
+                                    kind: 'reactivate',
+                                    member,
+                                  })
+                                }
                               >
                                 <RotateCcw className="size-4" />
                                 {t('reactivateBtn')}
@@ -651,7 +746,9 @@ export function MembersTab() {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   variant="destructive"
-                                  onClick={() => setConfirmAction({ kind: 'delete', member })}
+                                  onClick={() =>
+                                    setConfirmAction({ kind: 'delete', member })
+                                  }
                                 >
                                   <Trash2 className="size-4" />
                                   {t('deleteBtn')}
@@ -667,7 +764,12 @@ export function MembersTab() {
               />
               {nextCursor && (
                 <div className="text-center">
-                  <Button variant="outline" size="sm" onClick={handleLoadMore} disabled={loadingMore}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                  >
                     {loadingMore ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
@@ -699,7 +801,7 @@ export function MembersTab() {
       >
         <DialogContent className="bg-popover border-border sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-popover-foreground">
+            <DialogTitle className="text-popover-foreground flex items-center gap-2">
               <AlertTriangle className="size-4 text-amber-400" />
               {confirmCopy.title}
             </DialogTitle>
@@ -707,7 +809,9 @@ export function MembersTab() {
               {confirmAction
                 ? t.rich(confirmCopy.desc, {
                     name: confirmAction.member.full_name || t('unnamed'),
-                    bold: (chunks: React.ReactNode) => <strong>{chunks}</strong>,
+                    bold: (chunks: React.ReactNode) => (
+                      <strong>{chunks}</strong>
+                    ),
                   })
                 : null}
             </DialogDescription>
@@ -726,7 +830,7 @@ export function MembersTab() {
               className={
                 confirmAction?.kind === 'reactivate'
                   ? undefined
-                  : 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-red-600 text-white hover:bg-red-700'
               }
             >
               {pendingMemberAction ? (

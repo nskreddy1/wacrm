@@ -1,14 +1,14 @@
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
-import { ChatOpenAI } from '@langchain/openai'
-import { ChatAnthropic } from '@langchain/anthropic'
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
-import { AiError, type AiConfig, type AiUsage } from '../../types'
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { AiError, type AiConfig, type AiUsage } from '../../types';
 import {
   MAX_OUTPUT_TOKENS,
   OPENAI_COMPAT_BASE_URL,
   OLLAMA_PLACEHOLDER_KEY,
   resolveOllamaBaseUrl,
-} from '../../defaults'
+} from '../../defaults';
 
 // ============================================================
 // AiConfig → LangChain chat model.
@@ -28,7 +28,7 @@ import {
  * problems so routes keep returning the same error codes as before.
  */
 export function resolveChatModel(config: AiConfig): BaseChatModel {
-  const { provider, apiKey, model } = config
+  const { provider, apiKey, model } = config;
   switch (provider) {
     case 'openai':
       return new ChatOpenAI({
@@ -36,21 +36,21 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         model,
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
-      })
+      });
     case 'anthropic':
       return new ChatAnthropic({
         apiKey,
         model,
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
-      })
+      });
     case 'gemini':
       return new ChatGoogleGenerativeAI({
         apiKey,
         model,
         maxRetries: 0,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
-      })
+      });
     case 'ollama': {
       // Self-hosted Ollama — OpenAI-compatible /v1 endpoint, no real
       // API key (the daemon ignores auth, ChatOpenAI needs a non-empty one).
@@ -60,16 +60,16 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
         configuration: { baseURL: resolveOllamaBaseUrl(config.baseUrl) },
-      })
+      });
     }
     case 'custom': {
       // Bring-your-own OpenAI-compatible endpoint, per-account base URL.
-      const baseUrl = config.baseUrl?.trim()
+      const baseUrl = config.baseUrl?.trim();
       if (!baseUrl) {
         throw new AiError(
           'A base URL is required for the custom OpenAI-compatible provider.',
-          { code: 'missing_base_url', status: 400 },
-        )
+          { code: 'missing_base_url', status: 400 }
+        );
       }
       return new ChatOpenAI({
         apiKey,
@@ -77,16 +77,16 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
         configuration: { baseURL: baseUrl },
-      })
+      });
     }
     default: {
       // OpenAI-compatible presets — same protocol, registry-provided URL.
-      const baseUrl = OPENAI_COMPAT_BASE_URL[provider]
+      const baseUrl = OPENAI_COMPAT_BASE_URL[provider];
       if (!baseUrl) {
         throw new AiError(`Unsupported AI provider: ${provider}`, {
           code: 'unsupported_provider',
           status: 400,
-        })
+        });
       }
       return new ChatOpenAI({
         apiKey,
@@ -94,7 +94,7 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
         maxRetries: 0,
         maxTokens: MAX_OUTPUT_TOKENS,
         configuration: { baseURL: baseUrl },
-      })
+      });
     }
   }
 }
@@ -109,22 +109,22 @@ export function resolveChatModel(config: AiConfig): BaseChatModel {
 export function normalizeLcUsage(
   raw:
     | {
-        input_tokens?: number | undefined
-        output_tokens?: number | undefined
-        total_tokens?: number | undefined
+        input_tokens?: number | undefined;
+        output_tokens?: number | undefined;
+        total_tokens?: number | undefined;
       }
     | null
-    | undefined,
+    | undefined
 ): AiUsage | null {
-  if (!raw) return null
+  if (!raw) return null;
   const num = (v: unknown): number =>
-    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0
-  const promptTokens = num(raw.input_tokens)
-  const completionTokens = num(raw.output_tokens)
-  const total = num(raw.total_tokens)
-  const totalTokens = total > 0 ? total : promptTokens + completionTokens
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+  const promptTokens = num(raw.input_tokens);
+  const completionTokens = num(raw.output_tokens);
+  const total = num(raw.total_tokens);
+  const totalTokens = total > 0 ? total : promptTokens + completionTokens;
   if (promptTokens === 0 && completionTokens === 0 && totalTokens === 0) {
-    return null
+    return null;
   }
-  return { promptTokens, completionTokens, totalTokens }
+  return { promptTokens, completionTokens, totalTokens };
 }

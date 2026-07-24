@@ -8,11 +8,11 @@
 // has no SELECT policy, so nothing leaks outside this gate.
 // ============================================================
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { toErrorResponse } from "@/features/auth/lib/account";
-import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
-import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
+import { toErrorResponse } from '@/features/auth/lib/account';
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
+import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
 
 const PAGE_SIZE = 50;
 
@@ -22,24 +22,26 @@ export async function GET(request: Request) {
     const admin = platformAdmin();
 
     const url = new URL(request.url);
-    const cursor = url.searchParams.get("cursor"); // created_at keyset
-    const accountId = url.searchParams.get("account_id");
+    const cursor = url.searchParams.get('cursor'); // created_at keyset
+    const accountId = url.searchParams.get('account_id');
 
     let query = admin
-      .from("platform_audit_log")
-      .select("id, actor_id, account_id, action, entity, before, after, created_at")
-      .order("created_at", { ascending: false })
+      .from('platform_audit_log')
+      .select(
+        'id, actor_id, account_id, action, entity, before, after, created_at'
+      )
+      .order('created_at', { ascending: false })
       .limit(PAGE_SIZE + 1);
 
-    if (accountId) query = query.eq("account_id", accountId);
-    if (cursor) query = query.lt("created_at", cursor);
+    if (accountId) query = query.eq('account_id', accountId);
+    if (cursor) query = query.lt('created_at', cursor);
 
     const { data: rows, error } = await query;
     if (error) {
-      console.error("[GET /api/admin/audit] fetch error:", error);
+      console.error('[GET /api/admin/audit] fetch error:', error);
       return NextResponse.json(
-        { error: "Failed to load audit log" },
-        { status: 500 },
+        { error: 'Failed to load audit log' },
+        { status: 500 }
       );
     }
 
@@ -58,12 +60,12 @@ export async function GET(request: Request) {
     const [actorsRes, accountsRes] = await Promise.all([
       actorIds.length
         ? admin
-            .from("profiles")
-            .select("user_id, full_name, email")
-            .in("user_id", actorIds)
+            .from('profiles')
+            .select('user_id, full_name, email')
+            .in('user_id', actorIds)
         : Promise.resolve({ data: [], error: null }),
       accountIds.length
-        ? admin.from("accounts").select("id, name").in("id", accountIds)
+        ? admin.from('accounts').select('id, name').in('id', accountIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
 
@@ -71,10 +73,10 @@ export async function GET(request: Request) {
       (actorsRes.data ?? []).map((p) => [
         p.user_id,
         p.full_name || p.email || null,
-      ]),
+      ])
     );
     const accountNames = new Map<string, string>(
-      (accountsRes.data ?? []).map((a) => [a.id, a.name]),
+      (accountsRes.data ?? []).map((a) => [a.id, a.name])
     );
 
     return NextResponse.json({
@@ -82,7 +84,7 @@ export async function GET(request: Request) {
         ...r,
         actor_name: actorNames.get(r.actor_id) ?? null,
         account_name: r.account_id
-          ? (accountNames.get(r.account_id) ?? "Unknown workspace")
+          ? (accountNames.get(r.account_id) ?? 'Unknown workspace')
           : null,
       })),
       next_cursor: nextCursor,

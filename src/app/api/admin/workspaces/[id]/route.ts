@@ -4,15 +4,15 @@
 // configuration status (masked previews only — never ciphertext).
 // ============================================================
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { toErrorResponse } from "@/features/auth/lib/account";
-import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
-import { platformAdmin } from "@/features/admin/lib/platform/admin-client";
+import { toErrorResponse } from '@/features/auth/lib/account';
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
+import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireSuperAdmin();
@@ -20,47 +20,47 @@ export async function GET(
     const { id } = await params;
 
     const { data: account, error: accountErr } = await admin
-      .from("accounts")
-      .select("id, name, owner_user_id, created_at")
-      .eq("id", id)
+      .from('accounts')
+      .select('id, name, owner_user_id, created_at')
+      .eq('id', id)
       .maybeSingle();
 
     if (accountErr) {
-      console.error("[GET /api/admin/workspaces/:id] fetch error:", accountErr);
+      console.error('[GET /api/admin/workspaces/:id] fetch error:', accountErr);
       return NextResponse.json(
-        { error: "Failed to load workspace" },
-        { status: 500 },
+        { error: 'Failed to load workspace' },
+        { status: 500 }
       );
     }
     if (!account) {
       return NextResponse.json(
-        { error: "Workspace not found" },
-        { status: 404 },
+        { error: 'Workspace not found' },
+        { status: 404 }
       );
     }
 
     const [membersRes, channelsRes] = await Promise.all([
       admin
-        .from("profiles")
-        .select("user_id, full_name, email, account_role, created_at")
-        .eq("account_id", id)
-        .order("created_at", { ascending: true }),
+        .from('profiles')
+        .select('user_id, full_name, email, account_role, created_at')
+        .eq('account_id', id)
+        .order('created_at', { ascending: true }),
       admin
-        .from("channel_configurations")
+        .from('channel_configurations')
         .select(
-          "channel, provider, masked_preview, is_active, verified_at, updated_at",
+          'channel, provider, masked_preview, is_active, verified_at, updated_at'
         )
-        .eq("account_id", id),
+        .eq('account_id', id),
     ]);
 
     if (membersRes.error) {
       console.error(
-        "[GET /api/admin/workspaces/:id] members error:",
-        membersRes.error,
+        '[GET /api/admin/workspaces/:id] members error:',
+        membersRes.error
       );
       return NextResponse.json(
-        { error: "Failed to load members" },
-        { status: 500 },
+        { error: 'Failed to load members' },
+        { status: 500 }
       );
     }
 

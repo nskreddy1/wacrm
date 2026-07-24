@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from 'react';
 
 /**
  * SSR-safe boolean preference persisted in localStorage.
@@ -27,26 +27,30 @@ export function useLocalStorageBoolean(key: string, defaultValue: boolean) {
       const onLocal = (event: Event) => {
         if ((event as CustomEvent<string>).detail === key) onStoreChange();
       };
-      window.addEventListener("storage", onStorage);
-      window.addEventListener("local-storage-state", onLocal);
+      window.addEventListener('storage', onStorage);
+      window.addEventListener('local-storage-state', onLocal);
       return () => {
-        window.removeEventListener("storage", onStorage);
-        window.removeEventListener("local-storage-state", onLocal);
+        window.removeEventListener('storage', onStorage);
+        window.removeEventListener('local-storage-state', onLocal);
       };
     },
-    [key],
+    [key]
   );
 
   const getSnapshot = useCallback(() => {
     try {
       const stored = localStorage.getItem(key);
-      return stored === null ? defaultValue : stored === "true";
+      return stored === null ? defaultValue : stored === 'true';
     } catch {
       return defaultValue;
     }
   }, [key, defaultValue]);
 
-  const value = useSyncExternalStore(subscribe, getSnapshot, () => defaultValue);
+  const value = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    () => defaultValue
+  );
 
   const setValue = useCallback(
     (next: boolean | ((prev: boolean) => boolean)) => {
@@ -54,19 +58,21 @@ export function useLocalStorageBoolean(key: string, defaultValue: boolean) {
         const prev = (() => {
           try {
             const stored = localStorage.getItem(key);
-            return stored === null ? defaultValue : stored === "true";
+            return stored === null ? defaultValue : stored === 'true';
           } catch {
             return defaultValue;
           }
         })();
-        const resolved = typeof next === "function" ? next(prev) : next;
+        const resolved = typeof next === 'function' ? next(prev) : next;
         localStorage.setItem(key, String(resolved));
-        window.dispatchEvent(new CustomEvent("local-storage-state", { detail: key }));
+        window.dispatchEvent(
+          new CustomEvent('local-storage-state', { detail: key })
+        );
       } catch {
         // Persistence is best-effort; ignore storage failures.
       }
     },
-    [key, defaultValue],
+    [key, defaultValue]
   );
 
   return [value, setValue] as const;

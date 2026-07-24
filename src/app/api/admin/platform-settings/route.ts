@@ -1,12 +1,12 @@
-import { NextResponse } from 'next/server'
-import { requireSuperAdmin } from '@/features/auth/lib/super-admin'
-import { toErrorResponse } from '@/features/auth/lib/account'
-import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client'
+import { NextResponse } from 'next/server';
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
+import { toErrorResponse } from '@/features/auth/lib/account';
+import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client';
 import {
   getAiEngine,
   resetEngineCache,
   type AiEngine,
-} from '@/features/assistant/lib/ai/engine-flag'
+} from '@/features/assistant/lib/ai/engine-flag';
 
 // ============================================================
 // Platform settings — super-admin control surface.
@@ -29,16 +29,16 @@ import {
  */
 export async function GET() {
   try {
-    await requireSuperAdmin()
+    await requireSuperAdmin();
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 
   // Resolve fresh (bust the local cache first) so a super admin never
   // reads a stale value from this instance's TTL cache.
-  resetEngineCache()
-  const engine = await getAiEngine()
-  return NextResponse.json({ ai_engine: engine })
+  resetEngineCache();
+  const engine = await getAiEngine();
+  return NextResponse.json({ ai_engine: engine });
 }
 
 /**
@@ -51,38 +51,38 @@ export async function GET() {
  */
 export async function PATCH(request: Request) {
   try {
-    await requireSuperAdmin()
+    await requireSuperAdmin();
   } catch (err) {
-    return toErrorResponse(err)
+    return toErrorResponse(err);
   }
 
   const body = (await request.json().catch(() => null)) as {
-    ai_engine?: unknown
-  } | null
-  const value = body?.ai_engine
+    ai_engine?: unknown;
+  } | null;
+  const value = body?.ai_engine;
   if (value !== 'direct' && value !== 'langchain') {
     return NextResponse.json(
       { error: "ai_engine must be 'direct' or 'langchain'" },
-      { status: 400 },
-    )
+      { status: 400 }
+    );
   }
-  const engine: AiEngine = value
+  const engine: AiEngine = value;
 
   const { error } = await supabaseAdmin()
     .from('platform_settings')
     .upsert(
       { key: 'ai_engine', value: engine, updated_at: new Date().toISOString() },
-      { onConflict: 'key' },
-    )
+      { onConflict: 'key' }
+    );
 
   if (error) {
-    console.error('[admin/platform-settings PATCH] upsert failed:', error)
+    console.error('[admin/platform-settings PATCH] upsert failed:', error);
     return NextResponse.json(
       { error: 'Failed to save platform setting' },
-      { status: 500 },
-    )
+      { status: 500 }
+    );
   }
 
-  resetEngineCache()
-  return NextResponse.json({ ai_engine: engine })
+  resetEngineCache();
+  return NextResponse.json({ ai_engine: engine });
 }

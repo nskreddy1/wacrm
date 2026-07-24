@@ -1,4 +1,4 @@
-import type { CookieOptionsWithName } from "@supabase/ssr"
+import type { CookieOptionsWithName } from '@supabase/ssr';
 
 /**
  * Shared auth-cookie attributes for every Supabase client (browser,
@@ -14,7 +14,7 @@ import type { CookieOptionsWithName } from "@supabase/ssr"
  * localhost is treated as a secure context in dev).
  */
 export const authCookieOptions: CookieOptionsWithName = {
-  sameSite: "none",
+  sameSite: 'none',
   secure: true,
   partitioned: true,
-}
+};

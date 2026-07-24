@@ -1,17 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { OLLAMA_PLACEHOLDER_KEY } from './defaults'
-import { createValidationProof, verifyValidationProof } from './validation-proof'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { OLLAMA_PLACEHOLDER_KEY } from './defaults';
+import {
+  createValidationProof,
+  verifyValidationProof,
+} from './validation-proof';
 
-const ORIGINAL_KEY = process.env.ENCRYPTION_KEY
+const ORIGINAL_KEY = process.env.ENCRYPTION_KEY;
 
 beforeEach(() => {
-  process.env.ENCRYPTION_KEY = 'test-only-validation-proof-secret'
-})
+  process.env.ENCRYPTION_KEY = 'test-only-validation-proof-secret';
+});
 
 afterEach(() => {
-  if (ORIGINAL_KEY === undefined) delete process.env.ENCRYPTION_KEY
-  else process.env.ENCRYPTION_KEY = ORIGINAL_KEY
-})
+  if (ORIGINAL_KEY === undefined) delete process.env.ENCRYPTION_KEY;
+  else process.env.ENCRYPTION_KEY = ORIGINAL_KEY;
+});
 
 describe('Ollama validation proof', () => {
   it('binds a keyless Ollama test to its server URL', () => {
@@ -21,17 +24,17 @@ describe('Ollama validation proof', () => {
       model: 'llama3.2',
       apiKey: OLLAMA_PLACEHOLDER_KEY,
       baseUrl: 'http://localhost:11434',
-    }
-    const proof = createValidationProof(args)
+    };
+    const proof = createValidationProof(args);
 
-    expect(verifyValidationProof(proof, args)).toBe(true)
+    expect(verifyValidationProof(proof, args)).toBe(true);
     expect(
       verifyValidationProof(proof, {
         ...args,
         baseUrl: 'http://ollama.internal:11434',
-      }),
-    ).toBe(false)
-  })
+      })
+    ).toBe(false);
+  });
 
   it('rejects a proof for a different model', () => {
     const args = {
@@ -40,11 +43,11 @@ describe('Ollama validation proof', () => {
       model: 'llama3.2',
       apiKey: OLLAMA_PLACEHOLDER_KEY,
       baseUrl: 'http://localhost:11434',
-    }
-    const proof = createValidationProof(args)
+    };
+    const proof = createValidationProof(args);
 
-    expect(
-      verifyValidationProof(proof, { ...args, model: 'qwen3' }),
-    ).toBe(false)
-  })
-})
+    expect(verifyValidationProof(proof, { ...args, model: 'qwen3' })).toBe(
+      false
+    );
+  });
+});

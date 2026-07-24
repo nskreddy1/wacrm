@@ -1,5 +1,5 @@
-import { AiError } from '../../types'
-import { MAX_OUTPUT_TOKENS } from '../../defaults'
+import { AiError } from '../../types';
+import { MAX_OUTPUT_TOKENS } from '../../defaults';
 import {
   mergeConsecutive,
   normalizeUsage,
@@ -7,21 +7,21 @@ import {
   toNetworkError,
   type ProviderArgs,
   type ProviderResult,
-} from './shared'
+} from './shared';
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 interface GeminiResponse {
   candidates?: {
-    content?: { parts?: { text?: string }[] }
-  }[]
+    content?: { parts?: { text?: string }[] };
+  }[];
   usageMetadata?: {
-    promptTokenCount?: number
-    candidatesTokenCount?: number
-    totalTokenCount?: number
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
     /** Tokens served from Gemini's implicit prefix cache (75-90% off). */
-    cachedContentTokenCount?: number
-  }
+    cachedContentTokenCount?: number;
+  };
 }
 
 /**
@@ -35,49 +35,54 @@ interface GeminiResponse {
  * is called `model`. The key is passed via header (not query string) so
  * it can't leak into logs.
  */
-export async function generateGemini(args: ProviderArgs): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args
+export async function generateGemini(
+  args: ProviderArgs
+): Promise<ProviderResult> {
+  const { apiKey, model, systemPrompt, messages, timeoutMs } = args;
 
-  let res: Response
+  let res: Response;
   try {
-    res = await fetch(`${GEMINI_BASE}/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      headers: {
-        'x-goog-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: mergeConsecutive(messages).map((m) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        })),
-        generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
-    })
+    res = await fetch(
+      `${GEMINI_BASE}/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: mergeConsecutive(messages).map((m) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }],
+          })),
+          generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      }
+    );
   } catch (err) {
-    throw toNetworkError(err)
+    throw toNetworkError(err);
   }
 
   if (!res.ok) {
-    throw await providerHttpError('Gemini', res)
+    throw await providerHttpError('Gemini', res);
   }
 
-  const data = (await res.json().catch(() => null)) as GeminiResponse | null
+  const data = (await res.json().catch(() => null)) as GeminiResponse | null;
   const text = data?.candidates?.[0]?.content?.parts
     ?.map((p) => p.text ?? '')
-    .join('')
+    .join('');
   if (!text || typeof text !== 'string' || !text.trim()) {
     throw new AiError('Gemini returned an empty response.', {
       code: 'empty_response',
-    })
+    });
   }
   const usage = normalizeUsage({
     prompt: data?.usageMetadata?.promptTokenCount,
     completion: data?.usageMetadata?.candidatesTokenCount,
     total: data?.usageMetadata?.totalTokenCount,
     cached: data?.usageMetadata?.cachedContentTokenCount,
-  })
-  return { text, usage }
+  });
+  return { text, usage };
 }

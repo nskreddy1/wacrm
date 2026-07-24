@@ -17,7 +17,10 @@
 
 import { Client as PgClient } from 'pg';
 
-import { isValidE164, sanitizePhoneForMeta } from '@/features/whatsapp/lib/phone-utils';
+import {
+  isValidE164,
+  sanitizePhoneForMeta,
+} from '@/features/whatsapp/lib/phone-utils';
 import { isDeliverableUrl } from '@/features/webhooks/lib/ssrf';
 
 import {

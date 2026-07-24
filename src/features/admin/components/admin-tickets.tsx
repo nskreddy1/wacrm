@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 // ============================================================
 // AdminTickets — /admin/tickets (all-tenant support queue).
@@ -16,21 +16,21 @@
 // canonical — mirroring the user-side SupportTab.
 // ============================================================
 
-import { useState } from "react";
-import useSWR from "swr";
-import { toast } from "sonner";
-import { ArrowLeft, Loader2, Send, UserCheck } from "lucide-react";
+import { useState } from 'react';
+import useSWR from 'swr';
+import { toast } from 'sonner';
+import { ArrowLeft, Loader2, Send, UserCheck } from 'lucide-react';
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -38,24 +38,24 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 
 const STATUSES = [
-  "open",
-  "in_progress",
-  "waiting_on_user",
-  "resolved",
-  "closed",
+  'open',
+  'in_progress',
+  'waiting_on_user',
+  'resolved',
+  'closed',
 ] as const;
-const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 const CATEGORIES = [
-  "billing",
-  "technical",
-  "channel_setup",
-  "agent_help",
-  "other",
+  'billing',
+  'technical',
+  'channel_setup',
+  'agent_help',
+  'other',
 ] as const;
 
 type TicketStatus = (typeof STATUSES)[number];
@@ -89,30 +89,30 @@ interface TicketMessage {
 const jsonFetcher = async (url: string) => {
   const res = await fetch(url);
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error ?? "Request failed");
+  if (!res.ok) throw new Error(body?.error ?? 'Request failed');
   return body;
 };
 
 const statusVariant: Record<
   TicketStatus,
-  "default" | "secondary" | "outline" | "destructive"
+  'default' | 'secondary' | 'outline' | 'destructive'
 > = {
-  open: "default",
-  in_progress: "secondary",
-  waiting_on_user: "outline",
-  resolved: "secondary",
-  closed: "outline",
+  open: 'default',
+  in_progress: 'secondary',
+  waiting_on_user: 'outline',
+  resolved: 'secondary',
+  closed: 'outline',
 };
 
 const priorityClass: Record<string, string> = {
-  urgent: "text-destructive font-semibold",
-  high: "font-semibold",
-  normal: "",
-  low: "text-muted-foreground",
+  urgent: 'text-destructive font-semibold',
+  high: 'font-semibold',
+  normal: '',
+  low: 'text-muted-foreground',
 };
 
 function label(value: string) {
-  return value.replaceAll("_", " ");
+  return value.replaceAll('_', ' ');
 }
 
 function timeAgo(iso: string) {
@@ -125,22 +125,22 @@ function timeAgo(iso: string) {
 }
 
 export function AdminTickets() {
-  const [status, setStatus] = useState<string>("all");
-  const [priority, setPriority] = useState<string>("all");
-  const [category, setCategory] = useState<string>("all");
+  const [status, setStatus] = useState<string>('all');
+  const [priority, setPriority] = useState<string>('all');
+  const [category, setCategory] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const params = new URLSearchParams();
-  if (status !== "all") params.set("status", status);
-  if (priority !== "all") params.set("priority", priority);
-  if (category !== "all") params.set("category", category);
+  if (status !== 'all') params.set('status', status);
+  if (priority !== 'all') params.set('priority', priority);
+  if (category !== 'all') params.set('category', category);
   const qs = params.toString();
-  const listKey = `/api/admin/tickets${qs ? `?${qs}` : ""}`;
+  const listKey = `/api/admin/tickets${qs ? `?${qs}` : ''}`;
 
   const { data, isLoading, mutate } = useSWR<{ tickets: TicketRow[] }>(
     listKey,
     jsonFetcher,
-    { refreshInterval: 30_000 },
+    { refreshInterval: 30_000 }
   );
   const tickets = data?.tickets ?? [];
 
@@ -204,7 +204,7 @@ export function AdminTickets() {
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="py-8 text-center text-muted-foreground"
+                  className="text-muted-foreground py-8 text-center"
                 >
                   No tickets match these filters.
                 </TableCell>
@@ -214,7 +214,7 @@ export function AdminTickets() {
                 // SLA hint: only meaningful while the ball is in the
                 // admin's court and a user message exists.
                 const awaitingAdmin =
-                  (t.status === "open" || t.status === "in_progress") &&
+                  (t.status === 'open' || t.status === 'in_progress') &&
                   t.last_user_message_at;
                 return (
                   <TableRow
@@ -227,9 +227,8 @@ export function AdminTickets() {
                         <span className="truncate font-medium">
                           {t.subject}
                         </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {t.created_by_name ?? "Unknown"} ·{" "}
-                          {label(t.category)}
+                        <span className="text-muted-foreground truncate text-xs">
+                          {t.created_by_name ?? 'Unknown'} · {label(t.category)}
                         </span>
                       </span>
                     </TableCell>
@@ -239,8 +238,8 @@ export function AdminTickets() {
                     <TableCell>
                       <span
                         className={cn(
-                          "capitalize",
-                          priorityClass[t.priority] ?? "",
+                          'capitalize',
+                          priorityClass[t.priority] ?? ''
                         )}
                       >
                         {t.priority}
@@ -253,7 +252,7 @@ export function AdminTickets() {
                     </TableCell>
                     <TableCell>
                       {awaitingAdmin ? (
-                        <span className="text-sm text-destructive">
+                        <span className="text-destructive text-sm">
                           {timeAgo(t.last_user_message_at!)}
                         </span>
                       ) : (
@@ -320,7 +319,7 @@ function TicketThread({
     messages: TicketMessage[];
   }>(key, jsonFetcher, { refreshInterval: 15_000 });
 
-  const [reply, setReply] = useState("");
+  const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [updating, setUpdating] = useState(false);
 
@@ -332,37 +331,37 @@ function TicketThread({
     setSending(true);
     try {
       const res = await fetch(`/api/admin/tickets/${ticketId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body }),
       });
       const payload = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(payload?.error ?? "Failed to send reply");
-      setReply("");
+      if (!res.ok) throw new Error(payload?.error ?? 'Failed to send reply');
+      setReply('');
       await mutate();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setSending(false);
     }
   }
 
-  async function patchTicket(patch: { status?: string; assign?: "me" | null }) {
+  async function patchTicket(patch: { status?: string; assign?: 'me' | null }) {
     setUpdating(true);
     try {
       const res = await fetch(`/api/admin/tickets/${ticketId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(payload?.error ?? "Failed to update the ticket");
+        throw new Error(payload?.error ?? 'Failed to update the ticket');
       }
       await mutate();
-      toast.success("Ticket updated");
+      toast.success('Ticket updated');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setUpdating(false);
     }
@@ -378,12 +377,12 @@ function TicketThread({
           </Button>
           <div className="grid leading-tight">
             <h2 className="truncate text-sm font-semibold text-balance">
-              {ticket?.subject ?? "Ticket"}
+              {ticket?.subject ?? 'Ticket'}
             </h2>
             {ticket && (
-              <p className="text-xs text-muted-foreground">
-                {ticket.account_name} · {ticket.created_by_name ?? "Unknown"} ·{" "}
-                {label(ticket.category)} ·{" "}
+              <p className="text-muted-foreground text-xs">
+                {ticket.account_name} · {ticket.created_by_name ?? 'Unknown'} ·{' '}
+                {label(ticket.category)} ·{' '}
                 <span className="capitalize">{ticket.priority}</span>
               </p>
             )}
@@ -398,12 +397,12 @@ function TicketThread({
               disabled={updating}
               onClick={() =>
                 void patchTicket({
-                  assign: ticket.assigned_admin ? null : "me",
+                  assign: ticket.assigned_admin ? null : 'me',
                 })
               }
             >
               <UserCheck className="size-4" aria-hidden="true" />
-              {ticket.assigned_admin ? "Unassign" : "Assign to me"}
+              {ticket.assigned_admin ? 'Unassign' : 'Assign to me'}
             </Button>
             <Select
               value={ticket.status}
@@ -434,7 +433,7 @@ function TicketThread({
             <Skeleton className="ml-auto h-14 w-3/4" />
           </div>
         ) : (data?.messages ?? []).length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
+          <p className="text-muted-foreground py-6 text-center text-sm">
             No messages on this ticket yet.
           </p>
         ) : (
@@ -442,21 +441,21 @@ function TicketThread({
             <div
               key={m.id}
               className={cn(
-                "flex max-w-[85%] flex-col gap-1 rounded-lg p-3 text-sm",
+                'flex max-w-[85%] flex-col gap-1 rounded-lg p-3 text-sm',
                 m.is_admin_reply
-                  ? "self-end bg-primary text-primary-foreground"
-                  : "self-start bg-muted",
+                  ? 'bg-primary text-primary-foreground self-end'
+                  : 'bg-muted self-start'
               )}
             >
               <span
                 className={cn(
-                  "text-xs font-medium",
+                  'text-xs font-medium',
                   m.is_admin_reply
-                    ? "text-primary-foreground/80"
-                    : "text-muted-foreground",
+                    ? 'text-primary-foreground/80'
+                    : 'text-muted-foreground'
                 )}
               >
-                {m.is_admin_reply ? "Support" : (m.author_name ?? "User")} ·{" "}
+                {m.is_admin_reply ? 'Support' : (m.author_name ?? 'User')} ·{' '}
                 {timeAgo(m.created_at)}
               </span>
               <p className="whitespace-pre-wrap">{m.body}</p>

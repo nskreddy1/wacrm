@@ -1,20 +1,20 @@
-"use client"
+'use client';
 
-import { AppSidebar } from "@/components/layout/app-sidebar"
-import { DashboardCacheProvider } from "@/components/providers/dashboard-cache-provider"
-import { TeamChatWidget } from "@/features/team-chat/components/team-chat-widget"
-import { AssistantWidget } from "@/features/assistant/components/assistant-widget"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { AuthProvider } from "@/features/auth/hooks/use-auth"
-import type { NavAccess } from "@/lib/navigation/config"
-import type { SessionPayload } from "@/features/auth/lib/session-payload"
+import { AppSidebar } from '@/components/layout/app-sidebar';
+import { DashboardCacheProvider } from '@/components/providers/dashboard-cache-provider';
+import { TeamChatWidget } from '@/features/team-chat/components/team-chat-widget';
+import { AssistantWidget } from '@/features/assistant/components/assistant-widget';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { AuthProvider } from '@/features/auth/hooks/use-auth';
+import type { NavAccess } from '@/lib/navigation/config';
+import type { SessionPayload } from '@/features/auth/lib/session-payload';
 
 function DashboardShellInner({
   children,
   initialAccess,
 }: {
-  children: React.ReactNode
-  initialAccess: NavAccess | null
+  children: React.ReactNode;
+  initialAccess: NavAccess | null;
 }) {
   return (
     // h-dvh (not h-screen/100vh) tracks the *actual* dynamic viewport so the
@@ -24,7 +24,9 @@ function DashboardShellInner({
     <SidebarProvider className="h-dvh overflow-hidden overscroll-none">
       <AppSidebar initialAccess={initialAccess} />
       <SidebarInset className="flex min-w-0 flex-col overflow-hidden">
-        <main className="flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">{children}</main>
+        <main className="flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
+          {children}
+        </main>
       </SidebarInset>
       {/* Workspace-wide team chat (floating launcher, bottom-right). */}
       <TeamChatWidget />
@@ -32,7 +34,7 @@ function DashboardShellInner({
           read-only tools by default, write actions approved in-chat. */}
       <AssistantWidget />
     </SidebarProvider>
-  )
+  );
 }
 
 export function DashboardShell({
@@ -40,14 +42,14 @@ export function DashboardShell({
   initialAccess = null,
   initialSession = null,
 }: {
-  children: React.ReactNode
-  initialAccess?: NavAccess | null
+  children: React.ReactNode;
+  initialAccess?: NavAccess | null;
   /**
    * Server-resolved session payload. Seeds AuthProvider's SWR cache so
    * the first client paint after login shows the real account/profile
    * instead of placeholders while /api/v1/session fetches.
    */
-  initialSession?: SessionPayload | null
+  initialSession?: SessionPayload | null;
 }) {
   // DashboardCacheProvider must wrap AuthProvider: AuthProvider's
   // useSWR("/api/v1/session") relies on the global fetcher configured
@@ -56,8 +58,10 @@ export function DashboardShell({
   return (
     <DashboardCacheProvider>
       <AuthProvider initialSession={initialSession}>
-        <DashboardShellInner initialAccess={initialAccess}>{children}</DashboardShellInner>
+        <DashboardShellInner initialAccess={initialAccess}>
+          {children}
+        </DashboardShellInner>
       </AuthProvider>
     </DashboardCacheProvider>
-  )
+  );
 }

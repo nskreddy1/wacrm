@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { createClient } from '@/lib/supabase/client';
 
 function GoogleIcon() {
   return (
@@ -34,7 +34,10 @@ type GoogleAuthButtonProps = {
   label?: string;
 };
 
-export function GoogleAuthButton({ inviteToken, label = "Continue with Google" }: GoogleAuthButtonProps) {
+export function GoogleAuthButton({
+  inviteToken,
+  label = 'Continue with Google',
+}: GoogleAuthButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,8 +49,8 @@ export function GoogleAuthButton({ inviteToken, label = "Continue with Google" }
         process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
         `${window.location.origin}/auth/callback`;
       const redirectTo = inviteToken
-        ? `${callbackBase}${callbackBase.includes("?") ? "&" : "?"}next=${encodeURIComponent(
-            `/join/${inviteToken}`,
+        ? `${callbackBase}${callbackBase.includes('?') ? '&' : '?'}next=${encodeURIComponent(
+            `/join/${inviteToken}`
           )}`
         : callbackBase;
 
@@ -55,44 +58,52 @@ export function GoogleAuthButton({ inviteToken, label = "Continue with Google" }
       // When embedded (e.g. the v0 preview), get the URL without redirecting
       // and open it in a new top-level tab instead.
       const embedded = window.self !== window.top;
-      const { data, error: oauthError } = await createClient().auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo, skipBrowserRedirect: embedded },
-      });
+      const { data, error: oauthError } =
+        await createClient().auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo, skipBrowserRedirect: embedded },
+        });
 
       if (!oauthError && embedded && data?.url) {
-        window.open(data.url, "_blank", "noopener,noreferrer");
+        window.open(data.url, '_blank', 'noopener,noreferrer');
         setLoading(false);
         return;
       }
 
       if (oauthError) {
         setError(
-          oauthError.message.toLowerCase().includes("provider")
-            ? "Google sign-in is not enabled yet for this workspace."
-            : oauthError.message,
+          oauthError.message.toLowerCase().includes('provider')
+            ? 'Google sign-in is not enabled yet for this workspace.'
+            : oauthError.message
         );
         setLoading(false);
       }
       // On success the browser navigates away — keep the loading state.
     } catch {
-      setError("Could not start Google sign-in. Try again.");
+      setError('Could not start Google sign-in. Try again.');
       setLoading(false);
     }
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <Button type="button" variant="outline" size="xl" className="w-full" onClick={handleGoogle} disabled={loading}>
+      <Button
+        type="button"
+        variant="outline"
+        size="xl"
+        className="w-full"
+        onClick={handleGoogle}
+        disabled={loading}
+      >
         {loading ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         ) : (
           <GoogleIcon />
         )}
-        {loading ? "Redirecting to Google..." : label}
+        {loading ? 'Redirecting to Google...' : label}
       </Button>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-destructive text-sm">
           {error}
         </p>
       )}

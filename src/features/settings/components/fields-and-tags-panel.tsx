@@ -37,7 +37,10 @@ import type { DealFieldLayout } from '@/features/pipelines/lib/validation';
 
 const EMPTY_DEAL_FIELD_LAYOUT: DealFieldLayout = { hidden: [], custom: [] };
 import { isReservedContactField } from '@/lib/data/contacts/validation';
-import type { ContactField, ContactPreferences } from '@/lib/data/contacts/types';
+import type {
+  ContactField,
+  ContactPreferences,
+} from '@/lib/data/contacts/types';
 
 const CUSTOM_FIELD_LIMIT = 10;
 
@@ -91,21 +94,21 @@ function FieldRow({
   onEdit?: (field: DisplayField) => void;
 }) {
   return (
-    <div className="group/field relative flex min-h-10 items-center gap-1.5 overflow-hidden rounded-md border border-border bg-card px-3.5 py-2 text-sm transition-colors hover:border-primary/40">
+    <div className="group/field border-border bg-card hover:border-primary/40 relative flex min-h-10 items-center gap-1.5 overflow-hidden rounded-md border px-3.5 py-2 text-sm transition-colors">
       {field.required && (
         <span
           aria-hidden
-          className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-destructive"
+          className="bg-destructive absolute inset-y-1.5 left-0 w-[3px] rounded-r-full"
         />
       )}
-      <span className="truncate text-foreground">{field.label}</span>
+      <span className="text-foreground truncate">{field.label}</span>
       {field.unique && (
-        <span className="shrink-0 text-sm text-muted-foreground">(Unique)</span>
+        <span className="text-muted-foreground shrink-0 text-sm">(Unique)</span>
       )}
       {field.custom && (
         <span
           aria-hidden
-          className="mb-1.5 size-1.5 shrink-0 self-center rounded-full bg-primary"
+          className="bg-primary mb-1.5 size-1.5 shrink-0 self-center rounded-full"
         />
       )}
       {field.custom && <span className="sr-only">Custom field</span>}
@@ -114,7 +117,7 @@ function FieldRow({
           type="button"
           onClick={() => onEdit(field)}
           aria-label={`Edit ${field.label}`}
-          className="absolute inset-y-0 right-0 hidden items-center bg-card pl-2 pr-3 text-muted-foreground hover:text-primary group-hover/field:flex"
+          className="bg-card text-muted-foreground hover:text-primary absolute inset-y-0 right-0 hidden items-center pr-3 pl-2 group-hover/field:flex"
         >
           <svg
             aria-hidden
@@ -152,11 +155,11 @@ function ModuleCard({
   onEditField?: (field: DisplayField) => void;
 }) {
   return (
-    <article className="flex h-full min-h-[440px] w-96 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
-      <header className="border-b border-border bg-muted/60 px-4 py-3.5">
-        <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+    <article className="border-border bg-card flex h-full min-h-[440px] w-96 shrink-0 flex-col overflow-hidden rounded-lg border">
+      <header className="border-border bg-muted/60 border-b px-4 py-3.5">
+        <h3 className="text-foreground text-[15px] font-semibold">{title}</h3>
       </header>
-      <div className="app-scrollbar flex-1 space-y-5 overflow-y-auto px-4 pb-4 pt-4">
+      <div className="app-scrollbar flex-1 space-y-5 overflow-y-auto px-4 pt-4 pb-4">
         {loading ? (
           <div className="space-y-2.5">
             <Skeleton className="h-10 w-full" />
@@ -169,7 +172,9 @@ function ModuleCard({
             .filter((section) => section.fields.length > 0)
             .map((section) => (
               <section key={section.title} className="space-y-2.5">
-                <h4 className="text-sm font-bold text-foreground">{section.title}</h4>
+                <h4 className="text-foreground text-sm font-bold">
+                  {section.title}
+                </h4>
                 <div className="space-y-2.5">
                   {section.fields.map((field) => (
                     <FieldRow
@@ -183,22 +188,22 @@ function ModuleCard({
             ))
         )}
       </div>
-      <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3.5">
+      <footer className="border-border flex items-center justify-between gap-3 border-t px-4 py-3.5">
         {canEdit ? (
           <button
             type="button"
             onClick={onCustomize}
-            className="text-sm font-semibold text-primary hover:underline"
+            className="text-primary text-sm font-semibold hover:underline"
           >
             Customize Fields
           </button>
         ) : (
-          <span className="text-sm text-muted-foreground">View only</span>
+          <span className="text-muted-foreground text-sm">View only</span>
         )}
-        <span className="flex items-center gap-1.5 whitespace-nowrap text-[13px] text-muted-foreground">
-          <span aria-hidden className="size-1.5 rounded-full bg-primary/70" />
+        <span className="text-muted-foreground flex items-center gap-1.5 text-[13px] whitespace-nowrap">
+          <span aria-hidden className="bg-primary/70 size-1.5 rounded-full" />
           Used Custom Fields
-          <span className="font-bold text-foreground">
+          <span className="text-foreground font-bold">
             {'\u00A0'}:{'\u00A0'}
             {usedCustom}/{CUSTOM_FIELD_LIMIT}
           </span>
@@ -234,7 +239,10 @@ const SIMPLE_TYPE_META: Record<string, { type: string; sub: string }> = {
 function moduleSections(module: ModuleKey, layout: ModuleFieldLayout) {
   const registry = MODULE_FIELD_REGISTRY[module];
   const hidden = new Set(layout.hidden);
-  const standard = (f: { id: string; label: string; typeLabel?: string }, required: boolean): DisplayField => ({
+  const standard = (
+    f: { id: string; label: string; typeLabel?: string },
+    required: boolean
+  ): DisplayField => ({
     id: f.id,
     label: f.label,
     required,
@@ -247,21 +255,21 @@ function moduleSections(module: ModuleKey, layout: ModuleFieldLayout) {
       title: registry.sectionTitle,
       fields: [
         ...registry.required.map((f) => standard(f, true)),
-        ...registry.optional.filter((f) => !hidden.has(f.id)).map((f) => standard(f, false)),
+        ...registry.optional
+          .filter((f) => !hidden.has(f.id))
+          .map((f) => standard(f, false)),
       ],
     },
     {
       title: 'Additional Information',
-      fields: layout.custom.map(
-        (f): DisplayField => ({
-          id: f.id,
-          label: f.label,
-          custom: true,
-          typeLabel: SIMPLE_TYPE_META[f.type]?.type ?? 'Text',
-          subTypeLabel: SIMPLE_TYPE_META[f.type]?.sub ?? 'Single Line',
-          editable: true,
-        }),
-      ),
+      fields: layout.custom.map((f): DisplayField => ({
+        id: f.id,
+        label: f.label,
+        custom: true,
+        typeLabel: SIMPLE_TYPE_META[f.type]?.type ?? 'Text',
+        subTypeLabel: SIMPLE_TYPE_META[f.type]?.sub ?? 'Single Line',
+        editable: true,
+      })),
     },
   ];
 }
@@ -278,11 +286,14 @@ function ModuleFieldsCard({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<DisplayField | null>(null);
-  const { data, isLoading, mutate } = useSWR(`module-fields:${module}`, async () => {
-    const result = await getModuleFieldLayoutAction(module);
-    if (!result.ok) throw new Error(result.error);
-    return result.data;
-  });
+  const { data, isLoading, mutate } = useSWR(
+    `module-fields:${module}`,
+    async () => {
+      const result = await getModuleFieldLayoutAction(module);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    }
+  );
 
   const layout = data ?? EMPTY_MODULE_FIELD_LAYOUT;
 
@@ -313,7 +324,7 @@ function ModuleFieldsCard({
               const next: ModuleFieldLayout = {
                 ...layout,
                 custom: layout.custom.map((f) =>
-                  f.id === editing.id ? { ...f, label } : f,
+                  f.id === editing.id ? { ...f, label } : f
                 ),
               };
               const result = await saveModuleFieldLayoutAction(module, next);
@@ -322,7 +333,9 @@ function ModuleFieldsCard({
               toast.success('Field updated');
               setEditing(null);
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Unable to save field');
+              toast.error(
+                error instanceof Error ? error.message : 'Unable to save field'
+              );
             } finally {
               setSaving(false);
             }
@@ -346,7 +359,9 @@ function ModuleFieldsCard({
               toast.success('Fields updated');
               setOpen(false);
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Unable to save fields');
+              toast.error(
+                error instanceof Error ? error.message : 'Unable to save fields'
+              );
             } finally {
               setSaving(false);
             }
@@ -363,14 +378,19 @@ function ContactFieldsCard({ canEdit }: { canEdit: boolean }) {
   const [saving, setSaving] = useState(false);
   const { data, isLoading, mutate } = useSWR<ContactWorkspacePayload>(
     '/api/v1/workspace/contacts',
-    fetchJson,
+    fetchJson
   );
 
   const fields = useMemo(() => data?.fields ?? [], [data]);
   const preferences = useMemo<ContactPreferences>(
     () =>
-      data?.preferences ?? { visible: [], order: [], widths: {}, frozen: [] as string[] },
-    [data],
+      data?.preferences ?? {
+        visible: [],
+        order: [],
+        widths: {},
+        frozen: [] as string[],
+      },
+    [data]
   );
 
   const sections = useMemo(() => {
@@ -394,43 +414,40 @@ function ContactFieldsCard({ canEdit }: { canEdit: boolean }) {
         title: 'Contact Information',
         fields: shown
           .filter((field) => !isCustom(field))
-          .map(
-            (field): DisplayField => ({
-              id: field.id,
-              label: field.label,
-              required: field.required,
-              unique: field.unique,
-              editable: false,
-              ...meta(field),
-            }),
-          ),
+          .map((field): DisplayField => ({
+            id: field.id,
+            label: field.label,
+            required: field.required,
+            unique: field.unique,
+            editable: false,
+            ...meta(field),
+          })),
       },
       {
         title: 'Additional Information',
         fields: shown
           .filter((field) => isCustom(field))
-          .map(
-            (field): DisplayField => ({
-              id: field.id,
-              label: field.label,
-              custom: true,
-              required: field.required,
-              unique: field.unique,
-              editable: true,
-              canToggleRequired: true,
-              canToggleUnique: true,
-              ...meta(field),
-            }),
-          ),
+          .map((field): DisplayField => ({
+            id: field.id,
+            label: field.label,
+            custom: true,
+            required: field.required,
+            unique: field.unique,
+            editable: true,
+            canToggleRequired: true,
+            canToggleUnique: true,
+            ...meta(field),
+          })),
       },
     ];
   }, [fields, preferences]);
 
   const usedCustom = useMemo(
     () =>
-      fields.filter((field) => field.custom && !isReservedContactField(field.label))
-        .length,
-    [fields],
+      fields.filter(
+        (field) => field.custom && !isReservedContactField(field.label)
+      ).length,
+    [fields]
   );
 
   return (
@@ -481,7 +498,9 @@ function ContactFieldsCard({ canEdit }: { canEdit: boolean }) {
               toast.success('Field updated');
               setEditing(null);
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Unable to save field');
+              toast.error(
+                error instanceof Error ? error.message : 'Unable to save field'
+              );
             } finally {
               setSaving(false);
             }
@@ -515,18 +534,21 @@ function PipelineFieldsCard({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<DisplayField | null>(null);
-  const { data, isLoading, mutate } = useSWR(`deal-fields:${pipeline.id}`, async () => {
-    const result = await getDealFieldLayoutAction(pipeline.id);
-    if (!result.ok) throw new Error(result.error ?? 'Unable to load layout');
-    return result.data ?? EMPTY_DEAL_FIELD_LAYOUT;
-  });
+  const { data, isLoading, mutate } = useSWR(
+    `deal-fields:${pipeline.id}`,
+    async () => {
+      const result = await getDealFieldLayoutAction(pipeline.id);
+      if (!result.ok) throw new Error(result.error ?? 'Unable to load layout');
+      return result.data ?? EMPTY_DEAL_FIELD_LAYOUT;
+    }
+  );
 
   const layout: DealFieldLayout = data ?? EMPTY_DEAL_FIELD_LAYOUT;
   const hidden = new Set(layout.hidden);
 
   const standard = (
     f: { id: string; label: string; typeLabel?: string },
-    required: boolean,
+    required: boolean
   ): DisplayField => ({
     id: f.id,
     label: f.label,
@@ -542,22 +564,20 @@ function PipelineFieldsCard({
       fields: [
         ...DEAL_REQUIRED_FIELDS.map((f) => standard(f, true)),
         ...DEAL_OPTIONAL_FIELDS.filter((f) => !hidden.has(f.id)).map((f) =>
-          standard(f, false),
+          standard(f, false)
         ),
       ],
     },
     {
       title: 'Additional Information',
-      fields: layout.custom.map(
-        (f): DisplayField => ({
-          id: f.id,
-          label: f.label,
-          custom: true,
-          typeLabel: SIMPLE_TYPE_META[f.type]?.type ?? 'Text',
-          subTypeLabel: SIMPLE_TYPE_META[f.type]?.sub ?? 'Single Line',
-          editable: true,
-        }),
-      ),
+      fields: layout.custom.map((f): DisplayField => ({
+        id: f.id,
+        label: f.label,
+        custom: true,
+        typeLabel: SIMPLE_TYPE_META[f.type]?.type ?? 'Text',
+        subTypeLabel: SIMPLE_TYPE_META[f.type]?.sub ?? 'Single Line',
+        editable: true,
+      })),
     },
   ];
 
@@ -588,16 +608,19 @@ function PipelineFieldsCard({
               const next: DealFieldLayout = {
                 ...layout,
                 custom: layout.custom.map((f) =>
-                  f.id === editing.id ? { ...f, label } : f,
+                  f.id === editing.id ? { ...f, label } : f
                 ),
               };
               const result = await saveDealFieldLayoutAction(pipeline.id, next);
-              if (!result.ok) throw new Error(result.error ?? 'Unable to save field');
+              if (!result.ok)
+                throw new Error(result.error ?? 'Unable to save field');
               await mutate(result.data ?? next, { revalidate: false });
               toast.success('Field updated');
               setEditing(null);
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Unable to save field');
+              toast.error(
+                error instanceof Error ? error.message : 'Unable to save field'
+              );
             } finally {
               setSaving(false);
             }
@@ -616,12 +639,15 @@ function PipelineFieldsCard({
             setSaving(true);
             try {
               const result = await saveDealFieldLayoutAction(pipeline.id, next);
-              if (!result.ok) throw new Error(result.error ?? 'Unable to save layout');
+              if (!result.ok)
+                throw new Error(result.error ?? 'Unable to save layout');
               await mutate(result.data ?? next, { revalidate: false });
               toast.success('Deal fields updated');
               setOpen(false);
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Unable to save fields');
+              toast.error(
+                error instanceof Error ? error.message : 'Unable to save fields'
+              );
             } finally {
               setSaving(false);
             }
@@ -659,13 +685,20 @@ export function FieldsAndTagsPanel() {
 
   const { data: resources, isLoading: pipelinesLoading } = useSWR<{
     pipelines: { id: string; name: string }[];
-  }>(tab === 'pipelines' ? '/api/v1/workspace/automation-resources' : null, fetchJson);
+  }>(
+    tab === 'pipelines' ? '/api/v1/workspace/automation-resources' : null,
+    fetchJson
+  );
 
   return (
     <section className="animate-in fade-in-50 flex min-h-0 flex-1 flex-col gap-4 duration-200">
       <h2 className="sr-only">{t('title')}</h2>
 
-      <div role="tablist" aria-label={t('title')} className="flex gap-6 border-b border-border">
+      <div
+        role="tablist"
+        aria-label={t('title')}
+        className="border-border flex gap-6 border-b"
+      >
         {TABS.map((item) => (
           <button
             key={item.key}
@@ -676,7 +709,7 @@ export function FieldsAndTagsPanel() {
               '-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors',
               tab === item.key
                 ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+                : 'text-muted-foreground hover:text-foreground border-transparent'
             )}
           >
             {item.label}
@@ -692,7 +725,11 @@ export function FieldsAndTagsPanel() {
             title="Appointments"
             canEdit={canEditSettings}
           />
-          <ModuleFieldsCard module="catalog" title="Catalog" canEdit={canEditSettings} />
+          <ModuleFieldsCard
+            module="catalog"
+            title="Catalog"
+            canEdit={canEditSettings}
+          />
         </div>
       )}
 
@@ -703,7 +740,7 @@ export function FieldsAndTagsPanel() {
             <Skeleton className="h-64 w-72" />
           </div>
         ) : (resources?.pipelines?.length ?? 0) === 0 ? (
-          <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          <p className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
             No pipelines yet. Create a pipeline to customize its deal fields.
           </p>
         ) : (

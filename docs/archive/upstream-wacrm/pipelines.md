@@ -10,11 +10,11 @@ Pipelines is the sales side of `wacrm`. A Kanban board of deals moving through s
 
 ## Layout
 
-| Pane | What it shows |
-| --- | --- |
-| Top bar | Pipeline selector dropdown (swap between funnels), Manage pipelines entry, Add deal button. |
-| Analytics strip | Quick numbers: total pipeline value, count of deals per stage, won %. |
-| Board | One column per stage, left-to-right matching the configured order. Deal cards stack inside. |
+| Pane            | What it shows                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| Top bar         | Pipeline selector dropdown (swap between funnels), Manage pipelines entry, Add deal button. |
+| Analytics strip | Quick numbers: total pipeline value, count of deals per stage, won %.                       |
+| Board           | One column per stage, left-to-right matching the configured order. Deal cards stack inside. |
 
 Each column header is colour-coded per its stage colour (blue, yellow, orange, purple, green — pick what makes sense for your funnel). The "+" in a column header adds a deal directly into that stage.
 
@@ -26,16 +26,16 @@ Each column header is colour-coded per its stage colour (blue, yellow, orange, p
 
 A deal has:
 
-| Field | Use |
-| --- | --- |
-| Title | Short name visible on the card. |
-| Value | Numeric. New deals default to your account's currency (set in Settings → Deals); override per deal. |
-| Contact | The customer this deal is about. Nullable — see "Contact deletion" below. |
-| Conversation | The thread that spawned the deal, when applicable. Useful for one-click jump back to the chat. |
-| Assignee | The team member responsible. Pick from your tenant's user list. |
-| Expected close date | Optional forecasting field. |
-| Notes | Free-form. |
-| Status | `open` / `won` / `lost`. Independent of stage — see below. |
+| Field               | Use                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------- |
+| Title               | Short name visible on the card.                                                                     |
+| Value               | Numeric. New deals default to your account's currency (set in Settings → Deals); override per deal. |
+| Contact             | The customer this deal is about. Nullable — see "Contact deletion" below.                           |
+| Conversation        | The thread that spawned the deal, when applicable. Useful for one-click jump back to the chat.      |
+| Assignee            | The team member responsible. Pick from your tenant's user list.                                     |
+| Expected close date | Optional forecasting field.                                                                         |
+| Notes               | Free-form.                                                                                          |
+| Status              | `open` / `won` / `lost`. Independent of stage — see below.                                          |
 
 ## Status vs stage
 
@@ -51,7 +51,7 @@ This means a deal can be in the Proposal Sent stage with status `won` — you cl
 ### Create
 
 - Add deal in the top bar → form opens with stage defaulted to the first stage.
-- + in a column header → form opens with that column pre-picked.
+- - in a column header → form opens with that column pre-picked.
 - From the inbox contact sidebar → + Deal quickly creates a deal with the customer + conversation already attached.
 
 ### Edit

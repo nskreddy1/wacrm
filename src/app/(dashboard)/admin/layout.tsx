@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation";
+import { redirect } from 'next/navigation';
 
-import { requireSuperAdmin } from "@/features/auth/lib/super-admin";
-import { routes } from "@/lib/routing/routes";
-import { AdminNav } from "@/features/admin/components/admin-nav";
+import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
+import { routes } from '@/lib/routing/routes';
+import { AdminNav } from '@/features/admin/components/admin-nav';
 
 // ============================================================
 // /admin — platform operator console (server-gated layout).
@@ -15,7 +15,7 @@ import { AdminNav } from "@/features/admin/components/admin-nav";
 // never the only check.
 // ============================================================
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({
   children,
@@ -38,7 +38,7 @@ export default async function AdminLayout({
           <h1 className="text-xl font-semibold tracking-tight text-balance">
             Admin console
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Platform-wide workspace, support and channel operations. Every
             mutation is recorded in the audit trail.
           </p>

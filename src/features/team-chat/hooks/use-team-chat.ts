@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import useSWR from "swr";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useSWR from 'swr';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
-import { createClient } from "@/lib/supabase/client";
-import { useAuth } from "@/features/auth/hooks/use-auth";
+import { createClient } from '@/lib/supabase/client';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,7 +21,7 @@ export interface TeamChatMember {
 
 export interface TeamConversation {
   id: string;
-  kind: "dm" | "channel";
+  kind: 'dm' | 'channel';
   name: string | null;
   dm_key: string | null;
   created_by: string;
@@ -63,38 +63,49 @@ const EMPTY_UNREAD: Map<string, number> = new Map();
  * Pure fetcher: conversations + read cursors + unread counts in one
  * snapshot. Unread = recent messages newer than my cursor, sent by others.
  */
-async function fetchConversationsSnapshot(myId: string): Promise<ConversationsSnapshot> {
+async function fetchConversationsSnapshot(
+  myId: string
+): Promise<ConversationsSnapshot> {
   const supabase = createClient();
 
   const [{ data: convs, error }, { data: cursors }] = await Promise.all([
     supabase
-      .from("team_conversations")
-      .select("id, kind, name, dm_key, created_by, last_message_at, last_message_text, team_conversation_members(user_id)")
-      .order("last_message_at", { ascending: false, nullsFirst: false }),
-    supabase.from("team_read_cursors").select("conversation_id, last_read_at"),
+      .from('team_conversations')
+      .select(
+        'id, kind, name, dm_key, created_by, last_message_at, last_message_text, team_conversation_members(user_id)'
+      )
+      .order('last_message_at', { ascending: false, nullsFirst: false }),
+    supabase.from('team_read_cursors').select('conversation_id, last_read_at'),
   ]);
-  if (error) throw new Error(`[useTeamChat] conversations fetch error: ${error.message}`);
+  if (error)
+    throw new Error(
+      `[useTeamChat] conversations fetch error: ${error.message}`
+    );
 
   const conversations: TeamConversation[] = (convs ?? []).map((c) => ({
     id: c.id as string,
-    kind: c.kind as "dm" | "channel",
+    kind: c.kind as 'dm' | 'channel',
     name: (c.name as string | null) ?? null,
     dm_key: (c.dm_key as string | null) ?? null,
     created_by: c.created_by as string,
     last_message_at: (c.last_message_at as string | null) ?? null,
     last_message_text: (c.last_message_text as string | null) ?? null,
-    member_ids: ((c.team_conversation_members as { user_id: string }[]) ?? []).map((m) => m.user_id),
+    member_ids: (
+      (c.team_conversation_members as { user_id: string }[]) ?? []
+    ).map((m) => m.user_id),
   }));
 
   const cursorMap = new Map<string, string>();
   for (const cur of cursors ?? []) {
     cursorMap.set(cur.conversation_id as string, cur.last_read_at as string);
   }
-  const since = new Date(Date.now() - UNREAD_SCAN_DAYS * 86_400_000).toISOString();
+  const since = new Date(
+    Date.now() - UNREAD_SCAN_DAYS * 86_400_000
+  ).toISOString();
   const { data: recent } = await supabase
-    .from("team_messages")
-    .select("conversation_id, sender_id, created_at")
-    .gte("created_at", since)
+    .from('team_messages')
+    .select('conversation_id, sender_id, created_at')
+    .gte('created_at', since)
     .limit(1000);
   const unread = new Map<string, number>();
   for (const m of recent ?? []) {
@@ -124,11 +135,11 @@ export function useTeamChat(enabled: boolean) {
 
   // Workspace roster (existing endpoint, shared with Settings > Members).
   const { data: membersData } = useSWR<MembersResponse>(
-    enabled ? "/api/account/members" : null,
+    enabled ? '/api/account/members' : null
   );
   const members = useMemo(
     () => (membersData?.members ?? []).filter((m) => m.user_id !== myId),
-    [membersData, myId],
+    [membersData, myId]
   );
   const memberById = useMemo(() => {
     const map = new Map<string, TeamChatMember>();
@@ -154,8 +165,8 @@ export function useTeamChat(enabled: boolean) {
   // SWR owns the fetch (key is null until enabled and signed in);
   // realtime events overlay the cached snapshot via optimistic mutate.
   const { data: convData, mutate: mutateConvs } = useSWR(
-    enabled && myId ? (["team-chat-conversations", myId] as const) : null,
-    ([, uid]) => fetchConversationsSnapshot(uid),
+    enabled && myId ? (['team-chat-conversations', myId] as const) : null,
+    ([, uid]) => fetchConversationsSnapshot(uid)
   );
   const conversations = convData?.conversations ?? EMPTY_CONVERSATIONS;
   const unread = convData?.unread ?? EMPTY_UNREAD;
@@ -166,13 +177,13 @@ export function useTeamChat(enabled: boolean) {
     const uid = myIdRef.current;
     if (!uid) return;
     const supabase = createClient();
-    await supabase.from("team_read_cursors").upsert(
+    await supabase.from('team_read_cursors').upsert(
       {
         conversation_id: conversationId,
         user_id: uid,
         last_read_at: new Date().toISOString(),
       },
-      { onConflict: "conversation_id,user_id" },
+      { onConflict: 'conversation_id,user_id' }
     );
   }, []);
 
@@ -184,8 +195,8 @@ export function useTeamChat(enabled: boolean) {
     const channel: RealtimeChannel = supabase
       .channel(`team-chat:${accountId}`)
       .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "team_messages" },
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'team_messages' },
         (payload) => {
           const msg = payload.new as TeamMessage;
           const mine = msg.sender_id === myIdRef.current;
@@ -199,7 +210,9 @@ export function useTeamChat(enabled: boolean) {
           void mutateConvs(
             (prev) => {
               if (!prev) return prev;
-              const idx = prev.conversations.findIndex((c) => c.id === msg.conversation_id);
+              const idx = prev.conversations.findIndex(
+                (c) => c.id === msg.conversation_id
+              );
               if (idx === -1) {
                 needsRefetch = true;
                 return prev;
@@ -211,16 +224,19 @@ export function useTeamChat(enabled: boolean) {
                 last_message_text: msg.body.slice(0, 140),
               };
               nextConvs.sort((a, b) =>
-                (b.last_message_at ?? "").localeCompare(a.last_message_at ?? ""),
+                (b.last_message_at ?? '').localeCompare(a.last_message_at ?? '')
               );
               let nextUnread = prev.unread;
               if (!mine && !isActive) {
                 nextUnread = new Map(prev.unread);
-                nextUnread.set(msg.conversation_id, (nextUnread.get(msg.conversation_id) ?? 0) + 1);
+                nextUnread.set(
+                  msg.conversation_id,
+                  (nextUnread.get(msg.conversation_id) ?? 0) + 1
+                );
               }
               return { conversations: nextConvs, unread: nextUnread };
             },
-            { revalidate: false },
+            { revalidate: false }
           ).then(() => {
             if (needsRefetch) void mutateConvs();
           });
@@ -228,11 +244,11 @@ export function useTeamChat(enabled: boolean) {
           if (isActive) {
             // Viewing this thread: append & immediately mark read.
             setMessages((prev) =>
-              prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+              prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
             );
             if (!mine) void markReadInternal(msg.conversation_id);
           }
-        },
+        }
       )
       .subscribe();
 
@@ -254,23 +270,23 @@ export function useTeamChat(enabled: boolean) {
           nextUnread.delete(conversationId);
           return { conversations: prev.conversations, unread: nextUnread };
         },
-        { revalidate: false },
+        { revalidate: false }
       );
       const supabase = createClient();
       const { data, error } = await supabase
-        .from("team_messages")
-        .select("id, conversation_id, sender_id, body, created_at")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
+        .from('team_messages')
+        .select('id, conversation_id, sender_id, body, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
         .limit(200);
       if (error) {
-        console.error("[useTeamChat] messages fetch error:", error.message);
+        console.error('[useTeamChat] messages fetch error:', error.message);
       }
       setMessages((data as TeamMessage[]) ?? []);
       setLoading(false);
       void markReadInternal(conversationId);
     },
-    [markReadInternal, mutateConvs],
+    [markReadInternal, mutateConvs]
   );
 
   const closeConversation = useCallback(() => {
@@ -282,7 +298,7 @@ export function useTeamChat(enabled: boolean) {
   const openDm = useCallback(
     async (otherUserId: string): Promise<string | null> => {
       if (!myId || !accountId) return null;
-      const dmKey = [myId, otherUserId].sort().join(":");
+      const dmKey = [myId, otherUserId].sort().join(':');
       const existing = conversations.find((c) => c.dm_key === dmKey);
       if (existing) {
         await openConversation(existing.id);
@@ -292,65 +308,86 @@ export function useTeamChat(enabled: boolean) {
       // Someone else may have created it (RLS hides DMs we're not in
       // until membership rows exist, so check by key via insert race).
       const { data: created, error } = await supabase
-        .from("team_conversations")
-        .insert({ account_id: accountId, kind: "dm", dm_key: dmKey, created_by: myId })
-        .select("id")
+        .from('team_conversations')
+        .insert({
+          account_id: accountId,
+          kind: 'dm',
+          dm_key: dmKey,
+          created_by: myId,
+        })
+        .select('id')
         .single();
       if (error) {
         // Unique violation -> the pair already has a DM; reload to pick it up.
-        if (error.code === "23505") {
+        if (error.code === '23505') {
           await loadConversations();
           return null;
         }
-        console.error("[useTeamChat] openDm error:", error.message);
+        console.error('[useTeamChat] openDm error:', error.message);
         return null;
       }
       const convId = created.id as string;
-      const { error: memberError } = await supabase.from("team_conversation_members").insert([
-        { conversation_id: convId, user_id: myId },
-        { conversation_id: convId, user_id: otherUserId },
-      ]);
+      const { error: memberError } = await supabase
+        .from('team_conversation_members')
+        .insert([
+          { conversation_id: convId, user_id: myId },
+          { conversation_id: convId, user_id: otherUserId },
+        ]);
       if (memberError) {
-        console.error("[useTeamChat] openDm members error:", memberError.message);
+        console.error(
+          '[useTeamChat] openDm members error:',
+          memberError.message
+        );
         return null;
       }
       await loadConversations();
       await openConversation(convId);
       return convId;
     },
-    [myId, accountId, conversations, openConversation, loadConversations],
+    [myId, accountId, conversations, openConversation, loadConversations]
   );
 
   // ----- create a channel (admin+ per RLS) -----
   const createChannel = useCallback(
-    async (name: string, memberIds: string[]): Promise<{ ok: boolean; error?: string }> => {
-      if (!myId || !accountId) return { ok: false, error: "Not signed in" };
+    async (
+      name: string,
+      memberIds: string[]
+    ): Promise<{ ok: boolean; error?: string }> => {
+      if (!myId || !accountId) return { ok: false, error: 'Not signed in' };
       const supabase = createClient();
       const { data: created, error } = await supabase
-        .from("team_conversations")
-        .insert({ account_id: accountId, kind: "channel", name: name.trim(), created_by: myId })
-        .select("id")
+        .from('team_conversations')
+        .insert({
+          account_id: accountId,
+          kind: 'channel',
+          name: name.trim(),
+          created_by: myId,
+        })
+        .select('id')
         .single();
       if (error) {
-        const friendly = error.code === "42501"
-          ? "Only workspace admins can create channels."
-          : error.message;
+        const friendly =
+          error.code === '42501'
+            ? 'Only workspace admins can create channels.'
+            : error.message;
         return { ok: false, error: friendly };
       }
       const convId = created.id as string;
-      const rows = [myId, ...memberIds.filter((id) => id !== myId)].map((uid) => ({
-        conversation_id: convId,
-        user_id: uid,
-      }));
+      const rows = [myId, ...memberIds.filter((id) => id !== myId)].map(
+        (uid) => ({
+          conversation_id: convId,
+          user_id: uid,
+        })
+      );
       const { error: memberError } = await supabase
-        .from("team_conversation_members")
+        .from('team_conversation_members')
         .insert(rows);
       if (memberError) return { ok: false, error: memberError.message };
       await loadConversations();
       await openConversation(convId);
       return { ok: true };
     },
-    [myId, accountId, loadConversations, openConversation],
+    [myId, accountId, loadConversations, openConversation]
   );
 
   // ----- send -----
@@ -362,21 +399,28 @@ export function useTeamChat(enabled: boolean) {
       setSending(true);
       const supabase = createClient();
       const { data, error } = await supabase
-        .from("team_messages")
-        .insert({ conversation_id: convId, account_id: accountId, sender_id: uid, body: body.trim() })
-        .select("id, conversation_id, sender_id, body, created_at")
+        .from('team_messages')
+        .insert({
+          conversation_id: convId,
+          account_id: accountId,
+          sender_id: uid,
+          body: body.trim(),
+        })
+        .select('id, conversation_id, sender_id, body, created_at')
         .single();
       setSending(false);
       if (error) {
-        console.error("[useTeamChat] send error:", error.message);
+        console.error('[useTeamChat] send error:', error.message);
         return;
       }
       // Optimistically append (realtime will de-dupe by id).
       const msg = data as TeamMessage;
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+      );
       void markReadInternal(convId);
     },
-    [accountId, markReadInternal],
+    [accountId, markReadInternal]
   );
 
   // ----- derived -----
@@ -389,12 +433,16 @@ export function useTeamChat(enabled: boolean) {
   /** Display title + the "other" user for DMs (for presence dots). */
   const describeConversation = useCallback(
     (conv: TeamConversation): { title: string; dmUserId: string | null } => {
-      if (conv.kind === "channel") return { title: conv.name ?? "Channel", dmUserId: null };
+      if (conv.kind === 'channel')
+        return { title: conv.name ?? 'Channel', dmUserId: null };
       const otherId = conv.member_ids.find((id) => id !== myId) ?? null;
       const other = otherId ? memberById.get(otherId) : null;
-      return { title: other?.full_name || other?.email || "Direct message", dmUserId: otherId };
+      return {
+        title: other?.full_name || other?.email || 'Direct message',
+        dmUserId: otherId,
+      };
     },
-    [myId, memberById],
+    [myId, memberById]
   );
 
   return {
