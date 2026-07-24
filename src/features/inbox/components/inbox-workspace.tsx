@@ -13,7 +13,6 @@ import { useRealtime } from "@/features/inbox/hooks/use-realtime";
 import { ConversationList } from "@/features/inbox/components/conversation-list";
 import { MessageThread } from "@/features/inbox/components/message-thread";
 import { ContactSidebar } from "@/features/inbox/components/contact-sidebar";
-import { toast } from "sonner";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 

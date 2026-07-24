@@ -25,19 +25,30 @@ export interface AssistantToolContext {
   userId: string | null
 }
 
+/** The filter builder shape countRows callers narrow with. Keeping it
+ *  structural (rather than importing PostgrestFilterBuilder's five type
+ *  params) keeps call sites simple while staying fully typed. */
+type CountQuery = {
+  eq(column: string, value: string): CountQuery
+  gte(column: string, value: string): CountQuery
+  then<T>(
+    onfulfilled: (value: { count: number | null; error: unknown }) => T,
+  ): Promise<T>
+}
+
 /** Count helper: exact count without fetching rows. */
 async function countRows(
   db: SupabaseClient,
   table: string,
   accountId: string,
-  extra?: (q: any) => any,
+  extra?: (q: CountQuery) => CountQuery,
 ): Promise<number | null> {
   let q = db
     .from(table)
     .select('id', { count: 'exact', head: true })
-    .eq('account_id', accountId)
+    .eq('account_id', accountId) as unknown as CountQuery
   if (extra) q = extra(q)
-  const { count, error } = await q
+  const { count, error } = await q.then((res) => res)
   return error ? null : (count ?? 0)
 }
 

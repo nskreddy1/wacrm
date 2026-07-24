@@ -112,7 +112,6 @@ function conversationChannel(raw: string | null): Channel {
 export async function getDashboardOverview(ctx: AccountContext): Promise<DashboardOverview> {
   const now = Date.now()
   const since14d = new Date(now - 14 * DAY_MS).toISOString()
-  const since30d = new Date(now - 30 * DAY_MS).toISOString()
   const since60d = new Date(now - 60 * DAY_MS).toISOString()
 
   const [
