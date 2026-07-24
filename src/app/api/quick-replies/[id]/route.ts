@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
-import { supabaseAdmin } from '@/features/automations/lib/admin-client';
+import { supabaseAdmin } from '@/features/flows/lib/admin-client';
 import { validateInteractivePayload } from '@/features/whatsapp/lib/interactive';
 
 // Update / delete a single quick reply. Quick replies are account-

@@ -1219,7 +1219,13 @@ async function startNewRun(
 export type FlowAppEvent =
   | { type: 'new_contact_created' }
   | { type: 'tag_added'; tag_id: string }
-  | { type: 'conversation_assigned'; agent_id: string };
+  | { type: 'conversation_assigned'; agent_id: string }
+  /**
+   * A button/list tap that no active run consumed — lets a flow act
+   * as the target of quick-reply buttons sent outside any flow
+   * (broadcasts, agent messages with reply buttons, etc.).
+   */
+  | { type: 'interactive_reply'; reply_id: string };
 
 export interface DispatchEventInput {
   accountId: string;
@@ -1254,11 +1260,17 @@ export async function dispatchEventToFlows(
     for (const flowRaw of flows as FlowRow[]) {
       if (!flowRaw.entry_node_id) continue;
 
-      // Config filters — empty arrays mean "match any".
+      // Config filters — empty arrays mean "match any" (except
+      // interactive_reply, which always requires an exact id match).
       const cfg = (flowRaw.trigger_config ?? {}) as {
         tag_ids?: string[];
         agent_ids?: string[];
+        reply_ids?: string[];
       };
+      if (input.event.type === 'interactive_reply') {
+        const ids = Array.isArray(cfg.reply_ids) ? cfg.reply_ids : [];
+        if (!ids.includes(input.event.reply_id)) continue;
+      }
       if (
         input.event.type === 'tag_added' &&
         Array.isArray(cfg.tag_ids) &&

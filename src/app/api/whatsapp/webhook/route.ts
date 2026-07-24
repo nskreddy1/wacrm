@@ -12,8 +12,10 @@ import {
   isUniqueViolation,
 } from '@/features/contacts/lib/dedupe';
 import { verifyMetaWebhookSignature } from '@/features/whatsapp/lib/webhook-signature';
-import { runAutomationsForTrigger } from '@/features/automations/lib/engine';
-import { dispatchInboundToFlows } from '@/features/flows/lib/engine';
+import {
+  dispatchEventToFlows,
+  dispatchInboundToFlows,
+} from '@/features/flows/lib/engine';
 import { dispatchInboundToAiReply } from '@/features/assistant/lib/ai/auto-reply';
 import { dispatchWebhookEvent } from '@/features/webhooks/lib/deliver';
 import {
@@ -784,54 +786,32 @@ async function processMessage(
   });
   const flowConsumed = flowResult.consumed;
 
-  // Fire any automations that react to this webhook event. All dispatches
-  // run here (not earlier) so the contact, conversation, and inbound
-  // message all exist before any step — including send_message — runs.
-  // Fire-and-forget: a slow or failing automation must not block the
-  // webhook's 200 OK response to Meta.
+  // Workflows unification: inbound-driven triggers (keyword,
+  // first_inbound_message, new_message_received) are all evaluated
+  // inside dispatchInboundToFlows above. The remaining app-event
+  // triggers dispatch through the same flows engine here. Awaited —
+  // we're inside after(), and dispatchEventToFlows never rejects.
   const inboundText = contentText ?? message.text?.body ?? '';
-  const automationTriggers: (
-    | 'new_contact_created'
-    | 'first_inbound_message'
-    | 'new_message_received'
-    | 'keyword_match'
-    | 'interactive_reply'
-  )[] = [];
-  // Content-level triggers are suppressed when a flow consumed the
-  // message — see the comment block above.
-  if (!flowConsumed) {
-    automationTriggers.push('new_message_received', 'keyword_match');
-    // Interactive tap → fire the interactive_reply trigger too (only
-    // meaningful when a button/list reply actually arrived). Enables
-    // automation-only chained menus; when a Flow owns the menu it will
-    // have consumed the reply and this is skipped.
-    if (interactiveReplyId) {
-      automationTriggers.push('interactive_reply');
-    }
-  }
-  // new_contact_created fires only when the webhook just auto-created the
-  // contact row. first_inbound_message fires whenever this is the contact's
-  // first-ever customer-sent message — a superset that also catches
-  // manually-imported contacts sending for the first time. We dispatch both
-  // so users can pick whichever semantic they want; an automation that
-  // listens to only one trigger runs only when that trigger matches.
-  if (contactOutcome.wasCreated)
-    automationTriggers.unshift('new_contact_created');
-  if (isFirstInboundMessage)
-    automationTriggers.unshift('first_inbound_message');
-  for (const triggerType of automationTriggers) {
-    runAutomationsForTrigger({
+  if (contactOutcome.wasCreated) {
+    await dispatchEventToFlows({
       accountId,
-      triggerType,
       contactId: contactRecord.id,
-      context: {
-        message_text: inboundText,
-        conversation_id: conversation.id,
-        // Only set on interactive taps; drives the interactive_reply
-        // trigger's exact-id match.
-        interactive_reply_id: interactiveReplyId ?? undefined,
-      },
-    }).catch((err) => console.error('[automations] dispatch failed:', err));
+      conversationId: conversation.id,
+      event: { type: 'new_contact_created' },
+      messageText: inboundText,
+    });
+  }
+  // Interactive tap that no active run consumed → let a flow with an
+  // interactive_reply trigger claim it (chained menus started from
+  // broadcasts or agent-sent quick-reply buttons).
+  if (!flowConsumed && interactiveReplyId) {
+    await dispatchEventToFlows({
+      accountId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+      event: { type: 'interactive_reply', reply_id: interactiveReplyId },
+      messageText: inboundText,
+    });
   }
 
   // AI auto-reply. Runs only for plain-text inbound the deterministic
