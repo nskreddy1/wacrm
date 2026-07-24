@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Loader2, Pencil, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -41,12 +41,15 @@ export function ChannelConnectionSheet({
   open,
   onOpenChange,
   onChanged,
+  onEdit,
 }: {
   connection: Connection | null;
   channel: ChannelKind;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => Promise<unknown> | void;
+  /** Opens the setup sheet in edit mode. Hidden for platform-managed rows. */
+  onEdit?: (connection: Connection) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [recipient, setRecipient] = useState('');
@@ -233,6 +236,19 @@ export function ChannelConnectionSheet({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
+          {onEdit && connection.managed_by !== 'platform' ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                onOpenChange(false);
+                onEdit(connection);
+              }}
+              disabled={busy !== null}
+            >
+              <Pencil data-icon="inline-start" />
+              Edit
+            </Button>
+          ) : null}
           <Button onClick={test} disabled={busy !== null}>
             {busy === 'test' ? (
               <Loader2 data-icon="inline-start" className="animate-spin" />

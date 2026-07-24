@@ -643,6 +643,25 @@ export function ChannelConnections({
           if (!open) setDetailsConnection(null);
         }}
         onChanged={() => mutate()}
+        onEdit={(target) => {
+          // Edit in place: prefill from the row; stored credentials are
+          // kept server-side unless new ones are typed in the sheet.
+          setSetupInit({
+            provider: target.provider as ChannelSetupInit['provider'],
+            editId: target.id,
+            displayName: target.display_name,
+            externalIdentity: target.external_identity,
+            messagingServiceSid:
+              typeof (
+                target.configuration as { messaging_service_sid?: string }
+              )?.messaging_service_sid === 'string'
+                ? ((
+                    target.configuration as { messaging_service_sid?: string }
+                  ).messaging_service_sid ?? '')
+                : '',
+          });
+          setSetupOpen(true);
+        }}
       />
     </section>
   );

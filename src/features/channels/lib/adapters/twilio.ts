@@ -60,7 +60,13 @@ export class TwilioWhatsAppAdapter implements ChannelAdapter {
     // sender from the service's pool — WhatsApp senders are a supported
     // pool type (docs: /docs/messaging/services, "sender pool"). The
     // dedicated From number remains the default path.
-    const messagingServiceSid = credentials.value.messagingServiceSid?.trim();
+    // Precedence: plain configuration (editable in the connection
+    // sheet without retyping secrets) > encrypted credentials blob.
+    const configSid = (
+      message.connection.configuration as { messaging_service_sid?: string }
+    )?.messaging_service_sid?.trim();
+    const messagingServiceSid =
+      configSid || credentials.value.messagingServiceSid?.trim();
     const from = message.connection.external_identity;
     if (!messagingServiceSid && !from) {
       throw new Error(

@@ -134,7 +134,7 @@ export async function POST(request: Request) {
   const db = supabaseAdmin();
   // Channel-scoped lookup: the same Twilio number can hold separate
   // WhatsApp and SMS connections without cross-routing messages.
-  const { data: connection } = await db
+  let { data: connection } = await db
     .from('channel_connections')
     .select('*')
     .eq('provider', 'twilio')
@@ -142,6 +142,39 @@ export async function POST(request: Request) {
     .eq('external_identity', connectionIdentity)
     .eq('is_enabled', true)
     .maybeSingle();
+
+  // Status-callback fallback: Messaging Service sends report `From`
+  // as the pool sender Twilio picked, which may not equal the
+  // connection's stored external_identity. MessageSid is globally
+  // unique, so resolve the account through the message row and grab
+  // that account's enabled Twilio connection for this channel.
+  // Without this, delivery failures are silently dropped and stuck
+  // messages show "sent" forever — hiding real outbound problems.
+  if (!connection && isStatusCallback) {
+    const { data: msgRow } = await db
+      .from('messages')
+      .select('conversation_id, conversations!inner(account_id)')
+      .eq('message_id', messageSid)
+      .limit(1)
+      .maybeSingle();
+    const msgAccountId = (
+      msgRow as { conversations?: { account_id?: string } } | null
+    )?.conversations?.account_id;
+    if (msgAccountId) {
+      const { data: fallback } = await db
+        .from('channel_connections')
+        .select('*')
+        .eq('account_id', msgAccountId)
+        .eq('provider', 'twilio')
+        .eq('channel', channel)
+        .eq('is_enabled', true)
+        .order('is_primary', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      connection = fallback ?? null;
+    }
+  }
+
   if (!connection)
     return NextResponse.json({ error: 'Unknown destination' }, { status: 404 });
 

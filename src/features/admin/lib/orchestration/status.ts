@@ -88,10 +88,18 @@ export async function applyMessageDeliveryStatus(
 
   // 1) Mirror onto messages. No `.select()`: message_id is NOT unique
   //    (provider ids can repeat across numbers), so this updates 0..N
-  //    rows and must not assume a single row.
+  //    rows and must not assume a single row. Failures also persist
+  //    the provider's reason so the inbox can explain WHY a send
+  //    never reached the customer instead of a bare red icon.
+  const msgUpdate: Record<string, unknown> = { status: event.status };
+  if (event.status === 'failed' && (event.errorMessage || event.errorCode)) {
+    msgUpdate.error_message = event.errorCode
+      ? `${event.errorMessage ?? 'Delivery failed'} (${event.errorCode})`
+      : event.errorMessage;
+  }
   const { error: msgErr } = await db
     .from('messages')
-    .update({ status: event.status })
+    .update(msgUpdate)
     .eq('message_id', event.externalMessageId);
   if (msgErr) console.error('[status] messages update failed:', msgErr.message);
 

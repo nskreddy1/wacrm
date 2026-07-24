@@ -323,6 +323,8 @@ export interface Message {
   content_html?: string;
   provider_payload?: Record<string, unknown>;
   status: MessageStatus;
+  /** Provider-reported delivery failure reason (set when status = failed). */
+  error_message?: string | null;
   created_at: string;
   reply_to_message_id?: string;
   /**
