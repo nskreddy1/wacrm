@@ -189,7 +189,12 @@ export function AssistantWidget() {
                       }
 
                       const toolName = toolNameFromPart(part.type);
-                      if (!toolName || !('state' in part)) return null;
+                      if (
+                        !toolName ||
+                        !('state' in part) ||
+                        typeof part.state !== 'string'
+                      )
+                        return null;
                       const key = `${message.id}-${i}`;
 
                       // Approval card for write tools
