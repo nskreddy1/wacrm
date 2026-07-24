@@ -17,15 +17,22 @@
  */
 
 import {
+  Briefcase,
+  Clock,
+  FileText,
   Flag,
+  Globe,
   GitFork,
   Inbox,
   ListChecks,
   ListPlus,
   MessageCircle,
+  MessageSquareX,
   Paperclip,
+  PenLine,
   PlayCircle,
   Tag,
+  UserCheck,
   UserPlus,
   Workflow,
 } from 'lucide-react';
@@ -49,6 +56,14 @@ export type NodeType =
   | 'collect_input'
   | 'condition'
   | 'set_tag'
+  // Absorbed automation actions (Workflows unification)
+  | 'send_template'
+  | 'update_contact_field'
+  | 'assign_conversation'
+  | 'create_deal'
+  | 'send_webhook'
+  | 'close_conversation'
+  | 'wait'
   | 'handoff'
   | 'end';
 
@@ -77,12 +92,13 @@ export interface BuilderNode {
 // the canvas, so `start` is just the entry point under Flow control.
 // ------------------------------------------------------------
 
-export type NodeCategory = 'messaging' | 'logic' | 'flow';
+export type NodeCategory = 'messaging' | 'logic' | 'actions' | 'flow';
 
 /** Category labels + the order they render in the add-step menu. */
 export const NODE_CATEGORIES: { id: NodeCategory; label: string }[] = [
   { id: 'messaging', label: 'Messaging' },
   { id: 'logic', label: 'Logic & data' },
+  { id: 'actions', label: 'CRM actions' },
   { id: 'flow', label: 'Flow control' },
 ];
 
@@ -152,6 +168,55 @@ export const NODE_META: Record<
     blurb: 'Adds or removes a contact tag',
     category: 'logic',
   },
+  send_template: {
+    label: 'Send template',
+    icon: FileText,
+    color: 'text-blue-400',
+    blurb: 'Sends an approved WhatsApp template',
+    category: 'messaging',
+  },
+  update_contact_field: {
+    label: 'Update contact',
+    icon: PenLine,
+    color: 'text-teal-400',
+    blurb: 'Writes a contact field',
+    category: 'actions',
+  },
+  assign_conversation: {
+    label: 'Assign conversation',
+    icon: UserCheck,
+    color: 'text-orange-400',
+    blurb: 'Routes the chat to an agent',
+    category: 'actions',
+  },
+  create_deal: {
+    label: 'Create deal',
+    icon: Briefcase,
+    color: 'text-green-400',
+    blurb: 'Adds a deal to a pipeline stage',
+    category: 'actions',
+  },
+  send_webhook: {
+    label: 'Call webhook',
+    icon: Globe,
+    color: 'text-violet-400',
+    blurb: 'POSTs data to an external URL',
+    category: 'actions',
+  },
+  close_conversation: {
+    label: 'Close conversation',
+    icon: MessageSquareX,
+    color: 'text-red-400',
+    blurb: 'Marks the conversation closed',
+    category: 'actions',
+  },
+  wait: {
+    label: 'Wait',
+    icon: Clock,
+    color: 'text-yellow-400',
+    blurb: 'Pauses the flow for a duration',
+    category: 'flow',
+  },
   handoff: {
     label: 'Handoff to agent',
     icon: UserPlus,
@@ -205,6 +270,15 @@ const NODE_HUE: Record<NodeType, { l: number; c: number; h: number }> = {
   collect_input: { l: 0.65, c: 0.1, h: 185 }, // teal — capture
   condition: { l: 0.72, c: 0.15, h: 65 }, // amber — a fork in the road
   set_tag: { l: 0.65, c: 0.15, h: 350 }, // pink
+  // Absorbed action nodes — each gets a distinct hue in the same
+  // oklch family so the canvas stays scannable as graphs grow.
+  send_template: { l: 0.6, c: 0.15, h: 240 }, // blue — official template
+  update_contact_field: { l: 0.63, c: 0.11, h: 180 }, // cyan-teal — data write
+  assign_conversation: { l: 0.68, c: 0.15, h: 45 }, // orange — routing
+  create_deal: { l: 0.64, c: 0.14, h: 145 }, // green — money
+  send_webhook: { l: 0.58, c: 0.16, h: 305 }, // violet — external call
+  close_conversation: { l: 0.6, c: 0.17, h: 25 }, // red — terminal-ish
+  wait: { l: 0.75, c: 0.13, h: 90 }, // yellow — time
   handoff: { l: 0.65, c: 0.17, h: 16 }, // rose — hands off
   end: { l: 0.55, c: 0.01, h: 260 }, // neutral grey — terminal
 };
@@ -451,6 +525,56 @@ export function summarizeNode(
     case 'handoff': {
       const note = typeof cfg.note === 'string' ? cfg.note : '';
       return note.length > 0 ? truncate(note) : null;
+    }
+
+    // ---- Absorbed automation actions ----
+
+    case 'send_template': {
+      const name =
+        typeof cfg.template_name === 'string' ? cfg.template_name : '';
+      const lang = typeof cfg.language === 'string' ? cfg.language : '';
+      if (!name) return null;
+      return lang ? `${truncate(name, 50)} · ${lang}` : truncate(name, 60);
+    }
+    case 'update_contact_field': {
+      const field = typeof cfg.field === 'string' ? cfg.field : '';
+      const value = typeof cfg.value === 'string' ? cfg.value : '';
+      if (!field) return null;
+      const label = field.startsWith('custom:')
+        ? `custom.${field.slice(7, 15)}…`
+        : field;
+      return value ? `${label} = "${truncate(value, 40)}"` : `${label} (clear)`;
+    }
+    case 'assign_conversation': {
+      if (cfg.mode === 'round_robin') return 'Round-robin across agents';
+      const agent = typeof cfg.agent_id === 'string' ? cfg.agent_id : '';
+      return agent ? `Agent ${agent.slice(0, 8)}…` : null;
+    }
+    case 'create_deal': {
+      const title = typeof cfg.title === 'string' ? cfg.title : '';
+      const value = typeof cfg.value === 'number' ? cfg.value : null;
+      if (!title) return null;
+      return value !== null
+        ? `${truncate(title, 45)} · ${value}`
+        : truncate(title, 60);
+    }
+    case 'send_webhook': {
+      const url = typeof cfg.url === 'string' ? cfg.url : '';
+      if (!url) return null;
+      try {
+        const u = new URL(url);
+        return `POST ${u.hostname}${truncate(u.pathname, 25)}`;
+      } catch {
+        return truncate(url, 60);
+      }
+    }
+    case 'close_conversation':
+      return 'Closes the conversation';
+    case 'wait': {
+      const amount = typeof cfg.amount === 'number' ? cfg.amount : null;
+      const unit = typeof cfg.unit === 'string' ? cfg.unit : '';
+      if (amount === null || !unit) return null;
+      return `Wait ${amount} ${unit}`;
     }
   }
 }
