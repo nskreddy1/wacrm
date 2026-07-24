@@ -4,7 +4,7 @@ import { useState } from "react"
 import { CalendarClock, MapPin, Plus } from "lucide-react"
 
 import type { UpcomingAppointment } from "@/lib/data/dashboard/types"
-import { AppointmentCreateDialog } from "@/features/appointments/components/appointment-create-dialog"
+import { AppointmentRecordSheet } from "@/features/appointments/components/appointment-record-sheet"
 import { Button } from "@/components/ui/button"
 import { ChartCard } from "./chart-card"
 
@@ -79,7 +79,7 @@ export function UpcomingAppointments({
           ))}
         </ul>
       )}
-      <AppointmentCreateDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={onChanged} />
+      <AppointmentRecordSheet open={createOpen} onOpenChange={setCreateOpen} onCreated={onChanged} />
     </ChartCard>
   )
 }

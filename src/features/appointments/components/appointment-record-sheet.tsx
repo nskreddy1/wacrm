@@ -102,16 +102,18 @@ export function AppointmentRecordSheet({ open, onOpenChange, onCreated }: {
     },
   )
 
-  const contacts = contactsData?.data.contacts ?? []
-  const services = (catalogData?.data ?? []).filter((item) => item.isActive)
   const hidden = useMemo(() => new Set(layout?.hidden ?? []), [layout])
 
   const contactOptions = useMemo(() => {
+    const contacts = contactsData?.data.contacts ?? []
     const known = contacts.map((contact) => ({ id: contact.id, label: contactLabel(contact.values) }))
     const extras = extraContacts.filter((extra) => !contacts.some((contact) => contact.id === extra.id)).map((extra) => ({ id: extra.id, label: extra.name }))
     return [...extras, ...known]
-  }, [contacts, extraContacts])
-  const serviceOptions = useMemo(() => services.map((item) => ({ id: item.id, label: item.name })), [services])
+  }, [contactsData, extraContacts])
+  const serviceOptions = useMemo(
+    () => (catalogData?.data ?? []).filter((item) => item.isActive).map((item) => ({ id: item.id, label: item.name })),
+    [catalogData],
+  )
 
   function reset() {
     setTitle("")
@@ -135,8 +137,8 @@ export function AppointmentRecordSheet({ open, onOpenChange, onCreated }: {
   function handleServiceChange(value: string | null) {
     setCatalogItemId(value)
     if (value && !title.trim()) {
-      const service = services.find((item) => item.id === value)
-      if (service) setTitle(service.name)
+      const service = serviceOptions.find((option) => option.id === value)
+      if (service) setTitle(service.label)
     }
   }
 
