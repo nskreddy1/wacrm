@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, typecheck, test, build
+    name: Format, lint, typecheck, boundaries, test, build
     runs-on: ubuntu-latest
     # Dummy env vars so `next build` doesn't fail when it reads the
     # public Supabase config at build time. These never leave CI and
@@ -32,22 +32,33 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # pnpm must be installed before setup-node so its cache resolver
+      # can find the pnpm store path. The version comes from the
+      # `packageManager` field in package.json (single source of truth).
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v6
         with:
           node-version: 20
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm exec prettier --check .
 
       - name: Lint
-        run: npm run lint
+        run: pnpm lint
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm typecheck
+
+      - name: Architecture boundaries
+        run: pnpm check:boundaries
 
       - name: Test
-        run: npm test
+        run: pnpm test
 
       - name: Build
-        run: npm run build
+        run: pnpm build
