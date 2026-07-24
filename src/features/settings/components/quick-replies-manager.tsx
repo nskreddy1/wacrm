@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Loader2, MessageSquare, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { toast } from "sonner";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,26 +43,19 @@ function emptyDraft(): DraftState {
   };
 }
 
+async function fetchQuickReplies(url: string): Promise<QuickReply[]> {
+  const res = await fetch(url, { cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? "Failed to load quick replies");
+  return (data.quick_replies as QuickReply[]) ?? [];
+}
+
 export function QuickRepliesManager() {
-  const [items, setItems] = useState<QuickReply[]>([]);
-  const [loading, setLoading] = useState(true);
+  // SWR owns fetch/loading/revalidate state — no manual load effect.
+  const { data, isLoading: loading, mutate } = useSWR("/api/quick-replies", fetchQuickReplies);
+  const items = data ?? [];
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/quick-replies", { cache: "no-store" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) setItems((data.quick_replies as QuickReply[]) ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const openCreate = () => setDraft(emptyDraft());
   const openEdit = (qr: QuickReply) =>
@@ -102,13 +96,13 @@ export function QuickRepliesManager() {
       }
       toast.success(draft.id ? "Quick reply updated." : "Quick reply created.");
       setDraft(null);
-      await load();
+      await mutate();
     } catch {
       toast.error("Couldn't save the quick reply.");
     } finally {
       setSaving(false);
     }
-  }, [draft, load]);
+  }, [draft, mutate]);
 
   const remove = useCallback(
     async (id: string) => {
@@ -118,9 +112,9 @@ export function QuickRepliesManager() {
         toast.error("Couldn't delete the quick reply.");
         return;
       }
-      await load();
+      await mutate();
     },
-    [load],
+    [mutate],
   );
 
   return (
