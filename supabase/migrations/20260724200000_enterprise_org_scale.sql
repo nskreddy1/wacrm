@@ -9,8 +9,8 @@
 -- 1. account_domains — verified company email domains per account.
 --    A signup whose email domain matches a verified, auto-join
 --    domain joins that account instead of creating a new one.
--- 2. Default role hierarchy — CEO > VP > Manager > Team Lead >
---    Agent seeded for every account (visibility axis).
+-- 2. Default role hierarchy — Level 1 > Level 2 > Level 3 >
+--    Level 4 > Level 5 seeded for every account (visibility axis).
 -- 3. AI Agent — locked system profile with conversational-scope
 --    permissions that AI features run under (permission axis).
 -- ============================================================
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS account_domains (
   verification_token TEXT NOT NULL DEFAULT encode(gen_random_bytes(16), 'hex'),
   auto_join_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   -- Defaults granted to JIT joiners; NULL falls back to the
-  -- 'Standard' profile / 'Agent' role at join time.
+  -- 'Standard' profile / 'Level 5' role at join time.
   default_workspace_profile_id UUID REFERENCES workspace_profiles(id) ON DELETE SET NULL,
   default_workspace_role_id UUID REFERENCES workspace_roles(id) ON DELETE SET NULL,
   created_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -76,7 +76,7 @@ CREATE POLICY account_domains_delete ON account_domains
 
 -- ------------------------------------------------------------
 -- 2. Default role hierarchy seeding
---    CEO > VP > Manager > Team Lead > Agent
+--    Level 1 (top) > ... > Level 5 (leaf)
 -- ------------------------------------------------------------
 ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS workspace_role_id UUID
@@ -86,56 +86,56 @@ CREATE INDEX IF NOT EXISTS idx_profiles_workspace_role
   ON profiles(workspace_role_id);
 
 CREATE OR REPLACE FUNCTION seed_default_role_hierarchy(target_account_id UUID)
-RETURNS UUID  -- returns the leaf ('Agent') role id
+RETURNS UUID  -- returns the leaf ('Level 5') role id
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_ceo UUID; v_vp UUID; v_mgr UUID; v_lead UUID; v_agent UUID;
+  v_l1 UUID; v_l2 UUID; v_l3 UUID; v_l4 UUID; v_l5 UUID;
 BEGIN
   -- Idempotent: reuse existing system roles when present.
-  SELECT id INTO v_ceo FROM workspace_roles
-    WHERE account_id = target_account_id AND name = 'CEO' AND is_system;
-  IF v_ceo IS NULL THEN
+  SELECT id INTO v_l1 FROM workspace_roles
+    WHERE account_id = target_account_id AND name = 'Level 1' AND is_system;
+  IF v_l1 IS NULL THEN
     INSERT INTO workspace_roles (account_id, name, description, parent_role_id, peer_visibility, is_system)
-    VALUES (target_account_id, 'CEO', 'Top of the hierarchy. Sees all data in the workspace.', NULL, TRUE, TRUE)
-    RETURNING id INTO v_ceo;
+    VALUES (target_account_id, 'Level 1', 'Users with this role have access to the data owned by all other users.', NULL, TRUE, TRUE)
+    RETURNING id INTO v_l1;
   END IF;
 
-  SELECT id INTO v_vp FROM workspace_roles
-    WHERE account_id = target_account_id AND name = 'VP' AND is_system;
-  IF v_vp IS NULL THEN
+  SELECT id INTO v_l2 FROM workspace_roles
+    WHERE account_id = target_account_id AND name = 'Level 2' AND is_system;
+  IF v_l2 IS NULL THEN
     INSERT INTO workspace_roles (account_id, name, description, parent_role_id, peer_visibility, is_system)
-    VALUES (target_account_id, 'VP', 'Sees data owned by managers, team leads and agents below them.', v_ceo, TRUE, TRUE)
-    RETURNING id INTO v_vp;
+    VALUES (target_account_id, 'Level 2', 'Sees data owned by users in Level 3 and below.', v_l1, TRUE, TRUE)
+    RETURNING id INTO v_l2;
   END IF;
 
-  SELECT id INTO v_mgr FROM workspace_roles
-    WHERE account_id = target_account_id AND name = 'Manager' AND is_system;
-  IF v_mgr IS NULL THEN
+  SELECT id INTO v_l3 FROM workspace_roles
+    WHERE account_id = target_account_id AND name = 'Level 3' AND is_system;
+  IF v_l3 IS NULL THEN
     INSERT INTO workspace_roles (account_id, name, description, parent_role_id, peer_visibility, is_system)
-    VALUES (target_account_id, 'Manager', 'Sees data owned by team leads and agents below them.', v_vp, TRUE, TRUE)
-    RETURNING id INTO v_mgr;
+    VALUES (target_account_id, 'Level 3', 'Sees data owned by users in Level 4 and below.', v_l2, TRUE, TRUE)
+    RETURNING id INTO v_l3;
   END IF;
 
-  SELECT id INTO v_lead FROM workspace_roles
-    WHERE account_id = target_account_id AND name = 'Team Lead' AND is_system;
-  IF v_lead IS NULL THEN
+  SELECT id INTO v_l4 FROM workspace_roles
+    WHERE account_id = target_account_id AND name = 'Level 4' AND is_system;
+  IF v_l4 IS NULL THEN
     INSERT INTO workspace_roles (account_id, name, description, parent_role_id, peer_visibility, is_system)
-    VALUES (target_account_id, 'Team Lead', 'Sees data owned by agents on their team.', v_mgr, FALSE, TRUE)
-    RETURNING id INTO v_lead;
+    VALUES (target_account_id, 'Level 4', 'Sees data owned by users in Level 5.', v_l3, FALSE, TRUE)
+    RETURNING id INTO v_l4;
   END IF;
 
-  SELECT id INTO v_agent FROM workspace_roles
-    WHERE account_id = target_account_id AND name = 'Agent' AND is_system;
-  IF v_agent IS NULL THEN
+  SELECT id INTO v_l5 FROM workspace_roles
+    WHERE account_id = target_account_id AND name = 'Level 5' AND is_system;
+  IF v_l5 IS NULL THEN
     INSERT INTO workspace_roles (account_id, name, description, parent_role_id, peer_visibility, is_system)
-    VALUES (target_account_id, 'Agent', 'Sees only their own records.', v_lead, FALSE, TRUE)
-    RETURNING id INTO v_agent;
+    VALUES (target_account_id, 'Level 5', 'Sees only their own records.', v_l4, FALSE, TRUE)
+    RETURNING id INTO v_l5;
   END IF;
 
-  RETURN v_agent;
+  RETURN v_l5;
 END;
 $$;
 
@@ -143,7 +143,7 @@ ALTER FUNCTION seed_default_role_hierarchy(UUID) OWNER TO postgres;
 GRANT EXECUTE ON FUNCTION seed_default_role_hierarchy(UUID) TO service_role;
 
 -- Backfill hierarchy for every existing account and attach each
--- account owner to the CEO role.
+-- account owner to the Level 1 role.
 DO $$
 DECLARE
   acc RECORD;
@@ -156,7 +156,7 @@ BEGIN
       WHERE p.account_id = acc.id
         AND p.user_id = acc.owner_user_id
         AND p.workspace_role_id IS NULL
-        AND wr.account_id = acc.id AND wr.name = 'CEO' AND wr.is_system;
+        AND wr.account_id = acc.id AND wr.name = 'Level 1' AND wr.is_system;
   END LOOP;
 END $$;
 
@@ -177,8 +177,8 @@ SELECT
 FROM accounts a
 ON CONFLICT (account_id, name) DO NOTHING;
 
--- Backfill: every member gets a role — account owners CEO,
--- everyone else Agent (idempotent; only fills NULLs).
+-- Backfill: every member gets a role — account owners Level 1,
+-- everyone else Level 5 (idempotent; only fills NULLs).
 UPDATE profiles p
   SET workspace_role_id = wr.id
   FROM workspace_roles wr, accounts a
@@ -187,7 +187,7 @@ UPDATE profiles p
     AND a.id = p.account_id
     AND wr.account_id = p.account_id
     AND wr.is_system
-    AND wr.name = CASE WHEN a.owner_user_id = p.user_id THEN 'CEO' ELSE 'Agent' END;
+    AND wr.name = CASE WHEN a.owner_user_id = p.user_id THEN 'Level 1' ELSE 'Level 5' END;
 
 -- ------------------------------------------------------------
 -- 4. JIT domain-capture signup. Rewrites handle_new_user:
@@ -229,7 +229,7 @@ BEGIN
     v_role_id := v_capture.default_workspace_role_id;
     IF v_role_id IS NULL THEN
       SELECT id INTO v_role_id FROM workspace_roles
-        WHERE account_id = v_capture.account_id AND name = 'Agent' AND is_system;
+        WHERE account_id = v_capture.account_id AND name = 'Level 5' AND is_system;
     END IF;
 
     INSERT INTO public.profiles
@@ -275,10 +275,10 @@ BEGIN
        TRUE)
     ON CONFLICT (account_id, name) DO NOTHING;
 
-    -- Owner: Administrator profile + CEO role.
+    -- Owner: Administrator profile + Level 1 role.
     UPDATE profiles p SET
       workspace_profile_id = (SELECT id FROM workspace_profiles WHERE account_id = v_account_id AND name = 'Administrator' AND is_system),
-      workspace_role_id = (SELECT id FROM workspace_roles WHERE account_id = v_account_id AND name = 'CEO' AND is_system)
+      workspace_role_id = (SELECT id FROM workspace_roles WHERE account_id = v_account_id AND name = 'Level 1' AND is_system)
     WHERE p.user_id = NEW.id AND p.account_id = v_account_id;
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'Failed to seed roles/profiles for account %: %', v_account_id, SQLERRM;
