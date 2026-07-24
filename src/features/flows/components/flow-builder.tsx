@@ -17,18 +17,10 @@
  * are list-only and have no canvas analogue.
  */
 
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CircleAlert,
-  Plus,
   Trash2,
   ChevronDown,
   ChevronUp,
@@ -44,27 +36,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { type ValidationIssue } from '@/features/flows/lib/validate';
 import {
-  NODE_META,
   NodeIconChip,
-  groupNodeTypesByCategory,
   nodeColors,
   slugify,
   summarizeNode,
   type BuilderNode,
   type NodeType,
 } from './shared';
+import { NodePalette } from './node-palette';
 import { NodeConfigForm } from './forms/node-config-form';
 import { NodeKeySelect } from './forms/fields';
 import { IssueLine } from './validation-panel';
@@ -731,62 +713,14 @@ function NodeConfigWithAdvanced({
 }
 
 // ============================================================
-// Add-node menu
+// Add-node menu — shared searchable palette (see node-palette.tsx)
 // ============================================================
 
 function AddNodeButton({
   onAdd,
-  t,
 }: {
   onAdd: (type: NodeType) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const types: NodeType[] = [
-    'start',
-    'send_buttons',
-    'send_list',
-    'send_message',
-    'send_media',
-    'collect_input',
-    'condition',
-    'set_tag',
-    'handoff',
-    'end',
-  ];
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="border-border bg-card text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors"
-        aria-label={t('addNode')}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        {t('addNode')}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="border-border bg-popover">
-        {groupNodeTypesByCategory(types).map((group, i) => (
-          // A DropdownMenuGroup (base-ui Menu.Group) is REQUIRED here:
-          // DropdownMenuLabel is base-ui's Menu.GroupLabel, which throws
-          // at render if it can't find a Menu.Group ancestor context. A
-          // plain <div> wrapper made opening this menu crash the page.
-          <Fragment key={group.id}>
-            {i > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
-                {t(`categories.${group.id}`)}
-              </DropdownMenuLabel>
-              {group.types.map((t_type) => {
-                const meta = NODE_META[t_type];
-                return (
-                  <DropdownMenuItem key={t_type} onClick={() => onAdd(t_type)}>
-                    <meta.icon className={cn('h-3.5 w-3.5', meta.color)} />
-                    {t(`nodes.${t_type}.label`)}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuGroup>
-          </Fragment>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  return <NodePalette onAdd={onAdd} variant="subtle" align="end" />;
 }
