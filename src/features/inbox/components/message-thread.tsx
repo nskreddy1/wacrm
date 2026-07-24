@@ -46,6 +46,7 @@ import {
   type SendMediaPayload,
 } from './message-composer';
 import { deleteAccountMedia } from '@/lib/storage/upload-media';
+import { MessageThreadSkeleton } from '@/components/ui/loading-skeletons';
 import { TemplatePicker } from './template-picker';
 import { AiThreadBanner } from './ai-thread-banner';
 import { buildReplyPreview } from './reply-quote';
@@ -56,6 +57,33 @@ interface ReplyDraft {
   authorLabel: string;
   preview: string;
 }
+
+/**
+ * Session-scoped stale-while-revalidate cache for message threads.
+ * Bounded LRU (Map preserves insertion order) so hopping across many
+ * conversations in a long session can't grow memory unbounded.
+ */
+const THREAD_CACHE_MAX = 30;
+const messageThreadCache = {
+  map: new Map<string, Message[]>(),
+  get(id: string): Message[] | undefined {
+    const hit = this.map.get(id);
+    if (hit) {
+      // Refresh recency: delete + re-set moves the key to the end.
+      this.map.delete(id);
+      this.map.set(id, hit);
+    }
+    return hit;
+  },
+  set(id: string, messages: Message[]) {
+    this.map.delete(id);
+    this.map.set(id, messages);
+    if (this.map.size > THREAD_CACHE_MAX) {
+      const oldest = this.map.keys().next().value;
+      if (oldest) this.map.delete(oldest);
+    }
+  },
+};
 
 function renderTemplateBody(body: string, params: string[]): string {
   return body.replace(/\{\{(\d+)\}\}/g, (_, raw) => {
@@ -319,14 +347,28 @@ export function MessageThread({
   // separate from the unread-reset effect so that incoming messages
   // arriving while the thread is open don't trigger a full refetch —
   // they only flip hasUnread, which only the reset effect listens to.
+  //
+  // Perf (stale-while-revalidate): a module-level cache keeps the last
+  // fetched messages per conversation for the session. Switching back
+  // to a conversation paints the cached thread instantly (no skeleton,
+  // no blank flash) while the fresh fetch runs in the background and
+  // reconciles. This is what makes rapid conversation-hopping feel
+  // enterprise-snappy instead of laggy.
   useEffect(() => {
     if (!conversationId) return;
 
     const supabase = createClient();
     let cancelled = false;
 
+    const cached = messageThreadCache.get(conversationId);
+    if (cached) {
+      // Instant paint from cache — keep loading=false so no skeleton.
+      onMessagesLoadedRef.current(cached);
+    }
+
     (async () => {
-      setLoading(true);
+      // Only show the skeleton on a true cold load for this thread.
+      if (!cached) setLoading(true);
 
       const { data, error } = await supabase
         .from('messages')
@@ -339,7 +381,9 @@ export function MessageThread({
       if (error) {
         console.error('Failed to fetch messages:', error);
       } else {
-        onMessagesLoadedRef.current(data ?? []);
+        const fresh = data ?? [];
+        messageThreadCache.set(conversationId, fresh);
+        onMessagesLoadedRef.current(fresh);
       }
 
       if (!cancelled) setLoading(false);
@@ -353,6 +397,14 @@ export function MessageThread({
     // realtime is best-effort and any message events sent while the WS
     // was disconnected or throttled are otherwise lost.
   }, [conversationId, resyncToken]);
+
+  // Keep the cache in sync with live updates so switching away and
+  // back never shows stale sends/receives from this session.
+  useEffect(() => {
+    if (conversationId && messages.length > 0) {
+      messageThreadCache.set(conversationId, messages);
+    }
+  }, [conversationId, messages]);
 
   // Reactions fetch — pulls the current state from the DB. Kept separate
   // from the channel subscription below so a `resyncToken` bump just
@@ -1105,9 +1157,9 @@ export function MessageThread({
       {/* Messages Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="border-primary h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" />
-          </div>
+          // Bubble-shaped skeleton so the thread area keeps its chat
+          // silhouette while messages stream in (no layout jump).
+          <MessageThreadSkeleton />
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
             <p className="text-muted-foreground text-sm">

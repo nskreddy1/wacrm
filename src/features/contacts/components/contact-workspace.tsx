@@ -80,7 +80,8 @@ import {
 } from '@/features/contacts/components/contact-record-sheet';
 import { CustomFieldsManager } from '@/features/contacts/components/custom-fields-manager';
 import { ImportModal } from '@/features/contacts/components/import-modal';
-import { FeatureLoading, FeatureState } from '@/components/ui/feature-state';
+import { FeatureState } from '@/components/ui/feature-state';
+import { SheetTableSkeleton } from '@/components/ui/loading-skeletons';
 import {
   countRules,
   emptyFilterGroup,
@@ -372,11 +373,9 @@ export function ContactWorkspace({
       </div>
     );
   if (isLoading || !store)
-    return (
-      <div className="p-6">
-        <FeatureLoading label="Loading enterprise contacts" />
-      </div>
-    );
+    // Sheet-shaped skeleton: mirrors the real toolbar + header + row
+    // grid so the page doesn't jump when data arrives (CLS ~0).
+    return <SheetTableSkeleton columns={6} rows={14} />;
 
   return (
     <div className="bg-background flex min-h-0 flex-1 flex-col">
