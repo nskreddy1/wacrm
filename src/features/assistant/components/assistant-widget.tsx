@@ -81,7 +81,7 @@ export function AssistantWidget() {
       <Button
         type="button"
         size="icon"
-        aria-label={open ? 'Close helper agent' : 'Open helper agent'}
+        aria-label={open ? 'Close Mira' : 'Open Mira, your CRM copilot'}
         onClick={() => setOpen((v) => !v)}
         className="fixed right-20 bottom-4 z-40 size-12 rounded-full shadow-lg"
       >
@@ -92,7 +92,7 @@ export function AssistantWidget() {
       {open ? (
         <div
           role="dialog"
-          aria-label="Helper agent chat"
+          aria-label="Mira — CRM copilot chat"
           className="border-border bg-background fixed right-4 bottom-20 z-50 flex h-[min(600px,calc(100dvh-7rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_64px_-16px_rgba(0,0,0,0.4)]"
         >
           {/* Header */}
@@ -105,11 +105,9 @@ export function AssistantWidget() {
               />
             </span>
             <div className="flex min-w-0 flex-col">
-              <span className="text-sm leading-tight font-semibold">
-                Copilot
-              </span>
+              <span className="text-sm leading-tight font-semibold">Mira</span>
               <span className="text-muted-foreground text-[11px]">
-                Reads freely · writes need your approval
+                Your CRM copilot · writes need your approval
               </span>
             </div>
             <Button
@@ -133,11 +131,12 @@ export function AssistantWidget() {
               <div className="flex h-full flex-col justify-end gap-5 px-1 pb-2">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-lg font-semibold text-balance">
-                    How can I help?
+                    {"Hi, I'm Mira"}
                   </h2>
                   <p className="text-muted-foreground text-xs leading-relaxed">
                     I can read your whole workspace and build workflows for
-                    you end to end. Anything that changes data asks for your
+                    you end to end — from a simple welcome reply to multi-step
+                    sequences. Anything that changes data asks for your
                     approval first.
                   </p>
                 </div>
