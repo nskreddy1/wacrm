@@ -153,17 +153,15 @@ export const ToolStep = memo(function ToolStep({
         </span>
       </div>
       {openUrl ? (
-        <Button
-          asChild
-          size="sm"
-          variant="outline"
-          className="ml-6 h-7 w-fit gap-1 rounded-full px-3 text-xs"
+        // The project's Button doesn't support `asChild`, so style the
+        // Link directly with the same outline-button treatment.
+        <Link
+          href={openUrl}
+          className="border-border bg-background text-foreground hover:bg-muted ml-6 inline-flex h-7 w-fit items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors"
         >
-          <Link href={openUrl}>
-            Open workflow
-            <ArrowUpRight className="size-3" aria-hidden />
-          </Link>
-        </Button>
+          Open workflow
+          <ArrowUpRight className="size-3" aria-hidden />
+        </Link>
       ) : null}
     </div>
   );
