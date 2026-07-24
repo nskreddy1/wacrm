@@ -760,68 +760,54 @@ export function MessageThread({
   // Single reaction-set primitive. emoji === "" removes; otherwise adds/swaps.
   // The "toggle" semantic (pill click) is computed at the call site where the
   // current reactions for the bubble are already in scope. The optimistic
-  // next state is computed purely from the render-time `reactions` value
-  // (no impure functional updater), which also serves as the rollback
-  // snapshot on POST failure.
-  const postReaction = useCallback(
-    async (messageId: string, emoji: string) => {
-      if (!user?.id || !conversation) {
-        console.warn("[reactions] missing user or conversation");
-        return;
-      }
-      if (messageId.startsWith("temp-")) {
-        toast.error("Wait for the message to finish sending");
-        return;
-      }
+  // next state is computed purely from the render-time `reactions` value,
+  // which also serves as the rollback snapshot on POST failure. No manual
+  // useCallback — the React Compiler memoizes this automatically.
+  const postReaction = async (messageId: string, emoji: string) => {
+    if (!user?.id || !conversation) {
+      console.warn("[reactions] missing user or conversation");
+      return;
+    }
+    if (messageId.startsWith("temp-")) {
+      toast.error("Wait for the message to finish sending");
+      return;
+    }
 
-      const convId = conversation.id;
-      const userId = user.id;
-      const snapshot = reactions;
-      const own = snapshot.find(
-        (r) =>
-          r.message_id === messageId &&
-          r.actor_type === "agent" &&
-          r.actor_id === userId,
-      );
-      const next =
-        emoji === ""
-          ? own
-            ? snapshot.filter((r) => r !== own)
-            : snapshot
-          : own
-            ? snapshot.map((r) => (r === own ? { ...own, emoji } : r))
-            : [
-                ...snapshot,
-                {
-                  id: `temp-${Date.now()}`,
-                  message_id: messageId,
-                  conversation_id: convId,
-                  actor_type: "agent" as const,
-                  actor_id: userId,
-                  emoji,
-                  created_at: new Date().toISOString(),
-                },
-              ];
-      setReactions(next);
+    const convId = conversation.id;
+    const userId = user.id;
+    const snapshot = reactions;
+    const own = snapshot.find(
+      (r) =>
+        r.message_id === messageId &&
+        r.actor_type === "agent" &&
+        r.actor_id === userId,
+    );
+    const next =
+      emoji === ""
+        ? own
+          ? snapshot.filter((r) => r !== own)
+          : snapshot
+        : own
+          ? snapshot.map((r) => (r === own ? { ...own, emoji } : r))
+          : [...snapshot, buildTempReaction(messageId, convId, userId, emoji)];
+    setReactions(next);
 
-      try {
-        const res = await fetch("/api/whatsapp/react", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message_id: messageId, emoji }),
-        });
-        if (!res.ok) {
-          const payload = await res.json().catch(() => ({}));
-          throw new Error(payload?.error || `HTTP ${res.status}`);
-        }
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : "network error";
-        toast.error(`Reaction failed: ${reason}`);
-        setReactions(snapshot);
+    try {
+      const res = await fetch("/api/whatsapp/react", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: messageId, emoji }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.error || `HTTP ${res.status}`);
       }
-    },
-    [conversation, user?.id, reactions],
-  );
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "network error";
+      toast.error(`Reaction failed: ${reason}`);
+      setReactions(snapshot);
+    }
+  };
 
   const handleAssignChange = useCallback(
     async (agentId: string | null) => {

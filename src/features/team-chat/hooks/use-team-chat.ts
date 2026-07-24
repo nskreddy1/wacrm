@@ -48,6 +48,65 @@ interface MembersResponse {
 // (Slack does the same with its "while you were away" window).
 const UNREAD_SCAN_DAYS = 14;
 
+/** Combined SWR snapshot: the conversation list plus unread counts. */
+interface ConversationsSnapshot {
+  conversations: TeamConversation[];
+  unread: Map<string, number>;
+}
+
+// Stable fallbacks so consumers get referentially-equal empties while
+// the snapshot loads (avoids re-render churn in memoized children).
+const EMPTY_CONVERSATIONS: TeamConversation[] = [];
+const EMPTY_UNREAD: Map<string, number> = new Map();
+
+/**
+ * Pure fetcher: conversations + read cursors + unread counts in one
+ * snapshot. Unread = recent messages newer than my cursor, sent by others.
+ */
+async function fetchConversationsSnapshot(myId: string): Promise<ConversationsSnapshot> {
+  const supabase = createClient();
+
+  const [{ data: convs, error }, { data: cursors }] = await Promise.all([
+    supabase
+      .from("team_conversations")
+      .select("id, kind, name, dm_key, created_by, last_message_at, last_message_text, team_conversation_members(user_id)")
+      .order("last_message_at", { ascending: false, nullsFirst: false }),
+    supabase.from("team_read_cursors").select("conversation_id, last_read_at"),
+  ]);
+  if (error) throw new Error(`[useTeamChat] conversations fetch error: ${error.message}`);
+
+  const conversations: TeamConversation[] = (convs ?? []).map((c) => ({
+    id: c.id as string,
+    kind: c.kind as "dm" | "channel",
+    name: (c.name as string | null) ?? null,
+    dm_key: (c.dm_key as string | null) ?? null,
+    created_by: c.created_by as string,
+    last_message_at: (c.last_message_at as string | null) ?? null,
+    last_message_text: (c.last_message_text as string | null) ?? null,
+    member_ids: ((c.team_conversation_members as { user_id: string }[]) ?? []).map((m) => m.user_id),
+  }));
+
+  const cursorMap = new Map<string, string>();
+  for (const cur of cursors ?? []) {
+    cursorMap.set(cur.conversation_id as string, cur.last_read_at as string);
+  }
+  const since = new Date(Date.now() - UNREAD_SCAN_DAYS * 86_400_000).toISOString();
+  const { data: recent } = await supabase
+    .from("team_messages")
+    .select("conversation_id, sender_id, created_at")
+    .gte("created_at", since)
+    .limit(1000);
+  const unread = new Map<string, number>();
+  for (const m of recent ?? []) {
+    const convId = m.conversation_id as string;
+    if (m.sender_id === myId) continue;
+    const readAt = cursorMap.get(convId);
+    if (readAt && (m.created_at as string) <= readAt) continue;
+    unread.set(convId, (unread.get(convId) ?? 0) + 1);
+  }
+  return { conversations, unread };
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -77,8 +136,6 @@ export function useTeamChat(enabled: boolean) {
     return map;
   }, [membersData]);
 
-  const [conversations, setConversations] = useState<TeamConversation[]>([]);
-  const [unread, setUnread] = useState<Map<string, number>>(() => new Map());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<TeamMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -93,121 +150,16 @@ export function useTeamChat(enabled: boolean) {
     myIdRef.current = myId;
   });
 
-  // ----- initial load: conversations + read cursors + unread counts -----
-  const loadConversations = useCallback(async () => {
-    if (!myId) return;
-    const supabase = createClient();
-
-    const [{ data: convs, error }, { data: cursors }] = await Promise.all([
-      supabase
-        .from("team_conversations")
-        .select("id, kind, name, dm_key, created_by, last_message_at, last_message_text, team_conversation_members(user_id)")
-        .order("last_message_at", { ascending: false, nullsFirst: false }),
-      supabase.from("team_read_cursors").select("conversation_id, last_read_at"),
-    ]);
-    if (error) {
-      console.error("[useTeamChat] conversations fetch error:", error.message);
-      return;
-    }
-
-    const list: TeamConversation[] = (convs ?? []).map((c) => ({
-      id: c.id as string,
-      kind: c.kind as "dm" | "channel",
-      name: (c.name as string | null) ?? null,
-      dm_key: (c.dm_key as string | null) ?? null,
-      created_by: c.created_by as string,
-      last_message_at: (c.last_message_at as string | null) ?? null,
-      last_message_text: (c.last_message_text as string | null) ?? null,
-      member_ids: ((c.team_conversation_members as { user_id: string }[]) ?? []).map((m) => m.user_id),
-    }));
-    setConversations(list);
-
-    // Unread = recent messages newer than my cursor, sent by others.
-    const cursorMap = new Map<string, string>();
-    for (const cur of cursors ?? []) {
-      cursorMap.set(cur.conversation_id as string, cur.last_read_at as string);
-    }
-    const since = new Date(Date.now() - UNREAD_SCAN_DAYS * 86_400_000).toISOString();
-    const { data: recent } = await supabase
-      .from("team_messages")
-      .select("conversation_id, sender_id, created_at")
-      .gte("created_at", since)
-      .limit(1000);
-    const counts = new Map<string, number>();
-    for (const m of recent ?? []) {
-      const convId = m.conversation_id as string;
-      if (m.sender_id === myId) continue;
-      const readAt = cursorMap.get(convId);
-      if (readAt && (m.created_at as string) <= readAt) continue;
-      counts.set(convId, (counts.get(convId) ?? 0) + 1);
-    }
-    setUnread(counts);
-  }, [myId]);
-
-  useEffect(() => {
-    if (!enabled || !myId) return;
-    void loadConversations();
-  }, [enabled, myId, loadConversations]);
-
-  // ----- realtime: new messages + conversation upserts -----
-  useEffect(() => {
-    if (!enabled || !accountId || !myId) return;
-    const supabase = createClient();
-
-    const channel: RealtimeChannel = supabase
-      .channel(`team-chat:${accountId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "team_messages" },
-        (payload) => {
-          const msg = payload.new as TeamMessage;
-          const mine = msg.sender_id === myIdRef.current;
-
-          // Bump the conversation preview + ordering.
-          setConversations((prev) => {
-            const idx = prev.findIndex((c) => c.id === msg.conversation_id);
-            if (idx === -1) {
-              // Conversation not loaded yet (e.g. someone just DM'd me
-              // for the first time) — refetch the list.
-              void loadConversations();
-              return prev;
-            }
-            const next = [...prev];
-            next[idx] = {
-              ...next[idx],
-              last_message_at: msg.created_at,
-              last_message_text: msg.body.slice(0, 140),
-            };
-            next.sort((a, b) =>
-              (b.last_message_at ?? "").localeCompare(a.last_message_at ?? ""),
-            );
-            return next;
-          });
-
-          if (msg.conversation_id === activeIdRef.current) {
-            // Viewing this thread: append & immediately mark read.
-            setMessages((prev) =>
-              prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
-            );
-            if (!mine) void markReadInternal(msg.conversation_id);
-          } else if (!mine) {
-            setUnread((prev) => {
-              const next = new Map(prev);
-              next.set(msg.conversation_id, (next.get(msg.conversation_id) ?? 0) + 1);
-              return next;
-            });
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    // markReadInternal is stable (defined below via useCallback with no deps
-    // beyond supabase/myId which are stable for a session).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, accountId, myId, loadConversations]);
+  // ----- conversations + read cursors + unread counts -----
+  // SWR owns the fetch (key is null until enabled and signed in);
+  // realtime events overlay the cached snapshot via optimistic mutate.
+  const { data: convData, mutate: mutateConvs } = useSWR(
+    enabled && myId ? (["team-chat-conversations", myId] as const) : null,
+    ([, uid]) => fetchConversationsSnapshot(uid),
+  );
+  const conversations = convData?.conversations ?? EMPTY_CONVERSATIONS;
+  const unread = convData?.unread ?? EMPTY_UNREAD;
+  const loadConversations = useCallback(() => mutateConvs(), [mutateConvs]);
 
   // ----- read cursor -----
   const markReadInternal = useCallback(async (conversationId: string) => {
@@ -224,17 +176,86 @@ export function useTeamChat(enabled: boolean) {
     );
   }, []);
 
+  // ----- realtime: new messages + conversation upserts -----
+  useEffect(() => {
+    if (!enabled || !accountId || !myId) return;
+    const supabase = createClient();
+
+    const channel: RealtimeChannel = supabase
+      .channel(`team-chat:${accountId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "team_messages" },
+        (payload) => {
+          const msg = payload.new as TeamMessage;
+          const mine = msg.sender_id === myIdRef.current;
+          const isActive = msg.conversation_id === activeIdRef.current;
+
+          // Overlay the cached snapshot: bump the conversation preview +
+          // ordering, and bump unread for inactive threads. If the
+          // conversation isn't loaded yet (e.g. someone just DM'd me for
+          // the first time), fall through to a full revalidate.
+          let needsRefetch = false;
+          void mutateConvs(
+            (prev) => {
+              if (!prev) return prev;
+              const idx = prev.conversations.findIndex((c) => c.id === msg.conversation_id);
+              if (idx === -1) {
+                needsRefetch = true;
+                return prev;
+              }
+              const nextConvs = [...prev.conversations];
+              nextConvs[idx] = {
+                ...nextConvs[idx],
+                last_message_at: msg.created_at,
+                last_message_text: msg.body.slice(0, 140),
+              };
+              nextConvs.sort((a, b) =>
+                (b.last_message_at ?? "").localeCompare(a.last_message_at ?? ""),
+              );
+              let nextUnread = prev.unread;
+              if (!mine && !isActive) {
+                nextUnread = new Map(prev.unread);
+                nextUnread.set(msg.conversation_id, (nextUnread.get(msg.conversation_id) ?? 0) + 1);
+              }
+              return { conversations: nextConvs, unread: nextUnread };
+            },
+            { revalidate: false },
+          ).then(() => {
+            if (needsRefetch) void mutateConvs();
+          });
+
+          if (isActive) {
+            // Viewing this thread: append & immediately mark read.
+            setMessages((prev) =>
+              prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+            );
+            if (!mine) void markReadInternal(msg.conversation_id);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [enabled, accountId, myId, mutateConvs, markReadInternal]);
+
   const openConversation = useCallback(
     async (conversationId: string) => {
       setActiveId(conversationId);
       setLoading(true);
       setMessages([]);
-      setUnread((prev) => {
-        if (!prev.has(conversationId)) return prev;
-        const next = new Map(prev);
-        next.delete(conversationId);
-        return next;
-      });
+      // Clear the unread badge for this thread in the cached snapshot.
+      void mutateConvs(
+        (prev) => {
+          if (!prev || !prev.unread.has(conversationId)) return prev;
+          const nextUnread = new Map(prev.unread);
+          nextUnread.delete(conversationId);
+          return { conversations: prev.conversations, unread: nextUnread };
+        },
+        { revalidate: false },
+      );
       const supabase = createClient();
       const { data, error } = await supabase
         .from("team_messages")
@@ -249,7 +270,7 @@ export function useTeamChat(enabled: boolean) {
       setLoading(false);
       void markReadInternal(conversationId);
     },
-    [markReadInternal],
+    [markReadInternal, mutateConvs],
   );
 
   const closeConversation = useCallback(() => {
