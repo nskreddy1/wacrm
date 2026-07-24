@@ -75,6 +75,7 @@ import {
   SectionToolbar,
 } from '@/components/shared/section-view';
 import { InviteUserSheet } from './invite-user-sheet';
+import { VerifiedDomainsCard } from './verified-domains-card';
 import { WorkspaceNameCard } from './workspace-name-card';
 import { WorkspaceProfilesTab } from './workspace-profiles-tab';
 import { WorkspaceRolesTab } from './workspace-roles-tab';
@@ -431,7 +432,12 @@ export function MembersTab() {
         onSelect={(id) => setTab(id as typeof tab)}
       />
 
-      {tab === 'workspace' && <WorkspaceNameCard />}
+      {tab === 'workspace' && (
+        <div className="space-y-4">
+          <WorkspaceNameCard />
+          <VerifiedDomainsCard />
+        </div>
+      )}
       {tab === 'profiles' && canManageMembers && (
         <WorkspaceProfilesTab
           onChanged={() => void loadEverything(search.trim(), statusFilter)}
