@@ -118,7 +118,10 @@ export function isAutoAdvancing(node_type: string): boolean {
     node_type === 'send_message' ||
     node_type === 'send_media' ||
     node_type === 'condition' ||
-    node_type === 'set_tag'
+    node_type === 'set_tag' ||
+    // Absorbed action nodes auto-advance — except `wait`, which
+    // parks the run until the cron sweep wakes it at wake_at.
+    (isActionNodeType(node_type) && node_type !== 'wait')
   );
 }
 
@@ -127,7 +130,9 @@ export function isSuspending(node_type: string): boolean {
   return (
     node_type === 'send_buttons' ||
     node_type === 'send_list' ||
-    node_type === 'collect_input'
+    node_type === 'collect_input' ||
+    // `wait` also suspends — resumed by time, not by a reply.
+    node_type === 'wait'
   );
 }
 
