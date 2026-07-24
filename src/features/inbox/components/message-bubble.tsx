@@ -339,6 +339,14 @@ export function MessageBubble({
           {isAgent && <StatusIcon status={message.status} />}
         </div>
       </div>
+      {/* Delivery failure reason — provider-reported, persisted by the
+          status webhook. Without this, a failed send is just a silent
+          red icon and outbound problems look like "nothing happened". */}
+      {isAgent && message.status === 'failed' && (
+        <p className="mt-0.5 max-w-60 text-right text-[10px] leading-snug text-red-500">
+          {message.error_message || t('deliveryFailed')}
+        </p>
+      )}
       {reactions && reactions.length > 0 && onToggleReaction && (
         <MessageReactions
           reactions={reactions}
