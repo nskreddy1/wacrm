@@ -18,6 +18,7 @@ import useSWR from 'swr'
 import { toast } from 'sonner'
 import { CheckCircle2, Loader2, Lock, Mail, Megaphone, MessageCircle, MoreHorizontal, PlugZap, Plus, ShieldCheck, Smartphone, Trash2, Wrench } from 'lucide-react'
 
+import { BrandIcon } from '@/components/shared/brand-icon'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
