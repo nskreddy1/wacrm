@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Coins, Loader2 } from "lucide-react";
 
@@ -38,16 +38,15 @@ export function DealsSettings() {
     refreshProfile,
   } = useAuth();
 
-  const [selected, setSelected] = useState(defaultCurrency);
+  // null = untouched: the select derives from the account default directly,
+  // so it stays in sync when the profile resolves or a save round-trips
+  // through refreshProfile — no sync effect needed.
+  const [draftCurrency, setDraftCurrency] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const t = useTranslations("Settings.deals");
 
-  // Keep the select in sync once the profile (and its account default)
-  // resolves, and after a save round-trips through refreshProfile.
-  useEffect(() => {
-    setSelected(defaultCurrency);
-  }, [defaultCurrency]);
-
+  const selected = draftCurrency ?? defaultCurrency;
+  const setSelected = setDraftCurrency;
   const dirty = selected !== defaultCurrency;
 
   async function handleSave() {
