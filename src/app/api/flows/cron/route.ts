@@ -20,10 +20,10 @@ import {
  * index on `flow_runs WHERE status='active'`) forever — blocking any
  * new triggers for them. The cron is therefore not optional.
  *
- * Auth: re-uses `AUTOMATION_CRON_SECRET` so operators only have one
- * secret to provision. The two endpoints (`/api/automations/cron`
- * and this one) are independent operations; we keep them on separate
- * URLs so one failing doesn't block the other.
+ * Auth: `AUTOMATION_CRON_SECRET` (name kept for operator continuity
+ * after the legacy automations module was absorbed into flows). This
+ * is the single cron endpoint for the workflow engine: it resumes
+ * waits, starts scheduled flows, and sweeps stale runs in one tick.
  *
  * Hosting: hit on a schedule (Vercel Cron / GitHub Actions / external
  * pinger). A 5-minute interval is more than enough for a 24h timeout

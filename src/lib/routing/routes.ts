@@ -30,12 +30,9 @@ export const routes = {
     templates: '/templates',
     newBroadcast: '/broadcasts/new',
     broadcast: (broadcastId: string) => `/broadcasts/${segment(broadcastId)}`,
+    // Legacy alias — /automations server-redirects to /flows (the
+    // unified workflow surface). Kept so old bookmarks keep working.
     automations: '/automations',
-    newAutomation: '/automations/new',
-    automation: (automationId: string) =>
-      `/automations/${segment(automationId)}`,
-    automationLogs: (automationId: string) =>
-      `/automations/${segment(automationId)}/logs`,
     flows: '/flows',
     newFlow: '/flows?create=1',
     flow: (flowId: string) => `/flows/${segment(flowId)}`,
@@ -64,8 +61,6 @@ export const canonicalAppRoutes = [
   routes.app.broadcasts,
   routes.app.templates,
   routes.app.newBroadcast,
-  routes.app.automations,
-  routes.app.newAutomation,
   routes.app.flows,
   routes.app.agents,
   routes.app.notifications,

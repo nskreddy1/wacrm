@@ -1,6 +1,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { validateFlowForActivation } from '@/features/flows/lib/validate';
 
 // ============================================================
 // Platform assistant tools — full application coverage.
@@ -738,6 +739,76 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           return { error: 'Keyword trigger requires at least one keyword.' };
         }
 
+        // ---- Compliance: WhatsApp 24h customer-service window ----
+        // new_contact_created is business-initiated (no inbound message
+        // opened a window), so the first outbound step MUST be an
+        // approved template. Free-form text there would be rejected by
+        // Meta and can hurt the account's quality rating at scale.
+        if (trigger === 'new_contact_created') {
+          const firstSend = steps.find(
+            (s) => s.type === 'send_message' || s.type === 'send_template'
+          );
+          if (firstSend && firstSend.type === 'send_message') {
+            return {
+              error:
+                'Compliance: workflows triggered by contact creation are business-initiated, so the first message must be an approved template (send_template), not free-form text. WhatsApp only allows free-form messages inside the 24-hour window after the customer messages you.',
+            };
+          }
+        }
+
+        // ---- Compliance: a wait longer than 24h invalidates the
+        // customer-service window for any free-form send after it.
+        const windowMinutes = { minutes: 1, hours: 60, days: 1440 } as const;
+        let elapsed = 0;
+        for (const s of steps) {
+          if (s.type === 'wait') elapsed += s.amount * windowMinutes[s.unit];
+          if (s.type === 'send_message' && elapsed >= 1440) {
+            return {
+              error:
+                'Compliance: a free-form message (send_message) is scheduled more than 24 hours after the trigger. After the 24-hour window closes, WhatsApp requires an approved template — use send_template for that step or shorten the wait.',
+            };
+          }
+        }
+
+        // ---- Guardrail: duplicate name (avoids confusing twins) ----
+        const { data: dupe } = await db
+          .from('flows')
+          .select('id')
+          .eq('account_id', ctx.accountId)
+          .ilike('name', name.trim())
+          .limit(1)
+          .maybeSingle();
+        if (dupe) {
+          return {
+            error: `A workflow named "${name.trim()}" already exists. Pick a different name or update the existing one.`,
+          };
+        }
+
+        // ---- Guardrail: keyword collisions with active flows ----
+        // Two active flows matching the same keyword race each other;
+        // at scale this creates nondeterministic customer experiences.
+        if (trigger === 'keyword' && keywords?.length) {
+          const wanted = new Set(keywords.map((k) => k.trim().toLowerCase()));
+          const { data: actives } = await db
+            .from('flows')
+            .select('name, trigger_config')
+            .eq('account_id', ctx.accountId)
+            .eq('status', 'active')
+            .eq('trigger_type', 'keyword')
+            .limit(50);
+          for (const f of actives ?? []) {
+            const theirs = (
+              (f.trigger_config as { keywords?: string[] })?.keywords ?? []
+            ).map((k) => k.toLowerCase());
+            const clash = theirs.find((k) => wanted.has(k));
+            if (clash) {
+              return {
+                error: `Keyword "${clash}" is already used by the active workflow "${f.name}". Choose different keywords or pause that workflow first.`,
+              };
+            }
+          }
+        }
+
         // Build the node chain: step-1 → step-2 → … → end. Keys are
         // deterministic so the summary reads cleanly in the builder.
         const nodeKeys = steps.map((s, i) => `step-${i + 1}-${s.type}`);
@@ -790,6 +861,31 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             ? { keywords: keywords!.map((k) => k.trim().toLowerCase()) }
             : {};
 
+        // ---- Structural validation: same rules the builder enforces
+        // before activation (reachability, config shapes, terminals).
+        // Errors block creation; warnings ride along in the result so
+        // the helper can surface them to the user.
+        const issues = validateFlowForActivation(
+          {
+            name: name.trim(),
+            trigger_type: trigger,
+            trigger_config,
+            entry_node_id: nodeKeys[0],
+          },
+          nodes
+        );
+        const errors = issues.filter((i) => i.severity === 'error');
+        if (errors.length > 0) {
+          return {
+            error: `The workflow failed validation: ${errors
+              .map((e) => e.message)
+              .join(' | ')}`,
+          };
+        }
+        const warnings = issues
+          .filter((i) => i.severity === 'warning')
+          .map((i) => i.message);
+
         const { data: flow, error: flowErr } = await db
           .from('flows')
           .insert({
@@ -828,9 +924,10 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           name,
           status: 'draft',
           steps: nodes.length,
+          warnings,
           open_url: `/flows/${flow.id}`,
           message:
-            'Workflow created as a draft. Open it in the builder to review and activate.',
+            'Workflow created as a draft and passed validation. Open it in the builder to review and activate.',
         };
       },
     }),
@@ -859,11 +956,51 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
 
         const { data: flow } = await q.maybeSingle();
         if (!flow) return { error: 'Workflow not found in this workspace.' };
-        if (action === 'activate' && !flow.entry_node_id) {
-          return {
-            error:
-              'This workflow has no entry step yet — open it in the builder first.',
-          };
+        if (action === 'activate') {
+          if (!flow.entry_node_id) {
+            return {
+              error:
+                'This workflow has no entry step yet — open it in the builder first.',
+            };
+          }
+          // Full structural validation — the same gate the builder's
+          // Activate button enforces. Never let the helper activate a
+          // workflow the UI itself would refuse to.
+          const { data: full } = await db
+            .from('flows')
+            .select('name, trigger_type, trigger_config, entry_node_id')
+            .eq('id', flow.id)
+            .single();
+          const { data: flowNodes } = await db
+            .from('flow_nodes')
+            .select('node_key, node_type, config')
+            .eq('flow_id', flow.id);
+          if (full && flowNodes) {
+            const issues = validateFlowForActivation(
+              {
+                name: full.name,
+                trigger_type:
+                  full.trigger_type as import('@/features/flows/lib/types').FlowTriggerType,
+                trigger_config:
+                  (full.trigger_config as Record<string, unknown>) ?? {},
+                entry_node_id: full.entry_node_id,
+              },
+              flowNodes.map((n) => ({
+                node_key: n.node_key,
+                node_type: n.node_type,
+                config: (n.config as Record<string, unknown>) ?? {},
+              }))
+            );
+            const errors = issues.filter((i) => i.severity === 'error');
+            if (errors.length > 0) {
+              return {
+                error: `Cannot activate — validation failed: ${errors
+                  .map((e) => e.message)
+                  .join(' | ')}`,
+                open_url: `/flows/${flow.id}`,
+              };
+            }
+          }
         }
         const nextStatus = action === 'activate' ? 'active' : 'paused';
         const { error } = await db
