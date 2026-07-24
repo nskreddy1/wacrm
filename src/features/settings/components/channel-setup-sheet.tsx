@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -66,21 +66,44 @@ export function ChannelSetupSheet({
   onOpenChange: (open: boolean) => void
   onSaved: () => void
 }) {
-  const [provider, setProvider] = useState<ChannelProvider>(channel === 'email' ? 'smtp' : 'twilio')
-  const [form, setForm] = useState(defaults)
+  // Mount-per-open: the body initializes its draft from `init`/`channel`
+  // in useState initializers and remounts fresh each open cycle — no
+  // re-seed effect to keep in sync with the props.
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      {open && (
+        <ChannelSetupSheetBody
+          channel={channel}
+          init={init}
+          providers={providers}
+          onOpenChange={onOpenChange}
+          onSaved={onSaved}
+        />
+      )}
+    </Sheet>
+  )
+}
+
+function ChannelSetupSheetBody({
+  channel,
+  init,
+  providers,
+  onOpenChange,
+  onSaved,
+}: {
+  channel: ChannelKind
+  init: ChannelSetupInit | null
+  providers: { provider: ChannelProvider; label: string; available: boolean }[]
+  onOpenChange: (open: boolean) => void
+  onSaved: () => void
+}) {
+  const [provider, setProvider] = useState<ChannelProvider>(
+    () => init?.provider ?? (channel === 'email' ? 'smtp' : 'twilio'),
+  )
+  const [form, setForm] = useState(() => ({ ...defaults, accountSid: init?.accountSid ?? '' }))
   const [busy, setBusy] = useState<string | null>(null)
   const [discovery, setDiscovery] = useState<Discovery | null>(null)
   const reusing = Boolean(init?.reuseFromId)
-
-  // Re-seed the draft each time the sheet opens with a fresh intent.
-  useEffect(() => {
-    if (open) {
-      setProvider(init?.provider ?? (channel === 'email' ? 'smtp' : 'twilio'))
-      setForm({ ...defaults, accountSid: init?.accountSid ?? '' })
-      setDiscovery(null)
-      setBusy(null)
-    }
-  }, [open, channel, init])
 
   function update(name: keyof typeof defaults, value: string) {
     setForm((current) => ({ ...current, [name]: value }))
@@ -165,8 +188,7 @@ export function ChannelSetupSheet({
     : []
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+    <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b border-border px-5 py-4">
           <SheetTitle className="flex items-center gap-2.5 text-lg">
             Set up connection
@@ -352,6 +374,5 @@ export function ChannelSetupSheet({
           </Button>
         </SheetFooter>
       </SheetContent>
-    </Sheet>
   )
 }
