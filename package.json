@@ -104,5 +104,6 @@
     "hono": "^4.12.25",
     "js-yaml": "^4.2.0",
     "@babel/core": "^7.29.6"
-  }
+  },
+  "packageManager": "pnpm@10.34.3"
 }
