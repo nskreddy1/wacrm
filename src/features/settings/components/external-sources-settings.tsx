@@ -16,8 +16,9 @@
 // their own token/connection string).
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 import {
   Database,
   FileSpreadsheet,
