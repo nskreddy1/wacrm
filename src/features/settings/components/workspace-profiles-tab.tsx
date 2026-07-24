@@ -13,8 +13,9 @@
 // are hidden without it, and the API + RLS re-check server-side.
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 import { Copy, Loader2, Lock, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -69,32 +70,30 @@ interface EditorState {
   permissions: Set<PermissionSlug>;
 }
 
+async function fetchProfiles(url: string): Promise<WorkspaceProfile[]> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to load profiles');
+  const json = (await res.json()) as { data: WorkspaceProfile[] };
+  return json.data ?? [];
+}
+
 export function WorkspaceProfilesTab({ onChanged }: { onChanged?: () => void }) {
   const canManage = useCan('manage-members');
 
-  const [profiles, setProfiles] = useState<WorkspaceProfile[]>([]);
-  const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<WorkspaceProfile | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/account/profiles');
-      if (!res.ok) throw new Error();
-      const json = (await res.json()) as { data: WorkspaceProfile[] };
-      setProfiles(json.data ?? []);
-    } catch {
-      toast.error('Failed to load profiles');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // SWR owns fetch/loading/revalidate state — no manual load effect.
+  const {
+    data: profiles = [],
+    isLoading: loading,
+    mutate,
+  } = useSWR('/api/account/profiles', fetchProfiles, {
+    onError: () => toast.error('Failed to load profiles'),
+  });
+  const load = useCallback(() => mutate(), [mutate]);
 
   const openCreate = (cloneFrom?: WorkspaceProfile) => {
     setEditor({
