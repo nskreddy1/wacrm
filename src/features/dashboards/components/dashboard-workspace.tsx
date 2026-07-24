@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 import Link from "next/link"
 import {
   Briefcase,
@@ -40,21 +40,27 @@ function greetingForHour(hour: number) {
 }
 
 /**
- * Time-of-day values must be computed after mount: the server clock
- * (UTC) can disagree with the visitor's local clock, which caused a
- * hydration mismatch ("Good morning" vs "Good afternoon"). SSR renders
- * the neutral fallbacks, then the client swaps in local values.
+ * Time-of-day values must come from the visitor's clock: the server
+ * clock (UTC) can disagree with it, which caused a hydration mismatch
+ * ("Good morning" vs "Good afternoon"). useSyncExternalStore renders
+ * the null server snapshot during SSR/hydration, then the client
+ * snapshot — computed once per mount — takes over.
  */
-function useLocalClock() {
-  const [clock, setClock] = useState<{ greeting: string; today: string } | null>(null)
-  useEffect(() => {
+let clockSnapshot: { greeting: string; today: string } | null = null
+function getClockSnapshot() {
+  if (!clockSnapshot) {
     const now = new Date()
-    setClock({
+    clockSnapshot = {
       greeting: greetingForHour(now.getHours()),
       today: new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(now),
-    })
-  }, [])
-  return clock
+    }
+  }
+  return clockSnapshot
+}
+const noopSubscribe = () => () => {}
+
+function useLocalClock() {
+  return useSyncExternalStore(noopSubscribe, getClockSnapshot, () => null)
 }
 
 /** Full-page placeholder mirroring the real layout, shown during first load. */

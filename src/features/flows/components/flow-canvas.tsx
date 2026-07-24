@@ -350,11 +350,15 @@ function FlowCanvasInner() {
     return nodes;
   }, [builderNodes, entryNodeId, flashKey, autoLayoutPositions]);
 
+  // Controlled React-Flow nodes: local state absorbs drag updates, and
+  // when the derived source changes we adjust state during render (the
+  // React-documented pattern) instead of an extra effect pass.
   const [rfNodes, setRfNodes] = useState<RfNode<NodeData>[]>(derivedRfNodes);
-
-  useEffect(() => {
+  const [prevDerived, setPrevDerived] = useState(derivedRfNodes);
+  if (prevDerived !== derivedRfNodes) {
+    setPrevDerived(derivedRfNodes);
     setRfNodes(derivedRfNodes);
-  }, [derivedRfNodes]);
+  }
 
   const rfEdges = useMemo(() => {
     const canvasEdges = deriveCanvasEdges(builderNodes);

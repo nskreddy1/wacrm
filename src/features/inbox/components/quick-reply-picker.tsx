@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Loader2, MessageSquare, Zap } from "lucide-react";
 import { useTranslations } from "next-intl";
+import useSWR from "swr";
 
 import {
   Dialog,
@@ -30,28 +30,18 @@ export function QuickReplyPicker({
   onPick,
 }: QuickReplyPickerProps) {
   const t = useTranslations("Inbox.composer");
-  const [items, setItems] = useState<QuickReply[]>([]);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      try {
-        const res = await fetch("/api/quick-replies", { cache: "no-store" });
-        const data = await res.json().catch(() => ({}));
-        if (!cancelled && res.ok) {
-          setItems((data.quick_replies as QuickReply[]) ?? []);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+  // SWR with a conditional key: fetching pauses while the dialog is
+  // closed and revalidates on open — no manual effect/cancel bookkeeping.
+  const { data: items = [], isLoading: loading } = useSWR(
+    open ? "/api/quick-replies" : null,
+    async (url: string) => {
+      const res = await fetch(url, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to load quick replies");
+      return (data.quick_replies as QuickReply[]) ?? [];
+    },
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

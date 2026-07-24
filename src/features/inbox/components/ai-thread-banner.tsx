@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import useSWR from "swr";
 import { Sparkles, Hand, Undo2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -85,22 +86,25 @@ export function AiThreadBanner({
 }: AiThreadBannerProps) {
   const t = useTranslations("Inbox.aiBanner");
   const { accountId } = useAuth();
-  const [autoReplyOn, setAutoReplyOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
-  // Optimistic local mirror of the pause flag so the banner flips
-  // instantly on click; re-seeds whenever the thread (or its server
-  // state via realtime) changes.
-  const [paused, setPaused] = useState(disabled);
-  useEffect(() => setPaused(disabled), [conversationId, disabled]);
+  // Optimistic override of the pause flag so the banner flips instantly
+  // on click. Derived state (no sync effect): the override applies only
+  // to the thread it was set for, so switching threads or a realtime
+  // update naturally falls back to the server value.
+  const [pausedOverride, setPausedOverride] = useState<{
+    conversationId: string;
+    paused: boolean;
+  } | null>(null);
+  const paused =
+    pausedOverride?.conversationId === conversationId ? pausedOverride.paused : disabled;
 
-  useEffect(() => {
-    if (!accountId) return;
-    let alive = true;
-    fetchAiAccountStatus(accountId).then((s) => alive && setAutoReplyOn(s.autoReplyOn));
-    return () => {
-      alive = false;
-    };
-  }, [accountId]);
+  // SWR dedupes across threads on top of the module-level cache; the key
+  // is null until auth resolves, which pauses fetching.
+  const { data: aiStatus } = useSWR(
+    accountId ? (["ai-account-status", accountId] as const) : null,
+    ([, id]) => fetchAiAccountStatus(id),
+  );
+  const autoReplyOn = aiStatus?.autoReplyOn ?? null;
 
   const toggle = useCallback(
     async (paused: boolean) => {
@@ -117,7 +121,7 @@ export function AiThreadBanner({
           toast.error(j?.error ?? t("updateError"));
           return;
         }
-        setPaused(paused);
+        setPausedOverride({ conversationId, paused });
         onChange?.({
           ai_autoreply_disabled: paused,
           // Take over assigns to the acting agent; resume releases only
