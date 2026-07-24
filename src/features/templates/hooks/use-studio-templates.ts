@@ -364,7 +364,8 @@ export function useStudioTemplates() {
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (/not connected|not configured/i.test(msg)) skips.push('Twilio');
+      if (/not connected|not configured|no twilio connection/i.test(msg))
+        skips.push('Twilio');
       else throw new Error(`Twilio sync failed: ${msg}`);
     }
     // Meta WABA sync

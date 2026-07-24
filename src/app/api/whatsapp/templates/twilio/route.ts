@@ -11,21 +11,29 @@ import {
 } from '@/features/whatsapp/lib/twilio-content';
 import type { ChannelConnection, TemplateButton } from '@/types';
 
+// Tolerant by design: the studio's saveBody() serializes empty
+// optional fields as null (matching the DB row shape), and the
+// create action is implied when no action is provided. Rejecting
+// null here caused "Invalid Twilio template" for every submit.
 const createSchema = z.object({
-  action: z.literal('create'),
+  action: z.literal('create').optional(),
   name: z.string().trim().min(1).max(512),
   category: z.enum(['Marketing', 'Utility', 'Authentication']),
   language: z.string().trim().min(2).max(12),
   body_text: z.string().trim().min(1).max(1600),
-  header_content: z.string().trim().optional(),
-  footer_text: z.string().trim().optional(),
-  buttons: z.array(z.record(z.string(), z.unknown())).optional(),
+  header_content: z.string().trim().nullish(),
+  footer_text: z.string().trim().nullish(),
+  buttons: z
+    .array(z.record(z.string(), z.unknown()))
+    .nullish()
+    .transform((v) => v ?? undefined),
   sample_values: z
     .object({
       body: z.array(z.string()).optional(),
       header: z.array(z.string()).optional(),
     })
-    .optional(),
+    .nullish()
+    .transform((v) => v ?? undefined),
 });
 
 /**
@@ -135,8 +143,8 @@ export async function POST(request: Request) {
       name: input.name,
       language: input.language,
       body: input.body_text,
-      header: input.header_content,
-      footer: input.footer_text,
+      header: input.header_content ?? undefined,
+      footer: input.footer_text ?? undefined,
       buttons: input.buttons as TemplateButton[] | undefined,
       variables,
     });
@@ -174,7 +182,8 @@ export async function POST(request: Request) {
   } catch (error) {
     if (
       error instanceof Error &&
-      error.message.startsWith('Connect and enable')
+      (error.message.startsWith('Connect and enable') ||
+        error.message.startsWith('No Twilio connection'))
     )
       return NextResponse.json({ error: error.message }, { status: 409 });
     return toErrorResponse(error);
