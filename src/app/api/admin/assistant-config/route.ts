@@ -29,6 +29,8 @@ interface StoredShape {
   api_key?: unknown;
   base_url?: unknown;
   system_prompt?: unknown;
+  temperature?: unknown;
+  max_output_tokens?: unknown;
   enabled?: unknown;
 }
 
@@ -68,6 +70,11 @@ export async function GET() {
     system_prompt:
       typeof v?.system_prompt === 'string' ? v.system_prompt : null,
     default_system_prompt: ASSISTANT_DEFAULT_SYSTEM_PROMPT,
+    temperature: typeof v?.temperature === 'number' ? v.temperature : null,
+    max_output_tokens:
+      typeof v?.max_output_tokens === 'number'
+        ? v.max_output_tokens
+        : ASSISTANT_DEFAULT_MAX_OUTPUT_TOKENS,
     updated_at: data?.updated_at ?? null,
   });
 }
@@ -92,6 +99,8 @@ export async function PATCH(request: Request) {
     api_key?: unknown;
     base_url?: unknown;
     system_prompt?: unknown;
+    temperature?: unknown;
+    max_output_tokens?: unknown;
     enabled?: unknown;
   } | null;
 
@@ -111,13 +120,32 @@ export async function PATCH(request: Request) {
     typeof body.base_url === 'string' && body.base_url.trim().length > 0
       ? body.base_url.trim()
       : null;
-  // Blank/omitted prompt = use the platform default. Capped so a
-  // pasted novel can't blow up every request's token budget.
+  // The prompt is ALWAYS stored verbatim — even when it matches the
+  // shipped default — so the admin's editor is the single source of
+  // truth and future default changes never silently alter a tenant's
+  // live persona. Blank still means "fall back to platform default".
+  // Capped so a pasted novel can't blow up every request's budget.
   const systemPrompt =
     typeof body.system_prompt === 'string' &&
     body.system_prompt.trim().length > 0
       ? body.system_prompt.trim().slice(0, 8000)
       : null;
+
+  // Advanced generation knobs — validated, clamped, optional.
+  const temperature =
+    typeof body.temperature === 'number' &&
+    Number.isFinite(body.temperature) &&
+    body.temperature >= 0 &&
+    body.temperature <= 2
+      ? Math.round(body.temperature * 100) / 100
+      : null;
+  const maxOutputTokens =
+    typeof body.max_output_tokens === 'number' &&
+    Number.isInteger(body.max_output_tokens) &&
+    body.max_output_tokens >= 100 &&
+    body.max_output_tokens <= 8000
+      ? body.max_output_tokens
+      : ASSISTANT_DEFAULT_MAX_OUTPUT_TOKENS;
 
   // Reject junk endpoints early (mainly for self-hosted Ollama/NIM).
   if (baseUrl && !/^https?:\/\//.test(baseUrl)) {
