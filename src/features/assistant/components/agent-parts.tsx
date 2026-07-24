@@ -2,6 +2,7 @@
 
 import { memo, useState } from 'react';
 import Link from 'next/link';
+import { Streamdown } from 'streamdown';
 import {
   ArrowUpRight,
   Check,
@@ -80,10 +81,12 @@ export const MessageText = memo(function MessageText({
       </div>
     );
   }
-  // Assistant: flat text, no bubble — reads like a person, not a bot.
+  // Assistant: flat markdown, no bubble — reads like a person, not a
+  // bot. Streamdown handles incomplete markdown gracefully while the
+  // response is still streaming (unterminated **bold**, lists, etc.).
   return (
-    <div className="text-foreground max-w-full text-sm leading-relaxed whitespace-pre-wrap">
-      {text}
+    <div className="text-foreground max-w-full min-w-0 text-sm leading-relaxed [&_li]:my-0.5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5">
+      <Streamdown>{text}</Streamdown>
     </div>
   );
 });
