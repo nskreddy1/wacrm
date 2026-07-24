@@ -70,12 +70,12 @@ export default function AutomationsPage() {
   const [deleting, setDeleting] = useState(false)
 
   async function load() {
-    setError(null)
     try {
       const response = await fetch("/api/automations", { cache: "no-store" })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload?.error ?? "Failed to load automations")
       setAutomations((payload.automations ?? []) as Automation[])
+      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load automations")
     }

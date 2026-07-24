@@ -44,7 +44,6 @@ export default function BroadcastsPage() {
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchBroadcasts = useCallback(async () => {
-    setError(null);
     try {
       const supabase = createClient();
       const { data, error: fetchError } = await supabase
@@ -53,6 +52,7 @@ export default function BroadcastsPage() {
         .order('created_at', { ascending: false });
       if (fetchError) throw fetchError;
       setBroadcasts(data ?? []);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorLoad'));
     } finally {
