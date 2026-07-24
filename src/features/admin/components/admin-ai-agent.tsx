@@ -336,15 +336,17 @@ function AgentForm({
 
   // Switching provider pre-fills its sensible default model — but only
   // when the field still holds the previous provider's default, so a
-  // hand-edited model id is never clobbered.
-  useEffect(() => {
+  // hand-edited model id is never clobbered. Done in the change handler
+  // (not an effect) so there's no cascading re-render.
+  function changeProvider(next: AiProvider) {
+    setProvider(next);
     setModel((current) => {
       const defaults = Object.values(AI_PROVIDER_DEFAULT_MODEL);
       return current === "" || defaults.includes(current)
-        ? AI_PROVIDER_DEFAULT_MODEL[provider]
+        ? AI_PROVIDER_DEFAULT_MODEL[next]
         : current;
     });
-  }, [provider]);
+  }
 
   const needsBaseUrl = provider === "custom" || provider === "ollama";
   const keyOptional = provider === "ollama";
@@ -424,7 +426,7 @@ function AgentForm({
                 items={PROVIDER_LABEL}
                 value={provider}
                 onValueChange={(v) => {
-                  if (v !== null) setProvider(v as AiProvider);
+                  if (v !== null) changeProvider(v as AiProvider);
                 }}
               >
                 <SelectTrigger

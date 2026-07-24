@@ -30,6 +30,15 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    // Vendored third-party components (kept intentionally close to their
+    // upstream source, see file headers). Don't hold them to our strictest
+    // React Compiler rules — fixing these locally would fork upstream.
+    files: ["src/components/tremor/**"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
