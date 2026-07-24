@@ -70,13 +70,13 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
   const [fieldsManagerOpen, setFieldsManagerOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [filters, setFilters] = useState<FilterGroup>(() => emptyFilterGroup())
-  const [visibleFieldIds, setVisibleFieldIds] = useState<string[]>([])
+  // null = "user hasn't customized"; render falls back to the stored
+  // preference. Deriving instead of syncing via effect avoids an extra
+  // cascading render when the store loads.
+  const [customVisibleFieldIds, setVisibleFieldIds] = useState<string[] | null>(null)
+  const visibleFieldIds = customVisibleFieldIds ?? store?.preferences.visible ?? []
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
-
-  useEffect(() => {
-    if (store && visibleFieldIds.length === 0) setVisibleFieldIds(store.preferences.visible)
-  }, [store, visibleFieldIds.length])
 
   // Open the record sheet client-side; update the URL shallowly so the link
   // stays shareable without triggering a full server page render.
@@ -100,15 +100,13 @@ export function ContactWorkspace({ initialView = "list", savedViewId = "all", in
     return rows
   }, [store, query, sort, filters])
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  // Derived clamp: everything below renders from safePage, so when rows
+  // shrink (delete/filter) the view corrects itself without state syncing.
   const safePage = Math.min(page, totalPages - 1)
   const rows = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize)
   const allSelected = rows.length > 0 && rows.every((contact) => selected.has(contact.id))
   const hasRefinements = Boolean(query.trim()) || countRules(filters) > 0
   const showPagination = filtered.length > 10
-
-  useEffect(() => {
-    if (page !== safePage) setPage(safePage)
-  }, [page, safePage])
 
   function toggleSelected(id: string) { setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next }) }
   function toggleCurrentPage() {
