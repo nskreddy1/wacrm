@@ -48,13 +48,41 @@ const CHANNEL_LABEL: Record<ChannelKind, string> = {
  * placeholder for Meta Cloud API until Tech Provider approval.
  */
 export function ConnectChannelDialog({ channel, open, onOpenChange, authorizeUrl, reusable, onContinue }: ConnectChannelDialogProps) {
+  // Mount-per-open: the body initializes its transient state (agreement,
+  // preselected method) in useState initializers and remounts fresh each
+  // open cycle — no reset effect to keep in sync with the props.
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open && (
+        <ConnectChannelDialogBody
+          channel={channel}
+          onOpenChange={onOpenChange}
+          authorizeUrl={authorizeUrl}
+          reusable={reusable}
+          onContinue={onContinue}
+        />
+      )}
+    </Dialog>
+  )
+}
+
+function ConnectChannelDialogBody({
+  channel,
+  onOpenChange,
+  authorizeUrl,
+  reusable,
+  onContinue,
+}: Omit<ConnectChannelDialogProps, 'open'>) {
   const [agreed, setAgreed] = useState(false)
   const [waiting, setWaiting] = useState(false)
-  const [method, setMethod] = useState<ConnectMethod | null>(null)
+  const [method, setMethod] = useState<ConnectMethod | null>(
+    () => (authorizeUrl ? 'twilio-popup' : reusable ? 'twilio-reuse' : 'twilio-manual'),
+  )
   const popupRef = useRef<Window | null>(null)
   const label = CHANNEL_LABEL[channel]
 
-  // Listen for the callback route's postMessage from the popup.
+  // Listen for the callback route's postMessage from the popup. The
+  // subscription lives for the body's lifetime (i.e. while open).
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
@@ -69,20 +97,9 @@ export function ConnectChannelDialog({ channel, open, onOpenChange, authorizeUrl
   )
 
   useEffect(() => {
-    if (!open) return
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [open, handleMessage])
-
-  // Reset transient state each time the dialog opens; preselect the
-  // best available method.
-  useEffect(() => {
-    if (open) {
-      setAgreed(false)
-      setWaiting(false)
-      setMethod(authorizeUrl ? 'twilio-popup' : reusable ? 'twilio-reuse' : 'twilio-manual')
-    }
-  }, [open, authorizeUrl, reusable])
+  }, [handleMessage])
 
   function startConnect() {
     if (!method) return
@@ -110,8 +127,7 @@ export function ConnectChannelDialog({ channel, open, onOpenChange, authorizeUrl
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+    <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Connect your {label} account</DialogTitle>
           <DialogDescription>
@@ -179,6 +195,5 @@ export function ConnectChannelDialog({ channel, open, onOpenChange, authorizeUrl
           </Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
   )
 }

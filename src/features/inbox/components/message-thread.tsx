@@ -202,6 +202,18 @@ export function MessageThread({
   }, [isRefreshing, onRefresh]);
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
 
+  // Per-conversation UI state (reactions cache, reply draft) resets when
+  // the active conversation changes — a quote pulled from conversation A
+  // shouldn't bleed into conversation B, and reactions from the previous
+  // thread must not flash on the new one. Adjusting state during render
+  // (the React-documented pattern) replaces two reset effects.
+  const [prevConversationKey, setPrevConversationKey] = useState(conversation?.id);
+  if (prevConversationKey !== conversation?.id) {
+    setPrevConversationKey(conversation?.id);
+    setReactions([]);
+    setReplyTo(null);
+  }
+
   // Profiles are bounded by RLS to rows the current user is allowed to
   // see — today that's just the current user, but the dropdown keeps the
   // shape ready for shared-team workspaces without a refactor.
@@ -311,10 +323,9 @@ export function MessageThread({
   // refetches the rows without also tearing down and rebuilding the
   // realtime channel.
   useEffect(() => {
-    if (!conversationId) {
-      setReactions([]);
-      return;
-    }
+    // The render-time reset above already cleared reactions when the
+    // conversation changed (including to none) — only fetch when active.
+    if (!conversationId) return;
     const supabase = createClient();
     let cancelled = false;
 
@@ -407,12 +418,6 @@ export function MessageThread({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId]);
-
-  // Clear any in-progress reply draft when the active conversation changes —
-  // a quote pulled from conversation A shouldn't bleed into conversation B.
-  useEffect(() => {
-    setReplyTo(null);
   }, [conversationId]);
 
   // Reset the server-side unread_count to 0 whenever an unread count
@@ -754,8 +759,10 @@ export function MessageThread({
 
   // Single reaction-set primitive. emoji === "" removes; otherwise adds/swaps.
   // The "toggle" semantic (pill click) is computed at the call site where the
-  // current reactions for the bubble are already in scope — keeps this
-  // function dependency-free w.r.t. the reaction list.
+  // current reactions for the bubble are already in scope. The optimistic
+  // next state is computed purely from the render-time `reactions` value
+  // (no impure functional updater), which also serves as the rollback
+  // snapshot on POST failure.
   const postReaction = useCallback(
     async (messageId: string, emoji: string) => {
       if (!user?.id || !conversation) {
@@ -769,33 +776,33 @@ export function MessageThread({
 
       const convId = conversation.id;
       const userId = user.id;
-      let snapshot: MessageReaction[] = [];
-
-      // Functional updater — captures the freshest reactions list, never a
-      // stale closure. Snapshot stored for rollback on POST failure.
-      setReactions((prev) => {
-        snapshot = prev;
-        const own = prev.find(
-          (r) =>
-            r.message_id === messageId &&
-            r.actor_type === "agent" &&
-            r.actor_id === userId,
-        );
-        if (emoji === "") return own ? prev.filter((r) => r !== own) : prev;
-        if (own) return prev.map((r) => (r === own ? { ...own, emoji } : r));
-        return [
-          ...prev,
-          {
-            id: `temp-${Date.now()}`,
-            message_id: messageId,
-            conversation_id: convId,
-            actor_type: "agent",
-            actor_id: userId,
-            emoji,
-            created_at: new Date().toISOString(),
-          },
-        ];
-      });
+      const snapshot = reactions;
+      const own = snapshot.find(
+        (r) =>
+          r.message_id === messageId &&
+          r.actor_type === "agent" &&
+          r.actor_id === userId,
+      );
+      const next =
+        emoji === ""
+          ? own
+            ? snapshot.filter((r) => r !== own)
+            : snapshot
+          : own
+            ? snapshot.map((r) => (r === own ? { ...own, emoji } : r))
+            : [
+                ...snapshot,
+                {
+                  id: `temp-${Date.now()}`,
+                  message_id: messageId,
+                  conversation_id: convId,
+                  actor_type: "agent" as const,
+                  actor_id: userId,
+                  emoji,
+                  created_at: new Date().toISOString(),
+                },
+              ];
+      setReactions(next);
 
       try {
         const res = await fetch("/api/whatsapp/react", {
@@ -813,7 +820,7 @@ export function MessageThread({
         setReactions(snapshot);
       }
     },
-    [conversation, user?.id],
+    [conversation, user?.id, reactions],
   );
 
   const handleAssignChange = useCallback(
