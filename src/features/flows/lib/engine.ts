@@ -1206,3 +1206,168 @@ async function startNewRun(
     outcome: outcome.outcome === 'advanced' ? 'started' : outcome.outcome,
   };
 }
+
+// ============================================================
+// Event dispatch — absorbed automation triggers (Workflows).
+// App events (contact created, tag added, conversation assigned)
+// start flows here. Reuses startNewRun + the advance loop, so
+// event-started runs behave identically to inbound-started ones:
+// action nodes execute immediately; a suspending node parks the
+// run and continues conversationally.
+// ============================================================
+
+export type FlowAppEvent =
+  | { type: 'new_contact_created' }
+  | { type: 'tag_added'; tag_id: string }
+  | { type: 'conversation_assigned'; agent_id: string };
+
+export interface DispatchEventInput {
+  accountId: string;
+  contactId: string;
+  /** Required for conversation-scoped actions (send/assign/close). */
+  conversationId: string;
+  event: FlowAppEvent;
+  /** Optional triggering text mirrored into vars.__message_text. */
+  messageText?: string;
+}
+
+/**
+ * Start every active flow whose trigger matches an app event.
+ * Never rejects — callers run in webhook after() paths where a
+ * downstream failure must not change the provider ack.
+ */
+export async function dispatchEventToFlows(
+  input: DispatchEventInput
+): Promise<{ started: number }> {
+  const db = supabaseAdmin();
+  let started = 0;
+  try {
+    const { data: flows, error } = await db
+      .from('flows')
+      .select('*')
+      .eq('account_id', input.accountId)
+      .eq('status', 'active')
+      .eq('trigger_type', input.event.type)
+      .order('created_at', { ascending: true });
+    if (error || !flows?.length) return { started };
+
+    for (const flowRaw of flows as FlowRow[]) {
+      if (!flowRaw.entry_node_id) continue;
+
+      // Config filters — empty arrays mean "match any".
+      const cfg = (flowRaw.trigger_config ?? {}) as {
+        tag_ids?: string[];
+        agent_ids?: string[];
+      };
+      if (
+        input.event.type === 'tag_added' &&
+        Array.isArray(cfg.tag_ids) &&
+        cfg.tag_ids.length > 0 &&
+        !cfg.tag_ids.includes(input.event.tag_id)
+      ) {
+        continue;
+      }
+      if (
+        input.event.type === 'conversation_assigned' &&
+        Array.isArray(cfg.agent_ids) &&
+        cfg.agent_ids.length > 0 &&
+        !cfg.agent_ids.includes(input.event.agent_id)
+      ) {
+        continue;
+      }
+
+      const nodes = await loadAllNodes(db, flowRaw.id);
+      const result = await startNewRun(
+        db,
+        flowRaw,
+        {
+          accountId: input.accountId,
+          userId: flowRaw.user_id,
+          contactId: input.contactId,
+          conversationId: input.conversationId,
+          message: {
+            kind: 'text',
+            text: input.messageText ?? '',
+            meta_message_id: `event:${input.event.type}:${crypto.randomUUID()}`,
+          },
+        },
+        nodes
+      );
+      if (result.consumed) {
+        started += 1;
+        // One active run per contact (partial unique index) — once a
+        // run starts, further event flows for this contact must wait.
+        break;
+      }
+    }
+  } catch (err) {
+    console.error(
+      '[flows] dispatchEventToFlows threw:',
+      err instanceof Error ? err.message : err
+    );
+  }
+  return { started };
+}
+
+// ============================================================
+// Wake sweep — resumes `wait`-parked runs whose wake_at elapsed.
+// Called by /api/flows/cron alongside the stale-run sweep.
+// ============================================================
+
+export async function resumeWaitingRuns(): Promise<{ resumed: number }> {
+  const db = supabaseAdmin();
+  let resumed = 0;
+  try {
+    const nowIso = new Date().toISOString();
+    const { data: due, error } = await db
+      .from('flow_runs')
+      .select('*')
+      .eq('status', 'waiting')
+      .lte('wake_at', nowIso)
+      .limit(50);
+    if (error || !due?.length) return { resumed };
+
+    for (const runRaw of due as FlowRunRow[]) {
+      // Claim atomically — the status precondition means two overlapping
+      // cron ticks can't double-resume the same run.
+      const { data: claimed } = await db
+        .from('flow_runs')
+        .update({
+          status: 'active',
+          wake_at: null,
+          last_advanced_at: nowIso,
+        })
+        .eq('id', runRaw.id)
+        .eq('status', 'waiting')
+        .select('*')
+        .maybeSingle();
+      if (!claimed) continue;
+
+      const run = claimed as FlowRunRow;
+      const nodes = await loadAllNodes(db, run.flow_id);
+      const waitNode = run.current_node_key
+        ? nodes.get(run.current_node_key)
+        : null;
+      const nextKey =
+        waitNode && waitNode.node_type === 'wait'
+          ? (waitNode.config as { next_node_key?: string }).next_node_key
+          : null;
+      if (!nextKey) {
+        await endRun(db, run.id, 'failed', 'wait_missing_next');
+        continue;
+      }
+      await logEvent(db, run.id, 'node_entered', run.current_node_key, {
+        node_type: 'wait',
+        detail: 'woke',
+      });
+      await advanceFromNodeKey(db, run, nextKey, nodes);
+      resumed += 1;
+    }
+  } catch (err) {
+    console.error(
+      '[flows] resumeWaitingRuns threw:',
+      err instanceof Error ? err.message : err
+    );
+  }
+  return { resumed };
+}

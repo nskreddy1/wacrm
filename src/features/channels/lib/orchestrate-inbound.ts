@@ -1,6 +1,8 @@
 import { dispatchInboundToAiReply } from '@/features/assistant/lib/ai/auto-reply';
-import { runAutomationsForTrigger } from '@/features/automations/lib/engine';
-import { dispatchInboundToFlows } from '@/features/flows/lib/engine';
+import {
+  dispatchEventToFlows,
+  dispatchInboundToFlows,
+} from '@/features/flows/lib/engine';
 
 export interface OrchestrateInboundChannelMessageInput {
   accountId: string;
@@ -42,37 +44,17 @@ export async function orchestrateInboundChannelMessage(
 
     if (flowResult.consumed) return;
 
-    const context = {
-      message_text: messageText,
-      conversation_id: input.conversationId,
-    };
-    await runAutomationsForTrigger({
-      accountId: input.accountId,
-      triggerType: 'new_message_received',
-      contactId: input.contactId,
-      context,
-    });
-    await runAutomationsForTrigger({
-      accountId: input.accountId,
-      triggerType: 'keyword_match',
-      contactId: input.contactId,
-      context,
-    });
-
+    // Workflows unification: inbound-driven triggers (keyword,
+    // first_inbound_message, new_message_received) are all evaluated
+    // inside dispatchInboundToFlows. The only event left to raise
+    // here is contact creation, which starts event-triggered flows.
     if (input.contactCreated) {
-      await runAutomationsForTrigger({
+      await dispatchEventToFlows({
         accountId: input.accountId,
-        triggerType: 'new_contact_created',
         contactId: input.contactId,
-        context,
-      });
-    }
-    if (input.isFirstInboundMessage) {
-      await runAutomationsForTrigger({
-        accountId: input.accountId,
-        triggerType: 'first_inbound_message',
-        contactId: input.contactId,
-        context,
+        conversationId: input.conversationId,
+        event: { type: 'new_contact_created' },
+        messageText,
       });
     }
 
