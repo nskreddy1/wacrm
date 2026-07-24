@@ -48,7 +48,15 @@ export function deriveCanvasEdges(nodes: BuilderNode[]): CanvasEdge[] {
       case 'send_message':
       case 'send_media':
       case 'collect_input':
-      case 'set_tag': {
+      case 'set_tag':
+      // Absorbed action nodes — all single-exit via next_node_key.
+      case 'send_template':
+      case 'update_contact_field':
+      case 'assign_conversation':
+      case 'create_deal':
+      case 'send_webhook':
+      case 'close_conversation':
+      case 'wait': {
         const next = (cfg as { next_node_key?: string }).next_node_key;
         if (next && knownKeys.has(next)) {
           edges.push({
@@ -175,6 +183,14 @@ export function outgoingSlots(node: BuilderNode): OutgoingSlot[] {
     case 'send_media':
     case 'collect_input':
     case 'set_tag':
+    // Absorbed action nodes — one "next" slot each.
+    case 'send_template':
+    case 'update_contact_field':
+    case 'assign_conversation':
+    case 'create_deal':
+    case 'send_webhook':
+    case 'close_conversation':
+    case 'wait':
       return [{ id: 'next', label: 'Next' }];
 
     case 'condition':
@@ -249,6 +265,14 @@ export function applyEdgeConnection(
     case 'send_media':
     case 'collect_input':
     case 'set_tag':
+    // Absorbed action nodes — one "next" slot each.
+    case 'send_template':
+    case 'update_contact_field':
+    case 'assign_conversation':
+    case 'create_deal':
+    case 'send_webhook':
+    case 'close_conversation':
+    case 'wait':
       if (sourceHandle === 'next') return { next_node_key: targetKey };
       return null;
 
@@ -346,7 +370,15 @@ function patchedConfigWithoutKey(
     case 'send_message':
     case 'send_media':
     case 'collect_input':
-    case 'set_tag': {
+    case 'set_tag':
+    // Absorbed action nodes — one "next" slot each.
+    case 'send_template':
+    case 'update_contact_field':
+    case 'assign_conversation':
+    case 'create_deal':
+    case 'send_webhook':
+    case 'close_conversation':
+    case 'wait': {
       const next = (cfg as { next_node_key?: string }).next_node_key;
       if (next !== deletedKey) return null;
       return { ...cfg, next_node_key: '' };
