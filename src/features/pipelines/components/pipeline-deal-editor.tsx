@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import useSWR from "swr"
 import { Building2, Contact, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -57,7 +57,6 @@ export function PipelineDealEditor({ open, deal, defaultStageId, defaultSubPipel
   const { defaultCurrency: workspaceCurrency } = useAuth()
   const [draft, setDraft] = useState(() => draftFrom(deal, snapshot, defaultStageId, workspaceCurrency))
   const [subPipelineId, setSubPipelineId] = useState(() => defaultSubPipelineId ?? snapshot.subPipelines.find((entry) => deal && entry.dealIds.includes(deal.id))?.id ?? snapshot.subPipelines[0]?.id ?? "")
-  const [items, setItems] = useState<DraftDealItem[]>([])
   const [extraContacts, setExtraContacts] = useState<{ id: string; name: string }[]>([])
   const [quickContactOpen, setQuickContactOpen] = useState(false)
   const [fieldsOpen, setFieldsOpen] = useState(false)
@@ -72,18 +71,25 @@ export function PipelineDealEditor({ open, deal, defaultStageId, defaultSubPipel
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
-  // Load persisted line items when editing an existing deal
-  useEffect(() => {
-    let cancelled = false
-    if (open && deal?.id) {
-      listDealItemsAction(snapshot.pipeline.id, deal.id).then((result) => {
-        if (!cancelled && result.ok) setItems(result.data.map((item) => ({ key: item.id, id: item.id, catalogItemId: item.catalogItemId, name: item.name, listPrice: item.listPrice, quantity: item.quantity, discountPct: item.discountPct })))
-      })
-    } else {
-      setItems([])
-    }
-    return () => { cancelled = true }
-  }, [open, deal?.id, snapshot.pipeline.id])
+  // Persisted line items for an existing deal. SWR owns the fetch (key is
+  // null when creating or closed). Local edits live in `items`; when the
+  // fetched source changes we adjust state during render (the React-
+  // documented pattern) instead of a sync effect. Closing resets the key
+  // to null, so reopening a create editor starts from an empty list.
+  const { data: fetchedItems } = useSWR(
+    open && deal?.id ? (["deal-items", snapshot.pipeline.id, deal.id] as const) : null,
+    async ([, pipelineId, dealId]) => {
+      const result = await listDealItemsAction(pipelineId, dealId)
+      if (!result.ok) return []
+      return result.data.map((item) => ({ key: item.id, id: item.id, catalogItemId: item.catalogItemId, name: item.name, listPrice: item.listPrice, quantity: item.quantity, discountPct: item.discountPct }))
+    },
+  )
+  const [items, setItems] = useState<DraftDealItem[]>([])
+  const [prevFetchedItems, setPrevFetchedItems] = useState(fetchedItems)
+  if (prevFetchedItems !== fetchedItems) {
+    setPrevFetchedItems(fetchedItems)
+    setItems(fetchedItems ?? [])
+  }
 
   const hidden = useMemo(() => new Set(layout?.hidden ?? []), [layout])
   const [salesOpen, setSalesOpen] = useState(Boolean(deal && (deal.priority !== "normal" || deal.probability !== 20 || deal.status !== "open" || deal.nextStep || deal.activity)))
