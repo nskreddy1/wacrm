@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { RemoteImage } from "@/components/shared/remote-image";
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
 
@@ -137,7 +138,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           <div className="flex flex-col items-center text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-lg font-semibold text-foreground">
               {contact.avatar_url ? (
-                <img
+                <RemoteImage
                   src={contact.avatar_url}
                   alt={displayName}
                   className="h-16 w-16 rounded-full object-cover"

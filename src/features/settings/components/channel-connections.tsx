@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { ChevronRight, Loader2, Mail, MessageCircle, Plus, Settings2, ShieldCheck, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
+import { BrandIcon } from '@/components/shared/brand-icon'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -118,7 +119,7 @@ function ProviderCard({
       className="flex w-40 flex-col items-center gap-3 rounded-lg border border-border bg-card px-4 py-6 text-center transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       {iconSrc ? (
-        <img src={iconSrc || "/placeholder.svg"} alt="" className="size-10" />
+        <BrandIcon src={iconSrc} size={40} />
       ) : IconCmp ? (
         <IconCmp className="size-10 text-muted-foreground" strokeWidth={1.25} aria-hidden />
       ) : null}
@@ -242,7 +243,7 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
                 <div className="flex flex-col items-center gap-4 pt-4 text-center">
                   <h2 className="text-2xl font-bold text-balance text-foreground">{head.heroTitle}</h2>
                   {tab === 'whatsapp' ? (
-                    <img src="/icons/brands/whatsapp.svg" alt="WhatsApp" className="size-12" />
+                    <BrandIcon src="/icons/brands/whatsapp.svg" alt="WhatsApp" size={48} />
                   ) : (
                     <div className="flex size-14 items-center justify-center rounded-full bg-primary-soft">
                       <Icon className="size-7 text-primary" aria-hidden />
@@ -392,7 +393,7 @@ export function ChannelConnections({ fixedChannel }: { fixedChannel?: ChannelKin
         <AlertDialogContent>
           <AlertDialogHeader>
             <div className="mb-1 flex size-10 items-center justify-center rounded-lg border border-border bg-card">
-              <img src="/icons/brands/twilio.svg" alt="" className="size-6" />
+              <BrandIcon src="/icons/brands/twilio.svg" size={24} />
             </div>
             <AlertDialogTitle>Use your existing Twilio account?</AlertDialogTitle>
             <AlertDialogDescription>
