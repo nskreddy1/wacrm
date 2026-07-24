@@ -83,36 +83,35 @@ function fmtDate(iso: string): string {
   });
 }
 
+async function fetchSources(url: string): Promise<ExternalSource[]> {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error || 'Failed to load external sources');
+  }
+  const data = (await res.json()) as { sources: ExternalSource[] };
+  return data.sources;
+}
+
 export function ExternalSourcesSettings() {
   const { canEditSettings } = useAuth();
 
-  const [sources, setSources] = useState<ExternalSource[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ExternalSource | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/external-sources', { cache: 'no-store' });
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        toast.error(payload.error || 'Failed to load external sources');
-        return;
-      }
-      const data = (await res.json()) as { sources: ExternalSource[] };
-      setSources(data.sources);
-    } catch (err) {
+  // SWR owns fetch/loading/revalidate state — no manual load effect.
+  const {
+    data: sources = [],
+    isLoading: loading,
+    mutate,
+  } = useSWR('/api/external-sources', fetchSources, {
+    onError: (err) => {
       console.error('[ExternalSourcesSettings] load error:', err);
-      toast.error('Network error');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+      toast.error(err instanceof Error ? err.message : 'Network error');
+    },
+  });
+  const load = useCallback(() => mutate(), [mutate]);
 
   async function handleDelete(source: ExternalSource) {
     setDeleting(source.id);
@@ -126,7 +125,11 @@ export function ExternalSourcesSettings() {
         return;
       }
       toast.success(`Deleted "${source.name}"`);
-      setSources((prev) => prev.filter((s) => s.id !== source.id));
+      // Reflect the delete locally without a refetch.
+      void mutate(
+        (prev) => prev?.filter((s) => s.id !== source.id),
+        { revalidate: false },
+      );
     } catch (err) {
       console.error('[ExternalSourcesSettings] delete error:', err);
       toast.error('Network error');
