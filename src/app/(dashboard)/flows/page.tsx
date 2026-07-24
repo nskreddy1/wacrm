@@ -16,17 +16,9 @@ import {
   HelpCircle,
   UserPlus,
   FileText,
-  Zap,
 } from "lucide-react";
 
-import type { Automation } from "@/types";
-import {
-  mergeUnifiedItems,
-  filterUnifiedItems,
-  type FlowRow,
-  type UnifiedFilter,
-} from "@/features/flows/components/unified-items";
-import { AutomationRuleCard } from "@/features/flows/components/automation-rule-card";
+import { type FlowRow } from "@/features/flows/components/unified-items";
 
 import { useTranslations } from "next-intl";
 import { useCan } from "@/features/auth/hooks/use-can";
@@ -90,19 +82,14 @@ export default function FlowsPage() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
-  const [automations, setAutomations] = useState<Automation[]>([]);
-  const [filter, setFilter] = useState<UnifiedFilter>("all");
-  const [pendingRuleDelete, setPendingRuleDelete] = useState<Automation | null>(null);
-  const [deletingRule, setDeletingRule] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [flowsRes, tmplRes, autoRes] = await Promise.all([
+        const [flowsRes, tmplRes] = await Promise.all([
           fetch("/api/flows"),
           fetch("/api/flows/templates"),
-          fetch("/api/automations", { cache: "no-store" }),
         ]);
         if (!flowsRes.ok) {
           throw new Error(`Failed to load flows: ${flowsRes.status}`);
