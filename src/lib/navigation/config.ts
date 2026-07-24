@@ -122,19 +122,14 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         permission: 'templates:manage',
       },
       {
-        key: 'automations',
-        href: '/automations',
-        label: 'Automations',
-        shortLabel: 'Rules',
-        icon: 'workflow',
-        permission: 'automations:manage',
-      },
-      {
-        key: 'flows',
+        // Unified surface: canvas flows + classic automation rules
+        // live together at /flows. The old /automations list redirects
+        // there; rule builder/logs sub-routes remain functional.
+        key: 'workflows',
         href: '/flows',
-        label: 'Flows',
-        shortLabel: 'Flows',
-        icon: 'git-fork',
+        label: 'Workflows',
+        shortLabel: 'Workflows',
+        icon: 'workflow',
         permission: 'flows:manage',
       },
       {

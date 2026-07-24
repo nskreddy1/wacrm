@@ -18,7 +18,14 @@ import {
   FileText,
 } from 'lucide-react';
 
-import { type FlowRow } from '@/features/flows/components/unified-items';
+import {
+  type FlowRow,
+  type UnifiedFilter,
+  filterUnifiedItems,
+  mergeUnifiedItems,
+} from '@/features/flows/components/unified-items';
+import { AutomationRuleCard } from '@/features/flows/components/automation-rule-card';
+import type { Automation } from '@/types';
 
 import { useTranslations } from 'next-intl';
 import { useCan } from '@/features/auth/hooks/use-can';
@@ -36,6 +43,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { pageContainerClassName } from '@/components/layout/page-container';
+import { CardGridSkeleton } from '@/components/ui/loading-skeletons';
 
 /**
  * Flows list page.
@@ -79,6 +87,8 @@ export default function FlowsPage() {
   const canCreate = useCan('send-messages');
   const t = useTranslations('Flows.list');
   const [flows, setFlows] = useState<FlowRow[]>([]);
+  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [filter, setFilter] = useState<UnifiedFilter>('all');
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -89,9 +99,12 @@ export default function FlowsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [flowsRes, tmplRes] = await Promise.all([
+        // Unified Workflows surface: canvas flows + classic automation
+        // rules load in parallel and merge into one grid.
+        const [flowsRes, tmplRes, autoRes] = await Promise.all([
           fetch('/api/flows'),
           fetch('/api/flows/templates'),
+          fetch('/api/automations'),
         ]);
         if (!flowsRes.ok) {
           throw new Error(`Failed to load flows: ${flowsRes.status}`);
@@ -106,6 +119,17 @@ export default function FlowsPage() {
           };
           if (!cancelled) setTemplates(tmplJson.templates ?? []);
         }
+        // Classic rules are additive — a failure here must not blank
+        // the whole Workflows page.
+        if (autoRes.ok) {
+          const autoJson = (await autoRes.json()) as {
+            automations?: Automation[];
+            data?: Automation[];
+          };
+          if (!cancelled) {
+            setAutomations(autoJson.automations ?? autoJson.data ?? []);
+          }
+        }
       } catch (err) {
         if (!cancelled) {
           console.error(err);
@@ -119,6 +143,60 @@ export default function FlowsPage() {
       cancelled = true;
     };
   }, [t]);
+
+  async function handleToggleAutomation(a: Automation, next: boolean) {
+    // Optimistic flip — revert on failure.
+    setAutomations((prev) =>
+      prev.map((x) => (x.id === a.id ? { ...x, is_active: next } : x))
+    );
+    try {
+      const res = await fetch(`/api/automations/${a.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: next }),
+      });
+      if (!res.ok) throw new Error(`Toggle failed: ${res.status}`);
+    } catch (err) {
+      console.error(err);
+      setAutomations((prev) =>
+        prev.map((x) => (x.id === a.id ? { ...x, is_active: !next } : x))
+      );
+      toast.error(t('ruleToggleError'));
+    }
+  }
+
+  async function handleDuplicateAutomation(a: Automation) {
+    try {
+      const res = await fetch(`/api/automations/${a.id}/duplicate`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error(`Duplicate failed: ${res.status}`);
+      const json = (await res.json()) as { automation?: Automation };
+      if (json.automation) {
+        setAutomations((prev) => [json.automation as Automation, ...prev]);
+        toast.success(t('ruleDuplicated'));
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(t('ruleDuplicateError'));
+    }
+  }
+
+  async function handleDeleteAutomation(a: Automation) {
+    const yes = window.confirm(t('deleteConfirm', { name: a.name }));
+    if (!yes) return;
+    try {
+      const res = await fetch(`/api/automations/${a.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+      setAutomations((prev) => prev.filter((x) => x.id !== a.id));
+      toast.success(t('deleteSuccess'));
+    } catch (err) {
+      console.error(err);
+      toast.error(t('deleteError'));
+    }
+  }
 
   async function handleCreate() {
     if (!newName.trim()) return;
@@ -184,9 +262,10 @@ export default function FlowsPage() {
   }
 
   if (loading) {
+    // Card-grid skeleton mirrors the real workflows grid (no jump).
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+      <div className={cn(pageContainerClassName, 'space-y-6')}>
+        <CardGridSkeleton count={6} className="md:grid-cols-2 xl:grid-cols-3" />
       </div>
     );
   }
@@ -199,9 +278,6 @@ export default function FlowsPage() {
             <h1 className="text-foreground text-2xl font-semibold">
               {t('title')}
             </h1>
-            <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-300 uppercase">
-              {t('beta')}
-            </span>
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
             {t('description')}
@@ -217,24 +293,79 @@ export default function FlowsPage() {
         </GatedButton>
       </header>
 
-      {flows.length === 0 ? (
+      {flows.length === 0 && automations.length === 0 ? (
         <EmptyState
           onCreate={() => setCreateOpen(true)}
           canCreate={canCreate}
           t={t}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {flows.map((flow) => (
-            <FlowCard
-              key={flow.id}
-              flow={flow}
-              onEdit={() => router.push(`/flows/${flow.id}`)}
-              onDelete={() => handleDelete(flow)}
-              t={t}
-            />
-          ))}
-        </div>
+        <>
+          {automations.length > 0 && (
+            <div
+              role="tablist"
+              aria-label={t('filterLabel')}
+              className="border-border bg-muted/50 inline-flex items-center gap-1 rounded-lg border p-1"
+            >
+              {(
+                [
+                  ['all', t('filterAll')],
+                  ['flows', t('filterFlows')],
+                  ['rules', t('filterRules')],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  role="tab"
+                  type="button"
+                  aria-selected={filter === key}
+                  onClick={() => setFilter(key)}
+                  className={cn(
+                    'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                    filter === key
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filterUnifiedItems(
+              mergeUnifiedItems(flows, automations),
+              filter
+            ).map((item) =>
+              item.kind === 'flow' ? (
+                <FlowCard
+                  key={`flow-${item.flow.id}`}
+                  flow={item.flow}
+                  onEdit={() => router.push(`/flows/${item.flow.id}`)}
+                  onDelete={() => handleDelete(item.flow)}
+                  t={t}
+                />
+              ) : (
+                <AutomationRuleCard
+                  key={`rule-${item.automation.id}`}
+                  automation={item.automation}
+                  onToggle={(next) =>
+                    handleToggleAutomation(item.automation, next)
+                  }
+                  onEdit={() =>
+                    router.push(`/automations/${item.automation.id}`)
+                  }
+                  onLogs={() =>
+                    router.push(`/automations/${item.automation.id}/logs`)
+                  }
+                  onDuplicate={() => handleDuplicateAutomation(item.automation)}
+                  onDelete={() => handleDeleteAutomation(item.automation)}
+                  t={t}
+                />
+              )
+            )}
+          </div>
+        </>
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
