@@ -261,7 +261,14 @@ function ChannelSetupSheetBody({
             }
           : provider === 'meta'
             ? { phone_number_id: form.phoneNumberId.trim() }
-            : {};
+            : provider === 'twilio'
+              ? // Plain (non-secret) config so the Messaging Service can
+                // be changed later WITHOUT retyping the auth token — the
+                // adapters read configuration first, credentials second.
+                {
+                  messaging_service_sid: form.messagingServiceSid.trim(),
+                }
+              : {};
       const credentials = reusing
         ? undefined
         : provider === 'smtp'
@@ -287,15 +294,24 @@ function ChannelSetupSheetBody({
                 };
       await request({
         action: 'save',
+        ...(editing ? { id: init?.editId } : {}),
         channel,
         provider,
         displayName: form.displayName.trim(),
         externalIdentity: form.externalIdentity.trim(),
         configuration,
         credentials,
-        ...(reusing ? { reuseCredentialsFromId: init?.reuseFromId } : {}),
+        // Edit mode keeps the row's own stored credentials server-side;
+        // only an explicit "reuse from" needs the source id.
+        ...(init?.reuseFromId
+          ? { reuseCredentialsFromId: init.reuseFromId }
+          : {}),
       });
-      toast.success('Connection saved securely. Test it before enabling.');
+      toast.success(
+        editing
+          ? 'Connection updated. Run a test to confirm delivery still works.'
+          : 'Connection saved securely. Test it before enabling.'
+      );
       onSaved();
       onOpenChange(false);
     } catch (cause) {
@@ -733,6 +749,27 @@ function ChannelSetupSheetBody({
                     ) : null}
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+
+            {/* Manual Messaging Service entry — covers edit mode, where
+                discovery hasn't run (it needs the auth token, which we
+                never round-trip to the browser). Paste or clear the MG…
+                SID directly without re-entering credentials. */}
+            {provider === 'twilio' && !discovery ? (
+              <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3">
+                <span className="text-muted-foreground w-28 shrink-0 text-sm">
+                  Messaging Service
+                </span>
+                <Input
+                  value={form.messagingServiceSid}
+                  onChange={(event) =>
+                    update('messagingServiceSid', event.target.value)
+                  }
+                  placeholder="MGxxxxxxxx (optional — blank sends from the number)"
+                  className="bg-card h-8 flex-1 font-mono text-xs"
+                  aria-label="Messaging Service SID"
+                />
               </div>
             ) : null}
 
