@@ -122,20 +122,14 @@ export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
                 label={t('listView')}
               />
             </div>
-            <div className="ml-auto hidden flex-wrap items-center gap-x-3.5 gap-y-1.5 lg:flex">
-              {LEGEND_TYPES.map((t_type) => (
-                <span
-                  key={t_type}
-                  className="text-muted-foreground inline-flex items-center gap-1.5 text-[11.5px]"
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ background: nodeColors(t_type).solid }}
-                  />
-                  {t(`nodes.${t_type}.label`)}
-                </span>
-              ))}
-            </div>
+            {/* Enterprise builders (HubSpot, Intercom, Zapier) don't
+                strip-list every node type in the chrome — each node
+                card already carries its own colored icon chip, which
+                is the legend. Keep the right side calm: just a step
+                count so the toolbar reads as status, not noise. */}
+            <span className="text-muted-foreground ml-auto text-[12px] tabular-nums">
+              {t('stepCount', { count: initialNodes.length })}
+            </span>
           </div>
         )}
 
