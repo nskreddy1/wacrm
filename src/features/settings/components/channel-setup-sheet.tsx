@@ -185,8 +185,10 @@ function ChannelSetupSheetBody({
       const payload = await request({
         action: 'discover',
         provider: 'twilio',
+        // Edit mode reuses the row's OWN stored credentials — fall back
+        // to editId so "Fetch" works without retyping the auth token.
         ...(reusing
-          ? { reuseCredentialsFromId: init?.reuseFromId }
+          ? { reuseCredentialsFromId: init?.reuseFromId ?? init?.editId }
           : {
               accountSid: form.accountSid.trim(),
               authToken: form.authToken.trim(),
@@ -425,7 +427,9 @@ function ChannelSetupSheetBody({
               Credentials
             </span>
             <span className="text-foreground text-sm font-medium">
-              Reused from &ldquo;{init?.reuseFromLabel}&rdquo;
+              {init?.reuseFromLabel
+                ? `Reused from \u201C${init.reuseFromLabel}\u201D`
+                : 'Using this connection\u2019s stored credentials'}
             </span>
           </div>
         ) : null}
