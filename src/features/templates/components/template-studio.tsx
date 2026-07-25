@@ -436,7 +436,7 @@ function TemplateRail({
               </div>
               <div className="text-muted-foreground mt-1.5 flex items-center gap-1.5 text-xs">
                 <span className="uppercase">
-                  {tpl.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}
+                  {CHANNEL_META[tpl.channel].label}
                 </span>
                 <span aria-hidden="true">·</span>
                 <span>{CATEGORY_LABELS[tpl.category]}</span>
