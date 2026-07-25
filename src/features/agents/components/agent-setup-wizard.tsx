@@ -52,6 +52,10 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
   );
   const [personaDraft, setPersonaDraft] = useState(emptyPersonaDraft());
   const [prompt, setPrompt] = useState(STARTER_PROMPT);
+  // Reply limit: toggle FIRST ("should the bot ever stop by itself?"),
+  // and only when it's on do we ask the per-conversation max. Toggle
+  // off → limitMode 'never' (the bot replies every time).
+  const [limitOn, setLimitOn] = useState(true);
   const [replyCap, setReplyCap] = useState(3);
   const [suggestionsOn, setSuggestionsOn] = useState(true);
   const [autoreplyOn, setAutoreplyOn] = useState(true);
@@ -110,7 +114,9 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
           is_enabled: suggestionsOn || autoreplyOn,
           suggestions_enabled: suggestionsOn,
           autoreply_enabled: autoreplyOn,
-          settings: { replyCap },
+          settings: limitOn
+            ? { replyCap, limitMode: 'per_conversation' }
+            : { limitMode: 'never' },
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -384,26 +390,50 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
           </fieldset>
 
           {autoreplyOn ? (
-            <div>
-              <label
-                htmlFor="wiz-cap"
-                className="text-foreground mb-1 block text-sm font-medium"
-              >
-                Max automatic replies per conversation
+            <div className="border-border rounded-md border px-3 py-3">
+              <label className="flex cursor-pointer items-start justify-between gap-3">
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-foreground text-sm font-medium">
+                    Limit automatic replies
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    {limitOn
+                      ? 'The bot stops after a set number of replies per conversation and waits for your team.'
+                      : 'Off — the bot keeps replying every time (it still hands off to a human when it can\u2019t help).'}
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-checked={limitOn}
+                  checked={limitOn}
+                  onChange={(e) => setLimitOn(e.target.checked)}
+                  className="accent-primary mt-0.5 size-4 shrink-0"
+                />
               </label>
-              <input
-                id="wiz-cap"
-                type="number"
-                min={1}
-                max={20}
-                value={replyCap}
-                onChange={(e) => setReplyCap(Number(e.target.value) || 3)}
-                className="border-border bg-background text-foreground w-24 rounded-md border px-3 py-2 text-sm"
-              />
-              <p className="text-muted-foreground mt-1 text-xs">
-                After this many replies the conversation waits for your team —
-                the bot never spams customers.
-              </p>
+              {limitOn ? (
+                <div className="mt-3">
+                  <label
+                    htmlFor="wiz-cap"
+                    className="text-foreground mb-1 block text-sm font-medium"
+                  >
+                    Max automatic replies per conversation
+                  </label>
+                  <input
+                    id="wiz-cap"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={replyCap}
+                    onChange={(e) => setReplyCap(Number(e.target.value) || 3)}
+                    className="border-border bg-background text-foreground w-24 rounded-md border px-3 py-2 text-sm"
+                  />
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    After this many replies the conversation waits for your
+                    team — the bot never spams customers.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

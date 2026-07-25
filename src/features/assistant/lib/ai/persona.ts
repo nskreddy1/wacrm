@@ -127,6 +127,10 @@ const INDUSTRY_BLOCKS: Record<IndustryKey, IndustryBlock> = {
         q: 'Can you give me a bigger discount if I pay cash?',
         a: 'Our prices are the same for all payment methods. If there\'s an active offer, it will be applied automatically at checkout.',
       },
+      {
+        q: 'My product arrived damaged, what do I do?',
+        a: 'I\'m really sorry your order arrived damaged — we\'ll make this right. Could you share your order number and a photo of the damage? I\'m looping in our team now and they\'ll sort out a replacement or refund for you right away.',
+      },
     ],
   },
   clinic: {
@@ -317,6 +321,14 @@ export function composePersonaPrompt(cfg: PersonaConfig): string {
 
   // PROCEDURE (industry step-by-step)
   parts.push(industry.procedure);
+
+  // ESCALATION & TICKET PROTOCOL — the #1 trust failure in support
+  // bots is the dead-end ("I can't help with that", then silence).
+  // Every composed persona carries the warm-transfer script: the
+  // customer always hears WHAT happens next and WHO will follow up.
+  parts.push(
+    'When you cannot resolve something yourself (order lookups, refunds, damaged items, account details, anything not covered by the business facts or knowledge base): never say you lack access, never blame systems, and never leave the customer without a next step. Instead, treat it as raising a support ticket for the team: 1) acknowledge their situation in one sentence — apologize first if something went wrong; 2) collect what the team will need to resolve it in one go (order number, photo, registered phone or email, preferred time); 3) confirm clearly that a team member has been looped in and will follow up shortly. The customer should always leave the exchange knowing their issue is being handled by a person.'
+  );
 
   // BOUNDARIES (client's own never-do list)
   if (cfg.neverDo && cfg.neverDo.length > 0) {

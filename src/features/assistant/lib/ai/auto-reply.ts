@@ -252,6 +252,31 @@ export async function dispatchInboundToAiReply(
       if (assignee) update.assigned_agent_id = assignee;
       await db.from('conversations').update(update).eq('id', conversationId);
 
+      // WARM HANDOFF — the customer must never face silence or a cold
+      // refusal. The model was instructed to write a bridge message
+      // (acknowledge → collect details → promise follow-up) before the
+      // sentinel; a legacy bare sentinel or empty output falls back to
+      // a static bridge line. Best-effort: a failed send must not
+      // block the escalation itself (already persisted above).
+      const bridgeText =
+        text ||
+        'Thanks for reaching out — I want to make sure this is handled properly, so I\u2019m looping in a member of our team right now. If you can share any details that will help (like your order number or a photo of the issue), they\u2019ll pick it up from there and get back to you shortly.';
+      try {
+        await sendChannelMessage({
+          accountId,
+          conversationId,
+          contactId,
+          payload: { kind: 'text', text: bridgeText },
+          senderType: 'bot',
+          aiGenerated: true,
+        });
+      } catch (bridgeErr) {
+        console.error(
+          '[ai auto-reply] warm-handoff bridge send failed:',
+          bridgeErr
+        );
+      }
+
       // Unassigned escalation → notify every member of the account so
       // someone sees it (the assignment trigger only fires on assign).
       if (!assignee && !conv.assigned_agent_id) {
