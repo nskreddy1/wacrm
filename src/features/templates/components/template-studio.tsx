@@ -15,9 +15,10 @@
 // and merged over server rows until saved.
 // ============================================================
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
+  ChevronsRight,
   GripVertical,
   Image as ImageIcon,
   Link2,
@@ -134,13 +135,21 @@ const STUDIO_CHANNELS: {
   { channel: 'email', icon: Mail },
 ];
 
+/** localStorage key for the channel panel pin preference (pure UI state). */
+const CHANNEL_PANEL_PREF_KEY = 'wacrm.templates.channel-panel';
+
 /**
- * Zoho Bigin-style channel strip: a slim, full-height vertical bar
- * docked flush against the app sidebar. Channel icons stack at the
- * top; the active studio's name runs vertically down the strip
- * (rotated 180° so it reads bottom-to-top). Clicking an icon switches
- * the whole studio — template list, editor, and preview — to that
- * channel's library.
+ * Zoho Bigin-style channel panel docked flush against the app
+ * sidebar. Two modes:
+ *
+ * - Collapsed: slim icon strip + the open studio's name running
+ *   vertically. Hovering peeks the full panel (unless hover is
+ *   disabled from the panel footer).
+ * - Expanded (pinned via the arrow at the bottom): a labelled
+ *   "Channels" list with studio names and template counts.
+ *
+ * Clicking a channel switches the whole studio — template list,
+ * editor, and preview — to that channel's library.
  */
 function ChannelRail({
   active,
@@ -151,55 +160,181 @@ function ChannelRail({
   counts: Record<TemplateChannel, number>;
   onSelect: (channel: TemplateChannel) => void;
 }) {
+  const [pinned, setPinned] = useState(false);
+  const [hoverEnabled, setHoverEnabled] = useState(true);
+  const [peeking, setPeeking] = useState(false);
+
+  // Restore UI preference (not data — plain localStorage is fine).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CHANNEL_PANEL_PREF_KEY);
+      if (!raw) return;
+      const pref = JSON.parse(raw) as { pinned?: boolean; hover?: boolean };
+      if (typeof pref.pinned === 'boolean') setPinned(pref.pinned);
+      if (typeof pref.hover === 'boolean') setHoverEnabled(pref.hover);
+    } catch {
+      /* corrupted pref — keep defaults */
+    }
+  }, []);
+
+  const savePref = (pref: { pinned: boolean; hover: boolean }) => {
+    try {
+      localStorage.setItem(CHANNEL_PANEL_PREF_KEY, JSON.stringify(pref));
+    } catch {
+      /* storage unavailable — preference just won't persist */
+    }
+  };
+
+  const expanded = pinned || (hoverEnabled && peeking);
+
   return (
     <nav
       aria-label="Template studios"
-      className="bg-sidebar border-sidebar-border flex h-full w-12 shrink-0 flex-col items-center gap-1.5 border-r py-3"
+      onMouseEnter={() => setPeeking(true)}
+      onMouseLeave={() => setPeeking(false)}
+      className={cn(
+        'bg-sidebar border-sidebar-border flex h-full shrink-0 flex-col overflow-hidden border-r transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]',
+        expanded ? 'w-52' : 'w-12'
+      )}
     >
-      {STUDIO_CHANNELS.map(({ channel, icon: Icon }) => {
-        const meta = CHANNEL_META[channel];
-        const isActive = channel === active;
-        return (
-          <Tooltip key={channel}>
-            <TooltipTrigger asChild>
+      {/* Panel header — only meaningful when expanded */}
+      <p
+        className={cn(
+          'text-sidebar-foreground px-3 pt-3 pb-1 text-sm font-semibold whitespace-nowrap transition-opacity duration-200',
+          expanded ? 'opacity-100' : 'pointer-events-none h-0 p-0 opacity-0'
+        )}
+      >
+        Channels
+      </p>
+
+      <div
+        className={cn(
+          'flex flex-1 flex-col gap-1.5',
+          expanded ? 'px-2 py-1' : 'items-center py-3'
+        )}
+      >
+        {STUDIO_CHANNELS.map(({ channel, icon: Icon }) => {
+          const meta = CHANNEL_META[channel];
+          const isActive = channel === active;
+          const button = (
+            <button
+              key={channel}
+              type="button"
+              onClick={() => onSelect(channel)}
+              aria-current={isActive ? 'true' : undefined}
+              aria-label={`${meta.studioLabel} (${counts[channel]} templates)`}
+              className={cn(
+                'relative flex items-center rounded-lg transition-all duration-150',
+                expanded ? 'h-9 w-full gap-2.5 px-2.5' : 'size-9 justify-center',
+                isActive
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+              )}
+            >
+              <Icon className="size-4.5 shrink-0" aria-hidden="true" />
+              {expanded && (
+                <>
+                  <span className="flex-1 truncate text-left text-sm whitespace-nowrap">
+                    {meta.label}
+                  </span>
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                      isActive
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-sidebar-accent text-sidebar-foreground/70'
+                    )}
+                  >
+                    {counts[channel]}
+                  </span>
+                </>
+              )}
+              {!expanded && counts[channel] > 0 && !isActive && (
+                <span
+                  aria-hidden="true"
+                  className="bg-primary absolute top-1 right-1 size-1.5 rounded-full"
+                />
+              )}
+            </button>
+          );
+          if (expanded) return button;
+          return (
+            <Tooltip key={channel}>
+              <TooltipTrigger render={button} />
+              <TooltipContent side="right" sideOffset={8}>
+                {meta.studioLabel} · {counts[channel]}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+
+        {/* Collapsed: rotated label of the open studio (Zoho strip
+            pattern — the strip itself names where you are). */}
+        {!expanded && (
+          <>
+            <Separator className="bg-sidebar-border my-1.5 w-6" />
+            <p
+              aria-hidden="true"
+              className="text-sidebar-foreground/70 flex-1 [writing-mode:vertical-rl] rotate-180 pb-1 text-center text-[11px] font-semibold tracking-widest uppercase select-none"
+            >
+              {CHANNEL_META[active].studioLabel}
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Footer — hover toggle (expanded only) + pin/collapse arrow */}
+      <div
+        className={cn(
+          'border-sidebar-border flex items-center border-t p-1.5',
+          expanded ? 'justify-between gap-1' : 'justify-center'
+        )}
+      >
+        {expanded && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = !hoverEnabled;
+              setHoverEnabled(next);
+              savePref({ pinned, hover: next });
+            }}
+            className="text-sidebar-foreground/60 hover:text-sidebar-foreground truncate px-1.5 text-[11px] whitespace-nowrap transition-colors"
+          >
+            {hoverEnabled ? 'Disable hover panel' : 'Enable hover panel'}
+          </button>
+        )}
+        <Tooltip>
+          <TooltipTrigger
+            render={
               <button
                 type="button"
-                onClick={() => onSelect(channel)}
-                aria-current={isActive ? 'true' : undefined}
-                aria-label={`${meta.studioLabel} (${counts[channel]} templates)`}
-                className={cn(
-                  'relative flex size-9 items-center justify-center rounded-lg transition-all duration-150',
-                  isActive
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                )}
+                onClick={() => {
+                  const next = !pinned;
+                  setPinned(next);
+                  if (!next) setPeeking(false);
+                  savePref({ pinned: next, hover: hoverEnabled });
+                }}
+                aria-label={
+                  pinned ? 'Collapse channel panel' : 'Expand channel panel'
+                }
+                aria-expanded={expanded}
+                className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground flex size-7 shrink-0 items-center justify-center rounded-md transition-colors"
               >
-                <Icon className="size-4.5" aria-hidden="true" />
-                {counts[channel] > 0 && !isActive && (
-                  <span
-                    aria-hidden="true"
-                    className="bg-primary absolute top-1 right-1 size-1.5 rounded-full"
-                  />
-                )}
+                <ChevronsRight
+                  className={cn(
+                    'size-4 transition-transform duration-300',
+                    pinned && 'rotate-180'
+                  )}
+                  aria-hidden="true"
+                />
               </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={8}>
-              {meta.studioLabel} · {counts[channel]}
-            </TooltipContent>
-          </Tooltip>
-        );
-      })}
-
-      <Separator className="bg-sidebar-border my-1.5 w-6" />
-
-      {/* Rotated label of the open studio — the Zoho pipeline-strip
-          pattern: the strip itself names where you are. */}
-      <p
-        aria-hidden="true"
-        className="text-sidebar-foreground/70 flex-1 [writing-mode:vertical-rl] rotate-180 pb-1 text-center text-[11px] font-semibold tracking-widest uppercase select-none"
-      >
-        {CHANNEL_META[active].studioLabel}
-      </p>
+            }
+          />
+          <TooltipContent side="right" sideOffset={8}>
+            {pinned ? 'Collapse panel' : 'Keep panel open'}
+          </TooltipContent>
+        </Tooltip>
+      </div>
     </nav>
   );
 }
