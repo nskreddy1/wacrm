@@ -3,12 +3,14 @@
 /**
  * Agent Activity — the merged "Run History + Usage" tab.
  *
- * One per-agent view: a 14-day token/run chart on top (scoped to THIS
- * agent's surface via the ?mode= filter) with the recent runs table
- * below it. Replaces the old separate Run History and Usage tabs,
- * which showed near-identical account-wide data on both agents.
+ * The single agent's runs across both capabilities: a 14-day
+ * token/run chart on top with the recent runs table below, plus a
+ * capability filter (All / AI suggestions / Auto-reply) that maps to
+ * the ?mode= param. Replaces the old separate Run History and Usage
+ * tabs, which showed near-identical data.
  */
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import {
   Area,
@@ -21,7 +23,16 @@ import {
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { swrJson, AGENT_KIND_META, type AgentKind } from '../lib/agent-meta';
+import { cn } from '@/lib/utils';
+import { swrJson } from '../lib/agent-meta';
+
+type ModeFilter = 'all' | 'draft' | 'auto_reply';
+
+const MODE_FILTERS: { key: ModeFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'draft', label: 'AI suggestions' },
+  { key: 'auto_reply', label: 'Auto-reply' },
+];
 
 interface RunRow {
   id: string;
@@ -59,16 +70,17 @@ function timeLabel(iso: string): string {
     : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
 }
 
-export function AgentActivity({ agent }: { agent: AgentKind }) {
-  const mode = AGENT_KIND_META[agent].mode;
+export function AgentActivity() {
+  const [filter, setFilter] = useState<ModeFilter>('all');
+  const modeParam = filter === 'all' ? '' : `&mode=${filter}`;
 
   const { data: usage, isLoading: usageLoading } = useSWR<UsageResponse>(
-    `/api/ai/usage?days=14&mode=${mode}`,
+    `/api/ai/usage?days=14${modeParam}`,
     swrJson
   );
   const { data: runsData, isLoading: runsLoading } = useSWR<{
     runs: RunRow[];
-  }>(`/api/ai/runs?limit=25&mode=${mode}`, swrJson);
+  }>(`/api/ai/runs?limit=25${modeParam}`, swrJson);
 
   const runs = runsData?.runs ?? [];
   const days = usage?.daily ?? [];
@@ -88,6 +100,30 @@ export function AgentActivity({ agent }: { agent: AgentKind }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Capability filter */}
+      <div
+        role="group"
+        aria-label="Filter activity by capability"
+        className="flex gap-1.5"
+      >
+        {MODE_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            aria-pressed={filter === f.key}
+            onClick={() => setFilter(f.key)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              filter === f.key
+                ? 'border-primary/40 bg-primary/10 text-foreground'
+                : 'border-border text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       {/* Summary + chart */}
       <section className="border-border bg-card rounded-lg border p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -160,8 +196,8 @@ export function AgentActivity({ agent }: { agent: AgentKind }) {
                     borderRadius: 8,
                     fontSize: 12,
                   }}
-                  formatter={(value: number, name: string) => [
-                    value.toLocaleString(),
+                  formatter={(value, name) => [
+                    Number(value ?? 0).toLocaleString(),
                     name === 'tokens' ? 'Tokens' : 'Runs',
                   ]}
                 />
@@ -185,9 +221,8 @@ export function AgentActivity({ agent }: { agent: AgentKind }) {
         </h3>
         {runs.length === 0 ? (
           <p className="text-muted-foreground py-10 text-center text-sm">
-            {agent === 'autoreply'
-              ? 'Runs appear here when the Auto-Reply Agent answers a customer.'
-              : 'Runs appear here when the Copilot drafts a reply for your team.'}
+            Runs appear here when the agent drafts a suggestion or replies to
+            a customer.
           </p>
         ) : (
           <div className="mt-2 overflow-x-auto">

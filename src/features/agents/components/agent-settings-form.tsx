@@ -246,9 +246,8 @@ export function AgentSettingsForm({
         />
       </section>
 
-      {
-        <section
-          aria-labelledby="cfg-behavior"
+      <section
+        aria-labelledby="cfg-behavior"
           className="border-border bg-card rounded-xl border p-5"
         >
           <h3
@@ -351,8 +350,7 @@ export function AgentSettingsForm({
               </p>
             </div>
           </div>
-        </section>
-      ) : null}
+      </section>
 
       <div>
         <Button onClick={save} disabled={saving || !model.trim()}>
