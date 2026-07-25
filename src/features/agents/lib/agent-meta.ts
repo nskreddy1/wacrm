@@ -24,6 +24,9 @@ export interface AgentKindMeta {
   tagline: string;
   description: string;
   icon: LucideIcon;
+  /** The ai_usage_log.mode this agent's runs are recorded under —
+   *  scopes the Activity tab (chart + runs) to this agent only. */
+  mode: 'draft' | 'auto_reply';
   /** Pre-filled persona prompt in the wizard — a working starting
    *  point the client can keep, not a placeholder. */
   starterPrompt: string;
