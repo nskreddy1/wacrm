@@ -220,6 +220,15 @@ export async function parseAgentPayload(
     }
   }
 
+  // Trigger keywords (custom agents) — Tier-1 router triggers. The
+  // reader is the single source of truth for shape/limits, so what we
+  // store is exactly what the router will read back.
+  if ('triggerKeywords' in rawSettings) {
+    settings.triggerKeywords = readTriggerKeywords(
+      rawSettings.triggerKeywords
+    );
+  }
+
   // Embeddings key (both kinds): non-empty string sets it (validated
   // live below), explicit null clears it, absent leaves unchanged.
   if ('embeddingsApiKey' in rawSettings) {

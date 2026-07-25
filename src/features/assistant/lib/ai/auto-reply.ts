@@ -56,9 +56,9 @@ export async function dispatchInboundToAiReply(
     const config = await loadAgentConfig(db, accountId, 'autoreply');
     if (!config) return;
 
-    // Reply-hours window: outside the configured schedule the bot stands
-    // down entirely and the inbound waits in the inbox for a human.
-    if (!isWithinAutoReplySchedule(config)) return;
+    // NOTE: the schedule gate runs AFTER routing (below) — each custom
+    // agent can have its own on-duty hours, so a night-shift agent can
+    // answer while the default agent is off the clock.
 
     // Deterministic, user-configured responders win over the LLM — the
     // caller already excludes messages a Flow consumed. A flow with a
@@ -85,35 +85,6 @@ export async function dispatchInboundToAiReply(
     if (convErr || !conv) return;
     if (conv.assigned_agent_id) return; // a human owns this thread
     if (conv.ai_autoreply_disabled) return; // handed off / turned off here
-    // Reply-cap gate, by limit mode:
-    //  - never:            no cap — the bot always replies.
-    //  - per_conversation: lifetime cap; cheap early-out here, the
-    //                      authoritative check is the atomic claim below.
-    //  - per_day:          cap resets at midnight in the account's
-    //                      timezone; counted from today's bot messages.
-    if (
-      config.autoReplyLimitMode === 'per_conversation' &&
-      conv.ai_reply_count >= config.autoReplyMaxPerConversation
-    ) {
-      return;
-    }
-    if (config.autoReplyLimitMode === 'per_day') {
-      const dayStart = startOfTodayUtc(config.autoReplyTimezone);
-      const { count, error: cntErr } = await db
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('conversation_id', conversationId)
-        .eq('sender_type', 'bot')
-        .eq('ai_generated', true)
-        .gte('created_at', dayStart.toISOString());
-      if (cntErr) {
-        // Can't establish today's count — fail safe (don't reply) so a
-        // transient DB error can never blow past the cap.
-        console.error('[ai auto-reply] per-day count failed:', cntErr);
-        return;
-      }
-      if ((count ?? 0) >= config.autoReplyMaxPerConversation) return;
-    }
 
     const messages = await buildConversationContext(db, conversationId);
     if (messages.length === 0) return;
@@ -134,19 +105,54 @@ export async function dispatchInboundToAiReply(
       return;
     }
 
-    // Router → specialist handoff (2026 agentic pattern): when the
-    // account has custom specialist agents, a cheap routing pass on
-    // the default agent's own model picks the best match for this
-    // conversation. Fails open to the default agent; costs nothing
-    // when no specialists exist. Guardrails (cap, hours, escalation)
-    // always remain the default agent's — applySpecialist only swaps
-    // persona/provider.
+    // Supervisor router (2026 agentic pattern): keyword triggers →
+    // on-duty filter → LLM classifier → fallback to the default agent.
+    // The routed agent's config carries ITS guardrails where it set
+    // them (cap, schedule, escalation) and inherits the default's
+    // where it didn't — so every gate below runs on activeConfig.
+    // Fails open to the default agent; costs nothing when no custom
+    // agents exist.
     const { config: activeConfig, specialist } = await routeConversation(
       db,
       accountId,
       config,
       messages
     );
+
+    // Reply-hours window of WHOEVER is answering: outside the routed
+    // agent's schedule the bot stands down and the inbound waits in
+    // the inbox for a human.
+    if (!isWithinAutoReplySchedule(activeConfig)) return;
+
+    // Reply-cap gate, by the routed agent's limit mode:
+    //  - never:            no cap — the bot always replies.
+    //  - per_conversation: lifetime cap; cheap early-out here, the
+    //                      authoritative check is the atomic claim below.
+    //  - per_day:          cap resets at midnight in the agent's
+    //                      timezone; counted from today's bot messages.
+    if (
+      activeConfig.autoReplyLimitMode === 'per_conversation' &&
+      conv.ai_reply_count >= activeConfig.autoReplyMaxPerConversation
+    ) {
+      return;
+    }
+    if (activeConfig.autoReplyLimitMode === 'per_day') {
+      const dayStart = startOfTodayUtc(activeConfig.autoReplyTimezone);
+      const { count, error: cntErr } = await db
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId)
+        .eq('sender_type', 'bot')
+        .eq('ai_generated', true)
+        .gte('created_at', dayStart.toISOString());
+      if (cntErr) {
+        // Can't establish today's count — fail safe (don't reply) so a
+        // transient DB error can never blow past the cap.
+        console.error('[ai auto-reply] per-day count failed:', cntErr);
+        return;
+      }
+      if ((count ?? 0) >= activeConfig.autoReplyMaxPerConversation) return;
+    }
 
     // Ground the reply in the account's knowledge base and the
     // contact's live CRM record (both best-effort, fetched in parallel).
@@ -222,8 +228,10 @@ export async function dispatchInboundToAiReply(
       // Never stomp an existing human assignment.
       let assignee: string | null = null;
       if (!conv.assigned_agent_id) {
-        if (config.handoffAgentId) {
-          assignee = config.handoffAgentId;
+        // The routed agent's own escalation target wins; agents
+        // without one inherit the default agent's.
+        if (activeConfig.handoffAgentId) {
+          assignee = activeConfig.handoffAgentId;
         } else {
           // Round-robin over the account's members. A missing RPC (mig-
           // ration not applied) or empty account degrades to unassigned.
@@ -279,8 +287,8 @@ export async function dispatchInboundToAiReply(
     // send (their gates already ran above), but we still claim a slot so
     // `ai_reply_count` keeps tracking total bot replies for the thread.
     const lifetimeCap =
-      config.autoReplyLimitMode === 'per_conversation'
-        ? config.autoReplyMaxPerConversation
+      activeConfig.autoReplyLimitMode === 'per_conversation'
+        ? activeConfig.autoReplyMaxPerConversation
         : 2147483647;
     const { data: claimed, error: claimErr } = await db.rpc(
       'claim_ai_reply_slot',

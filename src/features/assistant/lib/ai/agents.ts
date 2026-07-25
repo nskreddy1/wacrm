@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { decrypt } from '@/features/whatsapp/lib/encryption';
 import type { AiConfig, AiProvider, AutoReplyLimitMode } from './types';
 import { isAiProvider, isAutoReplyLimitMode } from './types';
+import { isWithinAutoReplySchedule } from './schedule';
 
 // ============================================================
 // Single default agent — server loader.
@@ -47,6 +48,9 @@ export interface AgentSettings {
   handoffAgentId?: string | null;
   /** Optional OpenAI-compatible key for KB embeddings, encrypted. */
   embeddingsApiKey?: string | null;
+  /** Custom agents only — Tier-1 router triggers. Any keyword found in
+   *  the customer's message routes here instantly, no LLM call. */
+  triggerKeywords?: string[];
 }
 
 /** Agent row kinds: one 'default' generalist per account, plus any
@@ -86,6 +90,20 @@ function toHhMm(value: unknown): string | null {
   return m ? m[1] : null;
 }
 
+/** Sanitize a raw jsonb triggerKeywords value → lowercased, trimmed,
+ *  deduped, capped list. Anything malformed reads as []. */
+export function readTriggerKeywords(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const kw = item.trim().toLowerCase();
+    if (kw.length >= 2 && kw.length <= 60) seen.add(kw);
+    if (seen.size >= 20) break;
+  }
+  return Array.from(seen);
+}
+
 function readSettings(raw: Record<string, unknown>): Required<
   Omit<AgentSettings, 'embeddingsApiKey'>
 > & {
@@ -110,6 +128,7 @@ function readSettings(raw: Record<string, unknown>): Required<
       typeof raw.embeddingsApiKey === 'string' && raw.embeddingsApiKey
         ? raw.embeddingsApiKey
         : null,
+    triggerKeywords: readTriggerKeywords(raw.triggerKeywords),
   };
 }
 
@@ -246,12 +265,15 @@ export async function loadAgentConfig(
 }
 
 /**
- * Resolve a custom specialist on top of the default agent's runtime
- * config (2026 router → specialist pattern): the specialist overrides
- * the persona and, only if it has its own complete provider setup,
- * the model connection. Behavior guardrails (reply cap, hours,
- * escalation) always stay with the default agent — one place to
- * govern spend and safety no matter which specialist answers.
+ * Resolve a custom agent on top of the default agent's runtime config
+ * (2026 supervisor → agent pattern). The routed agent overrides:
+ *  - persona (its instructions, when set),
+ *  - provider/model/key — only if it has its own COMPLETE setup,
+ *  - guardrails it explicitly configured (reply cap & limit mode,
+ *    auto-reply schedule, escalation handoff target).
+ * Anything the agent did not set is INHERITED from the default agent,
+ * so a bare persona-only agent stays fully governed by the account's
+ * baseline safety settings.
  */
 export function applySpecialist(
   base: AiConfig & { agentId: string },
@@ -262,6 +284,17 @@ export function applySpecialist(
     isAiProvider(specialist.provider) &&
     specialist.model &&
     (specialist.api_key || specialist.provider === 'ollama');
+
+  // "Set" vs "inherit": only keys actually present in the agent's raw
+  // settings jsonb override the default agent's guardrails.
+  const raw = (specialist.settings ?? {}) as Record<string, unknown>;
+  const parsed = readSettings(raw);
+  const capSet = Number.isFinite(Number(raw.replyCap));
+  const scheduleSet = Boolean(
+    parsed.scheduleStart && parsed.scheduleEnd
+  );
+  const handoffSet =
+    typeof raw.handoffAgentId === 'string' && raw.handoffAgentId.length > 0;
 
   return {
     ...base,
@@ -275,7 +308,43 @@ export function applySpecialist(
           baseUrl: specialist.base_url,
         }
       : {}),
+    ...(capSet
+      ? {
+          autoReplyMaxPerConversation: parsed.replyCap,
+          autoReplyLimitMode: isAutoReplyLimitMode(raw.limitMode)
+            ? raw.limitMode
+            : base.autoReplyLimitMode,
+        }
+      : {}),
+    ...(scheduleSet
+      ? {
+          autoReplyScheduleStart: parsed.scheduleStart,
+          autoReplyScheduleEnd: parsed.scheduleEnd,
+          autoReplyTimezone: parsed.timezone ?? base.autoReplyTimezone,
+        }
+      : {}),
+    ...(handoffSet ? { handoffAgentId: parsed.handoffAgentId } : {}),
   };
+}
+
+/**
+ * Is this custom agent on duty right now? Agents with their own
+ * schedule are only routable inside that window; agents without one
+ * are always on duty (they inherit the default agent's window, which
+ * the worker checks after routing).
+ */
+export function isAgentOnDuty(row: AgentRow, now: Date = new Date()): boolean {
+  const raw = (row.settings ?? {}) as Record<string, unknown>;
+  const s = readSettings(raw);
+  if (!s.scheduleStart || !s.scheduleEnd) return true;
+  return isWithinAutoReplySchedule(
+    {
+      autoReplyScheduleStart: s.scheduleStart,
+      autoReplyScheduleEnd: s.scheduleEnd,
+      autoReplyTimezone: s.timezone,
+    },
+    now
+  );
 }
 
 /**
