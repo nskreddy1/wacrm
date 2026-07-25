@@ -14,6 +14,7 @@ import {
   providerLabel,
   type ClientAgent,
 } from '../lib/agent-meta';
+import { emptyPersonaDraft, PersonaBuilder } from './persona-builder';
 
 // ============================================================
 // Guided 3-step setup for the account's single AI agent:
@@ -73,6 +74,12 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
     (preset?.keyOptional || apiKey.trim().length > 0) &&
     (!preset?.needsBaseUrl || baseUrl.trim().length > 0);
 
+  // Guided answers only count once the one required field is filled;
+  // otherwise fall back to the expert prompt so create never sends an
+  // empty persona.
+  const useGuided =
+    personaMode === 'guided' && personaDraft.businessName.trim().length > 0;
+
   const create = async () => {
     setSaving(true);
     try {
@@ -85,7 +92,21 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
           model: model.trim(),
           api_key: apiKey.trim() || undefined,
           base_url: baseUrl.trim() || undefined,
-          system_prompt: prompt.trim() || undefined,
+          // Guided mode: send the client's plain answers — the server
+          // composes the enterprise-grade prompt. Expert mode: raw text.
+          ...(useGuided
+            ? {
+                persona_config: {
+                  ...personaDraft,
+                  keyFacts: (personaDraft.keyFacts ?? []).filter((f) =>
+                    f.trim()
+                  ),
+                  neverDo: (personaDraft.neverDo ?? []).filter((f) =>
+                    f.trim()
+                  ),
+                },
+              }
+            : { system_prompt: prompt.trim() || undefined }),
           is_enabled: suggestionsOn || autoreplyOn,
           suggestions_enabled: suggestionsOn,
           autoreply_enabled: autoreplyOn,
@@ -250,23 +271,72 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
       {step === 1 ? (
         <div className="flex flex-col gap-4">
           <div>
-            <label
-              htmlFor="wiz-prompt"
-              className="text-foreground mb-1 block text-sm font-medium"
-            >
-              How should your agent behave?
-            </label>
-            <textarea
-              id="wiz-prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={6}
-              className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 text-sm leading-relaxed"
-            />
-            <p className="text-muted-foreground mt-1 text-xs">
-              Describe your business, tone, and rules in plain language. We
-              filled in a starting point — edit anything.
-            </p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-foreground text-sm font-medium">
+                How should your agent behave?
+              </span>
+              <div
+                className="border-border flex rounded-md border p-0.5"
+                role="tablist"
+                aria-label="Persona editing mode"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={personaMode === 'guided'}
+                  onClick={() => setPersonaMode('guided')}
+                  className={cn(
+                    'rounded px-2.5 py-1 text-xs',
+                    personaMode === 'guided'
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'text-muted-foreground'
+                  )}
+                >
+                  Guided
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={personaMode === 'expert'}
+                  onClick={() => setPersonaMode('expert')}
+                  className={cn(
+                    'rounded px-2.5 py-1 text-xs',
+                    personaMode === 'expert'
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'text-muted-foreground'
+                  )}
+                >
+                  Expert
+                </button>
+              </div>
+            </div>
+            {personaMode === 'guided' ? (
+              <>
+                <p className="text-muted-foreground mb-3 text-xs">
+                  Answer a few plain questions — no AI knowledge needed. We
+                  turn them into enterprise-grade instructions for you.
+                </p>
+                <PersonaBuilder
+                  value={personaDraft}
+                  onChange={setPersonaDraft}
+                />
+              </>
+            ) : (
+              <>
+                <textarea
+                  id="wiz-prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={6}
+                  aria-label="Agent instructions"
+                  className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 text-sm leading-relaxed"
+                />
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Describe your business, tone, and rules in plain language.
+                  We filled in a starting point — edit anything.
+                </p>
+              </>
+            )}
           </div>
 
           <fieldset>
