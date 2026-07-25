@@ -104,7 +104,7 @@ export async function POST(request: Request) {
     const { config: activeConfig, specialist } =
       capability === 'autoreply'
         ? await routeConversation(supabase, accountId, config, messages)
-        : { config: { ...config, specialistId: undefined }, specialist: null };
+        : { config, specialist: null };
 
     const knowledge = await retrieveKnowledge(
       supabase,
