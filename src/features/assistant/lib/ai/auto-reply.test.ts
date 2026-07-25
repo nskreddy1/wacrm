@@ -3,7 +3,7 @@ import type { AiConfig } from './types';
 
 // Shared, hoisted mock state so the module mocks can close over it.
 const h = vi.hoisted(() => ({
-  loadAiConfig: vi.fn(),
+  loadAgentConfig: vi.fn(),
   buildConversationContext: vi.fn(),
   retrieveKnowledge: vi.fn(),
   generateReply: vi.fn(),
@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('./config', () => ({ loadAiConfig: h.loadAiConfig }));
+vi.mock('./agents', () => ({ loadAgentConfig: h.loadAgentConfig }));
 vi.mock('./context', () => ({
   buildConversationContext: h.buildConversationContext,
 }));
@@ -70,8 +70,11 @@ const ARGS = {
   configOwnerUserId: 'user-1',
 };
 
-function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
+type WorkerConfig = AiConfig & { agentId: string };
+
+function aiConfig(overrides: Partial<WorkerConfig> = {}): WorkerConfig {
   return {
+    agentId: 'agent-row-1',
     provider: 'openai',
     model: 'gpt-test',
     apiKey: 'sk-test',
@@ -100,7 +103,7 @@ beforeEach(() => {
   h.state.claim = true;
   h.state.updatePayload = null;
   h.state.rpcCalls = [];
-  h.loadAiConfig.mockResolvedValue(aiConfig());
+  h.loadAgentConfig.mockResolvedValue(aiConfig());
   h.buildConversationContext.mockResolvedValue([
     { role: 'user', content: 'hi' },
   ]);
@@ -166,14 +169,14 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
   });
 
   it('skips when AI is off / not configured', async () => {
-    h.loadAiConfig.mockResolvedValue(null);
+    h.loadAgentConfig.mockResolvedValue(null);
     await dispatchInboundToAiReply(ARGS);
     expect(h.generateReply).not.toHaveBeenCalled();
     expect(h.sendChannelMessage).not.toHaveBeenCalled();
   });
 
   it('skips when auto-reply is disabled for the account', async () => {
-    h.loadAiConfig.mockResolvedValue(aiConfig({ autoReplyEnabled: false }));
+    h.loadAgentConfig.mockResolvedValue(aiConfig({ autoReplyEnabled: false }));
     await dispatchInboundToAiReply(ARGS);
     expect(h.sendChannelMessage).not.toHaveBeenCalled();
   });
@@ -237,7 +240,7 @@ describe('dispatchInboundToAiReply — handoff', () => {
   });
 
   it('routes to the configured handoff agent on handoff', async () => {
-    h.loadAiConfig.mockResolvedValue(aiConfig({ handoffAgentId: 'agent-7' }));
+    h.loadAgentConfig.mockResolvedValue(aiConfig({ handoffAgentId: 'agent-7' }));
     h.generateReply.mockResolvedValue({ text: '', handoff: true });
     await dispatchInboundToAiReply(ARGS);
     expect(h.state.updatePayload).toMatchObject({
