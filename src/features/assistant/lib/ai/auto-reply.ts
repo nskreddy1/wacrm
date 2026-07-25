@@ -282,14 +282,32 @@ export async function dispatchInboundToAiReply(
     // Channel-agnostic send: the orchestrator resolves the conversation's
     // channel connection (Meta / Twilio / legacy config) and persists the
     // message row. Replaces the Meta-hardcoded engineSendText path.
-    await sendChannelMessage({
-      accountId,
-      conversationId,
-      contactId,
-      payload: { kind: 'text', text },
-      senderType: 'bot',
-      aiGenerated: true,
-    });
+    //
+    // If the send FAILS, refund the slot we claimed above — otherwise a
+    // provider outage (e.g. Twilio 21703) burns through the whole
+    // per-conversation cap with zero messages delivered, and the bot
+    // goes permanently silent on the thread.
+    try {
+      await sendChannelMessage({
+        accountId,
+        conversationId,
+        contactId,
+        payload: { kind: 'text', text },
+        senderType: 'bot',
+        aiGenerated: true,
+      });
+    } catch (sendErr) {
+      const { error: releaseErr } = await db.rpc('release_ai_reply_slot', {
+        conversation_id: conversationId,
+      });
+      if (releaseErr) {
+        console.error(
+          '[ai auto-reply] failed to refund reply slot after send failure:',
+          releaseErr
+        );
+      }
+      throw sendErr; // handled by the outer catch (logged, never thrown)
+    }
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err);
   }

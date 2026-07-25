@@ -350,7 +350,9 @@ export function AgentsConsole() {
             {tab === 'playground' ? (
               <AiPlayground onGoToSetup={() => setTab('configuration')} />
             ) : null}
-            {tab === 'runs' && canManage ? <RunHistoryTab /> : null}
+            {tab === 'runs' && canManage ? (
+              <RunHistoryTab agent={current.key} />
+            ) : null}
             {tab === 'usage' && canManage ? <AiUsageCard /> : null}
           </div>
         </section>
@@ -662,9 +664,14 @@ function OverviewTab({
 // completed provider call, so status is always "Success" — failures
 // never reach the usage log.
 
-function RunHistoryTab() {
+function RunHistoryTab({ agent }: { agent: AgentKey }) {
+  // Each agent shows ONLY its own surface's runs: the Auto-Reply Agent
+  // lists `auto_reply` provider calls, the Support Copilot lists inbox
+  // `draft` calls — previously both tabs showed the identical unfiltered
+  // account-wide history.
+  const mode = agent === 'autoreply' ? 'auto_reply' : 'draft';
   const { data, isLoading } = useSWR<{ runs: RunRow[] }>(
-    '/api/ai/runs?limit=25',
+    `/api/ai/runs?limit=25&mode=${mode}`,
     fetcher
   );
   const runs = data?.runs ?? [];
@@ -683,8 +690,9 @@ function RunHistoryTab() {
       <div className="border-border rounded-lg border border-dashed px-4 py-12 text-center">
         <p className="text-foreground text-sm font-medium">No runs yet</p>
         <p className="text-muted-foreground mt-1 text-sm">
-          Runs appear here when the assistant drafts a reply or auto-reply
-          answers a customer.
+          {agent === 'autoreply'
+            ? 'Runs appear here when the Auto-Reply Agent answers a customer.'
+            : 'Runs appear here when the Copilot drafts a reply for your team.'}
         </p>
       </div>
     );
