@@ -198,14 +198,21 @@ function ChannelRail({
       )}
     >
       {/* Panel header — only meaningful when expanded */}
-      <p
+      <div
         className={cn(
-          'text-sidebar-foreground px-3 pt-3 pb-1 text-sm font-semibold whitespace-nowrap transition-opacity duration-200',
-          expanded ? 'opacity-100' : 'pointer-events-none h-0 p-0 opacity-0'
+          'transition-opacity duration-200',
+          expanded
+            ? 'px-3 pt-3 pb-1 opacity-100'
+            : 'pointer-events-none h-0 overflow-hidden opacity-0'
         )}
       >
-        Channels
-      </p>
+        <p className="text-sidebar-foreground text-sm font-semibold whitespace-nowrap">
+          Choose a channel
+        </p>
+        <p className="text-sidebar-foreground/60 mt-0.5 text-[11px] leading-snug whitespace-nowrap">
+          Each channel keeps its own templates
+        </p>
+      </div>
 
       <div
         className={cn(
