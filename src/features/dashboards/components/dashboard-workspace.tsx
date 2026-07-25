@@ -24,6 +24,7 @@ import { AttentionPanel } from './attention-panel';
 import { BroadcastFunnel } from './broadcast-funnel';
 import { ChartCard, CardMetaChip } from './chart-card';
 import { ContactsGrowth } from './contacts-growth';
+import { LeadSources } from './lead-sources';
 import { KpiCard } from './kpi-card';
 import { PipelineFunnel } from './pipeline-funnel';
 import { Section } from './section';
@@ -158,6 +159,7 @@ export function DashboardWorkspace() {
     pipeline,
     team,
     contactsGrowth,
+    leadSources,
     activity,
     appointments,
     tasks,
@@ -374,6 +376,18 @@ export function DashboardWorkspace() {
                 href="/contacts"
               >
                 <ContactsGrowth data={contactsGrowth} />
+              </ChartCard>
+            </Section>
+
+            {/* Lead attribution */}
+            <Section index={5}>
+              <ChartCard
+                title="Lead sources"
+                caption="Where your new leads came from"
+                meta={<CardMetaChip>Last 30 days</CardMetaChip>}
+                href="/contacts"
+              >
+                <LeadSources data={leadSources} />
               </ChartCard>
             </Section>
           </div>
