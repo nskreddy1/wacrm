@@ -49,15 +49,23 @@ export interface AgentSettings {
   embeddingsApiKey?: string | null;
 }
 
+/** Agent row kinds: one 'default' generalist per account, plus any
+ *  number of 'custom' specialists the router can hand off to. */
+export type AgentRowKind = 'default' | 'custom';
+
 /** Raw `ai_agents` row as selected by AGENT_COLUMNS. */
 export interface AgentRow {
   id: string;
+  kind: AgentRowKind;
   display_name: string;
   provider: string | null;
   model: string | null;
   api_key: string | null;
   base_url: string | null;
   system_prompt: string | null;
+  /** Custom specialists: when this agent should receive a conversation
+   *  ("billing questions, refunds, invoices"). Router matching input. */
+  route_description: string | null;
   is_enabled: boolean;
   suggestions_enabled: boolean;
   autoreply_enabled: boolean;
@@ -67,7 +75,7 @@ export interface AgentRow {
 }
 
 export const AGENT_COLUMNS =
-  'id, display_name, provider, model, api_key, base_url, system_prompt, is_enabled, suggestions_enabled, autoreply_enabled, settings, created_at, updated_at';
+  'id, kind, display_name, provider, model, api_key, base_url, system_prompt, route_description, is_enabled, suggestions_enabled, autoreply_enabled, settings, created_at, updated_at';
 
 const DEFAULT_REPLY_CAP = 3;
 
@@ -134,9 +142,46 @@ export async function fetchAgentRow(
     .from('ai_agents')
     .select(AGENT_COLUMNS)
     .eq('account_id', accountId)
+    .eq('kind', 'default')
     .maybeSingle();
   if (error) throw error;
   return (data as AgentRow) ?? null;
+}
+
+/** Fetch every agent row for the account: default first, then custom
+ *  specialists by creation order. */
+export async function fetchAllAgentRows(
+  db: SupabaseClient,
+  accountId: string
+): Promise<AgentRow[]> {
+  const { data, error } = await db
+    .from('ai_agents')
+    .select(AGENT_COLUMNS)
+    .eq('account_id', accountId)
+    .order('kind', { ascending: false }) // 'default' > 'custom' desc puts default first
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data as AgentRow[]) ?? [];
+}
+
+/** Enabled custom specialists eligible for router handoff. A
+ *  specialist needs a route description to be routable. */
+export async function fetchRoutableSpecialists(
+  db: SupabaseClient,
+  accountId: string
+): Promise<AgentRow[]> {
+  const { data, error } = await db
+    .from('ai_agents')
+    .select(AGENT_COLUMNS)
+    .eq('account_id', accountId)
+    .eq('kind', 'custom')
+    .eq('is_enabled', true)
+    .not('route_description', 'is', null)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return ((data as AgentRow[]) ?? []).filter(
+    (r) => (r.route_description ?? '').trim().length > 0
+  );
 }
 
 /**
@@ -201,6 +246,39 @@ export async function loadAgentConfig(
 }
 
 /**
+ * Resolve a custom specialist on top of the default agent's runtime
+ * config (2026 router → specialist pattern): the specialist overrides
+ * the persona and, only if it has its own complete provider setup,
+ * the model connection. Behavior guardrails (reply cap, hours,
+ * escalation) always stay with the default agent — one place to
+ * govern spend and safety no matter which specialist answers.
+ */
+export function applySpecialist(
+  base: AiConfig & { agentId: string },
+  specialist: AgentRow
+): AiConfig & { agentId: string; specialistId: string } {
+  const hasOwnProvider =
+    specialist.provider &&
+    isAiProvider(specialist.provider) &&
+    specialist.model &&
+    (specialist.api_key || specialist.provider === 'ollama');
+
+  return {
+    ...base,
+    specialistId: specialist.id,
+    systemPrompt: specialist.system_prompt ?? base.systemPrompt,
+    ...(hasOwnProvider
+      ? {
+          provider: specialist.provider as AiProvider,
+          model: specialist.model as string,
+          apiKey: specialist.api_key ? decrypt(specialist.api_key) : '',
+          baseUrl: specialist.base_url,
+        }
+      : {}),
+  };
+}
+
+/**
  * Load + decrypt the account's embeddings key from the agent row.
  * Signature mirrors the old `loadEmbeddingsKey` so KB ingest routes
  * migrate with an import swap.
@@ -244,12 +322,14 @@ export function toClientAgent(row: AgentRow) {
 
   return {
     id: row.id,
+    kind: row.kind,
     displayName: row.display_name,
     provider: row.provider,
     model: row.model,
     hasApiKey: Boolean(row.api_key),
     baseUrl: row.base_url,
     systemPrompt: row.system_prompt,
+    routeDescription: row.route_description,
     isEnabled: row.is_enabled,
     suggestionsEnabled: row.suggestions_enabled,
     autoreplyEnabled: row.autoreply_enabled,
