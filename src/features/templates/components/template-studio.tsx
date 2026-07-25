@@ -47,6 +47,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStudioTemplates } from '@/features/templates/hooks/use-studio-templates';
@@ -130,11 +135,12 @@ const STUDIO_CHANNELS: {
 ];
 
 /**
- * Slim vertical rail on the far left. Collapsed it shows only the
- * channel icons; hovering (or keyboard focus) expands it to reveal
- * the studio names and per-channel template counts. Clicking a
- * channel switches the whole studio — template list, editor, and
- * preview — to that channel's library.
+ * Zoho Bigin-style channel strip: a slim, full-height vertical bar
+ * docked flush against the app sidebar. Channel icons stack at the
+ * top; the active studio's name runs vertically down the strip
+ * (rotated 180° so it reads bottom-to-top). Clicking an icon switches
+ * the whole studio — template list, editor, and preview — to that
+ * channel's library.
  */
 function ChannelRail({
   active,
@@ -148,59 +154,52 @@ function ChannelRail({
   return (
     <nav
       aria-label="Template studios"
-      className="group/rail border-border bg-card sticky top-4 flex w-12 shrink-0 flex-col gap-1 self-start overflow-hidden rounded-xl border p-1.5 shadow-sm transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] hover:w-48 focus-within:w-48"
+      className="bg-sidebar border-sidebar-border flex h-full w-12 shrink-0 flex-col items-center gap-1.5 border-r py-3"
     >
-      <p className="text-muted-foreground/70 h-5 px-2 pt-0.5 text-[10px] font-semibold tracking-widest whitespace-nowrap uppercase opacity-0 transition-opacity duration-200 group-hover/rail:opacity-100 group-focus-within/rail:opacity-100">
-        Studios
-      </p>
       {STUDIO_CHANNELS.map(({ channel, icon: Icon }) => {
         const meta = CHANNEL_META[channel];
         const isActive = channel === active;
         return (
-          <button
-            key={channel}
-            type="button"
-            onClick={() => onSelect(channel)}
-            aria-current={isActive ? 'true' : undefined}
-            title={meta.studioLabel}
-            className={cn(
-              'relative flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm whitespace-nowrap transition-colors duration-150',
-              isActive
-                ? 'bg-primary/10 text-primary font-semibold'
-                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-            )}
-          >
-            {/* Active indicator bar, mirrors the sidebar pattern */}
-            <span
-              aria-hidden="true"
-              className={cn(
-                'bg-primary absolute top-1/2 left-0 w-0.5 -translate-y-1/2 rounded-full transition-all duration-200',
-                isActive ? 'h-5 opacity-100' : 'h-0 opacity-0'
-              )}
-            />
-            <Icon
-              className={cn(
-                'size-4.5 shrink-0 transition-transform duration-200',
-                isActive && 'scale-110'
-              )}
-              aria-hidden="true"
-            />
-            <span className="flex-1 text-left opacity-0 transition-opacity duration-200 group-hover/rail:opacity-100 group-focus-within/rail:opacity-100">
-              {meta.studioLabel}
-            </span>
-            <span
-              className={cn(
-                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums opacity-0 transition-opacity duration-200 group-hover/rail:opacity-100 group-focus-within/rail:opacity-100',
-                isActive
-                  ? 'bg-primary/15 text-primary'
-                  : 'bg-muted text-muted-foreground'
-              )}
-            >
-              {counts[channel]}
-            </span>
-          </button>
+          <Tooltip key={channel}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onSelect(channel)}
+                aria-current={isActive ? 'true' : undefined}
+                aria-label={`${meta.studioLabel} (${counts[channel]} templates)`}
+                className={cn(
+                  'relative flex size-9 items-center justify-center rounded-lg transition-all duration-150',
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                )}
+              >
+                <Icon className="size-4.5" aria-hidden="true" />
+                {counts[channel] > 0 && !isActive && (
+                  <span
+                    aria-hidden="true"
+                    className="bg-primary absolute top-1 right-1 size-1.5 rounded-full"
+                  />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>
+              {meta.studioLabel} · {counts[channel]}
+            </TooltipContent>
+          </Tooltip>
         );
       })}
+
+      <Separator className="bg-sidebar-border my-1.5 w-6" />
+
+      {/* Rotated label of the open studio — the Zoho pipeline-strip
+          pattern: the strip itself names where you are. */}
+      <p
+        aria-hidden="true"
+        className="text-sidebar-foreground/70 flex-1 [writing-mode:vertical-rl] rotate-180 pb-1 text-center text-[11px] font-semibold tracking-widest uppercase select-none"
+      >
+        {CHANNEL_META[active].studioLabel}
+      </p>
     </nav>
   );
 }
@@ -1263,39 +1262,48 @@ export function TemplateStudio() {
 
   if (!active) {
     return (
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <div className="flex h-full min-h-0 w-full">
         <ChannelRail
           active={studioChannel}
           counts={channelCounts}
           onSelect={switchStudio}
         />
-        <TemplateRail
-          templates={templates}
-          activeId=""
-          channel={studioChannel}
-          isLoading={isLoading}
-          onSelect={setActiveId}
-          onCreate={createTemplate}
-          onSync={handleImportTemplates}
-          isSyncing={busy === 'sync'}
-        />
-        <div className="border-border text-muted-foreground flex min-h-64 flex-1 items-center justify-center rounded-xl border border-dashed text-sm">
-          {loadError ??
-            (isLoading
-              ? 'Loading templates…'
-              : `Select a ${CHANNEL_META[studioChannel].label} template or create a new one.`)}
+        <div
+          key={studioChannel}
+          className="studio-switch app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:flex-row lg:items-start"
+        >
+          <TemplateRail
+            templates={templates}
+            activeId=""
+            channel={studioChannel}
+            isLoading={isLoading}
+            onSelect={setActiveId}
+            onCreate={createTemplate}
+            onSync={handleImportTemplates}
+            isSyncing={busy === 'sync'}
+          />
+          <div className="border-border text-muted-foreground flex min-h-64 flex-1 items-center justify-center rounded-xl border border-dashed text-sm">
+            {loadError ??
+              (isLoading
+                ? 'Loading templates…'
+                : `Select a ${CHANNEL_META[studioChannel].label} template or create a new one.`)}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+    <div className="flex h-full min-h-0 w-full">
       <ChannelRail
         active={studioChannel}
         counts={channelCounts}
         onSelect={switchStudio}
       />
+      <div
+        key={studioChannel}
+        className="studio-switch app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:flex-row lg:items-start"
+      >
       <TemplateRail
         templates={templates}
         activeId={active.id}
@@ -1556,6 +1564,7 @@ export function TemplateStudio() {
           filled automatically.
         </p>
       </aside>
+      </div>
     </div>
   );
 }
