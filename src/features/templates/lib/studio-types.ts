@@ -8,7 +8,17 @@
 // in hooks/use-studio-templates.ts.
 // ============================================================
 
-export type TemplateChannel = 'whatsapp' | 'sms';
+export type TemplateChannel = 'whatsapp' | 'sms' | 'email';
+
+/** Channel metadata for the studio's channel rail. */
+export const CHANNEL_META: Record<
+  TemplateChannel,
+  { label: string; studioLabel: string }
+> = {
+  whatsapp: { label: 'WhatsApp', studioLabel: 'WhatsApp Studio' },
+  sms: { label: 'SMS', studioLabel: 'SMS Studio' },
+  email: { label: 'Email', studioLabel: 'Email Studio' },
+};
 
 export type TemplateStatus = 'approved' | 'pending' | 'draft' | 'rejected';
 
@@ -36,6 +46,11 @@ export interface SmsDraft {
   body: string;
 }
 
+export interface EmailDraft {
+  subject: string;
+  body: string;
+}
+
 export interface StudioTemplate {
   id: string;
   name: string;
@@ -47,6 +62,7 @@ export interface StudioTemplate {
   updatedAt: string;
   whatsapp: WhatsAppDraft;
   sms: SmsDraft;
+  email: EmailDraft;
   /** Provider rejection / submission error, surfaced in the editor. */
   errorMessage?: string | null;
   /** True for rows that only exist locally (never saved). */

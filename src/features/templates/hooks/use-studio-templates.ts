@@ -30,7 +30,7 @@ import { TEMPLATE_VARIABLES } from '@/features/templates/lib/studio-types';
 interface DbTemplateRow {
   id: string;
   name: string;
-  channel: 'whatsapp' | 'sms';
+  channel: 'whatsapp' | 'sms' | 'email';
   provider: TemplateProvider | null;
   category: string;
   language: string;
@@ -38,6 +38,7 @@ interface DbTemplateRow {
   header_type: string | null;
   header_content: string | null;
   header_media_url: string | null;
+  subject_text: string | null;
   body_text: string;
   footer_text: string | null;
   buttons: Array<{
@@ -74,10 +75,10 @@ function statusFromDb(status: string): TemplateStatus {
 }
 
 function categoryFromDb(
-  channel: 'whatsapp' | 'sms',
+  channel: 'whatsapp' | 'sms' | 'email',
   category: string
 ): TemplateCategory {
-  if (channel === 'sms') {
+  if (channel === 'sms' || channel === 'email') {
     if (category === 'transactional') return 'utility';
     if (category === 'otp') return 'authentication';
     return 'marketing';
@@ -110,7 +111,7 @@ function rowToStudio(row: DbTemplateRow): StudioTemplate {
     category: categoryFromDb(row.channel, row.category),
     language: row.language,
     status: statusFromDb(row.status),
-    provider: row.provider ?? (row.channel === 'sms' ? 'none' : 'meta'),
+    provider: row.provider ?? (row.channel === 'whatsapp' ? 'meta' : 'none'),
     updatedAt: (row.updated_at ?? row.created_at ?? '').slice(0, 10),
     errorMessage: row.rejection_reason || row.submission_error || null,
     whatsapp: {
@@ -124,6 +125,10 @@ function rowToStudio(row: DbTemplateRow): StudioTemplate {
       buttons: buttonsFromDb(row),
     },
     sms: { body: row.channel === 'sms' ? row.body_text : '' },
+    email: {
+      subject: row.channel === 'email' ? (row.subject_text ?? '') : '',
+      body: row.channel === 'email' ? row.body_text : '',
+    },
   };
 }
 

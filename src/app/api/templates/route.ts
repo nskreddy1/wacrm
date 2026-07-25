@@ -73,6 +73,19 @@ const saveSchema = z.discriminatedUnion('channel', [
       .nullable()
       .optional(),
   }),
+  z.object({
+    channel: z.literal('email'),
+    id: z.string().uuid().optional(),
+    name: z.string().trim().min(1).max(512),
+    category: z.enum(['marketing', 'transactional', 'otp']),
+    language: z.string().trim().min(2).max(12),
+    subject_text: z.string().trim().min(1).max(300),
+    body_text: z.string().trim().min(1).max(100_000),
+    sample_values: z
+      .object({ body: z.array(z.string()).optional() })
+      .nullable()
+      .optional(),
+  }),
 ]);
 
 export async function GET() {
@@ -81,7 +94,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('message_templates')
       .select(
-        'id, name, channel, provider, category, language, status, header_type, header_content, header_media_url, body_text, footer_text, buttons, sample_values, compliance, rejection_reason, submission_error, meta_template_id, twilio_content_sid, updated_at, created_at'
+        'id, name, channel, provider, category, language, status, header_type, header_content, header_media_url, subject_text, body_text, footer_text, buttons, sample_values, compliance, rejection_reason, submission_error, meta_template_id, twilio_content_sid, updated_at, created_at'
       )
       .eq('account_id', accountId)
       .order('updated_at', { ascending: false });
@@ -111,6 +124,9 @@ export async function POST(request: Request) {
 
     // Server-side compliance gate. Error-level violations block the
     // save; warnings are persisted so the UI can keep surfacing them.
+    // Email reuses the SMS rule set (marketing opt-out language,
+    // required disclosures) — there is no carrier review for email,
+    // so this is the only guardrail before a template goes live.
     const compliance = checkCompliance(
       input.channel === 'whatsapp'
         ? {
@@ -136,8 +152,8 @@ export async function POST(request: Request) {
 
     // Single object shape (not a per-channel union) so Supabase's
     // typed insert accepts it. WhatsApp saves as DRAFT (submission
-    // happens via the provider routes); SMS has no carrier review,
-    // so a compliant save is immediately APPROVED/live.
+    // happens via the provider routes); SMS and email have no
+    // carrier review, so a compliant save is immediately APPROVED.
     const isWhatsApp = input.channel === 'whatsapp';
     const row = {
       account_id: accountId,
@@ -149,6 +165,7 @@ export async function POST(request: Request) {
       language: input.language,
       header_type: isWhatsApp ? (input.header_type ?? null) : null,
       header_content: isWhatsApp ? (input.header_content ?? null) : null,
+      subject_text: input.channel === 'email' ? input.subject_text : null,
       body_text: input.body_text,
       footer_text: isWhatsApp ? (input.footer_text ?? null) : null,
       buttons: isWhatsApp && input.buttons?.length ? input.buttons : null,
