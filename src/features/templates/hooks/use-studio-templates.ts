@@ -223,6 +223,17 @@ function saveBody(tpl: StudioTemplate) {
       body_text: tpl.sms.body,
     };
   }
+  if (tpl.channel === 'email') {
+    return {
+      channel: 'email' as const,
+      id: tpl.isNew ? undefined : tpl.id,
+      name: tpl.name.trim() || 'Untitled template',
+      category: SMS_CATEGORY[tpl.category],
+      language: tpl.language,
+      subject_text: tpl.email.subject,
+      body_text: tpl.email.body,
+    };
+  }
   const body = toNumberedVariables(tpl.whatsapp.body);
   const header =
     tpl.whatsapp.headerKind === 'text' && tpl.whatsapp.headerText.trim()

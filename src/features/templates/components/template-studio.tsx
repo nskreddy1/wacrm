@@ -22,6 +22,7 @@ import {
   Image as ImageIcon,
   Link2,
   Loader2,
+  Mail,
   MessageSquareText,
   Phone,
   Plus,
@@ -58,6 +59,7 @@ import { cn } from '@/lib/utils';
 import {
   analyzeSms,
   CATEGORY_LABELS,
+  CHANNEL_META,
   STATUS_META,
   TEMPLATE_VARIABLES,
   type HeaderKind,
@@ -89,15 +91,15 @@ const SMS_CATEGORY_FOR_CHECK: Record<
   authentication: 'otp',
 };
 
-function blankTemplate(): StudioTemplate {
+function blankTemplate(channel: TemplateChannel = 'whatsapp'): StudioTemplate {
   return {
     id: nextId('tpl-new'),
     name: 'Untitled template',
-    channel: 'whatsapp',
-    category: 'utility',
+    channel,
+    category: channel === 'whatsapp' ? 'utility' : 'marketing',
     language: 'en_US',
     status: 'draft',
-    provider: 'meta',
+    provider: channel === 'whatsapp' ? 'meta' : 'none',
     updatedAt: new Date().toISOString().slice(0, 10),
     whatsapp: {
       headerKind: 'none',
@@ -107,8 +109,68 @@ function blankTemplate(): StudioTemplate {
       buttons: [],
     },
     sms: { body: '' },
+    email: { subject: '', body: '' },
     isNew: true,
   };
+}
+
+// ------------------------------------------------------------
+// Channel rail — the vertical studio switcher
+// ------------------------------------------------------------
+
+const STUDIO_CHANNELS: {
+  channel: TemplateChannel;
+  icon: typeof MessageSquareText;
+}[] = [
+  { channel: 'whatsapp', icon: MessageSquareText },
+  { channel: 'sms', icon: Smartphone },
+  { channel: 'email', icon: Mail },
+];
+
+/**
+ * Slim vertical rail on the far left. Collapsed it shows only the
+ * channel icons; hovering (or keyboard focus) expands it to reveal
+ * the studio names. Clicking a channel switches the whole studio —
+ * template list, editor, and preview — to that channel's library.
+ */
+function ChannelRail({
+  active,
+  onSelect,
+}: {
+  active: TemplateChannel;
+  onSelect: (channel: TemplateChannel) => void;
+}) {
+  return (
+    <nav
+      aria-label="Template studios"
+      className="group/rail border-border bg-card sticky top-4 flex w-12 shrink-0 flex-col gap-1 self-start overflow-hidden rounded-xl border p-1.5 transition-[width] duration-200 hover:w-44 focus-within:w-44"
+    >
+      {STUDIO_CHANNELS.map(({ channel, icon: Icon }) => {
+        const meta = CHANNEL_META[channel];
+        const isActive = channel === active;
+        return (
+          <button
+            key={channel}
+            type="button"
+            onClick={() => onSelect(channel)}
+            aria-current={isActive ? 'true' : undefined}
+            title={meta.studioLabel}
+            className={cn(
+              'flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm whitespace-nowrap transition-colors',
+              isActive
+                ? 'bg-primary/10 text-primary font-semibold'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            )}
+          >
+            <Icon className="size-4.5 shrink-0" aria-hidden="true" />
+            <span className="opacity-0 transition-opacity duration-150 group-hover/rail:opacity-100 group-focus-within/rail:opacity-100">
+              {meta.studioLabel}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
 }
 
 // ------------------------------------------------------------
@@ -118,6 +180,7 @@ function blankTemplate(): StudioTemplate {
 function TemplateRail({
   templates,
   activeId,
+  channel,
   isLoading,
   onSelect,
   onCreate,
@@ -126,6 +189,7 @@ function TemplateRail({
 }: {
   templates: StudioTemplate[];
   activeId: string;
+  channel: TemplateChannel;
   isLoading: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
@@ -137,20 +201,22 @@ function TemplateRail({
       <Button onClick={onCreate} className="w-full justify-center gap-2">
         <Plus className="size-4" aria-hidden="true" /> New template
       </Button>
-      <Button
-        variant="outline"
-        onClick={onSync}
-        disabled={isSyncing}
-        className="w-full justify-center gap-2"
-        title="Import approved WhatsApp templates from Twilio or Meta and refresh statuses"
-      >
-        {isSyncing ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <RefreshCw className="size-4" aria-hidden="true" />
-        )}
-        Sync templates
-      </Button>
+      {channel === 'whatsapp' && (
+        <Button
+          variant="outline"
+          onClick={onSync}
+          disabled={isSyncing}
+          className="w-full justify-center gap-2"
+          title="Import approved WhatsApp templates from Twilio or Meta and refresh statuses"
+        >
+          {isSyncing ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw className="size-4" aria-hidden="true" />
+          )}
+          Sync templates
+        </Button>
+      )}
       {isLoading && templates.length === 0 && (
         <div className="flex flex-col gap-1.5" aria-label="Loading templates">
           {[0, 1, 2].map((i) => (
@@ -163,8 +229,8 @@ function TemplateRail({
       )}
       {!isLoading && templates.length === 0 && (
         <p className="border-border text-muted-foreground rounded-lg border border-dashed p-4 text-center text-xs leading-relaxed">
-          No templates yet. Create your first WhatsApp or SMS template to get
-          started.
+          No {CHANNEL_META[channel].label} templates yet. Create your first one
+          to get started.
         </p>
       )}
       <div className="flex flex-col gap-1.5 overflow-y-auto">
@@ -867,13 +933,21 @@ export function TemplateStudio() {
   const [edits, setEdits] = useState<Record<string, StudioTemplate>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [device, setDevice] = useState<DeviceKind>('iphone');
+  // Which studio is open (WhatsApp / SMS / Email). Templates are
+  // stored per channel — the rail only ever lists the open studio's
+  // templates, so each channel keeps its own library.
+  const [studioChannel, setStudioChannel] =
+    useState<TemplateChannel>('whatsapp');
   const [busy, setBusy] = useState<
     'save' | 'submit' | 'delete' | 'sync' | null
   >(null);
 
   const templates = useMemo(
-    () => [...newDrafts, ...serverTemplates.map((t) => edits[t.id] ?? t)],
-    [newDrafts, serverTemplates, edits]
+    () =>
+      [...newDrafts, ...serverTemplates.map((t) => edits[t.id] ?? t)].filter(
+        (t) => t.channel === studioChannel
+      ),
+    [newDrafts, serverTemplates, edits, studioChannel]
   );
 
   const active =
@@ -895,6 +969,17 @@ export function TemplateStudio() {
         hasButtons: active.whatsapp.buttons.length > 0,
       }).issues;
     }
+    if (active.channel === 'email') {
+      // Email reuses the SMS rule set (opt-out language for
+      // marketing, disclosure checks) — CAN-SPAM/GDPR-style
+      // guardrails without a separate rules engine.
+      if (!active.email.body.trim()) return [];
+      return checkCompliance({
+        channel: 'sms',
+        category: SMS_CATEGORY_FOR_CHECK[active.category],
+        body: `${active.email.subject} ${active.email.body}`,
+      }).issues;
+    }
     if (!active.sms.body.trim()) return [];
     return checkCompliance({
       channel: 'sms',
@@ -914,9 +999,16 @@ export function TemplateStudio() {
   };
 
   const createTemplate = () => {
-    const tpl = blankTemplate();
+    const tpl = blankTemplate(studioChannel);
     setNewDrafts((prev) => [tpl, ...prev]);
     setActiveId(tpl.id);
+  };
+
+  const switchStudio = (channel: TemplateChannel) => {
+    setStudioChannel(channel);
+    // Selection belongs to the previous channel's list — reset so
+    // the new studio opens on its own first template.
+    setActiveId(null);
   };
 
   const clearLocal = (id: string) => {
