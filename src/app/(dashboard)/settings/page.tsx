@@ -12,6 +12,7 @@ import { ProfileForm } from '@/features/settings/components/profile-form';
 import { SecurityPanel } from '@/features/settings/components/security-panel';
 import { AppearancePanel } from '@/features/settings/components/appearance-panel';
 import { ChannelConnections } from '@/features/settings/components/channel-connections';
+import { EmailDeliveryPanel } from '@/features/settings/components/email-delivery-panel';
 import { QuickRepliesManager } from '@/features/settings/components/quick-replies-manager';
 import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-tags-panel';
 import { DealsSettings } from '@/features/settings/components/deals-settings';
@@ -62,7 +63,12 @@ export default function SettingsPage() {
     appearance: <AppearancePanel />,
     whatsapp: <ChannelConnections fixedChannel="whatsapp" />,
     sms: <ChannelConnections fixedChannel="sms" />,
-    email: <ChannelConnections fixedChannel="email" />,
+    email: (
+    <div className="flex flex-col gap-4">
+      <EmailDeliveryPanel />
+      <ChannelConnections fixedChannel="email" />
+    </div>
+  ),
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,
