@@ -20,6 +20,8 @@ routes, schema, or security posture.
 | `api-routes.md` | Every API namespace, its auth gate, and conventions |
 | `security.md` | Security architecture, review checklist, known patterns |
 | `roadmap.md` | Ranked problems, pre-production checklist, competitive feature gaps |
+| `features-100.md` | **100-feature build catalog** (Jul 2026 research): enterprise gates, omnichannel, agentic AI, sales, verticals (real estate, healthcare, education, automotive, retail), analytics, platform — each scored P0–P2, plus the vertical-template strategy |
+| `problems-100.md` | **100-problem audit** of the current app: bugs, security, enterprise gaps, architecture, data model, testing, observability, UX — each scored S1–S4 with a fix-order summary for the ship-blockers |
 
 Also mandatory reading:
 - `.agents/skills/` — installed skill library (security-review, emil-design-eng, etc.). Team memory says: check for a relevant skill before ANY feature work.
