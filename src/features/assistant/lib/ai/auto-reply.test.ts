@@ -190,8 +190,11 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
   });
 
   it('skips when auto-reply is disabled for the account', async () => {
-    h.loadAgentConfig.mockResolvedValue(aiConfig({ autoReplyEnabled: false }));
+    // Capability gating lives in loadAgentConfig now: with the
+    // autoreply_enabled column off it resolves null, not a config.
+    h.loadAgentConfig.mockResolvedValue(null);
     await dispatchInboundToAiReply(ARGS);
+    expect(h.generateReply).not.toHaveBeenCalled();
     expect(h.sendChannelMessage).not.toHaveBeenCalled();
   });
 

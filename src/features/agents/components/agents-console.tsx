@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
-import { Bot, Plus } from 'lucide-react';
+import { Bot, Plus, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import { AgentActivity } from './agent-activity';
 import { AgentSettingsForm } from './agent-settings-form';
 import { AgentSetupWizard } from './agent-setup-wizard';
 import { AiPlayground } from './ai-playground';
+import { SpecialistEditor } from './specialist-editor';
 
 // ------------------------------------------------------------------
 // AI Agents console — ONE default agent per account (a single
@@ -32,11 +33,21 @@ import { AiPlayground } from './ai-playground';
 // column: AI suggestions (suggestions_enabled) and Auto-reply
 // (autoreply_enabled). One agent can handle both jobs.
 //
+// On top of the default agent, admins can CREATE CUSTOM SPECIALIST
+// agents (kind='custom'): persona + routing description. The 2026
+// router → specialist pattern hands matching conversations to them
+// automatically; they run on the default agent's provider connection.
+//
 // Layout preserved from the original console design: serif page
-// header + count, left agent rail (Active / Inactive groups), right
-// detail panel with tabs. Run History and Usage are merged into a
-// single Activity tab (they showed the same data).
+// header + count, left agent rail, right detail panel with tabs.
+// Run History and Usage are merged into a single Activity tab.
 // ------------------------------------------------------------------
+
+/** What the detail panel is showing. */
+type Selection =
+  | { type: 'default' }
+  | { type: 'specialist'; id: string }
+  | { type: 'new-specialist' };
 
 type TabKey =
   | 'overview'
@@ -57,15 +68,22 @@ export function AgentsConsole() {
   const { can, accountId } = useAuth();
   const canManage = can('ai:manage');
 
-  const { data, isLoading, mutate } = useSWR<{ agent: ClientAgent | null }>(
-    '/api/ai/agents',
-    swrJson
-  );
+  const { data, isLoading, mutate } = useSWR<{
+    agent: ClientAgent | null;
+    specialists?: ClientAgent[];
+  }>('/api/ai/agents', swrJson);
   const agent = data?.agent ?? null;
+  const specialists = data?.specialists ?? [];
 
   const [tab, setTab] = useState<TabKey>('overview');
   const [showWizard, setShowWizard] = useState(false);
   const [busyToggle, setBusyToggle] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Selection>({ type: 'default' });
+
+  const selectedSpecialist =
+    selection.type === 'specialist'
+      ? (specialists.find((s) => s.id === selection.id) ?? null)
+      : null;
 
   const configured = Boolean(agent?.provider && agent?.model);
   const running = Boolean(
@@ -74,7 +92,8 @@ export function AgentsConsole() {
       configured &&
       (agent.suggestionsEnabled || agent.autoreplyEnabled)
   );
-  const activeCount = running ? 1 : 0;
+  const activeSpecialists = specialists.filter((s) => s.isEnabled);
+  const activeCount = (running ? 1 : 0) + (running ? activeSpecialists.length : 0);
 
   /** PATCH a partial body against the agent row and refresh. */
   async function patchAgent(body: Record<string, unknown>, okMsg: string) {
