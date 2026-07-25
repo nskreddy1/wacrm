@@ -159,14 +159,29 @@ export async function POST(request: Request) {
     };
 
     if (input.id) {
+      // Never overwrite user_id on update — it's an audit column
+      // (original author). Stomping it with the current editor made
+      // teammate edits collide with the editor's own same-named
+      // templates on the legacy (user_id, name, language) index.
+      const { user_id: _userId, ...updateRow } = row;
       const { data, error } = await supabase
         .from('message_templates')
-        .update(row)
+        .update(updateRow)
         .eq('id', input.id)
         .eq('account_id', accountId)
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          return NextResponse.json(
+            {
+              error: `A template named "${input.name}" (${input.language}) already exists. Pick a different name or edit the existing template.`,
+            },
+            { status: 409 }
+          );
+        }
+        throw error;
+      }
       return NextResponse.json({
         template: data,
         compliance: compliance.issues,
@@ -180,12 +195,32 @@ export async function POST(request: Request) {
       .single();
     if (error) {
       if (error.code === '23505') {
-        return NextResponse.json(
-          {
-            error: `A template named "${input.name}" (${input.language}) already exists.`,
-          },
-          { status: 409 }
-        );
+        // A template with this (provider, name, language) already
+        // exists on the account — treat the save as an update of the
+        // existing row instead of failing, so re-saving a draft from
+        // the studio is idempotent.
+        const { user_id: _userId, ...updateRow } = row;
+        const { data: updatedRow, error: updateErr } = await supabase
+          .from('message_templates')
+          .update(updateRow)
+          .eq('account_id', accountId)
+          .eq('provider', row.provider)
+          .eq('name', input.name)
+          .eq('language', input.language)
+          .select()
+          .single();
+        if (updateErr) {
+          return NextResponse.json(
+            {
+              error: `A template named "${input.name}" (${input.language}) already exists.`,
+            },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({
+          template: updatedRow,
+          compliance: compliance.issues,
+        });
       }
       throw error;
     }
