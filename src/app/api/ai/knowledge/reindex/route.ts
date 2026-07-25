@@ -5,7 +5,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
-import { loadEmbeddingsKey } from '@/features/assistant/lib/ai/config';
+import { loadAgentsEmbeddingsKey } from '@/features/assistant/lib/ai/agents';
 import { ingestDocument } from '@/features/assistant/lib/ai/knowledge';
 import { AiError } from '@/features/assistant/lib/ai/types';
 
@@ -38,7 +38,7 @@ export async function POST() {
       );
     }
 
-    const { key: embeddingsApiKey, corrupt } = await loadEmbeddingsKey(
+    const { key: embeddingsApiKey, corrupt } = await loadAgentsEmbeddingsKey(
       supabase,
       accountId
     );

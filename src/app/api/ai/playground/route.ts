@@ -5,7 +5,10 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
-import { loadAiConfig } from '@/features/assistant/lib/ai/config';
+import {
+  loadAgentConfig,
+  isAgentKind,
+} from '@/features/assistant/lib/ai/agents';
 import { retrieveKnowledge } from '@/features/assistant/lib/ai/knowledge';
 import { generateReply } from '@/features/assistant/lib/ai/generate';
 import { buildPromptParts } from '@/features/assistant/lib/ai/defaults';
@@ -63,10 +66,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const config = await loadAiConfig(supabase, accountId, {
-      requireActive: false,
+    // Which agent is being tested — each agent's Playground tab tests
+    // ITS OWN config. Default: autoreply (the customer-facing one).
+    const agentKind = isAgentKind(body?.agent) ? body.agent : 'autoreply';
+
+    // requireEnabled:false — "test before enabling" is the whole point
+    // of a playground; a saved key/model is still required.
+    const config = await loadAgentConfig(supabase, accountId, agentKind, {
+      requireEnabled: false,
     }).catch((err) => {
-      console.error('[ai/playground] loadAiConfig error:', err);
+      console.error('[ai/playground] loadAgentConfig error:', err);
       throw new AiError('Stored API key could not be decrypted.', {
         code: 'key_decrypt_failed',
         status: 400,
@@ -75,7 +84,8 @@ export async function POST(request: Request) {
     if (!config) {
       return NextResponse.json(
         {
-          error: 'No agent configured yet. Add your provider key in Setup.',
+          error:
+            'This agent is not configured yet. Finish its setup (provider, API key, model) first.',
           code: 'ai_not_configured',
         },
         { status: 400 }
@@ -99,10 +109,11 @@ export async function POST(request: Request) {
       messages,
       promptParts: buildPromptParts({
         userPrompt: config.systemPrompt,
-        mode: 'auto_reply',
+        // Exercise the same prompt mode the agent uses in production.
+        mode: agentKind === 'copilot' ? 'draft' : 'auto_reply',
         knowledge,
       }),
-      cacheKey: `playground:${accountId}`,
+      cacheKey: `playground:${accountId}:${agentKind}`,
     });
     return NextResponse.json({ reply: text, handoff });
   } catch (err) {

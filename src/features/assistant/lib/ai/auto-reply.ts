@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './admin-client';
-import { loadAiConfig } from './config';
+import { loadAgentConfig } from './agents';
 import { buildConversationContext } from './context';
 import { retrieveKnowledge } from './knowledge';
 import { buildCrmContext } from './crm-context';
@@ -49,11 +49,12 @@ export async function dispatchInboundToAiReply(
   try {
     const db = supabaseAdmin();
 
-    // Auto-reply is independent from the inbox "Draft with AI" master
-    // switch. Load the saved provider config even when `is_active` is off;
-    // this worker is governed exclusively by `auto_reply_enabled`.
-    const config = await loadAiConfig(db, accountId, { requireActive: false });
-    if (!config || !config.autoReplyEnabled) return;
+    // Per-agent system: this worker is the Auto-Reply Agent, and ONLY
+    // its own row powers it — its own provider, key, model, prompt, and
+    // behavior settings. Disabled or unconfigured → silent no-op (the
+    // Copilot being on/off is irrelevant here).
+    const config = await loadAgentConfig(db, accountId, 'autoreply');
+    if (!config) return;
 
     // Reply-hours window: outside the configured schedule the bot stands
     // down entirely and the inbound waits in the inbox for a human.
@@ -150,9 +151,8 @@ export async function dispatchInboundToAiReply(
         config,
         messages,
         promptParts: buildPromptParts({
-          // The Auto-Reply Agent has its own persona prompt; null
-          // inherits the Support Copilot prompt (pre-split behaviour).
-          userPrompt: config.autoreplySystemPrompt ?? config.systemPrompt,
+          // The agent's own persona prompt (fully independent config).
+          userPrompt: config.systemPrompt,
           mode: 'auto_reply',
           knowledge,
           crmContext,
@@ -169,6 +169,7 @@ export async function dispatchInboundToAiReply(
       accountId,
       conversationId,
       mode: 'auto_reply',
+      agentId: config.agentId,
       provider: config.provider,
       model: config.model,
       usage,
