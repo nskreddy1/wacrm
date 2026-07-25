@@ -12,7 +12,6 @@ import { ProfileForm } from '@/features/settings/components/profile-form';
 import { SecurityPanel } from '@/features/settings/components/security-panel';
 import { AppearancePanel } from '@/features/settings/components/appearance-panel';
 import { ChannelConnections } from '@/features/settings/components/channel-connections';
-import { EmailDeliveryPanel } from '@/features/settings/components/email-delivery-panel';
 import { QuickRepliesManager } from '@/features/settings/components/quick-replies-manager';
 import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-tags-panel';
 import { DealsSettings } from '@/features/settings/components/deals-settings';
@@ -63,12 +62,11 @@ export default function SettingsPage() {
     appearance: <AppearancePanel />,
     whatsapp: <ChannelConnections fixedChannel="whatsapp" />,
     sms: <ChannelConnections fixedChannel="sms" />,
-    email: (
-    <div className="flex flex-col gap-4">
-      <EmailDeliveryPanel />
-      <ChannelConnections fixedChannel="email" />
-    </div>
-  ),
+    // Single source of truth for email: the connections flow with
+    // its test-before-enable gate. The legacy always-visible SMTP
+    // form was removed — its prefilled placeholders read like saved
+    // defaults and bypassed connection testing.
+    email: <ChannelConnections fixedChannel="email" />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,
