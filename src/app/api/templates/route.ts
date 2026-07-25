@@ -77,7 +77,13 @@ const saveSchema = z.discriminatedUnion('channel', [
     channel: z.literal('email'),
     id: z.string().uuid().optional(),
     name: z.string().trim().min(1).max(512),
-    category: z.enum(['marketing', 'transactional', 'otp']),
+    category: z.enum([
+      'newsletter',
+      'promotional',
+      'transactional',
+      'onboarding',
+      'otp',
+    ]),
     language: z.string().trim().min(2).max(12),
     subject_text: z.string().trim().min(1).max(300),
     body_text: z.string().trim().min(1).max(100_000),
@@ -87,6 +93,23 @@ const saveSchema = z.discriminatedUnion('channel', [
       .optional(),
   }),
 ]);
+
+/**
+ * Email categories map onto the SMS/TCPA rule tiers for the
+ * compliance engine: promotional content needs opt-out language
+ * (CAN-SPAM, India DPDP consent norms), transactional needs none,
+ * OTP must not carry marketing content.
+ */
+const EMAIL_COMPLIANCE_TIER: Record<
+  'newsletter' | 'promotional' | 'transactional' | 'onboarding' | 'otp',
+  'marketing' | 'transactional' | 'otp'
+> = {
+  newsletter: 'marketing',
+  promotional: 'marketing',
+  transactional: 'transactional',
+  onboarding: 'transactional',
+  otp: 'otp',
+};
 
 export async function GET() {
   try {
@@ -136,7 +159,17 @@ export async function POST(request: Request) {
             footer: input.footer_text ?? '',
             hasButtons: (input.buttons?.length ?? 0) > 0,
           }
-        : { channel: 'sms', category: input.category, body: input.body_text }
+        : {
+            channel: 'sms',
+            category:
+              input.channel === 'email'
+                ? EMAIL_COMPLIANCE_TIER[input.category]
+                : input.category,
+            body:
+              input.channel === 'email'
+                ? `${input.subject_text} ${input.body_text}`
+                : input.body_text,
+          }
     );
     if (!compliance.ok) {
       return NextResponse.json(

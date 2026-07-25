@@ -3,6 +3,7 @@
 import useSWR from 'swr';
 
 import type {
+  EmailCategory,
   StudioTemplate,
   TemplateButton,
   TemplateCategory,
@@ -128,8 +129,27 @@ function rowToStudio(row: DbTemplateRow): StudioTemplate {
     email: {
       subject: row.channel === 'email' ? (row.subject_text ?? '') : '',
       body: row.channel === 'email' ? row.body_text : '',
+      category: emailCategoryFromDb(row),
     },
   };
+}
+
+const EMAIL_CATEGORIES: EmailCategory[] = [
+  'newsletter',
+  'promotional',
+  'transactional',
+  'onboarding',
+  'otp',
+];
+
+function emailCategoryFromDb(row: DbTemplateRow): EmailCategory {
+  if (
+    row.channel === 'email' &&
+    (EMAIL_CATEGORIES as string[]).includes(row.category)
+  ) {
+    return row.category as EmailCategory;
+  }
+  return 'promotional';
 }
 
 // ------------------------------------------------------------
