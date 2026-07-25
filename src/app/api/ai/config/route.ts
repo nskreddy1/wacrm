@@ -42,7 +42,7 @@ export async function GET() {
       // `api_key` is selected only to derive `has_key` — it is stripped
       // out below and never returned to the client.
       .select(
-        'provider, model, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_limit_mode, auto_reply_schedule_start, auto_reply_schedule_end, auto_reply_timezone, handoff_agent_id, api_key, embeddings_api_key'
+        'provider, model, base_url, system_prompt, autoreply_system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_limit_mode, auto_reply_schedule_start, auto_reply_schedule_end, auto_reply_timezone, handoff_agent_id, api_key, embeddings_api_key'
       )
       .eq('account_id', accountId)
       .maybeSingle();
@@ -149,9 +149,22 @@ export async function POST(request: Request) {
       }
     }
 
+    // Support Copilot prompt. Partial-save: only touched when the field
+    // is present in the body, so the Auto-Reply Agent's config form
+    // (which doesn't send it) can't wipe the Copilot's prompt.
+    const systemPromptProvided = 'system_prompt' in body;
     const systemPrompt =
       typeof body.system_prompt === 'string' && body.system_prompt.trim()
         ? body.system_prompt.trim()
+        : null;
+    // Auto-Reply Agent's own prompt. Partial-save semantics: only
+    // touched when the field is present in the body (the Copilot's
+    // config form doesn't send it, so saving there can't wipe it).
+    const autoreplyPromptProvided = 'autoreply_system_prompt' in body;
+    const autoreplySystemPrompt =
+      typeof body.autoreply_system_prompt === 'string' &&
+      body.autoreply_system_prompt.trim()
+        ? body.autoreply_system_prompt.trim()
         : null;
     const isActive = body.is_active === true;
     const autoReplyEnabled = body.auto_reply_enabled === true;
@@ -339,7 +352,6 @@ export async function POST(request: Request) {
       provider,
       model,
       base_url: baseUrl,
-      system_prompt: systemPrompt,
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
       auto_reply_max_per_conversation: maxPer,
@@ -351,6 +363,10 @@ export async function POST(request: Request) {
     // Only touch the handoff target when the form actually sent the field,
     // so a partial save (e.g. flipping a toggle) doesn't wipe it.
     if (handoffProvided) shared.handoff_agent_id = handoffAgentId;
+    // Same partial-save rule for the Auto-Reply Agent's own prompt.
+    if (autoreplyPromptProvided) {
+      shared.autoreply_system_prompt = autoreplySystemPrompt;
+    }
     if (rawEmbeddingsKey) {
       shared.embeddings_api_key = encrypt(rawEmbeddingsKey);
     } else if (clearEmbeddingsKey) {

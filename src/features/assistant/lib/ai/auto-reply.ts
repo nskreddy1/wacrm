@@ -150,7 +150,9 @@ export async function dispatchInboundToAiReply(
         config,
         messages,
         promptParts: buildPromptParts({
-          userPrompt: config.systemPrompt,
+          // The Auto-Reply Agent has its own persona prompt; null
+          // inherits the Support Copilot prompt (pre-split behaviour).
+          userPrompt: config.autoreplySystemPrompt ?? config.systemPrompt,
           mode: 'auto_reply',
           knowledge,
           crmContext,

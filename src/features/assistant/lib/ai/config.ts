@@ -9,6 +9,7 @@ interface AiConfigRow {
   api_key: string;
   base_url: string | null;
   system_prompt: string | null;
+  autoreply_system_prompt: string | null;
   is_active: boolean;
   auto_reply_enabled: boolean;
   auto_reply_max_per_conversation: number;
@@ -21,7 +22,7 @@ interface AiConfigRow {
 }
 
 const CONFIG_COLUMNS =
-  'provider, model, api_key, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_limit_mode, auto_reply_schedule_start, auto_reply_schedule_end, auto_reply_timezone, handoff_agent_id, embeddings_api_key';
+  'provider, model, api_key, base_url, system_prompt, autoreply_system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_limit_mode, auto_reply_schedule_start, auto_reply_schedule_end, auto_reply_timezone, handoff_agent_id, embeddings_api_key';
 
 /** Postgres `time` columns come back as 'HH:MM:SS'; the app works in
  *  'HH:MM'. Normalizes either shape (or null) to 'HH:MM' | null. */
@@ -93,6 +94,7 @@ export async function loadAiConfig(
     apiKey: decrypt(row.api_key),
     baseUrl: row.base_url,
     systemPrompt: row.system_prompt,
+    autoreplySystemPrompt: row.autoreply_system_prompt,
     isActive: row.is_active,
     autoReplyEnabled: row.auto_reply_enabled,
     autoReplyMaxPerConversation: row.auto_reply_max_per_conversation,
