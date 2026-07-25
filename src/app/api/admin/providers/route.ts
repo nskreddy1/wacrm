@@ -70,7 +70,7 @@ export async function GET() {
     await requireSuperAdmin();
     const admin = platformAdmin();
 
-    const [policiesResult, connectionsResult, accountsResult] =
+    const [policiesResult, connectionsResult, accountsResult, activityResult] =
       await Promise.all([
         admin
           .from('platform_provider_policies')
@@ -82,10 +82,21 @@ export async function GET() {
           )
           .order('created_at', { ascending: false }),
         admin.from('accounts').select('id, name'),
+        // Counts only — no message content, no identities.
+        admin.rpc('admin_provider_activity', { p_days: 14 }),
       ]);
     if (policiesResult.error) throw policiesResult.error;
     if (connectionsResult.error) throw connectionsResult.error;
     if (accountsResult.error) throw accountsResult.error;
+    // Activity is non-fatal: an empty chart beats a dead page.
+    const activityRows = activityResult.error
+      ? []
+      : ((activityResult.data ?? []) as {
+          day: string;
+          channel: string;
+          total: number;
+          failed: number;
+        }[]);
 
     const policyMap = new Map(
       (policiesResult.data ?? []).map((row) => [
@@ -145,7 +156,29 @@ export async function GET() {
       createdAt: row.created_at,
     }));
 
-    return NextResponse.json({ catalog, fleet });
+    // Activity: pivot day rows into { day, whatsapp, sms, email, failed }.
+    const dayMap = new Map<
+      string,
+      { day: string; whatsapp: number; sms: number; email: number; failed: number }
+    >();
+    // Seed the full 14-day window so quiet days render as zero.
+    for (let i = 13; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      dayMap.set(key, { day: key, whatsapp: 0, sms: 0, email: 0, failed: 0 });
+    }
+    for (const row of activityRows) {
+      const bucket = dayMap.get(row.day);
+      if (!bucket) continue;
+      if (row.channel === 'whatsapp') bucket.whatsapp += Number(row.total);
+      else if (row.channel === 'sms') bucket.sms += Number(row.total);
+      else if (row.channel === 'email') bucket.email += Number(row.total);
+      bucket.failed += Number(row.failed);
+    }
+    const activity = [...dayMap.values()];
+
+    return NextResponse.json({ catalog, fleet, activity });
   } catch (err) {
     return toErrorResponse(err);
   }
