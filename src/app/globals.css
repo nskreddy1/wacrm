@@ -405,6 +405,34 @@ html[data-theme='rose'] {
   animation: page-enter 180ms var(--ease-out-strong) both;
 }
 
+/*
+ * Template Studio channel switch. Re-triggered by keying the studio
+ * body on the active channel — the workspace slides in from the rail
+ * side (8px) so switching WhatsApp -> SMS -> Email feels like moving
+ * between rooms, not re-rendering a form. Same motion rules as the
+ * rest of the app: transform + opacity only, strong ease-out.
+ */
+@keyframes studio-switch {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.studio-switch {
+  animation: studio-switch 240ms var(--ease-out-strong) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-switch {
+    animation: none;
+  }
+}
+
 /* Error feedback: a short, decisive shake. Runs once on mount. */
 @keyframes auth-shake {
   0%,

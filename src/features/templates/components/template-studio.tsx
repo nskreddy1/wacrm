@@ -132,21 +132,27 @@ const STUDIO_CHANNELS: {
 /**
  * Slim vertical rail on the far left. Collapsed it shows only the
  * channel icons; hovering (or keyboard focus) expands it to reveal
- * the studio names. Clicking a channel switches the whole studio —
- * template list, editor, and preview — to that channel's library.
+ * the studio names and per-channel template counts. Clicking a
+ * channel switches the whole studio — template list, editor, and
+ * preview — to that channel's library.
  */
 function ChannelRail({
   active,
+  counts,
   onSelect,
 }: {
   active: TemplateChannel;
+  counts: Record<TemplateChannel, number>;
   onSelect: (channel: TemplateChannel) => void;
 }) {
   return (
     <nav
       aria-label="Template studios"
-      className="group/rail border-border bg-card sticky top-4 flex w-12 shrink-0 flex-col gap-1 self-start overflow-hidden rounded-xl border p-1.5 transition-[width] duration-200 hover:w-44 focus-within:w-44"
+      className="group/rail border-border bg-card sticky top-4 flex w-12 shrink-0 flex-col gap-1 self-start overflow-hidden rounded-xl border p-1.5 shadow-sm transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] hover:w-48 focus-within:w-48"
     >
+      <p className="text-muted-foreground/70 h-5 px-2 pt-0.5 text-[10px] font-semibold tracking-widest whitespace-nowrap uppercase opacity-0 transition-opacity duration-200 group-hover/rail:opacity-100 group-focus-within/rail:opacity-100">
+        Studios
+      </p>
       {STUDIO_CHANNELS.map(({ channel, icon: Icon }) => {
         const meta = CHANNEL_META[channel];
         const isActive = channel === active;
@@ -158,15 +164,39 @@ function ChannelRail({
             aria-current={isActive ? 'true' : undefined}
             title={meta.studioLabel}
             className={cn(
-              'flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm whitespace-nowrap transition-colors',
+              'relative flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm whitespace-nowrap transition-colors duration-150',
               isActive
                 ? 'bg-primary/10 text-primary font-semibold'
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             )}
           >
-            <Icon className="size-4.5 shrink-0" aria-hidden="true" />
-            <span className="opacity-0 transition-opacity duration-150 group-hover/rail:opacity-100 group-focus-within/rail:opacity-100">
+            {/* Active indicator bar, mirrors the sidebar pattern */}
+            <span
+              aria-hidden="true"
+              className={cn(
+                'bg-primary absolute top-1/2 left-0 w-0.5 -translate-y-1/2 rounded-full transition-all duration-200',
+                isActive ? 'h-5 opacity-100' : 'h-0 opacity-0'
+              )}
+            />
+            <Icon
+              className={cn(
+                'size-4.5 shrink-0 transition-transform duration-200',
+                isActive && 'scale-110'
+              )}
+              aria-hidden="true"
+            />
+            <span className="flex-1 text-left opacity-0 transition-opacity duration-200 group-hover/rail:opacity-100 group-focus-within/rail:opacity-100">
               {meta.studioLabel}
+            </span>
+            <span
+              className={cn(
+                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums opacity-0 transition-opacity duration-200 group-hover/rail:opacity-100 group-focus-within/rail:opacity-100',
+                isActive
+                  ? 'bg-primary/15 text-primary'
+                  : 'bg-muted text-muted-foreground'
+              )}
+            >
+              {counts[channel]}
             </span>
           </button>
         );
@@ -1046,13 +1076,27 @@ export function TemplateStudio() {
     'save' | 'submit' | 'delete' | 'sync' | null
   >(null);
 
-  const templates = useMemo(
-    () =>
-      [...newDrafts, ...serverTemplates.map((t) => edits[t.id] ?? t)].filter(
-        (t) => t.channel === studioChannel
-      ),
-    [newDrafts, serverTemplates, edits, studioChannel]
+  const allTemplates = useMemo(
+    () => [...newDrafts, ...serverTemplates.map((t) => edits[t.id] ?? t)],
+    [newDrafts, serverTemplates, edits]
   );
+
+  const templates = useMemo(
+    () => allTemplates.filter((t) => t.channel === studioChannel),
+    [allTemplates, studioChannel]
+  );
+
+  // Per-channel library sizes, surfaced in the channel rail so you
+  // can see at a glance where templates live before switching.
+  const channelCounts = useMemo(() => {
+    const counts: Record<TemplateChannel, number> = {
+      whatsapp: 0,
+      sms: 0,
+      email: 0,
+    };
+    for (const t of allTemplates) counts[t.channel] += 1;
+    return counts;
+  }, [allTemplates]);
 
   const active =
     templates.find((t) => t.id === activeId) ?? templates[0] ?? null;
@@ -1220,7 +1264,11 @@ export function TemplateStudio() {
   if (!active) {
     return (
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <ChannelRail active={studioChannel} onSelect={switchStudio} />
+        <ChannelRail
+          active={studioChannel}
+          counts={channelCounts}
+          onSelect={switchStudio}
+        />
         <TemplateRail
           templates={templates}
           activeId=""
@@ -1243,7 +1291,11 @@ export function TemplateStudio() {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <ChannelRail active={studioChannel} onSelect={switchStudio} />
+      <ChannelRail
+        active={studioChannel}
+        counts={channelCounts}
+        onSelect={switchStudio}
+      />
       <TemplateRail
         templates={templates}
         activeId={active.id}
