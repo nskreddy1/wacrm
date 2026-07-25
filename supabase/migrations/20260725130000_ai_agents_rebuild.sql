@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS ai_agents (
   created_by    uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   kind          text NOT NULL CHECK (kind IN ('copilot', 'autoreply')),
   display_name  text NOT NULL,
-  provider      text CHECK (provider IN ('openai', 'anthropic', 'gemini', 'groq', 'nvidia', 'custom')),
+  -- Mirrors AI_PROVIDERS in src/features/assistant/lib/ai/types.ts.
+  provider      text CHECK (provider IN ('openai', 'anthropic', 'gemini', 'nvidia', 'groq', 'openrouter', 'together', 'mistral', 'deepseek', 'xai', 'ollama', 'custom')),
   model         text,
   api_key       text,             -- AES-256-GCM-encrypted BYO provider key
   base_url      text,             -- custom / OpenAI-compatible endpoints
