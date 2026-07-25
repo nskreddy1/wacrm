@@ -2,23 +2,24 @@
 
 import { DevicesCard } from './devices-card';
 import { PasswordForm } from './password-form';
-import { SessionsCard } from './sessions-card';
 import { SettingsPanelHead } from './settings-panel-head';
 import { useTranslations } from 'next-intl';
 
 /**
- * "Login & security" section — groups the former Profile-tab password
- * and active-sessions cards into their own dedicated home.
+ * "Login & security" — two disciplined sections, each a split
+ * label/content card: password (with live strength meter) and
+ * devices & sessions (per-device revoke + sign out everywhere as
+ * the card footer). The old standalone sessions card merged into
+ * the devices card so session control lives in exactly one place.
  */
 export function SecurityPanel() {
   const t = useTranslations('Settings.security');
   return (
-    <section className="animate-in fade-in-50 max-w-2xl duration-200">
+    <section className="animate-in fade-in-50 max-w-3xl duration-200">
       <SettingsPanelHead title={t('title')} description={t('description')} />
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <PasswordForm />
         <DevicesCard />
-        <SessionsCard />
       </div>
     </section>
   );

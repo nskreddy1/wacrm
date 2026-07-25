@@ -3,17 +3,26 @@
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
-import { Laptop, Loader2, MonitorSmartphone, Smartphone } from 'lucide-react';
+import {
+  Laptop,
+  Loader2,
+  LogOut,
+  MonitorSmartphone,
+  Smartphone,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
 
 interface DeviceRow {
@@ -75,10 +84,18 @@ const fetcher = async (url: string) => {
   return body.data;
 };
 
+/**
+ * Devices & sessions: the full session surface in one place — every
+ * logged-in device with per-device revoke, and the global
+ * "sign out everywhere" escape hatch as the card's footer.
+ */
 export function DevicesCard() {
   const t = useTranslations('Settings.security');
+  const tp = useTranslations('Settings.profile');
   const [touched, setTouched] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [confirmAllOpen, setConfirmAllOpen] = useState(false);
+  const [signingOutAll, setSigningOutAll] = useState(false);
 
   // Register the current session once, then load the list.
   useEffect(() => {
@@ -121,82 +138,189 @@ export function DevicesCard() {
     }
   };
 
+  const onSignOutAll = async () => {
+    setSigningOutAll(true);
+    try {
+      const response = await fetch('/api/v1/session', { method: 'DELETE' });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string } | string;
+        } | null;
+        const message =
+          typeof payload?.error === 'string'
+            ? payload.error
+            : (payload?.error?.message ?? 'Unable to sign out');
+        toast.error(tp('signOutFailed', { message }));
+        return;
+      }
+      window.location.href = '/login';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      toast.error(msg);
+    } finally {
+      setSigningOutAll(false);
+    }
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-foreground flex items-center gap-2">
-          <MonitorSmartphone className="text-primary size-4" />
-          {t('devicesTitle')}
-        </CardTitle>
-        <CardDescription className="text-muted-foreground">
-          {t('devicesDesc')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading || !data ? (
-          <div className="text-muted-foreground flex items-center gap-2 py-2 text-sm">
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            {t('devicesLoading')}
+    <>
+      <Card className="py-0">
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-6 p-5 md:flex-row md:gap-10">
+            {/* Left rail */}
+            <div className="md:w-52 md:shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="bg-primary/10 text-primary flex size-7 items-center justify-center rounded-md">
+                  <MonitorSmartphone className="size-3.5" aria-hidden="true" />
+                </span>
+                <h3 className="text-foreground text-sm font-semibold">
+                  {t('devicesTitle')}
+                </h3>
+              </div>
+              <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+                {t('devicesDesc')}
+              </p>
+              {data && data.length > 0 && (
+                <p className="text-muted-foreground mt-3 text-xs">
+                  <span className="text-foreground font-semibold">
+                    {data.length}
+                  </span>{' '}
+                  {t('devicesCount', { count: data.length })}
+                </p>
+              )}
+            </div>
+
+            {/* Right: device list */}
+            <div className="min-w-0 flex-1">
+              {isLoading || !data ? (
+                <div className="text-muted-foreground flex items-center gap-2 py-2 text-sm">
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  {t('devicesLoading')}
+                </div>
+              ) : data.length === 0 ? (
+                <p className="text-muted-foreground py-2 text-sm">
+                  {t('devicesEmpty')}
+                </p>
+              ) : (
+                <ul className="border-border divide-border divide-y rounded-lg border">
+                  {data.map((device) => {
+                    const agent = describeAgent(device.user_agent);
+                    const Icon = agent.mobile ? Smartphone : Laptop;
+                    return (
+                      <li
+                        key={device.id}
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-2.5',
+                          device.is_current && 'bg-primary/[0.03]'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'flex size-8 shrink-0 items-center justify-center rounded-md',
+                            device.is_current
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-muted text-muted-foreground'
+                          )}
+                        >
+                          <Icon className="size-4" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="text-foreground truncate text-sm font-medium">
+                              {agent.label}
+                            </p>
+                            {device.is_current && (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px]"
+                              >
+                                {t('deviceCurrent')}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-muted-foreground truncate text-xs">
+                            {device.ip_address ?? '—'} ·{' '}
+                            {t('deviceLastActive', {
+                              time: relativeTime(device.last_seen_at),
+                            })}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRevoke(device)}
+                          disabled={revoking !== null}
+                          className="text-destructive hover:text-destructive shrink-0"
+                        >
+                          {revoking === device.id ? (
+                            <Loader2
+                              className="size-3.5 animate-spin"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            t('deviceRevoke')
+                          )}
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           </div>
-        ) : data.length === 0 ? (
-          <p className="text-muted-foreground py-2 text-sm">
-            {t('devicesEmpty')}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {data.map((device) => {
-              const agent = describeAgent(device.user_agent);
-              const Icon = agent.mobile ? Smartphone : Laptop;
-              return (
-                <li
-                  key={device.id}
-                  className="border-border flex items-center gap-3 rounded-lg border px-3 py-2.5"
-                >
-                  <Icon
-                    className="text-muted-foreground size-4 shrink-0"
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <p className="text-foreground truncate text-sm font-medium">
-                        {agent.label}
-                      </p>
-                      {device.is_current && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          {t('deviceCurrent')}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {device.ip_address ?? '—'} ·{' '}
-                      {t('deviceLastActive', {
-                        time: relativeTime(device.last_seen_at),
-                      })}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onRevoke(device)}
-                    disabled={revoking !== null}
-                    className="text-destructive hover:text-destructive shrink-0"
-                  >
-                    {revoking === device.id ? (
-                      <Loader2
-                        className="size-3.5 animate-spin"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      t('deviceRevoke')
-                    )}
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+
+          {/* Footer: the global escape hatch */}
+          <div className="border-border bg-muted/30 flex flex-col gap-2 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              {tp('sessionsDesc')}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmAllOpen(true)}
+              className="shrink-0"
+            >
+              <LogOut className="size-3.5" aria-hidden="true" />
+              {tp('signOutAll')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={confirmAllOpen} onOpenChange={setConfirmAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tp('signOutConfirmTitle')}</DialogTitle>
+            <DialogDescription>{tp('signOutConfirmDesc')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setConfirmAllOpen(false)}
+              disabled={signingOutAll}
+            >
+              {tp('cancel')}
+            </Button>
+            <Button
+              type="button"
+              onClick={onSignOutAll}
+              disabled={signingOutAll}
+            >
+              {signingOutAll ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  {tp('signingOut')}
+                </>
+              ) : (
+                tp('signOutEverywhere')
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

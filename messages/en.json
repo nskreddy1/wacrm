@@ -1796,7 +1796,12 @@
       "deviceLastActive": "active {time}",
       "deviceRevoke": "Revoke",
       "deviceRevoked": "Session revoked.",
-      "deviceRevokeFailed": "Could not revoke the session. Try again."
+      "deviceRevokeFailed": "Could not revoke the session. Try again.",
+      "devicesCount": "{count, plural, one {active session} other {active sessions}}",
+      "strengthWeak": "Weak — add more characters",
+      "strengthFair": "Fair — mix upper and lower case",
+      "strengthGood": "Good — add a number or symbol",
+      "strengthStrong": "Strong password"
     },
     "apiKeys": {
       "title": "API keys",
