@@ -29,6 +29,8 @@ import {
   Plus,
   Reply,
   RefreshCw,
+  Monitor,
+  Send,
   Smartphone,
   Trash2,
   Type,
@@ -1147,9 +1149,17 @@ function EmailEditor({
 }
 
 /**
- * Desktop email-client style preview: sender row, subject line, then
- * the body with variables resolved. Email doesn't get the phone
- * frame — it's read in an inbox, so the preview mirrors that.
+ * Advanced email preview (Litmus/Mailchimp pattern): two views —
+ *
+ * - "Inbox": a Gmail-style list row showing exactly what recipients
+ *   see before opening: sender, subject, and the body's first line
+ *   as the snippet/preheader. Includes truncation guidance (mobile
+ *   clients cut subjects around 40 chars, snippets around 90).
+ * - "Message": the opened email — header, subject, body with
+ *   variables resolved, plus the unsubscribe footer zone.
+ *
+ * A desktop/mobile width toggle simulates both breakpoints, since
+ * 40-60% of opens happen on phones.
  */
 function EmailPreview({
   email,
@@ -1158,32 +1168,283 @@ function EmailPreview({
   email: StudioTemplate['email'];
   customVariables?: CustomTemplateVariable[];
 }) {
+  const [view, setView] = useState<'inbox' | 'message'>('message');
+  const [mobile, setMobile] = useState(false);
+
   const fill = (text: string) => withSampleValues(text, customVariables);
+  const subject = email.subject.trim()
+    ? fill(email.subject)
+    : 'Subject preview';
+  const body = email.body.trim()
+    ? fill(email.body)
+    : 'Your email body will appear here as you type.';
+  // Snippet = first non-empty line (what Gmail shows after the subject).
+  const snippet =
+    body
+      .split('\n')
+      .map((l) => l.trim())
+      .find(Boolean) ?? '';
+  const subjectLimit = mobile ? 40 : 70;
+  const subjectTooLong = subject.length > subjectLimit;
+  const needsUnsub =
+    email.category === 'newsletter' || email.category === 'promotional';
+  const hasUnsub = /unsub|opt[ -]?out/i.test(email.body);
+
   return (
-    <div className="border-border bg-card w-full overflow-hidden rounded-xl border shadow-sm">
-      <div className="border-border flex items-center gap-2.5 border-b px-4 py-3">
-        <div className="bg-primary/15 text-primary flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
-          A
+    <div className="flex w-full flex-col gap-2">
+      {/* View + device toggles */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="bg-muted flex rounded-lg p-0.5">
+          {(['inbox', 'message'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors',
+                view === v
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {v}
+            </button>
+          ))}
         </div>
-        <div className="min-w-0">
-          <p className="text-foreground truncate text-xs font-semibold">
-            Acme Workspace
-          </p>
-          <p className="text-muted-foreground truncate text-[11px]">
-            to customer@example.com
-          </p>
+        <div className="bg-muted flex rounded-lg p-0.5">
+          <button
+            type="button"
+            onClick={() => setMobile(false)}
+            aria-pressed={!mobile}
+            aria-label="Desktop width preview"
+            className={cn(
+              'flex items-center justify-center rounded-md px-2 py-1 transition-colors',
+              !mobile
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Monitor className="size-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobile(true)}
+            aria-pressed={mobile}
+            aria-label="Mobile width preview"
+            className={cn(
+              'flex items-center justify-center rounded-md px-2 py-1 transition-colors',
+              mobile
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Smartphone className="size-3.5" aria-hidden="true" />
+          </button>
         </div>
       </div>
-      <div className="flex flex-col gap-2 px-4 py-3">
-        <p className="text-foreground text-sm font-semibold text-balance">
-          {email.subject.trim() ? fill(email.subject) : 'Subject preview'}
-        </p>
-        <p className="text-foreground/90 text-xs leading-relaxed whitespace-pre-wrap">
-          {email.body.trim()
-            ? fill(email.body)
-            : 'Your email body will appear here as you type.'}
-        </p>
+
+      <div
+        className={cn(
+          'border-border bg-card overflow-hidden rounded-xl border shadow-sm transition-all duration-300',
+          mobile ? 'mx-auto w-full max-w-70' : 'w-full'
+        )}
+      >
+        {view === 'inbox' ? (
+          /* Gmail-style inbox row: what the recipient sees pre-open */
+          <div className="flex items-start gap-2.5 px-3.5 py-3">
+            <div className="bg-primary/15 text-primary flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+              A
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-foreground truncate text-xs font-bold">
+                  Acme Workspace
+                </p>
+                <p className="text-muted-foreground shrink-0 text-[10px]">
+                  9:41 AM
+                </p>
+              </div>
+              <p className="text-foreground truncate text-xs font-semibold">
+                {mobile && subject.length > 40
+                  ? `${subject.slice(0, 40)}…`
+                  : subject}
+              </p>
+              <p className="text-muted-foreground truncate text-[11px]">
+                {snippet.length > 90 ? `${snippet.slice(0, 90)}…` : snippet}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="border-border flex items-center gap-2.5 border-b px-4 py-3">
+              <div className="bg-primary/15 text-primary flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                A
+              </div>
+              <div className="min-w-0">
+                <p className="text-foreground truncate text-xs font-semibold">
+                  Acme Workspace
+                </p>
+                <p className="text-muted-foreground truncate text-[11px]">
+                  to customer@example.com
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 px-4 py-3">
+              <p className="text-foreground text-sm font-semibold text-balance">
+                {subject}
+              </p>
+              <p className="text-foreground/90 text-xs leading-relaxed whitespace-pre-wrap">
+                {body}
+              </p>
+              {needsUnsub && (
+                <p
+                  className={cn(
+                    'border-border mt-1 border-t pt-2 text-[10px]',
+                    hasUnsub
+                      ? 'text-muted-foreground'
+                      : 'text-destructive font-medium'
+                  )}
+                >
+                  {hasUnsub
+                    ? 'Unsubscribe footer detected — required for marketing email.'
+                    : 'Missing unsubscribe link — required for newsletters and promotional email (CAN-SPAM / India DPDP).'}
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Truncation guidance under the preview */}
+      <p
+        className={cn(
+          'text-[10px] leading-snug',
+          subjectTooLong ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground'
+        )}
+      >
+        Subject: {subject.length}/{subjectLimit} chars
+        {subjectTooLong
+          ? ` — will truncate on ${mobile ? 'mobile' : 'desktop'} clients.`
+          : mobile
+            ? ' — fits mobile clients.'
+            : ' — fits desktop clients.'}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * End-to-end test delivery: sends the SAVED template to one explicit
+ * address through the workspace email layer (tenant provider first,
+ * platform Resend fallback). Disabled until the template is saved so
+ * what lands in the inbox always matches what the server has.
+ */
+function SendTestEmail({
+  templateId,
+  hasUnsavedEdits,
+}: {
+  templateId: string | null;
+  hasUnsavedEdits: boolean;
+}) {
+  const [to, setTo] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
+  const disabled = !templateId || sending;
+
+  const handleSend = async () => {
+    if (!templateId || !to.trim()) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/templates/test-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId, to: to.trim() }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        sent?: boolean;
+        provider?: string;
+        error?: string;
+      };
+      if (res.ok && data.sent) {
+        setResult({
+          ok: true,
+          message: `Sent via ${data.provider === 'platform_resend' ? 'Resend' : (data.provider ?? 'email provider')}. Check the inbox.`,
+        });
+      } else {
+        setResult({
+          ok: false,
+          message: data.error ?? 'Send failed. Try again.',
+        });
+      }
+    } catch {
+      setResult({ ok: false, message: 'Network error. Try again.' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="border-border bg-card w-full rounded-xl border p-3 shadow-sm">
+      <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        Send a test
+      </p>
+      <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
+        {templateId
+          ? hasUnsavedEdits
+            ? 'Save first — the test sends the last saved version.'
+            : 'Delivers the saved template with sample data to one address.'
+          : 'Save the template to enable test sending.'}
+      </p>
+      <div className="mt-2 flex gap-1.5">
+        <Input
+          type="email"
+          value={to}
+          placeholder="you@company.com"
+          onChange={(e) => setTo(e.target.value)}
+          onKeyDown={(e) => {
+            if (
+              e.key === 'Enter' &&
+              !e.nativeEvent.isComposing &&
+              e.keyCode !== 229
+            ) {
+              handleSend();
+            }
+          }}
+          disabled={disabled}
+          className="h-8 flex-1 text-xs"
+          aria-label="Test recipient email"
+        />
+        <Button
+          size="sm"
+          onClick={handleSend}
+          disabled={disabled || !to.trim()}
+          className="h-8"
+        >
+          {sending ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Send className="size-3.5" aria-hidden="true" />
+          )}
+          Send
+        </Button>
+      </div>
+      {result && (
+        <p
+          role="status"
+          className={cn(
+            'mt-2 text-[11px] leading-snug',
+            result.ok ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive'
+          )}
+        >
+          {result.message}
+        </p>
+      )}
     </div>
   );
 }
@@ -1715,7 +1976,16 @@ export function TemplateStudio() {
         aria-label="Live preview"
       >
         {active.channel === 'email' ? (
-          <EmailPreview email={active.email} customVariables={customVariables} />
+          <>
+            <EmailPreview
+              email={active.email}
+              customVariables={customVariables}
+            />
+            <SendTestEmail
+              templateId={active.isNew ? null : active.id}
+              hasUnsavedEdits={Boolean(edits[active.id] || active.isNew)}
+            />
+          </>
         ) : (
           <>
             <Tabs
