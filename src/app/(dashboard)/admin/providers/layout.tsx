@@ -31,7 +31,14 @@ export default async function ProvidersLayout({
 
   return (
     <div className="flex h-0 min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-      {children}
+      {/* Page shell: consistent breathing room on every edge and a
+          readable max width, matching the rest of the dashboard. */}
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-4 md:p-6">
+        <header className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold tracking-tight">Providers</h1>
+        </header>
+        {children}
+      </div>
     </div>
   );
 }
