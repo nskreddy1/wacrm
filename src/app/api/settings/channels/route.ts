@@ -482,12 +482,18 @@ export async function PATCH(request: Request) {
         { status: 403 }
       );
     }
-    if (
-      parsed.data.isEnabled &&
-      !['connected', 'degraded'].includes(existing.status)
-    )
+    // Test-before-enable: only a connection whose LAST test passed
+    // ('connected') may be enabled. 'degraded' means the last test
+    // failed — it must pass a new test first, otherwise a broken
+    // provider silently swallows sends.
+    if (parsed.data.isEnabled && existing.status !== 'connected')
       return NextResponse.json(
-        { error: 'Test this provider before enabling it' },
+        {
+          error:
+            existing.status === 'degraded'
+              ? 'The last connection test failed. Run "Test connection" and fix the credentials before enabling.'
+              : 'Test this provider before enabling it',
+        },
         { status: 409 }
       );
     if (parsed.data.isPrimary)
