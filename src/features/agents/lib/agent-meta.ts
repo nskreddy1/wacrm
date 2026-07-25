@@ -40,6 +40,7 @@ export const AGENT_KIND_META: Record<AgentKind, AgentKindMeta> = {
     description:
       'Assists your team inside the inbox — drafts suggested replies from the conversation history and your knowledge base. Suggestions are never sent without a person approving them.',
     icon: Sparkles,
+    mode: 'draft',
     starterPrompt:
       'You help our support team reply to customers. Match our tone: friendly, professional, and brief. If you are unsure about specifics, say so in the draft so the agent can fill them in.',
   },
@@ -50,6 +51,7 @@ export const AGENT_KIND_META: Record<AgentKind, AgentKindMeta> = {
     description:
       'Replies to incoming WhatsApp messages on its own using your business context and knowledge base. Hands the conversation to your team whenever a customer asks for a human or it is unsure.',
     icon: MessageCircleReply,
+    mode: 'auto_reply',
     starterPrompt:
       'You answer customers of our business on WhatsApp. Be warm and concise. Only answer questions about our business. If the customer wants a human, is upset, or you are not sure, hand off to the team.',
   },

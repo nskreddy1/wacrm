@@ -2,176 +2,82 @@
 
 import { useMemo, useState } from 'react';
 import useSWR from 'swr';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { Bot, Loader2, MessageCircleReply, Plus, Sparkles } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AiPlayground } from '@/features/agents/components/ai-playground';
-import { AiUsageCard } from '@/features/agents/components/ai-usage';
-import { AgentConfiguration } from '@/features/agents/components/agent-configuration';
-import { ConfigureAgentWizard } from '@/features/agents/components/configure-agent-wizard';
+import { Switch } from '@/components/ui/switch';
 import { AiKnowledgeCard } from '@/features/settings/components/ai-knowledge';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { cn } from '@/lib/utils';
+import {
+  AGENT_KIND_META,
+  AGENT_KIND_ORDER,
+  providerLabel,
+  swrJson,
+  type AgentKind,
+  type ClientAgent,
+} from '../lib/agent-meta';
+import { AgentActivity } from './agent-activity';
+import { AgentSettingsForm } from './agent-settings-form';
+import { AgentSetupWizard } from './agent-setup-wizard';
+import { AiPlayground } from './ai-playground';
 
 // ------------------------------------------------------------------
-// Lumis-style AI Agents console: serif display headings, a left rail
-// grouping agents by Active/Inactive, and a right detail panel with
-// underline tabs (Overview / Configuration / Playground / Usage).
-// Both "agents" are views over the account's single BYO-key config:
-//   - Support Copilot  -> is_active        (assistant + inbox drafts)
-//   - Auto-Reply Agent -> auto_reply_enabled (requires is_active)
+// AI Agents console — per-agent system. Each agent (Support Copilot,
+// Auto-Reply Agent) is its own `ai_agents` row with a fully
+// independent provider, API key, model, prompt, and behavior
+// settings. No shared config and no dependency between agents.
+// Tabs: Overview / Configuration / Knowledge Base / Playground /
+// Activity (Run History + Usage merged, scoped to the agent).
 // ------------------------------------------------------------------
 
-interface AiConfigData {
-  configured: boolean;
-  env_fallback?: boolean;
-  auto_reply_live?: boolean;
-  has_key?: boolean;
-  has_embeddings_key?: boolean;
-  provider?: string;
-  model?: string;
-  is_active?: boolean;
-  auto_reply_enabled?: boolean;
-  auto_reply_max_per_conversation?: number;
-  auto_reply_limit_mode?: string;
-  auto_reply_schedule_start?: string | null;
-  auto_reply_schedule_end?: string | null;
-  auto_reply_timezone?: string | null;
-  system_prompt?: string | null;
-}
-
-interface UsageData {
-  days: number;
-  totals: { calls: number; total_tokens: number };
-  daily: { date: string; tokens: number; calls: number }[];
-}
-
-type AgentKey = 'copilot' | 'autoreply';
 type TabKey =
-  'overview' | 'configuration' | 'knowledge' | 'playground' | 'runs' | 'usage';
-
-interface RunRow {
-  id: string;
-  conversation_id: string | null;
-  mode: 'auto_reply' | 'draft';
-  provider: string;
-  model: string;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  created_at: string;
-}
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
-const AGENT_META: Record<
-  AgentKey,
-  { name: string; icon: typeof Bot; description: string }
-> = {
-  copilot: {
-    name: 'Support Copilot',
-    icon: Sparkles,
-    description:
-      'Assists your team inside the inbox — drafts suggested replies from the conversation history and your knowledge base, summarizes long threads, and answers product questions in your established tone. Suggestions are never sent without an agent approving them.',
-  },
-  autoreply: {
-    name: 'Auto-Reply Agent',
-    icon: MessageCircleReply,
-    description:
-      'Replies to inbound customer messages automatically when your team is away or busy — grounded in your knowledge base, capped per conversation, and restricted to your reply-hours window. Hands the conversation to a human the moment it is unsure.',
-  },
-};
+  | 'overview'
+  | 'configuration'
+  | 'knowledge'
+  | 'playground'
+  | 'activity';
 
 export function AgentsConsole() {
   const { can, accountId } = useAuth();
   const canManage = can('ai:manage');
 
-  const {
-    data: config,
-    isLoading,
-    mutate,
-  } = useSWR<AiConfigData>('/api/ai/config', fetcher);
-  const { data: usage } = useSWR<UsageData>(
-    canManage ? '/api/ai/usage?days=14' : null,
-    fetcher
+  const { data, isLoading, mutate } = useSWR<{ agents: ClientAgent[] }>(
+    '/api/ai/agents',
+    swrJson
   );
+  const agents = useMemo(() => data?.agents ?? [], [data?.agents]);
 
-  const [selected, setSelected] = useState<AgentKey>('copilot');
+  const [selected, setSelected] = useState<AgentKind>('copilot');
   const [tab, setTab] = useState<TabKey>('overview');
-  const [busyToggle, setBusyToggle] = useState<AgentKey | null>(null);
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const [busyToggle, setBusyToggle] = useState<string | null>(null);
 
-  const configured = config?.configured === true;
-  const copilotActive = configured && config?.is_active === true;
-  const autoReplyActive = copilotActive && config?.auto_reply_enabled === true;
+  const byKind = useMemo(() => {
+    const map = new Map<AgentKind, ClientAgent>();
+    for (const a of agents) map.set(a.kind as AgentKind, a);
+    return map;
+  }, [agents]);
 
-  const agents = useMemo(
-    () =>
-      [
-        { key: 'copilot' as const, active: copilotActive },
-        { key: 'autoreply' as const, active: autoReplyActive },
-      ].map((a) => ({
-        ...a,
-        ...AGENT_META[a.key],
-        modelLabel: configured ? `${config?.model ?? ''}` : 'Not configured',
-      })),
-    [configured, copilotActive, autoReplyActive, config?.model]
-  );
-  const activeAgents = agents.filter((a) => a.active);
-  const inactiveAgents = agents.filter((a) => !a.active);
-  const current = agents.find((a) => a.key === selected) ?? agents[0];
+  const current = byKind.get(selected) ?? null;
+  const meta = AGENT_KIND_META[selected];
+  const activeCount = agents.filter((a) => a.isEnabled).length;
 
-  /**
-   * The enable/disable fix: toggles go through PATCH (toggle-only
-   * endpoint) instead of the full-form POST that required the API key
-   * to be re-validated. Enabling auto-reply also enables the assistant
-   * (it depends on it); disabling the assistant pauses auto-reply too.
-   */
-  async function toggleAgent(key: AgentKey, next: boolean) {
+  /** Enable/disable via the per-agent PATCH — no cross-agent coupling. */
+  async function toggleAgent(agent: ClientAgent, next: boolean) {
     if (!canManage) return;
-    if (!configured) {
-      toast.error('Set up the AI agent first — add your provider and API key.');
-      setTab('configuration');
-      return;
-    }
-    setBusyToggle(key);
+    setBusyToggle(agent.id);
     try {
-      const patch =
-        key === 'copilot'
-          ? next
-            ? { is_active: true }
-            : { is_active: false }
-          : next
-            ? { is_active: true, auto_reply_enabled: true }
-            : { auto_reply_enabled: false };
-      const res = await fetch('/api/ai/config', {
+      const res = await fetch(`/api/ai/agents/${agent.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
+        body: JSON.stringify({ is_enabled: next }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? 'Failed to update');
       await mutate();
       toast.success(
-        key === 'copilot'
-          ? next
-            ? 'Support Copilot enabled'
-            : 'Support Copilot disabled — Auto-Reply Agent paused too (it depends on Copilot)'
-          : next
-            ? 'Auto-Reply Agent enabled — Support Copilot brought online with it'
-            : 'Auto-Reply Agent disabled — Support Copilot stays on'
+        `${AGENT_KIND_META[agent.kind as AgentKind].name} ${next ? 'enabled' : 'paused'}`
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong');
@@ -180,721 +86,301 @@ export function AgentsConsole() {
     }
   }
 
+  function selectAgent(kind: AgentKind) {
+    setSelected(kind);
+    setTab('overview');
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {/* ---- Page header ---- */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-foreground font-serif text-3xl tracking-tight">
-            AI Agents
-          </h1>
-          <span className="border-border bg-card text-muted-foreground rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums">
-            {String(activeAgents.length).padStart(2, '0')}
-          </span>
-        </div>
-        {canManage ? (
-          <Button onClick={() => setWizardOpen(true)}>
-            <Plus data-icon="inline-start" aria-hidden />
-            Configure New Agent
-          </Button>
-        ) : null}
+      <div className="flex items-center gap-2.5">
+        <h1 className="text-foreground font-serif text-3xl tracking-tight">
+          AI Agents
+        </h1>
+        <span className="border-border bg-card text-muted-foreground rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums">
+          {String(activeCount).padStart(2, '0')}
+        </span>
       </div>
 
-      {canManage ? (
-        <ConfigureAgentWizard
-          open={wizardOpen}
-          onOpenChange={setWizardOpen}
-          onSaved={() => {
-            void mutate();
-            setTab('overview');
-          }}
-        />
-      ) : null}
-
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-        {/* ---- Left rail: agent list ---- */}
+        {/* ---- Left rail: one card per agent kind ---- */}
         <aside
-          className="flex w-full shrink-0 flex-col gap-4 lg:w-64"
+          className="flex w-full shrink-0 flex-col gap-2 lg:w-64"
           aria-label="Agent list"
         >
-          <RailGroup
-            label={`Active agents (${activeAgents.length})`}
-            agents={activeAgents}
-            selected={selected}
-            configured={configured}
-            onSelect={(k) => setSelected(k)}
-            loading={isLoading}
-          />
-          <RailGroup
-            label={`Inactive agents (${inactiveAgents.length})`}
-            agents={inactiveAgents}
-            selected={selected}
-            configured={configured}
-            onSelect={(k) => setSelected(k)}
-            loading={isLoading}
-          />
+          <span className="text-muted-foreground px-1 text-[11px] font-medium tracking-wider uppercase">
+            Your agents
+          </span>
+          {isLoading ? (
+            <>
+              <Skeleton className="h-16 w-full rounded-lg" />
+              <Skeleton className="h-16 w-full rounded-lg" />
+            </>
+          ) : (
+            AGENT_KIND_ORDER.map((kind) => {
+              const m = AGENT_KIND_META[kind];
+              const agent = byKind.get(kind) ?? null;
+              const Icon = m.icon;
+              const isSelected = kind === selected;
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => selectAgent(kind)}
+                  aria-pressed={isSelected}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors',
+                    isSelected
+                      ? 'border-primary/40 bg-card ring-primary/30 ring-1'
+                      : 'border-border bg-muted/40 hover:bg-card'
+                  )}
+                >
+                  <span className="border-border bg-background flex size-8 shrink-0 items-center justify-center rounded-md border">
+                    <Icon
+                      className="text-muted-foreground size-4"
+                      aria-hidden
+                    />
+                  </span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="text-foreground truncate text-sm font-medium">
+                      {m.name}
+                    </span>
+                    <span className="text-muted-foreground truncate text-xs">
+                      {agent
+                        ? `${agent.model ?? '—'} · ${agent.isEnabled ? 'Active' : 'Paused'}`
+                        : m.tagline}
+                    </span>
+                    {!agent && (
+                      <span className="text-primary mt-0.5 inline-flex items-center gap-1 text-xs font-medium">
+                        <Plus className="size-3" aria-hidden />
+                        Set up
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })
+          )}
         </aside>
 
         {/* ---- Right detail panel ---- */}
         <section className="border-border bg-card min-w-0 flex-1 rounded-xl border">
-          {/* Detail header */}
-          <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
-            <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-foreground font-serif text-2xl tracking-tight">
-                  {current.name}
-                </h2>
-                <Badge variant={current.active ? 'default' : 'secondary'}>
-                  {current.active
-                    ? 'Active'
-                    : configured
-                      ? 'Paused'
-                      : 'Not set up'}
-                </Badge>
-                {configured && config?.model ? (
-                  <Badge variant="outline" className="gap-1">
-                    <Sparkles className="size-3" aria-hidden />
-                    {config.model}
-                  </Badge>
+          {isLoading ? (
+            <div className="p-5">
+              <Skeleton className="h-80 w-full rounded-lg" />
+            </div>
+          ) : !current ? (
+            /* Not configured yet → guided setup wizard, right in place. */
+            <div className="p-5">
+              {canManage ? (
+                <AgentSetupWizard
+                  kind={selected}
+                  onCreated={async (agent) => {
+                    await mutate();
+                    setSelected(agent.kind as AgentKind);
+                    setTab('overview');
+                  }}
+                />
+              ) : (
+                <p className="text-muted-foreground py-12 text-center text-sm">
+                  The {meta.name} is not set up yet. Ask an admin to configure
+                  it.
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Detail header */}
+              <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-foreground font-serif text-2xl tracking-tight">
+                      {meta.name}
+                    </h2>
+                    <Badge
+                      variant={current.isEnabled ? 'default' : 'secondary'}
+                    >
+                      {current.isEnabled ? 'Active' : 'Paused'}
+                    </Badge>
+                    <Badge variant="outline">
+                      {providerLabel(current.provider)} · {current.model ?? '—'}
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    {meta.tagline} · fully independent configuration
+                  </p>
+                </div>
+                {canManage ? (
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-muted-foreground text-xs">
+                      {current.isEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                    {busyToggle === current.id ? (
+                      <Loader2
+                        className="text-muted-foreground size-4 animate-spin"
+                        aria-hidden
+                      />
+                    ) : (
+                      <Switch
+                        checked={current.isEnabled}
+                        onCheckedChange={(next) =>
+                          void toggleAgent(current, next)
+                        }
+                        aria-label={`Enable or disable ${meta.name}`}
+                      />
+                    )}
+                  </div>
                 ) : null}
               </div>
-              <p className="text-muted-foreground text-xs">
-                {configured
-                  ? `${providerLabel(config?.provider)} · ${
-                      current.key === 'autoreply'
-                        ? `Max ${config?.auto_reply_max_per_conversation ?? 3} replies ${config?.auto_reply_limit_mode === 'per_day' ? 'per day' : 'per conversation'}`
-                        : 'Suggestions reviewed by your team'
-                    }`
-                  : 'Connect a provider and API key to bring this agent online.'}
-              </p>
-            </div>
-            {canManage ? (
-              <div className="flex items-center gap-2.5">
-                <span className="text-muted-foreground text-xs">
-                  {current.active ? 'Enabled' : 'Disabled'}
-                </span>
-                {busyToggle === current.key ? (
-                  <Loader2
-                    className="text-muted-foreground size-4 animate-spin"
-                    aria-hidden
-                  />
-                ) : (
-                  <Switch
-                    checked={current.active}
-                    onCheckedChange={(next) =>
-                      void toggleAgent(current.key, next)
-                    }
-                    aria-label={`Enable or disable ${current.name}`}
-                  />
-                )}
-              </div>
-            ) : null}
-          </div>
 
-          {/* Underline tabs */}
-          <div
-            className="border-border mt-4 flex items-center gap-1 border-b px-5"
-            role="tablist"
-            aria-label="Agent detail tabs"
-          >
-            {[
-              { key: 'overview' as const, label: 'Overview' },
-              { key: 'configuration' as const, label: 'Configuration' },
-              { key: 'knowledge' as const, label: 'Knowledge Base' },
-              { key: 'playground' as const, label: 'Playground' },
-              ...(canManage
-                ? [
-                    { key: 'runs' as const, label: 'Run History' },
-                    { key: 'usage' as const, label: 'Usage' },
-                  ]
-                : []),
-            ].map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                aria-selected={tab === t.key}
-                onClick={() => setTab(t.key)}
-                className={cn(
-                  '-mb-px border-b-2 px-3 py-2.5 text-sm transition-colors',
-                  tab === t.key
-                    ? 'border-primary text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground border-transparent'
-                )}
+              {/* Underline tabs */}
+              <div
+                className="border-border mt-4 flex items-center gap-1 overflow-x-auto border-b px-5"
+                role="tablist"
+                aria-label="Agent detail tabs"
               >
-                {t.label}
-              </button>
-            ))}
-          </div>
+                {(
+                  [
+                    { key: 'overview', label: 'Overview' },
+                    { key: 'configuration', label: 'Configuration' },
+                    { key: 'knowledge', label: 'Knowledge Base' },
+                    { key: 'playground', label: 'Playground' },
+                    ...(canManage
+                      ? [{ key: 'activity', label: 'Activity' } as const]
+                      : []),
+                  ] as { key: TabKey; label: string }[]
+                ).map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.key}
+                    onClick={() => setTab(t.key)}
+                    className={cn(
+                      '-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm transition-colors',
+                      tab === t.key
+                        ? 'border-primary text-foreground font-medium'
+                        : 'text-muted-foreground hover:text-foreground border-transparent'
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
 
-          <div className="p-5">
-            {tab === 'overview' ? (
-              <OverviewTab
-                agent={current}
-                config={config}
-                usage={usage}
-                canManage={canManage}
-                busyToggle={busyToggle}
-                onToggle={toggleAgent}
-                loading={isLoading}
-              />
-            ) : null}
-            {tab === 'configuration' ? <AgentConfiguration /> : null}
-            {tab === 'knowledge' ? (
-              <AiKnowledgeCard
-                accountId={accountId}
-                canEdit={canManage}
-                hasEmbeddingsKey={config?.has_embeddings_key === true}
-              />
-            ) : null}
-            {tab === 'playground' ? (
-              <AiPlayground onGoToSetup={() => setTab('configuration')} />
-            ) : null}
-            {tab === 'runs' && canManage ? (
-              <RunHistoryTab agent={current.key} />
-            ) : null}
-            {tab === 'usage' && canManage ? <AiUsageCard /> : null}
-          </div>
+              <div className="p-5">
+                {tab === 'overview' ? (
+                  <OverviewTab agent={current} kind={selected} />
+                ) : null}
+                {tab === 'configuration' ? (
+                  canManage ? (
+                    <AgentSettingsForm
+                      agent={current}
+                      canManage={canManage}
+                      onSaved={() => void mutate()}
+                    />
+                  ) : (
+                    <p className="text-muted-foreground py-8 text-center text-sm">
+                      Only admins can change agent configuration.
+                    </p>
+                  )
+                ) : null}
+                {tab === 'knowledge' ? (
+                  <AiKnowledgeCard
+                    accountId={accountId}
+                    canEdit={canManage}
+                    hasEmbeddingsKey={current.hasEmbeddingsKey}
+                  />
+                ) : null}
+                {tab === 'playground' ? (
+                  <AiPlayground onGoToSetup={() => setTab('configuration')} />
+                ) : null}
+                {tab === 'activity' && canManage ? (
+                  <AgentActivity agent={selected} />
+                ) : null}
+              </div>
+            </>
+          )}
         </section>
       </div>
     </div>
   );
 }
 
-// ---- Left rail group ------------------------------------------------
-
-function RailGroup({
-  label,
-  agents,
-  selected,
-  configured,
-  onSelect,
-  loading,
-}: {
-  label: string;
-  agents: {
-    key: AgentKey;
-    name: string;
-    icon: typeof Bot;
-    active: boolean;
-    modelLabel: string;
-  }[];
-  selected: AgentKey;
-  configured: boolean;
-  onSelect: (key: AgentKey) => void;
-  loading: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="text-muted-foreground px-1 text-[11px] font-medium tracking-wider uppercase">
-        {label}
-      </span>
-      {loading ? (
-        <Skeleton className="h-16 w-full rounded-lg" />
-      ) : agents.length === 0 ? (
-        <p className="border-border text-muted-foreground rounded-lg border border-dashed px-3 py-3 text-xs">
-          {label.startsWith('Active')
-            ? 'No agents running.'
-            : 'Everything is running.'}
-        </p>
-      ) : (
-        agents.map((agent) => {
-          const Icon = agent.icon;
-          const isSelected = agent.key === selected;
-          return (
-            <button
-              key={agent.key}
-              type="button"
-              onClick={() => onSelect(agent.key)}
-              aria-pressed={isSelected}
-              className={cn(
-                'flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors',
-                isSelected
-                  ? 'border-primary/40 bg-card ring-primary/30 ring-1'
-                  : 'border-border bg-muted/40 hover:bg-card'
-              )}
-            >
-              <span className="border-border bg-background flex size-8 shrink-0 items-center justify-center rounded-md border">
-                <Icon className="text-muted-foreground size-4" aria-hidden />
-              </span>
-              <span className="flex min-w-0 flex-col">
-                <span className="text-foreground truncate text-sm font-medium">
-                  {agent.name}
-                </span>
-                <span className="text-muted-foreground truncate text-xs">
-                  {configured
-                    ? `${agent.modelLabel} · ${agent.active ? 'Active' : 'Paused'}`
-                    : 'Not configured'}
-                </span>
-              </span>
-            </button>
-          );
-        })
-      )}
-    </div>
-  );
-}
-
 // ---- Overview tab ----------------------------------------------------
 
+/** Read-only summary: what this agent is and how it is set up. */
 function OverviewTab({
   agent,
-  config,
-  usage,
-  canManage,
-  busyToggle,
-  onToggle,
-  loading,
+  kind,
 }: {
-  agent: { key: AgentKey; name: string; active: boolean };
-  config: AiConfigData | undefined;
-  usage: UsageData | undefined;
-  canManage: boolean;
-  busyToggle: AgentKey | null;
-  onToggle: (key: AgentKey, next: boolean) => Promise<void>;
-  loading: boolean;
+  agent: ClientAgent;
+  kind: AgentKind;
 }) {
-  const configured = config?.configured === true;
-  const schedule =
-    config?.auto_reply_schedule_start && config?.auto_reply_schedule_end
-      ? `${config.auto_reply_schedule_start} – ${config.auto_reply_schedule_end}${config.auto_reply_timezone ? ` (${config.auto_reply_timezone})` : ''}`
-      : 'Always on';
+  const meta = AGENT_KIND_META[kind];
+  const settings = agent.settings as Record<string, unknown>;
 
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-40 w-full rounded-lg" />
-        <Skeleton className="h-64 w-full rounded-lg" />
-      </div>
-    );
+  const rows: [string, string][] = [
+    ['Provider', providerLabel(agent.provider)],
+    ['Model', agent.model ?? '—'],
+    ['API key', agent.hasApiKey ? 'Saved' : 'Not set'],
+    ['Status', agent.isEnabled ? 'Active' : 'Paused'],
+  ];
+  if (kind === 'autoreply') {
+    const cap = Number(settings.replyCap);
+    rows.push(['Reply cap', `${cap >= 1 ? cap : 3} / conversation`]);
+    rows.push([
+      'Reply hours',
+      typeof settings.scheduleStart === 'string' &&
+      typeof settings.scheduleEnd === 'string' &&
+      settings.scheduleStart &&
+      settings.scheduleEnd
+        ? `${settings.scheduleStart} – ${settings.scheduleEnd}`
+        : 'Always on',
+    ]);
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Description card */}
-        <div className="border-border bg-muted/40 rounded-lg border p-4">
-          <CardLabel>Description</CardLabel>
-          <p className="text-foreground mt-2 text-sm leading-relaxed">
-            {AGENT_META[agent.key].description}
-          </p>
-          {config?.system_prompt ? (
-            <p className="border-border text-muted-foreground mt-3 border-t pt-3 text-xs leading-relaxed">
-              <span className="text-foreground font-medium">
-                Custom instructions:{' '}
-              </span>
-              {config.system_prompt.length > 180
-                ? `${config.system_prompt.slice(0, 180)}…`
-                : config.system_prompt}
-            </p>
-          ) : null}
-        </div>
-
-        {/* Status & controls card — each agent surfaces ONLY its own
-            switch. They are separate features sharing one provider
-            connection: Support Copilot gates the whole AI layer, and
-            the Auto-Reply Agent additionally needs Copilot online
-            (it reuses the same key, model and knowledge base). */}
-        <div className="border-border bg-muted/40 rounded-lg border p-4">
-          <CardLabel>Status &amp; controls</CardLabel>
-          <div className="mt-2 flex flex-col">
-            {agent.key === 'copilot' ? (
-              <ControlRow
-                label="Support Copilot"
-                hint="Inbox draft suggestions & playground"
-                checked={configured && config?.is_active === true}
-                disabled={!canManage}
-                busy={busyToggle === 'copilot'}
-                onChange={(next) => void onToggle('copilot', next)}
-              />
-            ) : (
-              <>
-                <ControlRow
-                  label="Auto-reply"
-                  hint="Answers customers automatically"
-                  checked={
-                    configured &&
-                    config?.is_active === true &&
-                    config?.auto_reply_enabled === true
-                  }
-                  disabled={!canManage}
-                  busy={busyToggle === 'autoreply'}
-                  onChange={(next) => void onToggle('autoreply', next)}
-                />
-                <FactRow
-                  label="Depends on"
-                  value={
-                    configured && config?.is_active === true
-                      ? 'Support Copilot — online'
-                      : 'Support Copilot — offline (enable it first)'
-                  }
-                />
-              </>
-            )}
-            <FactRow
-              label="Provider"
-              value={configured ? providerLabel(config?.provider) : '—'}
-            />
-            <FactRow
-              label="Model"
-              value={configured ? (config?.model ?? '—') : '—'}
-              last={agent.key === 'copilot'}
-            />
-            {agent.key === 'autoreply' ? (
-              <>
-                <FactRow
-                  label="Reply cap"
-                  value={
-                    configured
-                      ? `${config?.auto_reply_max_per_conversation ?? 3} ${config?.auto_reply_limit_mode === 'per_day' ? '/ day' : '/ conversation'}`
-                      : '—'
-                  }
-                />
-                <FactRow
-                  label="Reply hours"
-                  value={configured ? schedule : '—'}
-                  last
-                />
-              </>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {/* Requests chart */}
-      {canManage ? (
-        <div className="border-border bg-muted/40 rounded-lg border p-4">
-          <div className="flex items-center justify-between gap-2">
-            <CardLabel>Live requests volume</CardLabel>
-            <span className="text-muted-foreground text-xs">
-              Last {usage?.days ?? 14} days
-            </span>
-          </div>
-          {usage && usage.daily?.length ? (
-            <div className="mt-3 h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={usage.daily}
-                  margin={{ top: 6, right: 6, bottom: 0, left: -12 }}
-                >
-                  <defs>
-                    <linearGradient
-                      id="agents-calls-fill"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="var(--primary)"
-                        stopOpacity={0.25}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="var(--primary)"
-                        stopOpacity={0.02}
-                      />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="2 4"
-                    stroke="var(--border)"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(value: string) => value.slice(5)}
-                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                    axisLine={false}
-                    tickLine={false}
-                    minTickGap={24}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={40}
-                  />
-                  <Tooltip
-                    cursor={{
-                      stroke: 'var(--primary)',
-                      strokeDasharray: '3 3',
-                    }}
-                    contentStyle={{
-                      background: 'var(--popover)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      fontSize: 12,
-                      color: 'var(--popover-foreground)',
-                    }}
-                    formatter={(value, name) => [
-                      String(value ?? ''),
-                      name === 'calls' ? 'Requests' : 'Tokens',
-                    ]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="calls"
-                    stroke="var(--primary)"
-                    strokeWidth={2}
-                    fill="url(#agents-calls-fill)"
-                    dot={false}
-                    activeDot={{ r: 3 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p className="border-border text-muted-foreground mt-3 rounded-md border border-dashed px-4 py-8 text-center text-sm">
-              No AI requests yet — try the playground or enable auto-reply to
-              see traffic here.
-            </p>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// ---- Run history tab -------------------------------------------------
-// Matches the reference "Recent Runs" table: run id, triggered date,
-// surface, input/output tokens, status. Every logged row is a
-// completed provider call, so status is always "Success" — failures
-// never reach the usage log.
-
-function RunHistoryTab({ agent }: { agent: AgentKey }) {
-  // Each agent shows ONLY its own surface's runs: the Auto-Reply Agent
-  // lists `auto_reply` provider calls, the Support Copilot lists inbox
-  // `draft` calls — previously both tabs showed the identical unfiltered
-  // account-wide history.
-  const mode = agent === 'autoreply' ? 'auto_reply' : 'draft';
-  const { data, isLoading } = useSWR<{ runs: RunRow[] }>(
-    `/api/ai/runs?limit=25&mode=${mode}`,
-    fetcher
-  );
-  const runs = data?.runs ?? [];
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-10 w-full rounded-md" />
-        <Skeleton className="h-64 w-full rounded-lg" />
-      </div>
-    );
-  }
-
-  if (runs.length === 0) {
-    return (
-      <div className="border-border rounded-lg border border-dashed px-4 py-12 text-center">
-        <p className="text-foreground text-sm font-medium">No runs yet</p>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {agent === 'autoreply'
-            ? 'Runs appear here when the Auto-Reply Agent answers a customer.'
-            : 'Runs appear here when the Copilot drafts a reply for your team.'}
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="border-border bg-muted/40 rounded-lg border p-4">
+        <h3 className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+          Description
+        </h3>
+        <p className="text-foreground mt-2 text-sm leading-relaxed">
+          {meta.description}
         </p>
+        {agent.systemPrompt ? (
+          <p className="border-border text-muted-foreground mt-3 border-t pt-3 text-xs leading-relaxed">
+            <span className="text-foreground font-medium">
+              Custom instructions:{' '}
+            </span>
+            {agent.systemPrompt.length > 180
+              ? `${agent.systemPrompt.slice(0, 180)}…`
+              : agent.systemPrompt}
+          </p>
+        ) : null}
       </div>
-    );
-  }
 
-  return (
-    <div className="border-border bg-muted/40 rounded-lg border p-4">
-      <CardLabel>Recent runs</CardLabel>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-sm">
-          <thead>
-            <tr className="border-border border-b text-left">
-              <th
-                scope="col"
-                className="text-muted-foreground pr-4 pb-2 text-xs font-medium tracking-wider uppercase"
-              >
-                Run ID
-              </th>
-              <th
-                scope="col"
-                className="text-muted-foreground pr-4 pb-2 text-xs font-medium tracking-wider uppercase"
-              >
-                Triggered
-              </th>
-              <th
-                scope="col"
-                className="text-muted-foreground pr-4 pb-2 text-xs font-medium tracking-wider uppercase"
-              >
-                Surface
-              </th>
-              <th
-                scope="col"
-                className="text-muted-foreground pr-4 pb-2 text-xs font-medium tracking-wider uppercase"
-              >
-                Model
-              </th>
-              <th
-                scope="col"
-                className="text-muted-foreground pr-4 pb-2 text-right text-xs font-medium tracking-wider uppercase"
-              >
-                Input tkns
-              </th>
-              <th
-                scope="col"
-                className="text-muted-foreground pr-4 pb-2 text-right text-xs font-medium tracking-wider uppercase"
-              >
-                Output tkns
-              </th>
-              <th
-                scope="col"
-                className="text-muted-foreground pb-2 text-xs font-medium tracking-wider uppercase"
-              >
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {runs.map((run) => (
-              <tr
-                key={run.id}
-                className="border-border border-b border-dashed last:border-0"
-              >
-                <td className="text-foreground py-2.5 pr-4 font-mono text-xs">
-                  RUN-{run.id.slice(0, 4).toUpperCase()}
-                </td>
-                <td className="text-muted-foreground py-2.5 pr-4">
-                  {formatRunDate(run.created_at)}
-                </td>
-                <td className="py-2.5 pr-4">
-                  <Badge variant="outline">
-                    {run.mode === 'auto_reply' ? 'Auto-reply' : 'Draft'}
-                  </Badge>
-                </td>
-                <td className="text-muted-foreground max-w-36 truncate py-2.5 pr-4">
-                  {run.model}
-                </td>
-                <td className="text-foreground py-2.5 pr-4 text-right tabular-nums">
-                  {run.prompt_tokens.toLocaleString()}
-                </td>
-                <td className="text-foreground py-2.5 pr-4 text-right tabular-nums">
-                  {run.completion_tokens.toLocaleString()}
-                </td>
-                <td className="py-2.5">
-                  <Badge className="border-emerald-600/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                    Success
-                  </Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="border-border bg-muted/40 rounded-lg border p-4">
+        <h3 className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+          Setup
+        </h3>
+        <dl className="mt-2 flex flex-col">
+          {rows.map(([label, value], i) => (
+            <div
+              key={label}
+              className={cn(
+                'flex items-center justify-between py-2 text-sm',
+                i < rows.length - 1 && 'border-border border-b'
+              )}
+            >
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="text-foreground font-medium">{value}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </div>
   );
-}
-
-function formatRunDate(iso: string) {
-  const d = new Date(iso);
-  const now = new Date();
-  const time = d.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return `${time} Today`;
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return `${time} Yesterday`;
-  return `${time} ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-}
-
-// ---- Small building blocks -------------------------------------------
-
-function CardLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wider uppercase">
-      <span
-        className="bg-primary inline-block size-1.5 rounded-[2px]"
-        aria-hidden
-      />
-      {children}
-    </span>
-  );
-}
-
-function ControlRow({
-  label,
-  hint,
-  checked,
-  disabled,
-  busy,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  checked: boolean;
-  disabled: boolean;
-  busy: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <div className="border-border flex items-center justify-between gap-3 border-b border-dashed py-2.5">
-      <div className="flex min-w-0 flex-col">
-        <span className="text-foreground text-sm font-medium">{label}</span>
-        <span className="text-muted-foreground truncate text-xs">{hint}</span>
-      </div>
-      {busy ? (
-        <Loader2
-          className="text-muted-foreground size-4 animate-spin"
-          aria-hidden
-        />
-      ) : (
-        <Switch
-          checked={checked}
-          onCheckedChange={onChange}
-          disabled={disabled}
-          aria-label={`Enable or disable ${label}`}
-        />
-      )}
-    </div>
-  );
-}
-
-function FactRow({
-  label,
-  value,
-  last,
-}: {
-  label: string;
-  value: string;
-  last?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-between gap-3 py-2.5',
-        !last && 'border-border border-b border-dashed'
-      )}
-    >
-      <span className="text-muted-foreground text-sm">{label}</span>
-      <span className="text-foreground truncate text-sm font-medium">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function providerLabel(provider?: string) {
-  switch (provider) {
-    case 'gemini':
-      return 'Google Gemini';
-    case 'openai':
-      return 'OpenAI';
-    case 'anthropic':
-      return 'Anthropic';
-    case 'groq':
-      return 'Groq';
-    case 'ollama':
-      return 'Ollama';
-    case 'custom':
-      return 'Custom (OpenAI-compatible)';
-    default:
-      return provider ?? '—';
-  }
 }
