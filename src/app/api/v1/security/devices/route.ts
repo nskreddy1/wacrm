@@ -67,19 +67,45 @@ export async function GET() {
       .limit(50);
     if (error) throw error;
 
-    return NextResponse.json({
-      data: (data ?? []).map((row) => ({
-        id: row.id,
-        user_agent: row.user_agent,
-        ip_address: row.ip_address,
-        location: [row.city, row.region, row.country]
+    // Collapse duplicate sessions from the same physical device
+    // (same user agent + IP): every fresh sign-in creates a new
+    // session, but the user should see one row per device. The
+    // representative row is the current session if present, else the
+    // most recently active one. DELETE revokes the whole group.
+    const groups = new Map<string, NonNullable<typeof data>[number][]>();
+    for (const row of data ?? []) {
+      const key = `${row.user_agent ?? ''}|${row.ip_address ?? ''}`;
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(row);
+      else groups.set(key, [row]);
+    }
+
+    const deduped = [...groups.values()].map((rows) => {
+      const representative =
+        rows.find((row) => row.session_id === sessionId) ?? rows[0];
+      return {
+        id: representative.id,
+        user_agent: representative.user_agent,
+        ip_address: representative.ip_address,
+        location: [
+          representative.city,
+          representative.region,
+          representative.country,
+        ]
           .filter(Boolean)
           .join(', '),
-        created_at: row.created_at,
-        last_seen_at: row.last_seen_at,
-        is_current: row.session_id === sessionId,
-      })),
+        created_at: representative.created_at,
+        last_seen_at: rows[0].last_seen_at,
+        session_count: rows.length,
+        is_current: rows.some((row) => row.session_id === sessionId),
+      };
     });
+    deduped.sort(
+      (a, b) =>
+        new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime()
+    );
+
+    return NextResponse.json({ data: deduped });
   } catch (error) {
     return toErrorResponse(error);
   }
