@@ -148,7 +148,7 @@ export async function getDashboardOverview(
       .eq('account_id', ctx.accountId),
     ctx.supabase
       .from('contacts')
-      .select('id, name, created_at')
+      .select('id, name, source, created_at')
       .eq('account_id', ctx.accountId)
       .gte('created_at', since60d)
       .order('created_at', { ascending: false }),

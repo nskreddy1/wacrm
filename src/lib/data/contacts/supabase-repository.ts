@@ -16,13 +16,40 @@ import {
 } from './validation';
 
 const CONTACT_SELECT =
-  'id, account_id, user_id, name, phone, email, company, created_at, updated_at';
+  'id, account_id, user_id, name, phone, email, company, source, created_at, updated_at';
+
+/**
+ * Known first-touch lead sources. Channel webhooks write
+ * `<channel>_inbound` programmatically; the rest are set by the UI,
+ * import flow, or public API. Users can correct the value from the
+ * contacts table (single_select keeps reporting clean — free-text
+ * sources would fragment analytics into "FB", "fb", "Facebook"...).
+ */
+export const LEAD_SOURCES = [
+  'manual',
+  'import',
+  'api',
+  'api_outbound',
+  'whatsapp_inbound',
+  'sms_inbound',
+  'web_form',
+  'referral',
+  'campaign',
+  'other',
+] as const;
 
 export const coreContactFields: ContactField[] = [
   { id: 'name', label: 'Name', type: 'text', required: true, width: 220 },
   { id: 'phone', label: 'Phone', type: 'phone', width: 180 },
   { id: 'email', label: 'Email', type: 'email', width: 220 },
   { id: 'company', label: 'Company', type: 'text', width: 180 },
+  {
+    id: 'source',
+    label: 'Source',
+    type: 'single_select',
+    options: [...LEAD_SOURCES],
+    width: 160,
+  },
 ];
 
 function mapField(row: Record<string, unknown>): ContactField {
@@ -80,6 +107,7 @@ function mapContact(
       phone: String(row.phone ?? ''),
       email: String(row.email ?? ''),
       company: String(row.company ?? ''),
+      source: String(row.source ?? ''),
       ...customValues,
     },
   };
@@ -292,9 +320,21 @@ export async function createSupabaseContact(
   const fields = validateContactIdentity(rest);
   const owner =
     typeof ownerId === 'string' && ownerId.trim() ? ownerId : ctx.userId;
+  // If the create form set an explicit valid source (e.g. 'referral'),
+  // it wins over the caller default.
+  const pickedSource = LEAD_SOURCES.includes(
+    String(rest.source ?? '') as (typeof LEAD_SOURCES)[number]
+  )
+    ? String(rest.source)
+    : source;
   const { data, error } = await ctx.supabase
     .from('contacts')
-    .insert({ ...fields, account_id: ctx.accountId, user_id: owner, source })
+    .insert({
+      ...fields,
+      account_id: ctx.accountId,
+      user_id: owner,
+      source: pickedSource,
+    })
     .select(CONTACT_SELECT)
     .single();
   if (error)
@@ -336,12 +376,20 @@ export async function updateSupabaseContact(
     typeof ownerId === 'string' &&
     ownerId.trim() &&
     ownerId !== currentContact.ownerId;
+  // Source edits are allowlisted against LEAD_SOURCES so a typo can't
+  // fragment attribution reporting.
+  const sourceTouched =
+    rest.source !== undefined &&
+    LEAD_SOURCES.includes(String(rest.source) as (typeof LEAD_SOURCES)[number]);
   let row = current as Record<string, unknown>;
-  if (identityTouched || ownerTouched) {
+  if (identityTouched || ownerTouched || sourceTouched) {
     const identity = identityTouched
       ? validateContactIdentity({ ...currentContact.values, ...rest })
       : {};
-    const patch = ownerTouched ? { ...identity, user_id: ownerId } : identity;
+    const patch: Record<string, unknown> = ownerTouched
+      ? { ...identity, user_id: ownerId }
+      : { ...identity };
+    if (sourceTouched) patch.source = String(rest.source);
     const { data, error } = await ctx.supabase
       .from('contacts')
       .update(patch)

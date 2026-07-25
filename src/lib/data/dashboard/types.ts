@@ -123,6 +123,13 @@ export type GrowthPoint = {
   added: number;
 };
 
+/** Where new leads came from (30d), largest first. */
+export type LeadSourcePoint = {
+  /** Raw source key, e.g. 'whatsapp_inbound', 'import', 'manual'. */
+  source: string;
+  count: number;
+};
+
 export type ActivityEntry = {
   id: string;
   title: string;
@@ -172,6 +179,8 @@ export type DashboardOverview = {
   taskStats: TaskStats;
   /** 30 days of contact growth, oldest first. */
   contactsGrowth: GrowthPoint[];
+  /** New-lead attribution over the last 30 days, largest first. */
+  leadSources: LeadSourcePoint[];
   activity: ActivityEntry[];
   appointments: UpcomingAppointment[];
   tasks: OpenTask[];
