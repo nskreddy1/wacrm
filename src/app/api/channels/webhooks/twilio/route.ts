@@ -8,6 +8,19 @@ import {
   applyMessageDeliveryStatus,
   mapTwilioStatus,
 } from '@/features/admin/lib/orchestration/status';
+import type { ChannelConnection } from '@/types';
+
+/**
+ * Shape of a `channel_connections` row as this webhook consumes it —
+ * satisfies both `decryptProviderCredentials` (ChannelConnection +
+ * credentials_encrypted) and `persistInboundChannelMessage`'s
+ * ConnectionRow (nullable created_by_user_id).
+ */
+type WebhookConnection = ChannelConnection & {
+  credentials_encrypted?: string;
+  created_by_user_id: string | null;
+  external_identity: string | null;
+};
 
 export const maxDuration = 30;
 
@@ -124,8 +137,12 @@ export async function POST(request: Request) {
   const isStatusCallback = !!messageStatus && messageStatus !== 'received';
 
   // Our WhatsApp sender number owns the connection in both directions.
+  // Failed-send status callbacks can arrive with an EMPTY `From` (e.g.
+  // Twilio error 21703 — the Messaging Service had no sender to pick),
+  // so a missing identity is only fatal for inbound messages; status
+  // callbacks fall through to the MessageSid-based lookup below.
   const connectionIdentity = isStatusCallback ? from : to;
-  if (!connectionIdentity)
+  if (!connectionIdentity && !isStatusCallback)
     return NextResponse.json(
       { error: 'Invalid Twilio payload' },
       { status: 400 }
@@ -134,14 +151,18 @@ export async function POST(request: Request) {
   const db = supabaseAdmin();
   // Channel-scoped lookup: the same Twilio number can hold separate
   // WhatsApp and SMS connections without cross-routing messages.
-  let { data: connection } = await db
-    .from('channel_connections')
-    .select('*')
-    .eq('provider', 'twilio')
-    .eq('channel', channel)
-    .eq('external_identity', connectionIdentity)
-    .eq('is_enabled', true)
-    .maybeSingle();
+  let connection: WebhookConnection | null = null;
+  if (connectionIdentity) {
+    const { data } = await db
+      .from('channel_connections')
+      .select('*')
+      .eq('provider', 'twilio')
+      .eq('channel', channel)
+      .eq('external_identity', connectionIdentity)
+      .eq('is_enabled', true)
+      .maybeSingle();
+    connection = data;
+  }
 
   // Status-callback fallback: Messaging Service sends report `From`
   // as the pool sender Twilio picked, which may not equal the
@@ -198,6 +219,10 @@ export async function POST(request: Request) {
     const mapped = mapTwilioStatus(messageStatus);
     if (mapped) {
       const errorCode = params.get('ErrorCode') || undefined;
+      // Twilio includes a human-readable ErrorMessage on failures
+      // (e.g. 21703 "The Messaging Service does not have a phone
+      // number available") — surface it instead of just the code.
+      const errorText = params.get('ErrorMessage') || undefined;
       after(async () => {
         try {
           await applyMessageDeliveryStatus({
@@ -205,7 +230,9 @@ export async function POST(request: Request) {
             status: mapped,
             occurredAt: new Date().toISOString(),
             errorCode,
-            errorMessage: errorCode ? `Twilio error ${errorCode}` : undefined,
+            errorMessage:
+              errorText ??
+              (errorCode ? `Twilio error ${errorCode}` : undefined),
           });
         } catch (error) {
           console.error('[twilio-webhook] status apply failed:', error);

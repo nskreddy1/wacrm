@@ -77,10 +77,16 @@ export class TwilioWhatsAppAdapter implements ChannelAdapter {
     const body = new URLSearchParams({
       To: twilioAddress(message.recipient.identity),
     });
-    if (messagingServiceSid) {
-      body.set('MessagingServiceSid', messagingServiceSid);
-    } else if (from) {
+    // Prefer the connection's dedicated WhatsApp number. A Messaging
+    // Service SID is only used when no number is configured: if the
+    // MG… service's sender pool has no WhatsApp sender attached,
+    // Twilio accepts the send then fails it async with error 21703
+    // ("The Messaging Service does not have a phone number available")
+    // — so the pool is the fallback, never the override.
+    if (from) {
       body.set('From', twilioAddress(from));
+    } else if (messagingServiceSid) {
+      body.set('MessagingServiceSid', messagingServiceSid);
     }
 
     // Typed payload (preferred) → provider params. Falls back to the flat

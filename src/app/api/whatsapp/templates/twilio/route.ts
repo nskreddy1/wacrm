@@ -107,13 +107,20 @@ export async function POST(request: Request) {
           .eq('provider', 'twilio')
           .eq('twilio_content_sid', content.sid)
           .maybeSingle();
+        // Upsert on the account-scoped unique index so a locally
+        // drafted template with the same (name, language) is adopted
+        // by the sync instead of failing with 23505.
         const result = existing
           ? await channelAdmin()
               .from('message_templates')
               .update(row)
               .eq('id', existing.id)
               .eq('account_id', accountId)
-          : await channelAdmin().from('message_templates').insert(row);
+          : await channelAdmin()
+              .from('message_templates')
+              .upsert(row, {
+                onConflict: 'account_id,provider,name,language',
+              });
         if (result.error) throw result.error;
         if (existing) updated++;
         else inserted++;
@@ -152,29 +159,45 @@ export async function POST(request: Request) {
       name: input.name,
       category: input.category,
     });
+    // Upsert on the account-scoped unique index: re-submitting a
+    // template that already has a local row (e.g. a saved draft with
+    // the same name + language) updates it instead of failing 23505.
     const { data, error } = await channelAdmin()
       .from('message_templates')
-      .insert({
-        account_id: accountId,
-        user_id: userId,
-        provider: 'twilio',
-        twilio_content_sid: content.sid,
-        name: input.name,
-        category: input.category,
-        language: input.language,
-        header_type: input.header_content ? 'text' : null,
-        header_content: input.header_content ?? null,
-        body_text: input.body_text,
-        footer_text: input.footer_text ?? null,
-        buttons: input.buttons ?? null,
-        sample_values: input.sample_values ?? null,
-        status: approvalStatus(approval.status),
-        last_submitted_at: new Date().toISOString(),
-        submission_error: null,
-      })
+      .upsert(
+        {
+          account_id: accountId,
+          user_id: userId,
+          provider: 'twilio',
+          twilio_content_sid: content.sid,
+          name: input.name,
+          category: input.category,
+          language: input.language,
+          header_type: input.header_content ? 'text' : null,
+          header_content: input.header_content ?? null,
+          body_text: input.body_text,
+          footer_text: input.footer_text ?? null,
+          buttons: input.buttons ?? null,
+          sample_values: input.sample_values ?? null,
+          status: approvalStatus(approval.status),
+          last_submitted_at: new Date().toISOString(),
+          submission_error: null,
+        },
+        { onConflict: 'account_id,provider,name,language' }
+      )
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json(
+          {
+            error: `A template named "${input.name}" (${input.language}) already exists on this workspace.`,
+          },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
     return NextResponse.json(
       { template: data, provider: 'twilio' },
       { status: 201 }
