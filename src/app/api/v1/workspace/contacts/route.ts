@@ -62,6 +62,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       kind?: string;
       values?: Record<string, ContactValue>;
+      source?: string;
       field?: {
         label: string;
         type: FieldType;
@@ -79,8 +80,15 @@ export async function POST(request: Request) {
       );
     }
     if (!body.values) throw new Error('Contact values are required');
+    // Attribution: only allowlisted client-supplied sources are
+    // accepted (import flow) — everything else records as 'manual'.
+    const source = body.source === 'import' ? 'import' : 'manual';
     return response(
-      await createSupabaseContact(await getCurrentAccount(), body.values),
+      await createSupabaseContact(
+        await getCurrentAccount(),
+        body.values,
+        source
+      ),
       201
     );
   } catch (error) {

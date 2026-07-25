@@ -138,6 +138,9 @@ export async function findOrCreateContact(
       name: input.name ?? sanitized,
       email: input.email ?? null,
       company: input.company ?? null,
+      // First-touch attribution: created by an external system via
+      // the public API (e.g. a website form or Zapier automation).
+      source: 'api',
     })
     .select('id')
     .single();

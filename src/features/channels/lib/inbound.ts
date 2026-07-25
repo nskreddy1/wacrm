@@ -102,6 +102,9 @@ export async function persistInboundChannelMessage(
             user_id: ownerId,
             phone: normalizedFrom,
             name: message.name || normalizedFrom,
+            // First-touch attribution: this lead reached out to us on
+            // this channel. Set once at creation, never overwritten.
+            source: `${channel}_inbound`,
           })
           .select('id')
           .single();

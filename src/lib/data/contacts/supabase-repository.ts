@@ -282,7 +282,11 @@ export async function getSupabaseContactWorkspace(
 
 export async function createSupabaseContact(
   ctx: AccountContext,
-  values: Record<string, ContactValue>
+  values: Record<string, ContactValue>,
+  /** First-touch attribution for the new contact (default: manual UI
+   *  entry). Import flows pass 'import'; future public forms pass
+   *  'web_form'. Set once at creation — never overwritten later. */
+  source: string = 'manual'
 ) {
   const { ownerId, ...rest } = values;
   const fields = validateContactIdentity(rest);
@@ -290,7 +294,7 @@ export async function createSupabaseContact(
     typeof ownerId === 'string' && ownerId.trim() ? ownerId : ctx.userId;
   const { data, error } = await ctx.supabase
     .from('contacts')
-    .insert({ ...fields, account_id: ctx.accountId, user_id: owner })
+    .insert({ ...fields, account_id: ctx.accountId, user_id: owner, source })
     .select(CONTACT_SELECT)
     .single();
   if (error)
