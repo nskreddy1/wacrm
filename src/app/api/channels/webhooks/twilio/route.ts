@@ -8,6 +8,19 @@ import {
   applyMessageDeliveryStatus,
   mapTwilioStatus,
 } from '@/features/admin/lib/orchestration/status';
+import type { ChannelConnection } from '@/types';
+
+/**
+ * Shape of a `channel_connections` row as this webhook consumes it —
+ * satisfies both `decryptProviderCredentials` (ChannelConnection +
+ * credentials_encrypted) and `persistInboundChannelMessage`'s
+ * ConnectionRow (nullable created_by_user_id).
+ */
+type WebhookConnection = ChannelConnection & {
+  credentials_encrypted?: string;
+  created_by_user_id: string | null;
+  external_identity: string | null;
+};
 
 export const maxDuration = 30;
 
@@ -138,7 +151,7 @@ export async function POST(request: Request) {
   const db = supabaseAdmin();
   // Channel-scoped lookup: the same Twilio number can hold separate
   // WhatsApp and SMS connections without cross-routing messages.
-  let connection: Record<string, unknown> | null = null;
+  let connection: WebhookConnection | null = null;
   if (connectionIdentity) {
     const { data } = await db
       .from('channel_connections')
