@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { MessageCircleReply, Sparkles } from 'lucide-react';
 import type {
-  AgentKind,
+  AgentCapability,
   ClientAgent,
 } from '@/features/assistant/lib/ai/agents';
 import type { AiProvider } from '@/features/assistant/lib/ai/types';
@@ -11,53 +11,62 @@ import {
 } from '@/features/assistant/lib/ai/defaults';
 
 // ============================================================
-// Client-side metadata for the AI Agents console: what each agent
-// kind is, and the provider picker presets. Types come from the
-// server lib via type-only imports (erased at build).
+// Client-side metadata for the AI Agents console. ONE default agent
+// per account (single ai_agents row / single config) with two
+// independently toggleable capabilities — AI suggestions (inbox
+// drafts) and Auto-reply — each mapping to its own DB column.
+// Types come from the server lib via type-only imports (erased at
+// build).
 // ============================================================
 
-export type { AgentKind, ClientAgent };
+export type { AgentCapability, ClientAgent };
 
-export interface AgentKindMeta {
-  kind: AgentKind;
+export const DEFAULT_AGENT_NAME = 'AI Assistant';
+
+/** Working starting-point persona shown pre-filled in the wizard. */
+export const STARTER_PROMPT =
+  'You represent our business with customers on WhatsApp. Be warm, professional, and concise. Only answer questions about our business. If the customer wants a human, is upset, or you are not sure, hand off to the team.';
+
+export interface CapabilityMeta {
+  capability: AgentCapability;
+  /** ClientAgent boolean that backs this capability's toggle. */
+  field: 'suggestionsEnabled' | 'autoreplyEnabled';
   name: string;
   tagline: string;
   description: string;
   icon: LucideIcon;
-  /** The ai_usage_log.mode this agent's runs are recorded under —
-   *  scopes the Activity tab (chart + runs) to this agent only. */
+  /** The ai_usage_log.mode this capability's runs are recorded
+   *  under — scopes Run History / Usage filters. */
   mode: 'draft' | 'auto_reply';
-  /** Pre-filled persona prompt in the wizard — a working starting
-   *  point the client can keep, not a placeholder. */
-  starterPrompt: string;
 }
 
-export const AGENT_KIND_META: Record<AgentKind, AgentKindMeta> = {
-  copilot: {
-    kind: 'copilot',
-    name: 'Support Copilot',
+export const CAPABILITY_META: Record<AgentCapability, CapabilityMeta> = {
+  suggestions: {
+    capability: 'suggestions',
+    field: 'suggestionsEnabled',
+    name: 'AI suggestions',
     tagline: 'Drafts replies for your team',
     description:
       'Assists your team inside the inbox — drafts suggested replies from the conversation history and your knowledge base. Suggestions are never sent without a person approving them.',
     icon: Sparkles,
     mode: 'draft',
-    starterPrompt:
-      'You help our support team reply to customers. Match our tone: friendly, professional, and brief. If you are unsure about specifics, say so in the draft so the agent can fill them in.',
   },
   autoreply: {
-    kind: 'autoreply',
-    name: 'Auto-Reply Agent',
+    capability: 'autoreply',
+    field: 'autoreplyEnabled',
+    name: 'Auto-reply',
     tagline: 'Answers customers automatically',
     description:
       'Replies to incoming WhatsApp messages on its own using your business context and knowledge base. Hands the conversation to your team whenever a customer asks for a human or it is unsure.',
     icon: MessageCircleReply,
     mode: 'auto_reply',
-    starterPrompt:
-      'You answer customers of our business on WhatsApp. Be warm and concise. Only answer questions about our business. If the customer wants a human, is upset, or you are not sure, hand off to the team.',
   },
 };
 
-export const AGENT_KIND_ORDER: readonly AgentKind[] = ['copilot', 'autoreply'];
+export const CAPABILITY_ORDER: readonly AgentCapability[] = [
+  'suggestions',
+  'autoreply',
+];
 
 export interface ProviderPreset {
   id: AiProvider;

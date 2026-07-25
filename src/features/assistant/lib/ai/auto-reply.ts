@@ -49,10 +49,9 @@ export async function dispatchInboundToAiReply(
   try {
     const db = supabaseAdmin();
 
-    // Per-agent system: this worker is the Auto-Reply Agent, and ONLY
-    // its own row powers it — its own provider, key, model, prompt, and
-    // behavior settings. Disabled or unconfigured → silent no-op (the
-    // Copilot being on/off is irrelevant here).
+    // Single default agent, "auto-reply" capability: only runs when the
+    // agent's autoreply_enabled column is on. Unconfigured or switched
+    // off → silent no-op (suggestions_enabled is irrelevant here).
     const config = await loadAgentConfig(db, accountId, 'autoreply');
     if (!config) return;
 

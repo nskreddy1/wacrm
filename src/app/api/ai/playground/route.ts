@@ -7,7 +7,7 @@ import {
 } from '@/lib/rate-limit';
 import {
   loadAgentConfig,
-  isAgentKind,
+  isAgentCapability,
 } from '@/features/assistant/lib/ai/agents';
 import { retrieveKnowledge } from '@/features/assistant/lib/ai/knowledge';
 import { generateReply } from '@/features/assistant/lib/ai/generate';
@@ -66,13 +66,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Which agent is being tested — each agent's Playground tab tests
-    // ITS OWN config. Default: autoreply (the customer-facing one).
-    const agentKind = isAgentKind(body?.agent) ? body.agent : 'autoreply';
+    // Which capability is being exercised — the playground can test
+    // either surface of the single agent. Default: autoreply (the
+    // customer-facing one).
+    const capability = isAgentCapability(body?.capability)
+      ? body.capability
+      : 'autoreply';
 
     // requireEnabled:false — "test before enabling" is the whole point
     // of a playground; a saved key/model is still required.
-    const config = await loadAgentConfig(supabase, accountId, agentKind, {
+    const config = await loadAgentConfig(supabase, accountId, capability, {
       requireEnabled: false,
     }).catch((err) => {
       console.error('[ai/playground] loadAgentConfig error:', err);
@@ -109,11 +112,11 @@ export async function POST(request: Request) {
       messages,
       promptParts: buildPromptParts({
         userPrompt: config.systemPrompt,
-        // Exercise the same prompt mode the agent uses in production.
-        mode: agentKind === 'copilot' ? 'draft' : 'auto_reply',
+        // Exercise the same prompt mode the capability uses in production.
+        mode: capability === 'suggestions' ? 'draft' : 'auto_reply',
         knowledge,
       }),
-      cacheKey: `playground:${accountId}:${agentKind}`,
+      cacheKey: `playground:${accountId}:${capability}`,
     });
     return NextResponse.json({ reply: text, handoff });
   } catch (err) {
