@@ -287,6 +287,23 @@ export async function POST(request: Request) {
         { status: 409 }
       );
 
+    // Platform provider policy: operators can withdraw a provider
+    // from the catalog. Existing connections keep working; new ones
+    // are blocked here. No policy row means enabled by default.
+    const { data: policy } = await channelAdmin()
+      .from('platform_provider_policies')
+      .select('is_enabled')
+      .eq('provider', provider)
+      .eq('channel', channel)
+      .maybeSingle();
+    if (policy && !policy.is_enabled)
+      return NextResponse.json(
+        {
+          error: `${PROVIDER_LABEL[provider as ChannelProvider]} is currently not offered on this platform. Contact support for alternatives.`,
+        },
+        { status: 409 }
+      );
+
     const suppliedCredentials = buildProviderCredentials(
       provider,
       parsed.data.credentials
