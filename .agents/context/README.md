@@ -4,10 +4,19 @@ Read this folder before doing any feature work. It is the handoff from
 previous build sessions. Keep it updated when you change architecture,
 routes, schema, or security posture.
 
+## Reading order
+
+**New to the project?** `hld.md` → `database.md` → `lld.md`.
+**About to write code?** `lld.md` + `security.md`.
+**Need an exact column or index?** `database-schema.md`.
+
 | File | What it covers |
 | --- | --- |
+| `hld.md` | **High-level design.** What the product is, the one architecture diagram, tenancy model, all 16 domains, the 3 critical data flows, tech-stack rationale, architectural weaknesses, and where to make a change |
+| `lld.md` | **Low-level design.** Layer rules, real method signatures (`getCurrentAccount`, `requireSuperAdmin`, `ChannelAdapter`, rate limit, audit, v1 helpers), the canonical route-handler order, full 102-route inventory, frontend + migration + test conventions |
+| `database-schema.md` | **Full DB reference.** All 77 tables with exact column types, nullability, defaults, FKs with ON DELETE, every index's `CREATE INDEX`, check constraints, and all RLS policy expressions |
+| `database.md` | Conceptual data model: schema domains, key tables, RLS model, migration conventions |
 | `system-design.md` | Tech stack, project structure, feature map, system design |
-| `database.md` | Schema domains, key tables, RLS model, migration conventions |
 | `api-routes.md` | Every API namespace, its auth gate, and conventions |
 | `security.md` | Security architecture, review checklist, known patterns |
 | `roadmap.md` | Ranked problems, pre-production checklist, competitive feature gaps |

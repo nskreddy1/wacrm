@@ -2,6 +2,19 @@
 
 ## Ranked problems (fix order — highest impact first)
 
+0. **BUG — `mailtrap` missing from the `channel_provider` enum**
+   (P0, broken feature). Found while documenting the schema. The live
+   enum is `meta, twilio, google, resend, smtp, microsoft`. A Mailtrap
+   adapter exists (`features/channels/lib/adapters/mailtrap.ts`) and
+   the admin catalog offers Mailtrap because
+   `platform_provider_policies.provider` is a **text column with a
+   check constraint** that does include it — but
+   `channel_connections.provider` is the **enum**, so actually saving
+   a Mailtrap connection fails at insert time. Fix: migration with
+   `ALTER TYPE channel_provider ADD VALUE 'mailtrap';` (must run
+   outside a transaction block), then re-verify the settings save
+   path end to end.
+
 1. **No 2FA/TOTP** — table stakes for enterprise CRM buyers; login
    security layer exists, extend it (P0, security).
 2. **Signup not gated** — signup/password-reset don't share the
