@@ -34,7 +34,21 @@ function clientMeta(request: NextRequest) {
   const forwarded = request.headers.get('x-forwarded-for');
   // First hop of x-forwarded-for is the client.
   const ip = forwarded?.split(',')[0]?.trim().slice(0, 64) ?? null;
-  return { userAgent, ip };
+  // Vercel edge geo headers (city is URI-encoded).
+  const rawCity = request.headers.get('x-vercel-ip-city');
+  let city: string | null = null;
+  if (rawCity) {
+    try {
+      city = decodeURIComponent(rawCity).slice(0, 128);
+    } catch {
+      city = rawCity.slice(0, 128);
+    }
+  }
+  const region =
+    request.headers.get('x-vercel-ip-country-region')?.slice(0, 128) ?? null;
+  const country =
+    request.headers.get('x-vercel-ip-country')?.slice(0, 8) ?? null;
+  return { userAgent, ip, city, region, country };
 }
 
 export async function GET() {
@@ -45,7 +59,7 @@ export async function GET() {
     const { data, error } = await channelAdmin()
       .from('auth_devices')
       .select(
-        'id, session_id, user_agent, ip_address, created_at, last_seen_at, revoked_at'
+        'id, session_id, user_agent, ip_address, city, region, country, created_at, last_seen_at, revoked_at'
       )
       .eq('user_id', context.user.id)
       .is('revoked_at', null)
@@ -58,6 +72,9 @@ export async function GET() {
         id: row.id,
         user_agent: row.user_agent,
         ip_address: row.ip_address,
+        location: [row.city, row.region, row.country]
+          .filter(Boolean)
+          .join(', '),
         created_at: row.created_at,
         last_seen_at: row.last_seen_at,
         is_current: row.session_id === sessionId,
@@ -75,7 +92,7 @@ export async function POST(request: NextRequest) {
     if (!sessionId) {
       return NextResponse.json({ error: 'No active session' }, { status: 401 });
     }
-    const { userAgent, ip } = clientMeta(request);
+    const { userAgent, ip, city, region, country } = clientMeta(request);
 
     const { error } = await channelAdmin()
       .from('auth_devices')
@@ -85,6 +102,9 @@ export async function POST(request: NextRequest) {
           session_id: sessionId,
           user_agent: userAgent,
           ip_address: ip,
+          city,
+          region,
+          country,
           last_seen_at: new Date().toISOString(),
           revoked_at: null,
         },
@@ -93,6 +113,53 @@ export async function POST(request: NextRequest) {
     if (error) throw error;
 
     return NextResponse.json({ data: { recorded: true } });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
+
+/**
+ * PATCH — "sign out everywhere": the server-side token blacklist.
+ * Deletes every auth.sessions row for the caller (except the current
+ * session when keepCurrent), which revokes all refresh tokens at the
+ * source — no other device can mint a new access token. Outstanding
+ * access tokens die at JWT expiry. All device rows are marked revoked
+ * in the same pass.
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const context = await getCurrentAccount();
+    const body = (await request.json().catch(() => ({}))) as {
+      keepCurrent?: boolean;
+    };
+    const keepCurrent = body.keepCurrent !== false;
+    const sessionId = await currentSessionId(context.supabase);
+
+    const admin = channelAdmin();
+    const { data: revokedCount, error: rpcError } = await admin.rpc(
+      'admin_revoke_all_auth_sessions',
+      {
+        p_user_id: context.user.id,
+        p_keep_session_id: keepCurrent ? sessionId : null,
+      }
+    );
+    if (rpcError) throw rpcError;
+
+    // Mark device rows revoked (all, or all-but-current).
+    let markQuery = admin
+      .from('auth_devices')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('user_id', context.user.id)
+      .is('revoked_at', null);
+    if (keepCurrent && sessionId) {
+      markQuery = markQuery.neq('session_id', sessionId);
+    }
+    const { error: markError } = await markQuery;
+    if (markError) throw markError;
+
+    return NextResponse.json({
+      data: { revoked: revokedCount ?? 0, keptCurrent: keepCurrent },
+    });
   } catch (error) {
     return toErrorResponse(error);
   }

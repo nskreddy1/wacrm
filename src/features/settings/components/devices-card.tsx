@@ -29,6 +29,7 @@ interface DeviceRow {
   id: string;
   user_agent: string | null;
   ip_address: string | null;
+  location: string;
   created_at: string;
   last_seen_at: string;
   is_current: boolean;
@@ -141,6 +142,18 @@ export function DevicesCard() {
   const onSignOutAll = async () => {
     setSigningOutAll(true);
     try {
+      // 1. Server-side blacklist: delete every auth session row so
+      //    all refresh tokens are dead — other devices cannot renew.
+      const revokeAll = await fetch('/api/v1/security/devices', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keepCurrent: false }),
+      });
+      if (!revokeAll.ok) {
+        toast.error(t('deviceRevokeFailed'));
+        return;
+      }
+      // 2. Clear this browser's cookies via the normal sign-out.
       const response = await fetch('/api/v1/session', { method: 'DELETE' });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as {
@@ -239,6 +252,7 @@ export function DevicesCard() {
                             )}
                           </div>
                           <p className="text-muted-foreground truncate text-xs">
+                            {device.location ? `${device.location} · ` : ''}
                             {device.ip_address ?? '—'} ·{' '}
                             {t('deviceLastActive', {
                               time: relativeTime(device.last_seen_at),
