@@ -19,6 +19,8 @@ interface Turn {
   content: string;
   /** assistant-only: the agent signalled a human handoff on this turn. */
   handoff?: boolean;
+  /** assistant-only: name of the specialist the router picked, if any. */
+  routedTo?: string | null;
 }
 
 /** The subset of GET /api/ai/agents the playground cares about. */
@@ -104,6 +106,10 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
               ? data.reply
               : '',
           handoff: Boolean(data.handoff),
+          routedTo:
+            typeof data.routedTo === 'string' && data.routedTo.trim()
+              ? data.routedTo
+              : null,
         },
       ]);
     } catch {
@@ -222,6 +228,12 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
                   : 'bg-muted text-foreground rounded-bl-sm'
               )}
             >
+              {t.role === 'assistant' && t.routedTo && (
+                <p className="text-primary mb-1 flex items-center gap-1 text-xs font-medium">
+                  <ArrowRight className="h-3 w-3" />
+                  Routed to: {t.routedTo}
+                </p>
+              )}
               {t.content && <p className="whitespace-pre-wrap">{t.content}</p>}
               {t.role === 'assistant' && t.handoff && (
                 <p

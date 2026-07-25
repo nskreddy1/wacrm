@@ -9,6 +9,7 @@ import {
   loadAgentConfig,
   isAgentCapability,
 } from '@/features/assistant/lib/ai/agents';
+import { routeConversation } from '@/features/assistant/lib/ai/router';
 import { retrieveKnowledge } from '@/features/assistant/lib/ai/knowledge';
 import { generateReply } from '@/features/assistant/lib/ai/generate';
 import { buildPromptParts } from '@/features/assistant/lib/ai/defaults';
@@ -95,6 +96,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Router → specialist handoff, exactly as in production: when
+    // custom specialists exist, the same cheap routing pass picks who
+    // answers — so the playground tests the full agentic path, not
+    // just the default persona. Suggestions mode skips routing (drafts
+    // are always the default agent's job).
+    const { config: activeConfig, specialist } =
+      capability === 'autoreply'
+        ? await routeConversation(supabase, accountId, config, messages)
+        : { config: { ...config, specialistId: undefined }, specialist: null };
+
     const knowledge = await retrieveKnowledge(
       supabase,
       accountId,
@@ -108,17 +119,23 @@ export async function POST(request: Request) {
     // caching still lands (cache key: per-account playground scope,
     // there's no conversation).
     const { text, handoff } = await generateReply({
-      config,
+      config: activeConfig,
       messages,
       promptParts: buildPromptParts({
-        userPrompt: config.systemPrompt,
+        userPrompt: activeConfig.systemPrompt,
         // Exercise the same prompt mode the capability uses in production.
         mode: capability === 'suggestions' ? 'draft' : 'auto_reply',
         knowledge,
       }),
-      cacheKey: `playground:${accountId}:${capability}`,
+      cacheKey: `playground:${accountId}:${capability}:${specialist?.id ?? 'default'}`,
     });
-    return NextResponse.json({ reply: text, handoff });
+    return NextResponse.json({
+      reply: text,
+      handoff,
+      // Which agent answered — lets the playground UI show the routing
+      // decision ("Routed to: Billing Specialist").
+      routedTo: specialist ? specialist.display_name : null,
+    });
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(

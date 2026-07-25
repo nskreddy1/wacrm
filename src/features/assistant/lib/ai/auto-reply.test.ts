@@ -18,6 +18,20 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('./agents', () => ({ loadAgentConfig: h.loadAgentConfig }));
+// CRM grounding is best-effort context — not what these tests cover.
+vi.mock('./crm-context', () => ({
+  buildCrmContext: vi.fn().mockResolvedValue(null),
+}));
+// Router pass-through: no specialists → default agent answers. The
+// router's own matching logic is unit-tested in router.test.ts.
+vi.mock('./router', () => ({
+  routeConversation: vi
+    .fn()
+    .mockImplementation(
+      (_db: unknown, _accountId: unknown, config: unknown) =>
+        Promise.resolve({ config, specialist: null })
+    ),
+}));
 vi.mock('./context', () => ({
   buildConversationContext: h.buildConversationContext,
 }));
@@ -29,7 +43,7 @@ vi.mock('@/features/admin/lib/orchestration/outbound', () => ({
 vi.mock('./admin-client', () => ({
   supabaseAdmin: () => ({
     from: (table: string) => {
-      if (table === 'automations') {
+      if (table === 'flows') {
         // .select().eq().eq().in().limit() → active auto-responders
         const chain = {
           select: () => chain,
