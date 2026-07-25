@@ -5,6 +5,7 @@ import { channelAdmin } from '@/features/channels/lib/admin-client';
 import { resolveTwilioCredentials } from '@/features/channels/lib/twilio-account';
 import {
   createTwilioContent,
+  getTwilioApproval,
   listTwilioContentAndApprovals,
   normalizeTwilioContent,
   submitTwilioApproval,
@@ -48,13 +49,30 @@ async function connectionFor(accountId: string) {
   return resolved.credentials;
 }
 
+/**
+ * Twilio approval status → our MessageTemplateStatus.
+ * Full set per the Content API docs: unsubmitted, received, pending,
+ * approved, rejected, paused, disabled. `received` AND `pending` both
+ * mean "in review" — missing `pending` here was the bug that stomped
+ * every in-review template back to DRAFT on the next sync.
+ */
 function approvalStatus(value?: string) {
-  const status = value?.toLowerCase();
-  if (status === 'approved' || status === 'received')
-    return status === 'approved' ? 'APPROVED' : 'PENDING';
-  if (status === 'rejected') return 'REJECTED';
-  if (status === 'paused') return 'PAUSED';
-  return 'DRAFT';
+  switch (value?.toLowerCase()) {
+    case 'approved':
+      return 'APPROVED';
+    case 'received':
+    case 'pending':
+      return 'PENDING';
+    case 'rejected':
+      return 'REJECTED';
+    case 'paused':
+      return 'PAUSED';
+    case 'disabled':
+      return 'DISABLED';
+    default:
+      // unsubmitted / missing — never submitted for WhatsApp review.
+      return 'DRAFT';
+  }
 }
 
 export async function POST(request: Request) {
@@ -62,6 +80,61 @@ export async function POST(request: Request) {
     const { accountId, userId } = await requireRole('agent');
     const credentials = await connectionFor(accountId);
     const body = await request.json().catch(() => ({}));
+
+    if (body.action === 'check') {
+      // Per-template status check: fetch THIS template's approval from
+      // Twilio and update just its row — so "did my template get
+      // approved?" is one click on the template, not a full re-import.
+      const templateId = typeof body.id === 'string' ? body.id : null;
+      if (!templateId) {
+        return NextResponse.json(
+          { error: 'Template id is required.' },
+          { status: 400 }
+        );
+      }
+      const { data: tplRow, error: tplErr } = await channelAdmin()
+        .from('message_templates')
+        .select('id, twilio_content_sid, status')
+        .eq('id', templateId)
+        .eq('account_id', accountId)
+        .maybeSingle();
+      if (tplErr) throw tplErr;
+      if (!tplRow) {
+        return NextResponse.json(
+          { error: 'Template not found.' },
+          { status: 404 }
+        );
+      }
+      if (!tplRow.twilio_content_sid) {
+        return NextResponse.json(
+          {
+            error:
+              'This template has not been submitted to Twilio yet — submit it for review first.',
+          },
+          { status: 400 }
+        );
+      }
+      const approval = await getTwilioApproval(
+        credentials,
+        tplRow.twilio_content_sid
+      );
+      const status = approvalStatus(approval?.status);
+      const { error: updErr } = await channelAdmin()
+        .from('message_templates')
+        .update({
+          status,
+          rejection_reason: approval?.rejection_reason ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', tplRow.id)
+        .eq('account_id', accountId);
+      if (updErr) throw updErr;
+      return NextResponse.json({
+        status,
+        rejection_reason: approval?.rejection_reason ?? null,
+        provider: 'twilio',
+      });
+    }
 
     if (body.action === 'sync') {
       // v2 ContentAndApprovals returns approval status inline — one
