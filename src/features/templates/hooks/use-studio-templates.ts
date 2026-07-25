@@ -345,6 +345,37 @@ export function useStudioTemplates() {
   }
 
   /**
+   * Check ONE template's review status with the provider (per-template
+   * "was it approved yet?"). Updates just that row and returns a
+   * human-readable answer for the toast.
+   */
+  async function checkStatus(tpl: StudioTemplate): Promise<string> {
+    const json = await postJson('/api/whatsapp/templates/twilio', {
+      action: 'check',
+      id: tpl.id,
+    });
+    await mutate();
+    const status = String(json.status ?? 'DRAFT');
+    const reason = json.rejection_reason as string | null;
+    switch (status) {
+      case 'APPROVED':
+        return `"${tpl.name}" is approved — ready to send.`;
+      case 'PENDING':
+        return `"${tpl.name}" is still in review. WhatsApp usually decides within 48 hours.`;
+      case 'REJECTED':
+        return reason
+          ? `"${tpl.name}" was rejected: ${reason}`
+          : `"${tpl.name}" was rejected. Edit and resubmit.`;
+      case 'PAUSED':
+        return `"${tpl.name}" is paused by WhatsApp due to quality feedback.`;
+      case 'DISABLED':
+        return `"${tpl.name}" was disabled by WhatsApp and can't be sent.`;
+      default:
+        return `"${tpl.name}" hasn't been submitted for review yet.`;
+    }
+  }
+
+  /**
    * Import/refresh WhatsApp templates from every connected provider.
    * Tries Twilio (Content API) and Meta (WABA message_templates) in
    * turn; "not configured" responses are skipped, not fatal, so one
@@ -408,6 +439,7 @@ export function useStudioTemplates() {
     save,
     submit,
     syncStatuses,
+    checkStatus,
     importTemplates,
     remove,
     refresh: mutate,

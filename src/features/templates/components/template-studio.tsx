@@ -856,7 +856,7 @@ export function TemplateStudio() {
     loadError,
     save,
     submit,
-    syncStatuses,
+    checkStatus,
     importTemplates,
     remove,
   } = useStudioTemplates();
@@ -965,17 +965,19 @@ export function TemplateStudio() {
   };
 
   /**
-   * Pull approval statuses from Twilio (bulk ContentAndApprovals).
-   * Rendered only for Twilio-provider WhatsApp templates — Meta rows
-   * sync via their own /sync route and SMS never needs approval.
+   * Per-template review check: "was THIS template approved yet?"
+   * Fetches only the active template's approval from Twilio and
+   * updates its row. Bulk import/refresh lives on the rail button
+   * (handleImportTemplates) — this one answers for one template.
    */
-  const handleSyncStatuses = async () => {
+  const handleCheckStatus = async () => {
+    if (!active) return;
     setBusy('sync');
     try {
-      const summary = await syncStatuses();
+      const summary = await checkStatus(active);
       toast.success(summary);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Status sync failed.');
+      toast.error(e instanceof Error ? e.message : 'Status check failed.');
     } finally {
       setBusy(null);
     }
@@ -1232,11 +1234,14 @@ export function TemplateStudio() {
               )}
               {active.channel === 'sms' ? 'Save template' : 'Save draft'}
             </Button>
-            {active.channel === 'whatsapp' && active.provider === 'twilio' && (
+          {active.channel === 'whatsapp' &&
+            active.provider === 'twilio' &&
+            !active.isNew &&
+            active.status !== 'draft' && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleSyncStatuses}
+                onClick={handleCheckStatus}
                 disabled={busy !== null}
               >
                 {busy === 'sync' ? (
@@ -1244,7 +1249,7 @@ export function TemplateStudio() {
                 ) : (
                   <RefreshCw className="size-4" aria-hidden="true" />
                 )}
-                Sync statuses
+                Check review status
               </Button>
             )}
             {active.channel === 'whatsapp' && (
