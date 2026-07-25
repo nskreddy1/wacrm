@@ -87,6 +87,22 @@ export async function PATCH(
     if (provided.has('system_prompt')) {
       patch.system_prompt = values.system_prompt;
     }
+    // Specialist-only routing hint — ignored for the default agent.
+    if (provided.has('route_description') && row.kind === 'custom') {
+      const rawRoute =
+        typeof (body as Record<string, unknown>).route_description === 'string'
+          ? ((body as Record<string, unknown>).route_description as string)
+              .trim()
+              .slice(0, 500)
+          : '';
+      if (!rawRoute) {
+        return NextResponse.json(
+          { error: 'Describe when this specialist should take over.' },
+          { status: 400 }
+        );
+      }
+      patch.route_description = rawRoute;
+    }
     if (typeof values.is_enabled === 'boolean') {
       patch.is_enabled = values.is_enabled;
     }

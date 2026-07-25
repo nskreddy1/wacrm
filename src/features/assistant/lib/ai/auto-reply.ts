@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './admin-client';
 import { loadAgentConfig } from './agents';
+import { routeConversation } from './router';
 import { buildConversationContext } from './context';
 import { retrieveKnowledge } from './knowledge';
 import { buildCrmContext } from './crm-context';
@@ -133,6 +134,20 @@ export async function dispatchInboundToAiReply(
       return;
     }
 
+    // Router → specialist handoff (2026 agentic pattern): when the
+    // account has custom specialist agents, a cheap routing pass on
+    // the default agent's own model picks the best match for this
+    // conversation. Fails open to the default agent; costs nothing
+    // when no specialists exist. Guardrails (cap, hours, escalation)
+    // always remain the default agent's — applySpecialist only swaps
+    // persona/provider.
+    const { config: activeConfig, specialist } = await routeConversation(
+      db,
+      accountId,
+      config,
+      messages
+    );
+
     // Ground the reply in the account's knowledge base and the
     // contact's live CRM record (both best-effort, fetched in parallel).
     const [knowledge, crmContext] = await Promise.all([
@@ -147,11 +162,12 @@ export async function dispatchInboundToAiReply(
     // cached prefix across replies.
     const { text, handoff, usage, sentiment, escalationReason } =
       await generateReply({
-        config,
+        config: activeConfig,
         messages,
         promptParts: buildPromptParts({
-          // The agent's own persona prompt (fully independent config).
-          userPrompt: config.systemPrompt,
+          // The routed persona — the specialist's when matched, else
+          // the default agent's.
+          userPrompt: activeConfig.systemPrompt,
           mode: 'auto_reply',
           knowledge,
           crmContext,
@@ -168,9 +184,11 @@ export async function dispatchInboundToAiReply(
       accountId,
       conversationId,
       mode: 'auto_reply',
-      agentId: config.agentId,
-      provider: config.provider,
-      model: config.model,
+      // Attribute spend to the specialist that actually answered,
+      // falling back to the default agent.
+      agentId: specialist?.id ?? config.agentId,
+      provider: activeConfig.provider,
+      model: activeConfig.model,
       usage,
       keySource: config.keySource,
     });
