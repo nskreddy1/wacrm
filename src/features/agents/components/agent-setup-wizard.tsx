@@ -2,20 +2,24 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
-  AGENT_KIND_META,
+  CAPABILITY_META,
+  CAPABILITY_ORDER,
+  DEFAULT_AGENT_NAME,
   PROVIDER_PRESETS,
+  STARTER_PROMPT,
   providerLabel,
-  type AgentKind,
   type ClientAgent,
 } from '../lib/agent-meta';
 
 // ============================================================
-// Guided 3-step agent creation: 1) provider + key + model,
-// 2) personality + behavior, 3) review & create. The API validates
+// Guided 3-step setup for the account's single AI agent:
+// 1) provider + key + model, 2) personality + which capabilities to
+// switch on (AI suggestions / Auto-reply — separate columns, both
+// powered by this one config), 3) review & create. The API validates
 // the key live against the provider before anything is stored, so a
 // typo'd key fails HERE — not at 2am in a customer chat.
 // ============================================================
@@ -23,17 +27,11 @@ import {
 const STEPS = ['Provider', 'Personality', 'Review'] as const;
 
 interface AgentSetupWizardProps {
-  kind: AgentKind;
   onCreated: (agent: ClientAgent) => void;
   onCancel?: () => void;
 }
 
-export function AgentSetupWizard({
-  kind,
-  onCreated,
-  onCancel,
-}: AgentSetupWizardProps) {
-  const meta = AGENT_KIND_META[kind];
+export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
@@ -45,10 +43,11 @@ export function AgentSetupWizard({
   );
   const [baseUrl, setBaseUrl] = useState('');
 
-  // Step 2 — personality + behavior.
-  const [prompt, setPrompt] = useState(meta.starterPrompt);
+  // Step 2 — personality + capabilities.
+  const [prompt, setPrompt] = useState(STARTER_PROMPT);
   const [replyCap, setReplyCap] = useState(3);
-  const [enableNow, setEnableNow] = useState(true);
+  const [suggestionsOn, setSuggestionsOn] = useState(true);
+  const [autoreplyOn, setAutoreplyOn] = useState(true);
 
   const preset = PROVIDER_PRESETS.find((p) => p.id === provider);
 
@@ -75,22 +74,23 @@ export function AgentSetupWizard({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          kind,
-          display_name: meta.name,
+          display_name: DEFAULT_AGENT_NAME,
           provider,
           model: model.trim(),
           api_key: apiKey.trim() || undefined,
           base_url: baseUrl.trim() || undefined,
           system_prompt: prompt.trim() || undefined,
-          is_enabled: enableNow,
-          settings: kind === 'autoreply' ? { replyCap } : {},
+          is_enabled: suggestionsOn || autoreplyOn,
+          suggestions_enabled: suggestionsOn,
+          autoreply_enabled: autoreplyOn,
+          settings: { replyCap },
         }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(payload.error ?? 'Could not create the agent');
       }
-      toast.success(`${meta.name} is ready`);
+      toast.success('Your AI agent is ready');
       onCreated(payload.agent as ClientAgent);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not create agent');
@@ -102,12 +102,15 @@ export function AgentSetupWizard({
   return (
     <div className="border-border bg-card rounded-xl border p-6">
       <div className="mb-1 flex items-center gap-2">
-        <meta.icon className="text-primary size-5" aria-hidden />
+        <Bot className="text-primary size-5" aria-hidden />
         <h2 className="text-foreground font-serif text-xl">
-          Set up {meta.name}
+          Set up your AI agent
         </h2>
       </div>
-      <p className="text-muted-foreground mb-6 text-sm">{meta.tagline}</p>
+      <p className="text-muted-foreground mb-6 text-sm">
+        One agent, two jobs — it can draft replies for your team and answer
+        customers automatically. You pick which below.
+      </p>
 
       {/* Stepper */}
       <ol className="mb-6 flex items-center gap-2" aria-label="Setup steps">
@@ -228,7 +231,7 @@ export function AgentSetupWizard({
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 text-sm font-mono"
+              className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 font-mono text-sm"
             />
             <p className="text-muted-foreground mt-1 text-xs">
               We picked a sensible default — change it if you prefer another
@@ -245,7 +248,7 @@ export function AgentSetupWizard({
               htmlFor="wiz-prompt"
               className="text-foreground mb-1 block text-sm font-medium"
             >
-              How should this agent behave?
+              How should your agent behave?
             </label>
             <textarea
               id="wiz-prompt"
@@ -260,7 +263,51 @@ export function AgentSetupWizard({
             </p>
           </div>
 
-          {kind === 'autoreply' ? (
+          <fieldset>
+            <legend className="text-foreground mb-2 text-sm font-medium">
+              What should it do?
+            </legend>
+            <div className="flex flex-col gap-2">
+              {CAPABILITY_ORDER.map((cap) => {
+                const m = CAPABILITY_META[cap];
+                const checked = cap === 'suggestions' ? suggestionsOn : autoreplyOn;
+                const setChecked =
+                  cap === 'suggestions' ? setSuggestionsOn : setAutoreplyOn;
+                return (
+                  <label
+                    key={cap}
+                    className={cn(
+                      'flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 transition-colors',
+                      checked
+                        ? 'border-primary/40 bg-primary/5'
+                        : 'border-border hover:border-primary/30'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => setChecked(e.target.checked)}
+                      className="accent-primary mt-0.5 size-4"
+                    />
+                    <span className="flex min-w-0 flex-col">
+                      <span className="text-foreground text-sm font-medium">
+                        {m.name}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {m.tagline}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Both are separate switches you can flip anytime — they share
+              this one provider connection.
+            </p>
+          </fieldset>
+
+          {autoreplyOn ? (
             <div>
               <label
                 htmlFor="wiz-cap"
@@ -283,32 +330,23 @@ export function AgentSetupWizard({
               </p>
             </div>
           ) : null}
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={enableNow}
-              onChange={(e) => setEnableNow(e.target.checked)}
-              className="accent-primary size-4"
-            />
-            <span className="text-foreground">
-              Turn the agent on right after it&apos;s created
-            </span>
-          </label>
         </div>
       ) : null}
 
       {step === 2 ? (
         <dl className="border-border divide-border divide-y rounded-md border text-sm">
           {[
-            ['Agent', meta.name],
             ['Provider', providerLabel(provider)],
             ['Model', model],
             ...(baseUrl ? [['Base URL', baseUrl] as [string, string]] : []),
-            ...(kind === 'autoreply'
-              ? [['Reply cap', `${replyCap} / conversation`] as [string, string]]
-              : []),
-            ['Starts', enableNow ? 'Enabled immediately' : 'Off until you enable it'],
+            [
+              'AI suggestions',
+              suggestionsOn ? 'On — drafts for your team' : 'Off',
+            ],
+            [
+              'Auto-reply',
+              autoreplyOn ? `On — max ${replyCap} replies / conversation` : 'Off',
+            ],
           ].map(([k, v]) => (
             <div key={k} className="flex items-center justify-between px-4 py-2.5">
               <dt className="text-muted-foreground">{k}</dt>

@@ -8,16 +8,16 @@ import { Button } from '@/components/ui/button';
 import { fetchAccountMembers, memberLabel } from '@/lib/account/members';
 import type { AccountMember } from '@/types';
 import {
-  AGENT_KIND_META,
   PROVIDER_PRESETS,
+  STARTER_PROMPT,
   type ClientAgent,
 } from '../lib/agent-meta';
 
 // ============================================================
-// Per-agent Configuration tab. Each agent edits ONLY its own row
-// (PATCH /api/ai/agents/[id]) — copilot and autoreply forms are
-// different by design: the copilot has no reply cap / hours /
-// escalation because a human approves every draft.
+// Configuration tab for the account's single AI agent — one provider
+// connection, one persona, plus guardrails for the auto-reply
+// capability (reply cap, active hours, escalation). Saved via
+// PATCH /api/ai/agents/[id]; the API key is only sent when replaced.
 // ============================================================
 
 interface AgentSettingsFormProps {
@@ -31,8 +31,6 @@ export function AgentSettingsForm({
   canManage,
   onSaved,
 }: AgentSettingsFormProps) {
-  const isAutoreply = agent.kind === 'autoreply';
-  const meta = AGENT_KIND_META[agent.kind];
   const settings = agent.settings as Record<string, unknown>;
 
   const [provider, setProvider] = useState(agent.provider ?? 'openai');
@@ -59,9 +57,9 @@ export function AgentSettingsForm({
 
   const preset = PROVIDER_PRESETS.find((p) => p.id === provider);
 
-  // Team members for the escalation handoff picker (autoreply only).
+  // Team members for the escalation handoff picker.
   const { data: membersData } = useSWR<AccountMember[]>(
-    isAutoreply && canManage ? 'account-members' : null,
+    canManage ? 'account-members' : null,
     fetchAccountMembers
   );
   const members = membersData ?? [];
@@ -88,15 +86,13 @@ export function AgentSettingsForm({
       if (preset?.needsBaseUrl || provider === 'ollama') {
         body.base_url = baseUrl.trim() || undefined;
       }
-      if (isAutoreply) {
-        body.settings = {
-          replyCap,
-          scheduleStart: scheduleStart || null,
-          scheduleEnd: scheduleEnd || null,
-          timezone: scheduleStart ? timezone : null,
-          handoffAgentId: handoff || null,
-        };
-      }
+      body.settings = {
+        replyCap,
+        scheduleStart: scheduleStart || null,
+        scheduleEnd: scheduleEnd || null,
+        timezone: scheduleStart ? timezone : null,
+        handoffAgentId: handoff || null,
+      };
 
       const res = await fetch(`/api/ai/agents/${agent.id}`, {
         method: 'PATCH',
@@ -128,18 +124,15 @@ export function AgentSettingsForm({
   return (
     <div className="flex flex-col gap-6">
       <section
-        aria-labelledby={`cfg-provider-${agent.kind}`}
+        aria-labelledby="cfg-provider"
         className="border-border bg-card rounded-xl border p-5"
       >
-        <h3
-          id={`cfg-provider-${agent.kind}`}
-          className="text-foreground mb-1 text-sm font-semibold"
-        >
+        <h3 id="cfg-provider" className="text-foreground mb-1 text-sm font-semibold">
           Model &amp; provider
         </h3>
         <p className="text-muted-foreground mb-4 text-xs">
-          This agent runs on its own provider and key — changing it never
-          affects the other agent.
+          One connection powers both capabilities — AI suggestions and
+          auto-reply share this provider, key, and model.
         </p>
 
         <div className="flex flex-col gap-4">
@@ -169,13 +162,13 @@ export function AgentSettingsForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label
-                htmlFor={`cfg-model-${agent.kind}`}
+                htmlFor="cfg-model"
                 className="text-foreground mb-1 block text-sm font-medium"
               >
                 Model
               </label>
               <input
-                id={`cfg-model-${agent.kind}`}
+                id="cfg-model"
                 type="text"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
@@ -185,13 +178,13 @@ export function AgentSettingsForm({
             {!preset?.keyOptional ? (
               <div>
                 <label
-                  htmlFor={`cfg-key-${agent.kind}`}
+                  htmlFor="cfg-key"
                   className="text-foreground mb-1 block text-sm font-medium"
                 >
                   API Key
                 </label>
                 <input
-                  id={`cfg-key-${agent.kind}`}
+                  id="cfg-key"
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
@@ -210,13 +203,13 @@ export function AgentSettingsForm({
           {preset?.needsBaseUrl || provider === 'ollama' ? (
             <div>
               <label
-                htmlFor={`cfg-base-${agent.kind}`}
+                htmlFor="cfg-base"
                 className="text-foreground mb-1 block text-sm font-medium"
               >
                 Base URL {provider === 'ollama' ? '(optional)' : ''}
               </label>
               <input
-                id={`cfg-base-${agent.kind}`}
+                id="cfg-base"
                 type="url"
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
@@ -233,27 +226,27 @@ export function AgentSettingsForm({
       </section>
 
       <section
-        aria-labelledby={`cfg-persona-${agent.kind}`}
+        aria-labelledby="cfg-persona"
         className="border-border bg-card rounded-xl border p-5"
       >
-        <h3
-          id={`cfg-persona-${agent.kind}`}
-          className="text-foreground mb-1 text-sm font-semibold"
-        >
+        <h3 id="cfg-persona" className="text-foreground mb-1 text-sm font-semibold">
           Personality &amp; instructions
         </h3>
-        <p className="text-muted-foreground mb-4 text-xs">{meta.description}</p>
+        <p className="text-muted-foreground mb-4 text-xs">
+          One persona for both jobs — how the agent talks when drafting for
+          your team and when replying to customers on its own.
+        </p>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={6}
-          aria-label={`${meta.name} instructions`}
-          placeholder={meta.starterPrompt}
+          aria-label="Agent instructions"
+          placeholder={STARTER_PROMPT}
           className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 text-sm leading-relaxed"
         />
       </section>
 
-      {isAutoreply ? (
+      {
         <section
           aria-labelledby="cfg-behavior"
           className="border-border bg-card rounded-xl border p-5"
@@ -265,8 +258,8 @@ export function AgentSettingsForm({
             Automatic reply behavior
           </h3>
           <p className="text-muted-foreground mb-4 text-xs">
-            Guardrails for unattended replies — these settings exist only on
-            the Auto-Reply Agent.
+            Guardrails for unattended replies — they apply only when the
+            auto-reply capability is on.
           </p>
 
           <div className="flex flex-col gap-4">
