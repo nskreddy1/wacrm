@@ -22,8 +22,11 @@ alter table ai_agents
   add constraint ai_agents_kind_check check (kind in ('default', 'custom'));
 
 -- Exactly one default agent per account; unlimited custom specialists.
--- The old UNIQUE(account_id, kind) would cap custom agents at one.
+-- The old UNIQUE(account_id, kind) would cap custom agents at one, and
+-- the rebuild-era ai_agents_account_idx (UNIQUE on account_id alone)
+-- would block ANY second row — both must go.
 alter table ai_agents drop constraint if exists ai_agents_account_id_kind_key;
+drop index if exists ai_agents_account_idx;
 create unique index if not exists ai_agents_account_default_uniq
   on ai_agents (account_id) where (kind = 'default');
 
