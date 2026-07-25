@@ -1,5 +1,6 @@
 import type { ChannelKind, ChannelProvider } from '@/types';
 import type { ChannelAdapter } from '../contracts';
+import { MailtrapEmailAdapter } from './mailtrap';
 import { MetaWhatsAppAdapter } from './meta';
 import { ResendEmailAdapter } from './resend';
 import { SmtpEmailAdapter } from './smtp';
@@ -22,6 +23,8 @@ export function createChannelAdapter(
       return new SmtpEmailAdapter();
     case 'resend':
       return new ResendEmailAdapter();
+    case 'mailtrap':
+      return new MailtrapEmailAdapter();
     case 'twilio':
       return channel === 'sms'
         ? new TwilioSmsAdapter()

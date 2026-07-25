@@ -235,7 +235,13 @@ export interface Notification {
 
 export type ChannelKind = 'whatsapp' | 'sms' | 'email';
 export type ChannelProvider =
-  'meta' | 'twilio' | 'google' | 'microsoft' | 'resend' | 'smtp';
+  | 'meta'
+  | 'twilio'
+  | 'google'
+  | 'microsoft'
+  | 'resend'
+  | 'smtp'
+  | 'mailtrap';
 export type ChannelConnectionStatus =
   'draft' | 'connected' | 'degraded' | 'disconnected';
 

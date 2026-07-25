@@ -15,6 +15,7 @@ export const PROVIDER_CHANNELS: Record<ChannelProvider, ChannelKind[]> = {
   microsoft: ['email'],
   resend: ['email'],
   smtp: ['email'],
+  mailtrap: ['email'],
 };
 
 export const PROVIDER_LABEL: Record<ChannelProvider, string> = {
@@ -24,6 +25,7 @@ export const PROVIDER_LABEL: Record<ChannelProvider, string> = {
   microsoft: 'Microsoft 365',
   resend: 'Resend',
   smtp: 'SMTP',
+  mailtrap: 'Mailtrap',
 };
 
 const unavailableCapabilities: ChannelCapabilities = {
