@@ -43,7 +43,13 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
   );
   const [baseUrl, setBaseUrl] = useState('');
 
-  // Step 2 — personality + capabilities.
+  // Step 2 — personality + capabilities. Guided is the default: new
+  // clients answer plain questions and WE compose the enterprise
+  // prompt server-side; the expert textarea stays one click away.
+  const [personaMode, setPersonaMode] = useState<'guided' | 'expert'>(
+    'guided'
+  );
+  const [personaDraft, setPersonaDraft] = useState(emptyPersonaDraft());
   const [prompt, setPrompt] = useState(STARTER_PROMPT);
   const [replyCap, setReplyCap] = useState(3);
   const [suggestionsOn, setSuggestionsOn] = useState(true);

@@ -12,6 +12,8 @@ import {
   STARTER_PROMPT,
   type ClientAgent,
 } from '../lib/agent-meta';
+import { readPersonaConfig } from '@/features/assistant/lib/ai/persona';
+import { emptyPersonaDraft, PersonaBuilder } from './persona-builder';
 
 // ============================================================
 // Configuration tab for the account's single AI agent — one provider
@@ -38,6 +40,16 @@ export function AgentSettingsForm({
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState(agent.baseUrl ?? '');
   const [prompt, setPrompt] = useState(agent.systemPrompt ?? '');
+  // Guided persona: saved answers re-open the same form. Clients who
+  // never saw a prompt in their life stay in guided mode; experts can
+  // switch to the raw prompt.
+  const savedPersona = readPersonaConfig(settings.personaConfig);
+  const [personaMode, setPersonaMode] = useState<'guided' | 'expert'>(
+    savedPersona || !agent.systemPrompt ? 'guided' : 'expert'
+  );
+  const [personaDraft, setPersonaDraft] = useState(
+    savedPersona ?? emptyPersonaDraft()
+  );
   const [replyCap, setReplyCap] = useState(
     Number(settings.replyCap) >= 1 ? Number(settings.replyCap) : 3
   );
@@ -79,8 +91,20 @@ export function AgentSettingsForm({
         display_name: agent.displayName,
         provider,
         model: model.trim(),
-        system_prompt: prompt,
       };
+      // Persona: guided mode sends the answers and the SERVER composes
+      // the enterprise prompt; expert mode sends the raw prompt and
+      // clears any stored guided answers.
+      if (personaMode === 'guided' && personaDraft.businessName.trim()) {
+        body.persona_config = {
+          ...personaDraft,
+          keyFacts: (personaDraft.keyFacts ?? []).filter((f) => f.trim()),
+          neverDo: (personaDraft.neverDo ?? []).filter((f) => f.trim()),
+        };
+      } else {
+        body.system_prompt = prompt;
+        if (savedPersona) body.persona_config = null;
+      }
       // Key: only sent when replaced — the stored one is never echoed.
       if (apiKey.trim()) body.api_key = apiKey.trim();
       if (preset?.needsBaseUrl || provider === 'ollama') {
@@ -229,21 +253,62 @@ export function AgentSettingsForm({
         aria-labelledby="cfg-persona"
         className="border-border bg-card rounded-xl border p-5"
       >
-        <h3 id="cfg-persona" className="text-foreground mb-1 text-sm font-semibold">
-          Personality &amp; instructions
-        </h3>
-        <p className="text-muted-foreground mb-4 text-xs">
-          One persona for both jobs — how the agent talks when drafting for
-          your team and when replying to customers on its own.
-        </p>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={6}
-          aria-label="Agent instructions"
-          placeholder={STARTER_PROMPT}
-          className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 text-sm leading-relaxed"
-        />
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3
+              id="cfg-persona"
+              className="text-foreground mb-1 text-sm font-semibold"
+            >
+              Personality &amp; instructions
+            </h3>
+            <p className="text-muted-foreground text-xs">
+              {personaMode === 'guided'
+                ? 'Answer a few questions — we generate enterprise-grade instructions for you.'
+                : 'One persona for both jobs — how the agent talks when drafting for your team and when replying to customers on its own.'}
+            </p>
+          </div>
+          <div className="border-border flex rounded-md border p-0.5" role="tablist" aria-label="Persona editing mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={personaMode === 'guided'}
+              onClick={() => setPersonaMode('guided')}
+              className={
+                personaMode === 'guided'
+                  ? 'bg-primary text-primary-foreground rounded px-2.5 py-1 text-xs font-medium'
+                  : 'text-muted-foreground rounded px-2.5 py-1 text-xs'
+              }
+            >
+              Guided
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={personaMode === 'expert'}
+              onClick={() => setPersonaMode('expert')}
+              className={
+                personaMode === 'expert'
+                  ? 'bg-primary text-primary-foreground rounded px-2.5 py-1 text-xs font-medium'
+                  : 'text-muted-foreground rounded px-2.5 py-1 text-xs'
+              }
+            >
+              Expert
+            </button>
+          </div>
+        </div>
+
+        {personaMode === 'guided' ? (
+          <PersonaBuilder value={personaDraft} onChange={setPersonaDraft} />
+        ) : (
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={6}
+            aria-label="Agent instructions"
+            placeholder={STARTER_PROMPT}
+            className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 text-sm leading-relaxed"
+          />
+        )}
       </section>
 
       <section

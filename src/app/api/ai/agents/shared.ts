@@ -12,6 +12,10 @@ import {
 } from '@/features/assistant/lib/ai/types';
 import { OLLAMA_PLACEHOLDER_KEY } from '@/features/assistant/lib/ai/defaults';
 import { readTriggerKeywords } from '@/features/assistant/lib/ai/agents';
+import {
+  composePersonaPrompt,
+  readPersonaConfig,
+} from '@/features/assistant/lib/ai/persona';
 
 // ============================================================
 // Shared request parsing + live validation for the single default
@@ -114,12 +118,34 @@ export async function parseAgentPayload(
   }
 
   // ---- system prompt -------------------------------------------
-  const systemPrompt =
+  let systemPrompt =
     typeof body.system_prompt === 'string' && body.system_prompt.trim()
       ? body.system_prompt.trim()
       : null;
   if (systemPrompt && systemPrompt.length > 8000) {
     return err('system_prompt is too long (max 8000 characters)');
+  }
+
+  // ---- guided persona (enterprise prompt composer) ---------------
+  // Clients answer a short form instead of writing prompts; the
+  // SERVER composes the enterprise-grade system prompt so the stored
+  // prompt is always the authoritative, founder-quality version.
+  // `personaConfig: null` clears it (expert mode: raw prompt wins).
+  let personaConfig: Record<string, unknown> | null | undefined;
+  if (provided.has('persona_config')) {
+    if (body.persona_config === null) {
+      personaConfig = null;
+    } else {
+      const parsed = readPersonaConfig(body.persona_config);
+      if (!parsed) {
+        return err(
+          'persona_config needs at least a business name, industry, and tone'
+        );
+      }
+      personaConfig = parsed as unknown as Record<string, unknown>;
+      systemPrompt = composePersonaPrompt(parsed);
+      provided.add('system_prompt');
+    }
   }
 
   // ---- API key ---------------------------------------------------
@@ -234,6 +260,12 @@ export async function parseAgentPayload(
     settings.triggerKeywords = readTriggerKeywords(
       rawSettings.triggerKeywords
     );
+  }
+
+  // Guided persona answers persist alongside the composed prompt so
+  // the form can be re-opened and re-edited later.
+  if (personaConfig !== undefined) {
+    settings.personaConfig = personaConfig;
   }
 
   // Embeddings key (both kinds): non-empty string sets it (validated
