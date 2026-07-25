@@ -18,6 +18,7 @@ import {
   Package,
   PanelLeftClose,
   Pencil,
+  Plug,
   Settings,
   ShieldCheck,
   Users,
@@ -239,31 +240,52 @@ function PlatformGroup() {
 
   if (!isSuperAdmin) return null;
 
+  const items = [
+    {
+      href: '/admin/workspaces',
+      label: 'Admin console',
+      icon: ShieldCheck,
+      // /admin is active for every sub-page EXCEPT providers, which
+      // has its own dedicated entry below.
+      active:
+        isActive(pathname, '/admin') &&
+        !pathname.startsWith('/admin/providers'),
+    },
+    {
+      href: '/admin/providers',
+      label: 'Providers',
+      icon: Plug,
+      active: pathname.startsWith('/admin/providers'),
+    },
+  ];
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              tooltip="Go to Admin console"
-              isActive={isActive(pathname, '/admin')}
-              render={
-                <Link
-                  href="/admin/workspaces"
-                  prefetch
-                  onMouseEnter={() => router.prefetch('/admin/workspaces')}
-                  onFocus={() => router.prefetch('/admin/workspaces')}
-                  onClick={() => {
-                    if (isMobile) setOpenMobile(false);
-                  }}
-                />
-              }
-            >
-              <ShieldCheck aria-hidden="true" />
-              <span>Admin console</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.href}>
+              <SidebarMenuButton
+                tooltip={`Go to ${item.label}`}
+                isActive={item.active}
+                render={
+                  <Link
+                    href={item.href}
+                    prefetch
+                    onMouseEnter={() => router.prefetch(item.href)}
+                    onFocus={() => router.prefetch(item.href)}
+                    onClick={() => {
+                      if (isMobile) setOpenMobile(false);
+                    }}
+                  />
+                }
+              >
+                <item.icon aria-hidden="true" />
+                <span>{item.label}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
