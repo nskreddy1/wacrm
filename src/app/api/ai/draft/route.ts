@@ -5,7 +5,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
-import { loadAiConfig } from '@/features/assistant/lib/ai/config';
+import { loadAgentConfig } from '@/features/assistant/lib/ai/agents';
 import { buildConversationContext } from '@/features/assistant/lib/ai/context';
 import { retrieveKnowledge } from '@/features/assistant/lib/ai/knowledge';
 import { generateReply } from '@/features/assistant/lib/ai/generate';
@@ -70,19 +70,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const config = await loadAiConfig(supabase, accountId).catch((err) => {
-      // Decrypt failure — surface distinctly from "not configured".
-      console.error('[ai/draft] loadAiConfig error:', err);
-      throw new AiError('Stored API key could not be decrypted.', {
-        code: 'key_decrypt_failed',
-        status: 400,
-      });
-    });
+    // Drafts are the "AI suggestions" capability of the account's
+    // single agent — gated on its suggestions_enabled column.
+    const config = await loadAgentConfig(
+      supabase,
+      accountId,
+      'suggestions'
+    ).catch(
+      (err) => {
+        // Decrypt failure — surface distinctly from "not configured".
+        console.error('[ai/draft] loadAgentConfig error:', err);
+        throw new AiError('Stored API key could not be decrypted.', {
+          code: 'key_decrypt_failed',
+          status: 400,
+        });
+      }
+    );
     if (!config) {
       return NextResponse.json(
         {
           error:
-            'AI assistant is not set up. Enable it in Settings → AI Assistant.',
+            'AI suggestions are not set up. Configure your agent in AI Agents.',
           code: 'ai_not_configured',
         },
         { status: 400 }
@@ -137,6 +145,7 @@ export async function POST(request: Request) {
         accountId,
         conversationId,
         mode: 'draft',
+        agentId: config.agentId,
         provider: config.provider,
         model: config.model,
         usage,

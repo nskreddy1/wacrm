@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './admin-client';
-import { loadAiConfig } from './config';
+import { loadAgentConfig } from './agents';
+import { routeConversation } from './router';
 import { buildConversationContext } from './context';
 import { retrieveKnowledge } from './knowledge';
 import { buildCrmContext } from './crm-context';
@@ -49,15 +50,15 @@ export async function dispatchInboundToAiReply(
   try {
     const db = supabaseAdmin();
 
-    // Auto-reply is independent from the inbox "Draft with AI" master
-    // switch. Load the saved provider config even when `is_active` is off;
-    // this worker is governed exclusively by `auto_reply_enabled`.
-    const config = await loadAiConfig(db, accountId, { requireActive: false });
-    if (!config || !config.autoReplyEnabled) return;
+    // Single default agent, "auto-reply" capability: only runs when the
+    // agent's autoreply_enabled column is on. Unconfigured or switched
+    // off → silent no-op (suggestions_enabled is irrelevant here).
+    const config = await loadAgentConfig(db, accountId, 'autoreply');
+    if (!config) return;
 
-    // Reply-hours window: outside the configured schedule the bot stands
-    // down entirely and the inbound waits in the inbox for a human.
-    if (!isWithinAutoReplySchedule(config)) return;
+    // NOTE: the schedule gate runs AFTER routing (below) — each custom
+    // agent can have its own on-duty hours, so a night-shift agent can
+    // answer while the default agent is off the clock.
 
     // Deterministic, user-configured responders win over the LLM — the
     // caller already excludes messages a Flow consumed. A flow with a
@@ -84,35 +85,6 @@ export async function dispatchInboundToAiReply(
     if (convErr || !conv) return;
     if (conv.assigned_agent_id) return; // a human owns this thread
     if (conv.ai_autoreply_disabled) return; // handed off / turned off here
-    // Reply-cap gate, by limit mode:
-    //  - never:            no cap — the bot always replies.
-    //  - per_conversation: lifetime cap; cheap early-out here, the
-    //                      authoritative check is the atomic claim below.
-    //  - per_day:          cap resets at midnight in the account's
-    //                      timezone; counted from today's bot messages.
-    if (
-      config.autoReplyLimitMode === 'per_conversation' &&
-      conv.ai_reply_count >= config.autoReplyMaxPerConversation
-    ) {
-      return;
-    }
-    if (config.autoReplyLimitMode === 'per_day') {
-      const dayStart = startOfTodayUtc(config.autoReplyTimezone);
-      const { count, error: cntErr } = await db
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('conversation_id', conversationId)
-        .eq('sender_type', 'bot')
-        .eq('ai_generated', true)
-        .gte('created_at', dayStart.toISOString());
-      if (cntErr) {
-        // Can't establish today's count — fail safe (don't reply) so a
-        // transient DB error can never blow past the cap.
-        console.error('[ai auto-reply] per-day count failed:', cntErr);
-        return;
-      }
-      if ((count ?? 0) >= config.autoReplyMaxPerConversation) return;
-    }
 
     const messages = await buildConversationContext(db, conversationId);
     if (messages.length === 0) return;
@@ -133,6 +105,55 @@ export async function dispatchInboundToAiReply(
       return;
     }
 
+    // Supervisor router (2026 agentic pattern): keyword triggers →
+    // on-duty filter → LLM classifier → fallback to the default agent.
+    // The routed agent's config carries ITS guardrails where it set
+    // them (cap, schedule, escalation) and inherits the default's
+    // where it didn't — so every gate below runs on activeConfig.
+    // Fails open to the default agent; costs nothing when no custom
+    // agents exist.
+    const { config: activeConfig, specialist } = await routeConversation(
+      db,
+      accountId,
+      config,
+      messages
+    );
+
+    // Reply-hours window of WHOEVER is answering: outside the routed
+    // agent's schedule the bot stands down and the inbound waits in
+    // the inbox for a human.
+    if (!isWithinAutoReplySchedule(activeConfig)) return;
+
+    // Reply-cap gate, by the routed agent's limit mode:
+    //  - never:            no cap — the bot always replies.
+    //  - per_conversation: lifetime cap; cheap early-out here, the
+    //                      authoritative check is the atomic claim below.
+    //  - per_day:          cap resets at midnight in the agent's
+    //                      timezone; counted from today's bot messages.
+    if (
+      activeConfig.autoReplyLimitMode === 'per_conversation' &&
+      conv.ai_reply_count >= activeConfig.autoReplyMaxPerConversation
+    ) {
+      return;
+    }
+    if (activeConfig.autoReplyLimitMode === 'per_day') {
+      const dayStart = startOfTodayUtc(activeConfig.autoReplyTimezone);
+      const { count, error: cntErr } = await db
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId)
+        .eq('sender_type', 'bot')
+        .eq('ai_generated', true)
+        .gte('created_at', dayStart.toISOString());
+      if (cntErr) {
+        // Can't establish today's count — fail safe (don't reply) so a
+        // transient DB error can never blow past the cap.
+        console.error('[ai auto-reply] per-day count failed:', cntErr);
+        return;
+      }
+      if ((count ?? 0) >= activeConfig.autoReplyMaxPerConversation) return;
+    }
+
     // Ground the reply in the account's knowledge base and the
     // contact's live CRM record (both best-effort, fetched in parallel).
     const [knowledge, crmContext] = await Promise.all([
@@ -147,10 +168,12 @@ export async function dispatchInboundToAiReply(
     // cached prefix across replies.
     const { text, handoff, usage, sentiment, escalationReason } =
       await generateReply({
-        config,
+        config: activeConfig,
         messages,
         promptParts: buildPromptParts({
-          userPrompt: config.systemPrompt,
+          // The routed persona — the specialist's when matched, else
+          // the default agent's.
+          userPrompt: activeConfig.systemPrompt,
           mode: 'auto_reply',
           knowledge,
           crmContext,
@@ -167,8 +190,11 @@ export async function dispatchInboundToAiReply(
       accountId,
       conversationId,
       mode: 'auto_reply',
-      provider: config.provider,
-      model: config.model,
+      // Attribute spend to the specialist that actually answered,
+      // falling back to the default agent.
+      agentId: specialist?.id ?? config.agentId,
+      provider: activeConfig.provider,
+      model: activeConfig.model,
       usage,
       keySource: config.keySource,
     });
@@ -202,8 +228,10 @@ export async function dispatchInboundToAiReply(
       // Never stomp an existing human assignment.
       let assignee: string | null = null;
       if (!conv.assigned_agent_id) {
-        if (config.handoffAgentId) {
-          assignee = config.handoffAgentId;
+        // The routed agent's own escalation target wins; agents
+        // without one inherit the default agent's.
+        if (activeConfig.handoffAgentId) {
+          assignee = activeConfig.handoffAgentId;
         } else {
           // Round-robin over the account's members. A missing RPC (mig-
           // ration not applied) or empty account degrades to unassigned.
@@ -259,8 +287,8 @@ export async function dispatchInboundToAiReply(
     // send (their gates already ran above), but we still claim a slot so
     // `ai_reply_count` keeps tracking total bot replies for the thread.
     const lifetimeCap =
-      config.autoReplyLimitMode === 'per_conversation'
-        ? config.autoReplyMaxPerConversation
+      activeConfig.autoReplyLimitMode === 'per_conversation'
+        ? activeConfig.autoReplyMaxPerConversation
         : 2147483647;
     const { data: claimed, error: claimErr } = await db.rpc(
       'claim_ai_reply_slot',
@@ -282,14 +310,32 @@ export async function dispatchInboundToAiReply(
     // Channel-agnostic send: the orchestrator resolves the conversation's
     // channel connection (Meta / Twilio / legacy config) and persists the
     // message row. Replaces the Meta-hardcoded engineSendText path.
-    await sendChannelMessage({
-      accountId,
-      conversationId,
-      contactId,
-      payload: { kind: 'text', text },
-      senderType: 'bot',
-      aiGenerated: true,
-    });
+    //
+    // If the send FAILS, refund the slot we claimed above — otherwise a
+    // provider outage (e.g. Twilio 21703) burns through the whole
+    // per-conversation cap with zero messages delivered, and the bot
+    // goes permanently silent on the thread.
+    try {
+      await sendChannelMessage({
+        accountId,
+        conversationId,
+        contactId,
+        payload: { kind: 'text', text },
+        senderType: 'bot',
+        aiGenerated: true,
+      });
+    } catch (sendErr) {
+      const { error: releaseErr } = await db.rpc('release_ai_reply_slot', {
+        conversation_id: conversationId,
+      });
+      if (releaseErr) {
+        console.error(
+          '[ai auto-reply] failed to refund reply slot after send failure:',
+          releaseErr
+        );
+      }
+      throw sendErr; // handled by the outer catch (logged, never thrown)
+    }
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err);
   }

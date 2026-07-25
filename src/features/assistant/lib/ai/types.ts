@@ -84,6 +84,10 @@ export interface AiConfig {
    *  presets derive their URL from the registry in `defaults.ts`. */
   baseUrl?: string | null;
   systemPrompt: string | null;
+  /** Auto-Reply Agent's own system prompt. Null = inherit
+   *  `systemPrompt` (the Support Copilot prompt) — the pre-split
+   *  behaviour, so existing accounts are unaffected. */
+  autoreplySystemPrompt?: string | null;
   isActive: boolean;
   autoReplyEnabled: boolean;
   autoReplyMaxPerConversation: number;

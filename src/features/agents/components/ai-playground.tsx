@@ -19,21 +19,35 @@ interface Turn {
   content: string;
   /** assistant-only: the agent signalled a human handoff on this turn. */
   handoff?: boolean;
+  /** assistant-only: name of the specialist the router picked, if any. */
+  routedTo?: string | null;
 }
 
-/** The subset of GET /api/ai/config the playground cares about. */
-interface ConfigStatus {
+/** The subset of GET /api/ai/agents the playground cares about. */
+interface AgentStatus {
   configured: boolean;
-  env_fallback: boolean;
-  auto_reply_live: boolean;
-  is_active?: boolean;
+  autoReplyLive: boolean;
 }
 
-const fetchConfig = async (url: string): Promise<ConfigStatus> => {
+const fetchAgentStatus = async (url: string): Promise<AgentStatus> => {
   const res = await fetch(url);
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(payload.error ?? 'Could not load AI status');
-  return payload as ConfigStatus;
+  const agent = payload?.agent;
+  return {
+    configured: Boolean(
+      agent?.provider &&
+        agent?.model &&
+        (agent?.hasApiKey || agent?.provider === 'ollama')
+    ),
+    autoReplyLive: Boolean(
+      agent?.isEnabled &&
+        agent?.autoreplyEnabled &&
+        agent?.provider &&
+        agent?.model &&
+        (agent?.hasApiKey || agent?.provider === 'ollama')
+    ),
+  };
 };
 
 export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
@@ -41,12 +55,14 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Config-aware empty state: "Go to Setup" only shows when the agent
+  // Status-aware empty state: "Go to Setup" only shows when the agent
   // genuinely isn't set up, instead of unconditionally.
-  const { data: config } = useSWR<ConfigStatus>('/api/ai/config', fetchConfig, {
-    revalidateOnFocus: true,
-  });
-  const isSetUp = Boolean(config && (config.configured || config.env_fallback));
+  const { data: config } = useSWR<AgentStatus>(
+    '/api/ai/agents',
+    fetchAgentStatus,
+    { revalidateOnFocus: true }
+  );
+  const isSetUp = Boolean(config?.configured);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -90,6 +106,10 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
               ? data.reply
               : '',
           handoff: Boolean(data.handoff),
+          routedTo:
+            typeof data.routedTo === 'string' && data.routedTo.trim()
+              ? data.routedTo
+              : null,
         },
       ]);
     } catch {
@@ -167,7 +187,7 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
                 <p
                   className={cn(
                     'mt-2 flex items-center gap-1.5 text-xs',
-                    config.auto_reply_live
+                    config.autoReplyLive
                       ? 'text-emerald-600 dark:text-emerald-500'
                       : 'text-muted-foreground'
                   )}
@@ -175,14 +195,14 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
                   <span
                     className={cn(
                       'inline-block size-1.5 rounded-full',
-                      config.auto_reply_live
+                      config.autoReplyLive
                         ? 'bg-emerald-500'
                         : 'bg-muted-foreground/50'
                     )}
                   />
-                  {config.auto_reply_live
+                  {config.autoReplyLive
                     ? 'Auto-reply is live — customers get these answers automatically.'
-                    : 'Auto-reply is off — replies here are test-only until you enable it in Setup.'}
+                    : 'Auto-reply is off — replies here are test-only until you enable it.'}
                 </p>
               </>
             )}
@@ -208,6 +228,12 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
                   : 'bg-muted text-foreground rounded-bl-sm'
               )}
             >
+              {t.role === 'assistant' && t.routedTo && (
+                <p className="text-primary mb-1 flex items-center gap-1 text-xs font-medium">
+                  <ArrowRight className="h-3 w-3" />
+                  Routed to: {t.routedTo}
+                </p>
+              )}
               {t.content && <p className="whitespace-pre-wrap">{t.content}</p>}
               {t.role === 'assistant' && t.handoff && (
                 <p

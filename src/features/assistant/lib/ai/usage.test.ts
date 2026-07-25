@@ -23,6 +23,9 @@ describe('logAiUsage', () => {
     expect(insert).toHaveBeenCalledWith({
       account_id: 'acct-1',
       conversation_id: 'conv-1',
+      // Null when the caller doesn't attribute the spend to a specific
+      // agent row (multi-agent accounts pass the routed agent's id).
+      agent_id: null,
       mode: 'auto_reply',
       provider: 'anthropic',
       model: 'claude-x',

@@ -7,6 +7,10 @@ export interface LogAiUsageArgs {
    *  deleted between generation and logging. */
   conversationId: string | null;
   mode: 'auto_reply' | 'draft';
+  /** Which `ai_agents` row made the call — drives per-agent Run
+   *  History / Usage. Optional: pre-rebuild callers and env-fallback
+   *  paths have no agent. */
+  agentId?: string | null;
   provider: AiProvider;
   model: string;
   /** Provider usage; a no-op when null (nothing worth recording). */
@@ -39,6 +43,7 @@ export async function logAiUsage(
       account_id: args.accountId,
       conversation_id: args.conversationId,
       mode: args.mode,
+      agent_id: args.agentId ?? null,
       provider: args.provider,
       model: args.model,
       prompt_tokens: args.usage.promptTokens,

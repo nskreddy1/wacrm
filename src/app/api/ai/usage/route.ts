@@ -47,6 +47,13 @@ export async function GET(request: Request) {
         ? Math.min(90, Math.floor(rawDays))
         : DEFAULT_WINDOW_DAYS;
 
+    // Optional per-agent scope: each agent's Activity tab shows only
+    // its own surface's spend (auto_reply ↔ Auto-Reply Agent, draft ↔
+    // Support Copilot). Omitted → account-wide, the pre-split view.
+    const rawMode = url.searchParams.get('mode');
+    const mode =
+      rawMode === 'auto_reply' || rawMode === 'draft' ? rawMode : null;
+
     // Align the query cutoff to the START of the oldest local day we'll
     // chart (not a rolling `now - N*24h` instant). Otherwise rows in the
     // oldest partial day would be counted in the totals but fall outside
@@ -55,7 +62,7 @@ export async function GET(request: Request) {
     // chart (see lib/dashboard/date-utils).
     const since = daysAgoStart(days - 1);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('ai_usage_log')
       .select(
         'created_at, mode, provider, model, prompt_tokens, completion_tokens, total_tokens'
@@ -64,6 +71,9 @@ export async function GET(request: Request) {
       .gte('created_at', since.toISOString())
       .order('created_at', { ascending: false })
       .limit(MAX_ROWS + 1);
+    if (mode) query = query.eq('mode', mode);
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('[ai/usage GET] fetch error:', error);

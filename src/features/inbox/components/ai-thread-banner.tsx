@@ -11,7 +11,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 // ------------------------------------------------------------
 // Account AI status is the same for every conversation, so cache it per
 // account and reuse it across thread switches instead of hitting
-// /api/ai/config every time the agent opens a chat.
+// /api/ai/agents every time the agent opens a chat.
 //
 // Keyed by accountId (a multi-account user switching workspaces must not
 // see the previous account's status), and only *successful* fetches are
@@ -30,18 +30,21 @@ async function fetchAiAccountStatus(
   const cached = statusCache.get(accountId);
   if (cached) return cached;
   try {
-    const res = await fetch('/api/ai/config', { cache: 'no-store' });
+    const res = await fetch('/api/ai/agents', { cache: 'no-store' });
     if (!res.ok) return { autoReplyOn: false }; // don't cache a transient failure
     const j = await res.json();
+    const agent = j?.agent;
     const status = {
-      // Server-computed effective status — mirrors loadAiConfig, including
-      // the shared env-key fallback, so accounts with no BYO key still get
-      // the Take over / Resume AI toggle. Falls back to the legacy fields
-      // for a stale server that doesn't send auto_reply_live yet.
-      autoReplyOn:
-        typeof j?.auto_reply_live === 'boolean'
-          ? j.auto_reply_live
-          : !!(j?.configured && j?.is_active && j?.auto_reply_enabled),
+      // The single default agent's auto-reply capability: master switch
+      // AND the capability's own column, AND a usable provider config —
+      // mirrors loadAgentConfig's gating on the server.
+      autoReplyOn: !!(
+        agent?.isEnabled &&
+        agent?.autoreplyEnabled &&
+        agent?.provider &&
+        agent?.model &&
+        (agent?.hasApiKey || agent?.provider === 'ollama')
+      ),
     };
     statusCache.set(accountId, status);
     return status;
