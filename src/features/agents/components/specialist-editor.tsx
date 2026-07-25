@@ -207,16 +207,18 @@ export function SpecialistEditor({
         )}
         {!isCreate && canManage && (
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
-                className="text-destructive hover:text-destructive ml-auto"
-                disabled={deleting}
-              >
-                <Trash2 className="size-4" aria-hidden />
-                Delete
-              </Button>
-            </AlertDialogTrigger>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive ml-auto"
+                  disabled={deleting}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                  Delete
+                </Button>
+              }
+            />
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>

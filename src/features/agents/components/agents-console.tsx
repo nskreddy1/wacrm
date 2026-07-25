@@ -137,8 +137,14 @@ export function AgentsConsole() {
             {String(activeCount).padStart(2, '0')}
           </span>
         </div>
-        {canManage && !agent && !showWizard && (
-          <Button onClick={() => setShowWizard(true)}>
+        {canManage && !showWizard && selection.type !== 'new-specialist' && (
+          <Button
+            onClick={() =>
+              agent
+                ? setSelection({ type: 'new-specialist' })
+                : setShowWizard(true)
+            }
+          >
             <Plus className="size-4" aria-hidden />
             Configure New Agent
           </Button>
@@ -158,7 +164,29 @@ export function AgentsConsole() {
             {isLoading ? (
               <Skeleton className="h-16 w-full rounded-lg" />
             ) : running && agent ? (
-              <AgentRailCard agent={agent} selected />
+              <>
+                <AgentRailCard
+                  agent={agent}
+                  selected={selection.type === 'default'}
+                  onSelect={() => {
+                    setSelection({ type: 'default' });
+                    setShowWizard(false);
+                  }}
+                />
+                {activeSpecialists.map((s) => (
+                  <AgentRailCard
+                    key={s.id}
+                    agent={s}
+                    isSpecialist
+                    selected={
+                      selection.type === 'specialist' && selection.id === s.id
+                    }
+                    onSelect={() =>
+                      setSelection({ type: 'specialist', id: s.id })
+                    }
+                  />
+                ))}
+              </>
             ) : (
               <div className="border-border text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-sm">
                 No agents running.
@@ -168,17 +196,52 @@ export function AgentsConsole() {
 
           <div className="flex flex-col gap-2">
             <span className="text-muted-foreground px-1 text-[11px] font-medium tracking-wider uppercase">
-              Inactive agents ({agent && !running ? 1 : 0})
+              Inactive agents (
+              {(agent && !running ? 1 : 0) +
+                (running
+                  ? specialists.length - activeSpecialists.length
+                  : specialists.length)}
+              )
             </span>
             {isLoading ? (
               <Skeleton className="h-16 w-full rounded-lg" />
-            ) : agent && !running ? (
-              <AgentRailCard agent={agent} selected />
-            ) : !agent ? (
-              <div className="border-border text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-sm">
-                No agent yet.
-              </div>
-            ) : null}
+            ) : (
+              <>
+                {agent && !running && (
+                  <AgentRailCard
+                    agent={agent}
+                    selected={selection.type === 'default'}
+                    onSelect={() => {
+                      setSelection({ type: 'default' });
+                      setShowWizard(false);
+                    }}
+                  />
+                )}
+                {/* Specialists are routed through the default agent, so
+                    they're only "active" while it is running. */}
+                {(running
+                  ? specialists.filter((s) => !s.isEnabled)
+                  : specialists
+                ).map((s) => (
+                  <AgentRailCard
+                    key={s.id}
+                    agent={s}
+                    isSpecialist
+                    selected={
+                      selection.type === 'specialist' && selection.id === s.id
+                    }
+                    onSelect={() =>
+                      setSelection({ type: 'specialist', id: s.id })
+                    }
+                  />
+                ))}
+                {!agent && (
+                  <div className="border-border text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-sm">
+                    No agent yet.
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </aside>
 
@@ -202,6 +265,38 @@ export function AgentsConsole() {
               ) : (
                 <p className="text-muted-foreground py-12 text-center text-sm">
                   The AI agent is not set up yet. Ask an admin to configure it.
+                </p>
+              )}
+            </div>
+          ) : selection.type === 'new-specialist' ? (
+            <div className="p-5">
+              <SpecialistEditor
+                specialist={null}
+                canManage={canManage}
+                onCancel={() => setSelection({ type: 'default' })}
+                onSaved={async () => {
+                  await mutate();
+                  setSelection({ type: 'default' });
+                }}
+              />
+            </div>
+          ) : selection.type === 'specialist' ? (
+            <div className="p-5">
+              {selectedSpecialist ? (
+                <SpecialistEditor
+                  key={selectedSpecialist.id}
+                  specialist={selectedSpecialist}
+                  canManage={canManage}
+                  onCancel={() => setSelection({ type: 'default' })}
+                  onSaved={() => mutate()}
+                  onDeleted={async () => {
+                    await mutate();
+                    setSelection({ type: 'default' });
+                  }}
+                />
+              ) : (
+                <p className="text-muted-foreground py-12 text-center text-sm">
+                  This specialist no longer exists.
                 </p>
               )}
             </div>
@@ -316,38 +411,53 @@ export function AgentsConsole() {
 function AgentRailCard({
   agent,
   selected,
+  isSpecialist,
+  onSelect,
 }: {
   agent: ClientAgent;
   selected?: boolean;
+  isSpecialist?: boolean;
+  onSelect?: () => void;
 }) {
   const enabledCaps = CAPABILITY_ORDER.filter(
     (c) => agent[CAPABILITY_META[c].field]
   );
+  const subtitle = isSpecialist
+    ? agent.routeDescription || 'Specialist'
+    : agent.provider && agent.model
+      ? enabledCaps.length > 0
+        ? enabledCaps.map((c) => CAPABILITY_META[c].name).join(' · ')
+        : 'All capabilities off'
+      : 'Not configured';
+
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
       className={cn(
-        'flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left',
+        'flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors',
         selected
           ? 'border-primary/40 bg-card ring-primary/30 ring-1'
-          : 'border-border bg-muted/40'
+          : 'border-border bg-muted/40 hover:bg-muted'
       )}
     >
       <span className="border-border bg-background flex size-8 shrink-0 items-center justify-center rounded-md border">
-        <Bot className="text-muted-foreground size-4" aria-hidden />
+        {isSpecialist ? (
+          <UserRound className="text-muted-foreground size-4" aria-hidden />
+        ) : (
+          <Bot className="text-muted-foreground size-4" aria-hidden />
+        )}
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="text-foreground truncate text-sm font-medium">
           {agent.displayName || DEFAULT_AGENT_NAME}
         </span>
         <span className="text-muted-foreground truncate text-xs">
-          {agent.provider && agent.model
-            ? enabledCaps.length > 0
-              ? enabledCaps.map((c) => CAPABILITY_META[c].name).join(' · ')
-              : 'All capabilities off'
-            : 'Not configured'}
+          {subtitle}
         </span>
       </span>
-    </div>
+    </button>
   );
 }
 
