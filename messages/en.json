@@ -1787,7 +1787,16 @@
     },
     "security": {
       "title": "Login & security",
-      "description": "Change your password and sign out of your devices. These keep your account safe."
+      "description": "Change your password and sign out of your devices. These keep your account safe.",
+      "devicesTitle": "Logged-in devices",
+      "devicesDesc": "Every device with an active session on your account. Revoke any you don't recognize.",
+      "devicesLoading": "Loading devices…",
+      "devicesEmpty": "No devices recorded yet.",
+      "deviceCurrent": "This device",
+      "deviceLastActive": "active {time}",
+      "deviceRevoke": "Revoke",
+      "deviceRevoked": "Session revoked.",
+      "deviceRevokeFailed": "Could not revoke the session. Try again."
     },
     "apiKeys": {
       "title": "API keys",

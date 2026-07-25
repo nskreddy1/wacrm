@@ -1,5 +1,6 @@
 'use client';
 
+import { DevicesCard } from './devices-card';
 import { PasswordForm } from './password-form';
 import { SessionsCard } from './sessions-card';
 import { SettingsPanelHead } from './settings-panel-head';
@@ -16,6 +17,7 @@ export function SecurityPanel() {
       <SettingsPanelHead title={t('title')} description={t('description')} />
       <div className="space-y-4">
         <PasswordForm />
+        <DevicesCard />
         <SessionsCard />
       </div>
     </section>
