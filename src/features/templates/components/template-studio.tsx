@@ -62,6 +62,8 @@ import {
   CHANNEL_META,
   STATUS_META,
   TEMPLATE_VARIABLES,
+  withSampleValues,
+  type CustomTemplateVariable,
   type HeaderKind,
   type StudioTemplate,
   type TemplateButton,
@@ -907,6 +909,108 @@ function SmsEditor({
   );
 }
 
+function EmailEditor({
+  template,
+  onPatch,
+}: {
+  template: StudioTemplate;
+  onPatch: (patch: Partial<StudioTemplate['email']>) => void;
+}) {
+  const email = template.email;
+  return (
+    <div className="flex flex-col gap-5">
+      <section
+        aria-labelledby="email-subject-label"
+        className="flex flex-col gap-2"
+      >
+        <Label
+          id="email-subject-label"
+          htmlFor="email-subject"
+          className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+        >
+          Subject
+        </Label>
+        <Input
+          id="email-subject"
+          value={email.subject}
+          placeholder="e.g. Your order {{1}} has shipped"
+          onChange={(e) => onPatch({ subject: e.target.value })}
+        />
+      </section>
+
+      <section
+        aria-labelledby="email-body-label"
+        className="flex flex-col gap-2"
+      >
+        <Label
+          id="email-body-label"
+          className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+        >
+          Body
+        </Label>
+        <Textarea
+          value={email.body}
+          rows={12}
+          placeholder={
+            'Write your email. Plain text with variables — {{first_name}}, {{company}}…\n\nMarketing emails must include an unsubscribe line.'
+          }
+          onChange={(e) => onPatch({ body: e.target.value })}
+          className="resize-y font-sans text-sm leading-relaxed"
+        />
+        <VariableChips
+          onInsert={(token) =>
+            onPatch({
+              body: `${email.body}${email.body && !email.body.endsWith(' ') ? ' ' : ''}${token}`,
+            })
+          }
+        />
+      </section>
+    </div>
+  );
+}
+
+/**
+ * Desktop email-client style preview: sender row, subject line, then
+ * the body with variables resolved. Email doesn't get the phone
+ * frame — it's read in an inbox, so the preview mirrors that.
+ */
+function EmailPreview({
+  email,
+  customVariables,
+}: {
+  email: StudioTemplate['email'];
+  customVariables?: CustomTemplateVariable[];
+}) {
+  const fill = (text: string) => withSampleValues(text, customVariables);
+  return (
+    <div className="border-border bg-card w-full overflow-hidden rounded-xl border shadow-sm">
+      <div className="border-border flex items-center gap-2.5 border-b px-4 py-3">
+        <div className="bg-primary/15 text-primary flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+          A
+        </div>
+        <div className="min-w-0">
+          <p className="text-foreground truncate text-xs font-semibold">
+            Acme Workspace
+          </p>
+          <p className="text-muted-foreground truncate text-[11px]">
+            to customer@example.com
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2 px-4 py-3">
+        <p className="text-foreground text-sm font-semibold text-balance">
+          {email.subject.trim() ? fill(email.subject) : 'Subject preview'}
+        </p>
+        <p className="text-foreground/90 text-xs leading-relaxed whitespace-pre-wrap">
+          {email.body.trim()
+            ? fill(email.body)
+            : 'Your email body will appear here as you type.'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------
 // Studio shell
 // ------------------------------------------------------------
@@ -1027,9 +1131,9 @@ export function TemplateStudio() {
       clearLocal(active.id);
       setActiveId(savedId);
       toast.success(
-        active.channel === 'sms'
-          ? 'SMS template saved and active.'
-          : 'Draft saved.'
+        active.channel === 'whatsapp'
+          ? 'Draft saved.'
+          : `${CHANNEL_META[active.channel].label} template saved and active.`
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed.');
@@ -1116,9 +1220,11 @@ export function TemplateStudio() {
   if (!active) {
     return (
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <ChannelRail active={studioChannel} onSelect={switchStudio} />
         <TemplateRail
           templates={templates}
           activeId=""
+          channel={studioChannel}
           isLoading={isLoading}
           onSelect={setActiveId}
           onCreate={createTemplate}
@@ -1129,7 +1235,7 @@ export function TemplateStudio() {
           {loadError ??
             (isLoading
               ? 'Loading templates…'
-              : 'Select a template or create a new one.')}
+              : `Select a ${CHANNEL_META[studioChannel].label} template or create a new one.`)}
         </div>
       </div>
     );
@@ -1137,9 +1243,11 @@ export function TemplateStudio() {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <ChannelRail active={studioChannel} onSelect={switchStudio} />
       <TemplateRail
         templates={templates}
         activeId={active.id}
+        channel={studioChannel}
         isLoading={isLoading}
         onSelect={setActiveId}
         onCreate={createTemplate}
@@ -1207,22 +1315,20 @@ export function TemplateStudio() {
           </div>
         </div>
 
-        {/* Channel switch */}
-        <Tabs
-          value={active.channel}
-          onValueChange={(v) => patchActive({ channel: v as TemplateChannel })}
-          className="mt-5"
-        >
-          <TabsList className="grid w-full max-w-xs grid-cols-2">
-            <TabsTrigger value="whatsapp" className="gap-1.5">
-              <MessageSquareText className="size-4" aria-hidden="true" />{' '}
-              WhatsApp
-            </TabsTrigger>
-            <TabsTrigger value="sms" className="gap-1.5">
-              <Smartphone className="size-4" aria-hidden="true" /> SMS
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/* Studio badge — the channel is fixed per studio; switch
+            studios with the vertical rail on the far left. */}
+        <div className="mt-5 flex items-center gap-2">
+          <span className="bg-primary/10 text-primary inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold">
+            {studioChannel === 'whatsapp' ? (
+              <MessageSquareText className="size-3.5" aria-hidden="true" />
+            ) : studioChannel === 'sms' ? (
+              <Smartphone className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Mail className="size-3.5" aria-hidden="true" />
+            )}
+            {CHANNEL_META[studioChannel].studioLabel}
+          </span>
+        </div>
 
         <Separator className="my-5" />
 
@@ -1232,6 +1338,11 @@ export function TemplateStudio() {
             onPatch={(p) =>
               patchActive({ whatsapp: { ...active.whatsapp, ...p } })
             }
+          />
+        ) : active.channel === 'email' ? (
+          <EmailEditor
+            template={active}
+            onPatch={(p) => patchActive({ email: { ...active.email, ...p } })}
           />
         ) : (
           <SmsEditor
@@ -1324,7 +1435,7 @@ export function TemplateStudio() {
               {busy === 'save' && (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               )}
-              {active.channel === 'sms' ? 'Save template' : 'Save draft'}
+              {active.channel === 'whatsapp' ? 'Save draft' : 'Save template'}
             </Button>
           {active.channel === 'whatsapp' &&
             active.provider === 'twilio' &&
@@ -1361,23 +1472,32 @@ export function TemplateStudio() {
         className="flex w-full shrink-0 flex-col items-center gap-4 lg:w-[320px]"
         aria-label="Live preview"
       >
-        <Tabs value={device} onValueChange={(v) => setDevice(v as DeviceKind)}>
-          <TabsList>
-            <TabsTrigger value="iphone" className="px-4">
-              iPhone
-            </TabsTrigger>
-            <TabsTrigger value="android" className="px-4">
-              Android
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <PhonePreview
-          device={device}
-          channel={active.channel}
-          whatsapp={active.whatsapp}
-          sms={active.sms}
-          customVariables={customVariables}
-        />
+        {active.channel === 'email' ? (
+          <EmailPreview email={active.email} customVariables={customVariables} />
+        ) : (
+          <>
+            <Tabs
+              value={device}
+              onValueChange={(v) => setDevice(v as DeviceKind)}
+            >
+              <TabsList>
+                <TabsTrigger value="iphone" className="px-4">
+                  iPhone
+                </TabsTrigger>
+                <TabsTrigger value="android" className="px-4">
+                  Android
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <PhonePreview
+              device={device}
+              channel={active.channel === 'sms' ? 'sms' : 'whatsapp'}
+              whatsapp={active.whatsapp}
+              sms={active.sms}
+              customVariables={customVariables}
+            />
+          </>
+        )}
         <p className="text-muted-foreground text-center text-[11px] leading-snug">
           Live preview with sample data — variables like{' '}
           <span className="text-primary font-mono">{'{{first_name}}'}</span> are
