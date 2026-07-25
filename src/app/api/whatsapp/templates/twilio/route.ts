@@ -9,6 +9,7 @@ import {
   listTwilioContentAndApprovals,
   normalizeTwilioContent,
   submitTwilioApproval,
+  validateWhatsAppTemplateBody,
 } from '@/features/whatsapp/lib/twilio-content';
 import type { ChannelConnection, TemplateButton } from '@/types';
 
@@ -22,6 +23,7 @@ const createSchema = z.object({
   category: z.enum(['Marketing', 'Utility', 'Authentication']),
   language: z.string().trim().min(2).max(12),
   body_text: z.string().trim().min(1).max(1600),
+  header_type: z.enum(['text', 'image']).nullish(),
   header_content: z.string().trim().nullish(),
   footer_text: z.string().trim().nullish(),
   buttons: z
@@ -161,6 +163,8 @@ export async function POST(request: Request) {
                 ? 'Authentication'
                 : 'Marketing',
           body_text: normalized.body,
+          header_type: normalized.mediaUrl ? 'image' : null,
+          header_content: normalized.mediaUrl,
           buttons: normalized.buttons.length ? normalized.buttons : null,
           sample_values: content.variables
             ? {
@@ -213,18 +217,76 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     const input = parsed.data;
+
+    // ---- assemble the Twilio-compliant template -------------------
+    // Twilio's Content API has no separate text-header/footer params
+    // (only Meta does): a text header becomes a bold first line and
+    // the footer a subtly-italic last line, so what the user designed
+    // is what WhatsApp reviews and customers see. Header variables
+    // ({{1}}…) are renumbered ahead of the body's so numbering stays
+    // unique across the merged text.
+    const isImageHeader = input.header_type === 'image';
+    const headerText =
+      !isImageHeader && input.header_content?.trim()
+        ? input.header_content.trim()
+        : null;
+    const headerSamples = input.sample_values?.header ?? [];
+    const bodySamples = input.sample_values?.body ?? [];
+
+    let mergedBody = input.body_text;
+    let samples = bodySamples;
+    if (headerText) {
+      const headerVarCount = new Set(
+        Array.from(headerText.matchAll(/\{\{(\d+)\}\}/g), (m) => m[1])
+      ).size;
+      const shiftedBody = headerVarCount
+        ? input.body_text.replace(
+            /\{\{(\d+)\}\}/g,
+            (_, n) => `{{${Number(n) + headerVarCount}}}`
+          )
+        : input.body_text;
+      mergedBody = `*${headerText}*\n\n${shiftedBody}`;
+      samples = [...headerSamples, ...bodySamples];
+    }
+    if (input.footer_text?.trim())
+      mergedBody = `${mergedBody}\n\n_${input.footer_text.trim()}_`;
+
+    // Image headers require a public URL sample for review, and
+    // Twilio's basic content types don't combine media with buttons.
+    const mediaUrl = isImageHeader ? input.header_content?.trim() : undefined;
+    if (isImageHeader && !/^https:\/\//.test(mediaUrl ?? '')) {
+      return NextResponse.json(
+        {
+          error:
+            'Image headers need a public https image URL — upload the image somewhere public and paste its link.',
+        },
+        { status: 400 }
+      );
+    }
+    if (mediaUrl && input.buttons?.length) {
+      return NextResponse.json(
+        {
+          error:
+            'Twilio WhatsApp templates can\u2019t have both an image header and buttons — remove one of them.',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Catch WhatsApp auto-reject rules NOW instead of a silent
+    // rejection 48 hours from now.
+    const validationError = validateWhatsAppTemplateBody(mergedBody, samples);
+    if (validationError)
+      return NextResponse.json({ error: validationError }, { status: 400 });
+
     const variables = Object.fromEntries(
-      (input.sample_values?.body ?? []).map((value, index) => [
-        String(index + 1),
-        value,
-      ])
+      samples.map((value, index) => [String(index + 1), value])
     );
     const content = await createTwilioContent(credentials, {
       name: input.name,
       language: input.language,
-      body: input.body_text,
-      header: input.header_content ?? undefined,
-      footer: input.footer_text ?? undefined,
+      body: mergedBody,
+      mediaUrl,
       buttons: input.buttons as TemplateButton[] | undefined,
       variables,
     });
@@ -246,7 +308,9 @@ export async function POST(request: Request) {
           name: input.name,
           category: input.category,
           language: input.language,
-          header_type: input.header_content ? 'text' : null,
+          header_type: input.header_content
+            ? (input.header_type ?? 'text')
+            : null,
           header_content: input.header_content ?? null,
           body_text: input.body_text,
           footer_text: input.footer_text ?? null,

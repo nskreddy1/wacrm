@@ -15,6 +15,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
+import { logAuditEvent } from '@/lib/audit-events';
 
 interface BroadcastResult {
   phone: string;
@@ -245,6 +246,21 @@ export async function POST(request: Request) {
         failedCount++;
       }
     }
+
+    // Audit: who blasted what to how many people — counts only, no
+    // message content or phone numbers in the log.
+    await logAuditEvent(supabase, {
+      accountId,
+      actorId: user.id,
+      action: 'broadcast.sent',
+      entity: `template:${template_name}`,
+      meta: {
+        channel: 'whatsapp',
+        total: recipients.length,
+        sent: sentCount,
+        failed: failedCount,
+      },
+    });
 
     return NextResponse.json({
       success: true,

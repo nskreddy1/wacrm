@@ -29,6 +29,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
+import { logAuditEvent } from '@/lib/audit-events';
 
 const MEMBER_STATUSES = ['active', 'inactive', 'deleted'] as const;
 
@@ -103,6 +104,17 @@ export async function PATCH(
       if (error) return rpcErrorToResponse(error);
     }
 
+    await logAuditEvent(ctx.supabase, {
+      accountId: ctx.accountId,
+      actorId: ctx.userId,
+      action: 'member.updated',
+      entity: `member:${userId}`,
+      meta: {
+        ...(profileId ? { profile_id: profileId } : {}),
+        ...(status ? { status } : {}),
+      },
+    });
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     return toErrorResponse(err);
@@ -129,6 +141,13 @@ export async function DELETE(
     });
 
     if (error) return rpcErrorToResponse(error);
+
+    await logAuditEvent(ctx.supabase, {
+      accountId: ctx.accountId,
+      actorId: ctx.userId,
+      action: 'member.removed',
+      entity: `member:${userId}`,
+    });
 
     return NextResponse.json({ ok: true, newPersonalAccountId: data });
   } catch (err) {

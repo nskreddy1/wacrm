@@ -16,6 +16,7 @@ import { QuickRepliesManager } from '@/features/settings/components/quick-replie
 import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-tags-panel';
 import { DealsSettings } from '@/features/settings/components/deals-settings';
 import { MembersTab } from '@/features/settings/components/members-tab';
+import { ActivityPanel } from '@/features/settings/components/activity-panel';
 import { ApiKeysSettings } from '@/features/settings/components/api-keys-settings';
 import { ExternalSourcesSettings } from '@/features/settings/components/external-sources-settings';
 import { SupportTab } from '@/features/settings/components/support-tab';
@@ -66,6 +67,7 @@ export default function SettingsPage() {
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,
     members: <MembersTab />,
+    activity: <ActivityPanel />,
     api: <ApiKeysSettings />,
     'external-sources': <ExternalSourcesSettings />,
     support: <SupportTab />,

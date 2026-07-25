@@ -4,6 +4,7 @@ import {
   requireRole,
   toErrorResponse,
 } from '@/features/auth/lib/account';
+import { logAuditEvent } from '@/lib/audit-events';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -177,8 +178,17 @@ export async function POST(request: Request) {
       );
     }
 
+    const created = data as AgentRow;
+    await logAuditEvent(supabase, {
+      accountId,
+      actorId: userId,
+      action: 'agent.created',
+      entity: `ai_agent:${created.id}`,
+      meta: { name: created.display_name, kind: created.kind },
+    });
+
     return NextResponse.json(
-      { agent: toClientAgent(data as AgentRow) },
+      { agent: toClientAgent(created) },
       { status: 201 }
     );
   } catch (err) {

@@ -119,14 +119,43 @@ export async function listTwilioContentAndApprovals(
   return items;
 }
 
+/**
+ * WhatsApp review rules from the Content API docs
+ * (docs/content/twilio-text, twilio-media): a template body that
+ * starts or ends with a variable, or has two variables next to each
+ * other, is auto-rejected — and every variable needs a sample value.
+ * Validating here turns silent 48-hour rejections into instant,
+ * fixable messages for the user.
+ */
+export function validateWhatsAppTemplateBody(
+  body: string,
+  samples: string[]
+): string | null {
+  const trimmed = body.trim();
+  if (/^\{\{\d+\}\}/.test(trimmed))
+    return 'WhatsApp rejects templates that START with a variable — add some text before it (e.g. "Hi {{1}}").';
+  if (/\{\{\d+\}\}$/.test(trimmed))
+    return 'WhatsApp rejects templates that END with a variable — add some text after it (e.g. "{{1}}. Thank you!").';
+  if (/\{\{\d+\}\}\s*\{\{\d+\}\}/.test(trimmed))
+    return 'WhatsApp rejects templates with two variables next to each other — put words between them.';
+  const varCount = new Set(
+    Array.from(trimmed.matchAll(/\{\{(\d+)\}\}/g), (m) => m[1])
+  ).size;
+  const filled = samples.filter((s) => s.trim()).length;
+  if (varCount > filled)
+    return `Every variable needs a sample value for WhatsApp review — ${varCount} variable${varCount === 1 ? '' : 's'} but only ${filled} sample${filled === 1 ? '' : 's'} provided. Fill in the sample values under the body field.`;
+  return null;
+}
+
 export async function createTwilioContent(
   credentials: TwilioCredentials,
   input: {
     name: string;
     language: string;
     body: string;
-    header?: string;
-    footer?: string;
+    /** Public https URL for an image/video/document header — creates a
+     *  twilio/media template (WhatsApp media header). */
+    mediaUrl?: string;
     buttons?: TemplateButton[];
     variables?: Record<string, string>;
   }
@@ -145,11 +174,18 @@ export async function createTwilioContent(
         phone: button.phone_number,
       });
   }
-  const types: Record<string, unknown> = quickReplies.length
-    ? { 'twilio/quick-reply': { body: input.body, actions: quickReplies } }
-    : actions.length
-      ? { 'twilio/call-to-action': { body: input.body, actions } }
-      : { 'twilio/text': { body: input.body } };
+  // Content type selection per the docs: media header → twilio/media
+  // (buttons are not supported alongside media by the Content API's
+  // basic types — the route rejects that combination up front);
+  // quick replies → twilio/quick-reply; URL/phone → call-to-action;
+  // plain → twilio/text.
+  const types: Record<string, unknown> = input.mediaUrl
+    ? { 'twilio/media': { body: input.body, media: [input.mediaUrl] } }
+    : quickReplies.length
+      ? { 'twilio/quick-reply': { body: input.body, actions: quickReplies } }
+      : actions.length
+        ? { 'twilio/call-to-action': { body: input.body, actions } }
+        : { 'twilio/text': { body: input.body } };
   return request<TwilioContentItem>(credentials, `${CONTENT_BASE}/Content`, {
     method: 'POST',
     body: JSON.stringify({
@@ -184,8 +220,15 @@ export function normalizeTwilioContent(item: TwilioContentItem) {
   const value = (types['twilio/text'] ??
     types['twilio/quick-reply'] ??
     types['twilio/call-to-action'] ??
+    types['twilio/media'] ??
     Object.values(types)[0] ??
     {}) as Record<string, unknown>;
+  // twilio/media templates carry the WhatsApp media header — surface
+  // the first URL so the studio can show/import it as an image header.
+  const mediaUrl =
+    Array.isArray(value.media) && typeof value.media[0] === 'string'
+      ? (value.media[0] as string)
+      : null;
   const actions = Array.isArray(value.actions)
     ? (value.actions as Array<Record<string, string>>)
     : [];
@@ -209,5 +252,5 @@ export function normalizeTwilioContent(item: TwilioContentItem) {
         text: action.title ?? action.id ?? 'Reply',
       });
   }
-  return { body: String(value.body ?? ''), buttons };
+  return { body: String(value.body ?? ''), buttons, mediaUrl };
 }

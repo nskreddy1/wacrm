@@ -12,6 +12,7 @@ import {
   type AgentRow,
 } from '@/features/assistant/lib/ai/agents';
 import { parseAgentPayload, validateAgentCredentials } from '../shared';
+import { logAuditEvent } from '@/lib/audit-events';
 
 function notFound() {
   return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
@@ -220,6 +221,16 @@ export async function PATCH(
       );
     }
 
+    // Audit: record WHICH config fields changed, never their values
+    // (patch may contain the encrypted key — values stay out of logs).
+    await logAuditEvent(supabase, {
+      accountId,
+      actorId: userId,
+      action: 'agent.updated',
+      entity: `ai_agent:${id}`,
+      meta: { fields: Object.keys(patch), name: row.display_name },
+    });
+
     return NextResponse.json({ agent: toClientAgent(data as AgentRow) });
   } catch (err) {
     return toErrorResponse(err);
@@ -238,14 +249,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const { supabase, accountId } = await requireRole('admin');
+    const { supabase, accountId, userId } = await requireRole('admin');
 
     const { data, error } = await supabase
       .from('ai_agents')
       .delete()
       .eq('id', id)
       .eq('account_id', accountId)
-      .select('id');
+      .select('id, display_name');
 
     if (error) {
       console.error('[ai/agents DELETE] error:', error);
@@ -255,6 +266,15 @@ export async function DELETE(
       );
     }
     if (!data || data.length === 0) return notFound();
+
+    await logAuditEvent(supabase, {
+      accountId,
+      actorId: userId,
+      action: 'agent.deleted',
+      entity: `ai_agent:${id}`,
+      meta: { name: data[0]?.display_name },
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     return toErrorResponse(err);

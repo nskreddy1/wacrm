@@ -11,6 +11,7 @@ import {
 } from '@/features/whatsapp/lib/template-validators';
 import { buildMetaTemplatePayload } from '@/features/whatsapp/lib/template-components';
 import { ensureImageHeaderHandle } from '@/features/whatsapp/lib/template-header-handle';
+import { logAuditEvent } from '@/lib/audit-events';
 
 /**
  * Per-template lifecycle endpoint.
@@ -327,6 +328,14 @@ export async function DELETE(
         { status: 500 }
       );
     }
+
+    await logAuditEvent(supabase, {
+      accountId,
+      actorId: user.id,
+      action: 'template.deleted',
+      entity: `template:${id}`,
+      meta: { name: existing.name },
+    });
 
     return NextResponse.json({ success: true, dry_run: isDryRun() });
   } catch (error) {

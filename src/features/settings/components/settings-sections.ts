@@ -1,4 +1,5 @@
 import {
+  Activity,
   Coins,
   Database,
   KeyRound,
@@ -36,6 +37,7 @@ export const SETTINGS_SECTIONS = [
   'fields',
   'deals',
   'members',
+  'activity',
   'api',
   'external-sources',
   'support',
@@ -95,6 +97,12 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
     id: 'members',
     label: 'Users and Controls',
     icon: UsersRound,
+    group: 'general',
+  },
+  activity: {
+    id: 'activity',
+    label: 'Audit log',
+    icon: Activity,
     group: 'general',
   },
   fields: { id: 'fields', label: 'Fields', icon: Tags, group: 'customization' },
