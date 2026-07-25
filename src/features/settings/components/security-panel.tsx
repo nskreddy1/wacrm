@@ -1,6 +1,7 @@
 'use client';
 
 import { DevicesCard } from './devices-card';
+import { LoginActivityCard } from './login-activity-card';
 import { PasswordForm } from './password-form';
 import { SettingsPanelHead } from './settings-panel-head';
 import { useTranslations } from 'next-intl';
@@ -20,6 +21,7 @@ export function SecurityPanel() {
       <div className="flex flex-col gap-4">
         <PasswordForm />
         <DevicesCard />
+        <LoginActivityCard />
       </div>
     </section>
   );

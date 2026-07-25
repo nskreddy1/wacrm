@@ -61,7 +61,7 @@ export async function GET() {
       .select(
         'id, session_id, user_agent, ip_address, city, region, country, created_at, last_seen_at, revoked_at'
       )
-      .eq('user_id', context.user.id)
+      .eq('user_id', context.userId)
       .is('revoked_at', null)
       .order('last_seen_at', { ascending: false })
       .limit(50);
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       .from('auth_devices')
       .upsert(
         {
-          user_id: context.user.id,
+          user_id: context.userId,
           session_id: sessionId,
           user_agent: userAgent,
           ip_address: ip,
@@ -139,7 +139,7 @@ export async function PATCH(request: NextRequest) {
     const { data: revokedCount, error: rpcError } = await admin.rpc(
       'admin_revoke_all_auth_sessions',
       {
-        p_user_id: context.user.id,
+        p_user_id: context.userId,
         p_keep_session_id: keepCurrent ? sessionId : null,
       }
     );
@@ -149,7 +149,7 @@ export async function PATCH(request: NextRequest) {
     let markQuery = admin
       .from('auth_devices')
       .update({ revoked_at: new Date().toISOString() })
-      .eq('user_id', context.user.id)
+      .eq('user_id', context.userId)
       .is('revoked_at', null);
     if (keepCurrent && sessionId) {
       markQuery = markQuery.neq('session_id', sessionId);
@@ -181,7 +181,7 @@ export async function DELETE(request: NextRequest) {
       .from('auth_devices')
       .select('id, session_id, user_id')
       .eq('id', parsed.data.deviceId)
-      .eq('user_id', context.user.id)
+      .eq('user_id', context.userId)
       .maybeSingle();
     if (readError) throw readError;
     if (!device) {
@@ -192,7 +192,7 @@ export async function DELETE(request: NextRequest) {
     // inside the function as defense in depth.
     const { error: rpcError } = await admin.rpc('admin_revoke_auth_session', {
       p_session_id: device.session_id,
-      p_user_id: context.user.id,
+      p_user_id: context.userId,
     });
     if (rpcError) throw rpcError;
 

@@ -1801,7 +1801,13 @@
       "strengthWeak": "Weak — add more characters",
       "strengthFair": "Fair — mix upper and lower case",
       "strengthGood": "Good — add a number or symbol",
-      "strengthStrong": "Strong password"
+      "strengthStrong": "Strong password",
+      "activityTitle": "Recent login activity",
+      "activityDesc": "The last sign-in attempts on your account, with location. A failure from a place you don't recognize means you should change your password.",
+      "activityLoading": "Loading activity…",
+      "activityEmpty": "No login activity recorded yet.",
+      "activitySuccess": "Signed in",
+      "activityFailure": "Failed attempt"
     },
     "apiKeys": {
       "title": "API keys",
