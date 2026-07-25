@@ -66,6 +66,21 @@ export async function PATCH(
     if (!existing) return notFound();
     const row = existing as AgentRow;
 
+    // Custom agents may switch back to "inherit the default agent's
+    // model" by sending provider: null — strip it before parsing (the
+    // parser only accepts real providers) and clear the connection.
+    const bodyRec = body as Record<string, unknown>;
+    const clearProvider =
+      row.kind === 'custom' &&
+      'provider' in bodyRec &&
+      bodyRec.provider === null;
+    if (clearProvider) {
+      delete bodyRec.provider;
+      delete bodyRec.model;
+      delete bodyRec.api_key;
+      delete bodyRec.base_url;
+    }
+
     const parsed = await parseAgentPayload(body, {
       partial: true,
       supabase,
@@ -76,6 +91,13 @@ export async function PATCH(
 
     // ---- merge: only provided fields override the stored row ------
     const patch: Record<string, unknown> = {};
+    if (clearProvider) {
+      // Back to inheriting the default agent's connection.
+      patch.provider = null;
+      patch.model = null;
+      patch.api_key = null;
+      patch.base_url = null;
+    }
     if (provided.has('display_name') && values.display_name) {
       patch.display_name = values.display_name;
     }
@@ -139,13 +161,16 @@ export async function PATCH(
       effModel !== row.model ||
       effBaseUrl !== (row.base_url ?? null);
 
-    // Enabling a half-configured agent is refused with a clear message
-    // instead of letting the runtime silently no-op later.
+    // Enabling a half-configured DEFAULT agent is refused with a clear
+    // message instead of letting the runtime silently no-op later.
+    // Custom agents are exempt: no provider = inherit the default
+    // agent's connection, which is a complete, valid setup.
     const turningSomethingOn =
       patch.is_enabled === true ||
       patch.suggestions_enabled === true ||
       patch.autoreply_enabled === true;
     if (
+      row.kind === 'default' &&
       turningSomethingOn &&
       (!effProvider || !effModel || (!row.api_key && !plainApiKey && effProvider !== 'ollama'))
     ) {

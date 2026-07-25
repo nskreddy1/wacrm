@@ -11,6 +11,7 @@ import {
   type AiProvider,
 } from '@/features/assistant/lib/ai/types';
 import { OLLAMA_PLACEHOLDER_KEY } from '@/features/assistant/lib/ai/defaults';
+import { readTriggerKeywords } from '@/features/assistant/lib/ai/agents';
 
 // ============================================================
 // Shared request parsing + live validation for the single default
@@ -144,9 +145,15 @@ export async function parseAgentPayload(
 
   {
     if ('replyCap' in rawSettings || !partial) {
-      let cap = Number(rawSettings.replyCap);
-      if (!Number.isFinite(cap)) cap = 3;
-      settings.replyCap = Math.min(20, Math.max(1, Math.floor(cap)));
+      // Explicit null = "inherit the default agent's cap" (custom
+      // agents) — store null, don't coerce to a number.
+      if (rawSettings.replyCap === null && partial) {
+        settings.replyCap = null;
+      } else {
+        let cap = Number(rawSettings.replyCap);
+        if (!Number.isFinite(cap)) cap = 3;
+        settings.replyCap = Math.min(20, Math.max(1, Math.floor(cap)));
+      }
     }
     if ('limitMode' in rawSettings || !partial) {
       settings.limitMode = isAutoReplyLimitMode(rawSettings.limitMode)
