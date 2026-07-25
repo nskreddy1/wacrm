@@ -12,6 +12,8 @@ import {
 
 import { cn } from '@/lib/utils';
 
+// Providers is intentionally absent: it is a standalone page with
+// its own sidebar entry, not a console tab.
 const items = [
   { href: '/admin/workspaces', label: 'Workspaces', icon: Building2 },
   { href: '/admin/tickets', label: 'Tickets', icon: LifeBuoy },

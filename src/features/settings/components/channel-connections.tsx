@@ -408,7 +408,9 @@ export function ChannelConnections({
                               hint={
                                 item.provider === 'smtp'
                                   ? 'Any SMTP mailbox'
-                                  : 'Transactional email API'
+                                  : item.provider === 'mailtrap'
+                                    ? 'Email API with sandbox testing'
+                                    : 'Transactional email API'
                               }
                               icon={Mail}
                               onClick={() =>

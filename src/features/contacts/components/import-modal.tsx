@@ -255,7 +255,10 @@ export function ImportModal({
       const response = await fetch('/api/v1/workspace/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: valuesForRow(csv.rows[index]) }),
+        body: JSON.stringify({
+          values: valuesForRow(csv.rows[index]),
+          source: 'import',
+        }),
       });
       const payload = await response.json();
       if (response.ok) imported++;

@@ -13,7 +13,7 @@ export const FIELD_TYPES = [
   'currency',
 ] as const satisfies readonly FieldType[];
 const SELECT_TYPES = new Set<FieldType>(['single_select', 'multi_select']);
-const CORE_LABELS = new Set(['name', 'phone', 'email', 'company']);
+const CORE_LABELS = new Set(['name', 'phone', 'email', 'company', 'source']);
 
 // Auto-provisioned custom fields backing dedicated Create Contact inputs.
 // They are managed by the form itself, not the custom-field editor.

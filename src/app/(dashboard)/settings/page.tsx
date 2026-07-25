@@ -62,6 +62,10 @@ export default function SettingsPage() {
     appearance: <AppearancePanel />,
     whatsapp: <ChannelConnections fixedChannel="whatsapp" />,
     sms: <ChannelConnections fixedChannel="sms" />,
+    // Single source of truth for email: the connections flow with
+    // its test-before-enable gate. The legacy always-visible SMTP
+    // form was removed — its prefilled placeholders read like saved
+    // defaults and bypassed connection testing.
     email: <ChannelConnections fixedChannel="email" />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,

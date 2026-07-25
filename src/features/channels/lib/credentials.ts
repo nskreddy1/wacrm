@@ -35,12 +35,18 @@ export interface MetaCredentials {
   verifyToken: string;
 }
 
+export interface MailtrapChannelCredentials {
+  /** Mailtrap Email Sending API token (Sending Domains → API). */
+  token: string;
+}
+
 export type ProviderCredentials =
   | { provider: 'twilio'; value: TwilioCredentials }
   | { provider: 'google'; value: GoogleCredentials }
   | { provider: 'resend'; value: ResendCredentials }
   | { provider: 'smtp'; value: SmtpCredentials }
-  | { provider: 'meta'; value: MetaCredentials };
+  | { provider: 'meta'; value: MetaCredentials }
+  | { provider: 'mailtrap'; value: MailtrapChannelCredentials };
 
 /**
  * Build a typed ProviderCredentials from raw form input. Shared by the
@@ -64,6 +70,14 @@ export function buildProviderCredentials(
   if (provider === 'resend') {
     if (!input.apiKey) throw new Error('Resend API key is required');
     return { provider: 'resend', value: { apiKey: input.apiKey } };
+  }
+  if (provider === 'mailtrap') {
+    if (!input.token && !input.apiKey)
+      throw new Error('Mailtrap API token is required');
+    return {
+      provider: 'mailtrap',
+      value: { token: input.token || input.apiKey },
+    };
   }
   if (provider === 'meta') {
     // WhatsApp Cloud API (direct Meta connection). Only the access

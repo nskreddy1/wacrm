@@ -17,7 +17,8 @@
 // can still surface the copyable link.
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { sendEmail } from './mailer';
 
 export interface InviteEmailParams {
   to: string;
@@ -30,11 +31,17 @@ export interface InviteEmailParams {
   /** The one-time invite accept URL (/join/<token>). */
   inviteUrl: string;
   expiresInDays: number;
+  /**
+   * When provided, the workspace's own email provider (SMTP /
+   * Resend / MSG91, configured in Settings → Email delivery) is
+   * tried FIRST, before the platform-level fallbacks below.
+   */
+  workspace?: { db: SupabaseClient; accountId: string };
 }
 
 export interface InviteEmailResult {
   sent: boolean;
-  provider: 'resend' | 'supabase' | null;
+  provider: string | null;
   error?: string;
 }
 
@@ -204,13 +211,32 @@ async function sendViaSupabase(
 }
 
 /**
- * Send the invitation email. Resend when configured (production),
- * otherwise Supabase's built-in invite email (default / testing).
+ * Send the invitation email. Delivery chain, first success wins:
+ *
+ *   1. Workspace provider (SMTP / Resend / MSG91) via the generic
+ *      mailer — when the caller passes `workspace` and the account
+ *      configured email delivery in Settings.
+ *   2. Platform Resend (RESEND_API_KEY env).
+ *   3. Supabase's built-in invite email (default / testing).
+ *
  * Never throws — delivery is best-effort.
  */
 export async function sendInviteEmail(
   p: InviteEmailParams
 ): Promise<InviteEmailResult> {
+  // 1. Workspace-configured provider (tenant's own SMTP/Resend/MSG91).
+  if (p.workspace) {
+    const viaWorkspace = await sendEmail(p.workspace.db, p.workspace.accountId, {
+      to: p.to,
+      subject: `You've been invited to join ${p.accountName}`,
+      html: renderHtml(p),
+    });
+    if (viaWorkspace.sent) {
+      return { sent: true, provider: viaWorkspace.provider };
+    }
+  }
+
+  // 2-3. Platform fallbacks.
   if (process.env.RESEND_API_KEY) {
     const result = await sendViaResend(p);
     // If Resend is configured but the send bounced (e.g. unverified

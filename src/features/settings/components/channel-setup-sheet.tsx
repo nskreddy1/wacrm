@@ -251,6 +251,10 @@ function ChannelSetupSheetBody({
       toast.error('Resend API key is required.');
       return;
     }
+    if (provider === 'mailtrap' && !form.apiKey.trim()) {
+      toast.error('Mailtrap API token is required.');
+      return;
+    }
     setBusy('save');
     try {
       const configuration =
@@ -277,7 +281,9 @@ function ChannelSetupSheetBody({
           ? { username: form.username, password: form.password }
           : provider === 'resend'
             ? { apiKey: form.apiKey }
-            : provider === 'meta'
+            : provider === 'mailtrap'
+              ? { token: form.apiKey }
+              : provider === 'meta'
               ? {
                   accessToken: form.accessToken.trim(),
                   ...(form.appSecret.trim()
@@ -628,6 +634,28 @@ function ChannelSetupSheetBody({
                   className="bg-card h-8 flex-1"
                   aria-label="Resend API key"
                 />
+              </div>
+            ) : null}
+
+            {provider === 'mailtrap' ? (
+              <div className="flex flex-col gap-2">
+                <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3">
+                  <span className="text-muted-foreground w-28 shrink-0 text-sm">
+                    API token
+                  </span>
+                  <Input
+                    type="password"
+                    value={form.apiKey}
+                    onChange={(event) => update('apiKey', event.target.value)}
+                    className="bg-card h-8 flex-1"
+                    aria-label="Mailtrap API token"
+                  />
+                </div>
+                <p className="text-muted-foreground text-xs leading-snug">
+                  Mailtrap Console → Sending Domains → API. Use the from
+                  address of a verified sending domain (or the demo domain
+                  for testing).
+                </p>
               </div>
             ) : null}
 

@@ -148,7 +148,7 @@ export async function getDashboardOverview(
       .eq('account_id', ctx.accountId),
     ctx.supabase
       .from('contacts')
-      .select('id, name, created_at')
+      .select('id, name, source, created_at')
       .eq('account_id', ctx.accountId)
       .gte('created_at', since60d)
       .order('created_at', { ascending: false }),
@@ -222,6 +222,7 @@ export async function getDashboardOverview(
   const recentContacts = (contactsRecentRes.data ?? []) as Array<{
     id: string;
     name: string | null;
+    source: string | null;
     created_at: string;
   }>;
   const contactDates = recentContacts.map((row) => String(row.created_at));
@@ -514,6 +515,20 @@ export async function getDashboardOverview(
     .sort((a, b) => b.open - a.open || b.resolved7d - a.resolved7d)
     .slice(0, 5);
 
+  // ---- Lead source attribution (30d) -----------------------
+  // Aggregate first-touch sources of contacts created in the last 30
+  // days; pre-attribution rows (null source) roll up as 'unknown'.
+  const sourceCounts = new Map<string, number>();
+  for (const row of recentContacts) {
+    if (new Date(row.created_at).getTime() < cutoff30d) continue;
+    const key = row.source?.trim() || 'unknown';
+    sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
+  }
+  const leadSources = Array.from(sourceCounts, ([source, count]) => ({
+    source,
+    count,
+  })).sort((a, b) => b.count - a.count);
+
   // ---- Contacts growth (30d) -------------------------------
   const added30d = contactDates.filter(
     (at) => new Date(at).getTime() >= cutoff30d
@@ -669,6 +684,7 @@ export async function getDashboardOverview(
     performers,
     taskStats,
     contactsGrowth,
+    leadSources,
     activity,
     appointments: appointments.map((appointment) => ({
       id: appointment.id,

@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { createClient } from '@/lib/supabase/client';
 
 type LoginFormProps = {
   inviteToken: string | null;
@@ -41,13 +40,28 @@ export function LoginForm({
       );
 
       if (hasSupabaseConfig) {
-        const { error: signInError } =
-          await createClient().auth.signInWithPassword({
+        // Server-gated sign-in: enforces attempt limits + lockout and
+        // records the login location. Never call Supabase directly
+        // from the browser for sign-in — that bypasses the gate.
+        const response = await fetch('/api/v1/security/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
             email: email.trim().toLowerCase(),
             password,
-          });
-        if (signInError) {
-          showLoginError(signInError.message);
+          }),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: string;
+            warning?: string;
+          } | null;
+          showLoginError(
+            body?.warning
+              ? `${body?.error ?? 'Sign-in failed.'} ${body.warning}`
+              : (body?.error ?? 'Unable to sign in. Try again.')
+          );
           return;
         }
       } else {

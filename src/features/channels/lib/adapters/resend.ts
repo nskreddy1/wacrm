@@ -66,10 +66,38 @@ export class ResendEmailAdapter implements ChannelAdapter {
       const response = await fetch('https://api.resend.com/domains', {
         headers: { Authorization: `Bearer ${credentials.value.apiKey}` },
       });
+      if (response.ok) {
+        return { ok: true, checkedAt: new Date().toISOString() };
+      }
+      // Sending-only (restricted) Resend keys return 401 on /domains
+      // but CAN send. Prove the key by delivering to Resend's official
+      // test address, so restricted keys don't fail the health check.
+      if (response.status === 401) {
+        const probe = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${credentials.value.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: connection.external_identity ?? 'onboarding@resend.dev',
+            to: ['delivered@resend.dev'],
+            subject: 'Connection health check',
+            text: 'Automated connection verification from your CRM.',
+          }),
+        });
+        return {
+          ok: probe.ok,
+          checkedAt: new Date().toISOString(),
+          error: probe.ok
+            ? undefined
+            : `Resend returned ${probe.status} — check the API key and sender domain`,
+        };
+      }
       return {
-        ok: response.ok,
+        ok: false,
         checkedAt: new Date().toISOString(),
-        error: response.ok ? undefined : `Resend returned ${response.status}`,
+        error: `Resend returned ${response.status}`,
       };
     } catch (error) {
       return {

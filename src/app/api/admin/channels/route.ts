@@ -52,6 +52,7 @@ const providers = [
   'microsoft',
   'resend',
   'smtp',
+  'mailtrap',
 ] as const;
 const channels = ['whatsapp', 'sms', 'email'] as const;
 

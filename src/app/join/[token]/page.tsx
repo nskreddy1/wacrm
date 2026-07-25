@@ -61,9 +61,34 @@ interface PeekOk {
 }
 interface PeekFail {
   ok: false;
-  reason: 'not_found' | 'used' | 'expired' | 'server_error';
+  reason: 'not_found' | 'used' | 'expired' | 'server_error' | 'rate_limited';
 }
 type PeekResult = PeekOk | PeekFail;
+
+/**
+ * Defensive normalization of whatever the peek endpoint returned.
+ * Guards against shapes we didn't anticipate (429 rate-limit body,
+ * proxy error pages, partial JSON) — anything unknown becomes a
+ * retryable server_error instead of crashing the render on
+ * FAIL_COPY[undefined].
+ */
+function normalizePeek(status: number, body: unknown): PeekResult {
+  if (status === 429) return { ok: false, reason: 'rate_limited' };
+  if (body && typeof body === 'object') {
+    const b = body as Record<string, unknown>;
+    if (b.ok === true && typeof b.account_name === 'string') {
+      return b as unknown as PeekOk;
+    }
+    if (
+      b.ok === false &&
+      typeof b.reason === 'string' &&
+      ['not_found', 'used', 'expired', 'server_error'].includes(b.reason)
+    ) {
+      return b as unknown as PeekFail;
+    }
+  }
+  return { ok: false, reason: 'server_error' };
+}
 
 const ROLE_LABEL: Record<PeekOk['role'], string> = {
   admin: 'Admin',
@@ -87,6 +112,10 @@ const FAIL_COPY: Record<PeekFail['reason'], { title: string; body: string }> = {
   server_error: {
     title: 'Something went wrong',
     body: 'We couldn’t verify this invitation right now. Try refreshing the page in a moment.',
+  },
+  rate_limited: {
+    title: 'Too many attempts',
+    body: 'This page was refreshed too many times in a short period. Wait a minute, then try again.',
   },
 };
 
@@ -122,8 +151,8 @@ export default function JoinPage() {
         }),
         createClient().auth.getUser(),
       ]);
-      const peekBody = (await peekRes.json()) as PeekResult;
-      setPeek(peekBody);
+      const peekBody: unknown = await peekRes.json().catch(() => null);
+      setPeek(normalizePeek(peekRes.status, peekBody));
       setAuthedUserId(authRes.data.user?.id ?? null);
     } catch (err) {
       console.error('[join] peek error:', err);
@@ -147,9 +176,9 @@ export default function JoinPage() {
           }),
           createClient().auth.getUser(),
         ]);
-        const peekBody = (await peekRes.json()) as PeekResult;
+        const peekBody: unknown = await peekRes.json().catch(() => null);
         if (cancelled) return;
-        setPeek(peekBody);
+        setPeek(normalizePeek(peekRes.status, peekBody));
         setAuthedUserId(authRes.data.user?.id ?? null);
       } catch (err) {
         console.error('[join] peek error:', err);

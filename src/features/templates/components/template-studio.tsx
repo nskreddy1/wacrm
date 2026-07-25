@@ -15,18 +15,22 @@
 // and merged over server rows until saved.
 // ============================================================
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
+  ChevronsRight,
   GripVertical,
   Image as ImageIcon,
   Link2,
   Loader2,
+  Mail,
   MessageSquareText,
   Phone,
   Plus,
   Reply,
   RefreshCw,
+  Monitor,
+  Send,
   Smartphone,
   Trash2,
   Type,
@@ -46,6 +50,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStudioTemplates } from '@/features/templates/hooks/use-studio-templates';
@@ -58,8 +67,13 @@ import { cn } from '@/lib/utils';
 import {
   analyzeSms,
   CATEGORY_LABELS,
+  CHANNEL_META,
+  EMAIL_CATEGORY_LABELS,
   STATUS_META,
   TEMPLATE_VARIABLES,
+  withSampleValues,
+  type CustomTemplateVariable,
+  type EmailCategory,
   type HeaderKind,
   type StudioTemplate,
   type TemplateButton,
@@ -89,15 +103,15 @@ const SMS_CATEGORY_FOR_CHECK: Record<
   authentication: 'otp',
 };
 
-function blankTemplate(): StudioTemplate {
+function blankTemplate(channel: TemplateChannel = 'whatsapp'): StudioTemplate {
   return {
     id: nextId('tpl-new'),
     name: 'Untitled template',
-    channel: 'whatsapp',
-    category: 'utility',
+    channel,
+    category: channel === 'whatsapp' ? 'utility' : 'marketing',
     language: 'en_US',
     status: 'draft',
-    provider: 'meta',
+    provider: channel === 'whatsapp' ? 'meta' : 'none',
     updatedAt: new Date().toISOString().slice(0, 10),
     whatsapp: {
       headerKind: 'none',
@@ -107,8 +121,233 @@ function blankTemplate(): StudioTemplate {
       buttons: [],
     },
     sms: { body: '' },
+    email: { subject: '', body: '', category: 'promotional' },
     isNew: true,
   };
+}
+
+// ------------------------------------------------------------
+// Channel rail — the vertical studio switcher
+// ------------------------------------------------------------
+
+const STUDIO_CHANNELS: {
+  channel: TemplateChannel;
+  icon: typeof MessageSquareText;
+}[] = [
+  { channel: 'whatsapp', icon: MessageSquareText },
+  { channel: 'sms', icon: Smartphone },
+  { channel: 'email', icon: Mail },
+];
+
+/** localStorage key for the channel panel pin preference (pure UI state). */
+const CHANNEL_PANEL_PREF_KEY = 'wacrm.templates.channel-panel';
+
+/**
+ * Zoho Bigin-style channel panel docked flush against the app
+ * sidebar. Two modes:
+ *
+ * - Collapsed: slim icon strip + the open studio's name running
+ *   vertically. Hovering peeks the full panel (unless hover is
+ *   disabled from the panel footer).
+ * - Expanded (pinned via the arrow at the bottom): a labelled
+ *   "Channels" list with studio names and template counts.
+ *
+ * Clicking a channel switches the whole studio — template list,
+ * editor, and preview — to that channel's library.
+ */
+function ChannelRail({
+  active,
+  counts,
+  onSelect,
+}: {
+  active: TemplateChannel;
+  counts: Record<TemplateChannel, number>;
+  onSelect: (channel: TemplateChannel) => void;
+}) {
+  const [pinned, setPinned] = useState(false);
+  const [hoverEnabled, setHoverEnabled] = useState(true);
+  const [peeking, setPeeking] = useState(false);
+
+  // Restore UI preference (not data — plain localStorage is fine).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CHANNEL_PANEL_PREF_KEY);
+      if (!raw) return;
+      const pref = JSON.parse(raw) as { pinned?: boolean; hover?: boolean };
+      if (typeof pref.pinned === 'boolean') setPinned(pref.pinned);
+      if (typeof pref.hover === 'boolean') setHoverEnabled(pref.hover);
+    } catch {
+      /* corrupted pref — keep defaults */
+    }
+  }, []);
+
+  const savePref = (pref: { pinned: boolean; hover: boolean }) => {
+    try {
+      localStorage.setItem(CHANNEL_PANEL_PREF_KEY, JSON.stringify(pref));
+    } catch {
+      /* storage unavailable — preference just won't persist */
+    }
+  };
+
+  const expanded = pinned || (hoverEnabled && peeking);
+
+  return (
+    <nav
+      aria-label="Template studios"
+      onMouseEnter={() => setPeeking(true)}
+      onMouseLeave={() => setPeeking(false)}
+      className={cn(
+        'bg-sidebar border-sidebar-border flex h-full shrink-0 flex-col overflow-hidden border-r transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]',
+        expanded ? 'w-52' : 'w-12'
+      )}
+    >
+      {/* Panel header — only meaningful when expanded */}
+      <div
+        className={cn(
+          'transition-opacity duration-200',
+          expanded
+            ? 'px-3 pt-3 pb-1 opacity-100'
+            : 'pointer-events-none h-0 overflow-hidden opacity-0'
+        )}
+      >
+        <p className="text-sidebar-foreground text-sm font-semibold whitespace-nowrap">
+          Choose a channel
+        </p>
+        <p className="text-sidebar-foreground/60 mt-0.5 text-[11px] leading-snug whitespace-nowrap">
+          Each channel keeps its own templates
+        </p>
+      </div>
+
+      <div
+        className={cn(
+          'flex flex-1 flex-col gap-1.5',
+          expanded ? 'px-2 py-1' : 'items-center py-3'
+        )}
+      >
+        {STUDIO_CHANNELS.map(({ channel, icon: Icon }) => {
+          const meta = CHANNEL_META[channel];
+          const isActive = channel === active;
+          const button = (
+            <button
+              key={channel}
+              type="button"
+              onClick={() => onSelect(channel)}
+              aria-current={isActive ? 'true' : undefined}
+              aria-label={`${meta.studioLabel} (${counts[channel]} templates)`}
+              className={cn(
+                'relative flex items-center rounded-lg transition-all duration-150',
+                expanded ? 'h-9 w-full gap-2.5 px-2.5' : 'size-9 justify-center',
+                isActive
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+              )}
+            >
+              <Icon className="size-4.5 shrink-0" aria-hidden="true" />
+              {expanded && (
+                <>
+                  <span className="flex-1 truncate text-left text-sm whitespace-nowrap">
+                    {meta.label}
+                  </span>
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                      isActive
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-sidebar-accent text-sidebar-foreground/70'
+                    )}
+                  >
+                    {counts[channel]}
+                  </span>
+                </>
+              )}
+              {!expanded && counts[channel] > 0 && !isActive && (
+                <span
+                  aria-hidden="true"
+                  className="bg-primary absolute top-1 right-1 size-1.5 rounded-full"
+                />
+              )}
+            </button>
+          );
+          if (expanded) return button;
+          return (
+            <Tooltip key={channel}>
+              <TooltipTrigger render={button} />
+              <TooltipContent side="right" sideOffset={8}>
+                {meta.studioLabel} · {counts[channel]}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+
+        {/* Collapsed: rotated label of the open studio (Zoho strip
+            pattern — the strip itself names where you are). */}
+        {!expanded && (
+          <>
+            <Separator className="bg-sidebar-border my-1.5 w-6" />
+            <p
+              aria-hidden="true"
+              className="text-sidebar-foreground/70 flex-1 [writing-mode:vertical-rl] rotate-180 pb-1 text-center text-[11px] font-semibold tracking-widest uppercase select-none"
+            >
+              {CHANNEL_META[active].studioLabel}
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Footer — hover toggle (expanded only) + pin/collapse arrow */}
+      <div
+        className={cn(
+          'border-sidebar-border flex items-center border-t p-1.5',
+          expanded ? 'justify-between gap-1' : 'justify-center'
+        )}
+      >
+        {expanded && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = !hoverEnabled;
+              setHoverEnabled(next);
+              savePref({ pinned, hover: next });
+            }}
+            className="text-sidebar-foreground/60 hover:text-sidebar-foreground truncate px-1.5 text-[11px] whitespace-nowrap transition-colors"
+          >
+            {hoverEnabled ? 'Disable hover panel' : 'Enable hover panel'}
+          </button>
+        )}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !pinned;
+                  setPinned(next);
+                  if (!next) setPeeking(false);
+                  savePref({ pinned: next, hover: hoverEnabled });
+                }}
+                aria-label={
+                  pinned ? 'Collapse channel panel' : 'Expand channel panel'
+                }
+                aria-expanded={expanded}
+                className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground flex size-7 shrink-0 items-center justify-center rounded-md transition-colors"
+              >
+                <ChevronsRight
+                  className={cn(
+                    'size-4 transition-transform duration-300',
+                    pinned && 'rotate-180'
+                  )}
+                  aria-hidden="true"
+                />
+              </button>
+            }
+          />
+          <TooltipContent side="right" sideOffset={8}>
+            {pinned ? 'Collapse panel' : 'Keep panel open'}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </nav>
+  );
 }
 
 // ------------------------------------------------------------
@@ -118,6 +357,7 @@ function blankTemplate(): StudioTemplate {
 function TemplateRail({
   templates,
   activeId,
+  channel,
   isLoading,
   onSelect,
   onCreate,
@@ -126,6 +366,7 @@ function TemplateRail({
 }: {
   templates: StudioTemplate[];
   activeId: string;
+  channel: TemplateChannel;
   isLoading: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
@@ -137,20 +378,22 @@ function TemplateRail({
       <Button onClick={onCreate} className="w-full justify-center gap-2">
         <Plus className="size-4" aria-hidden="true" /> New template
       </Button>
-      <Button
-        variant="outline"
-        onClick={onSync}
-        disabled={isSyncing}
-        className="w-full justify-center gap-2"
-        title="Import approved WhatsApp templates from Twilio or Meta and refresh statuses"
-      >
-        {isSyncing ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <RefreshCw className="size-4" aria-hidden="true" />
-        )}
-        Sync templates
-      </Button>
+      {channel === 'whatsapp' && (
+        <Button
+          variant="outline"
+          onClick={onSync}
+          disabled={isSyncing}
+          className="w-full justify-center gap-2"
+          title="Import approved WhatsApp templates from Twilio or Meta and refresh statuses"
+        >
+          {isSyncing ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw className="size-4" aria-hidden="true" />
+          )}
+          Sync templates
+        </Button>
+      )}
       {isLoading && templates.length === 0 && (
         <div className="flex flex-col gap-1.5" aria-label="Loading templates">
           {[0, 1, 2].map((i) => (
@@ -163,8 +406,8 @@ function TemplateRail({
       )}
       {!isLoading && templates.length === 0 && (
         <p className="border-border text-muted-foreground rounded-lg border border-dashed p-4 text-center text-xs leading-relaxed">
-          No templates yet. Create your first WhatsApp or SMS template to get
-          started.
+          No {CHANNEL_META[channel].label} templates yet. Create your first one
+          to get started.
         </p>
       )}
       <div className="flex flex-col gap-1.5 overflow-y-auto">
@@ -197,10 +440,14 @@ function TemplateRail({
               </div>
               <div className="text-muted-foreground mt-1.5 flex items-center gap-1.5 text-xs">
                 <span className="uppercase">
-                  {tpl.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}
+                  {CHANNEL_META[tpl.channel].label}
                 </span>
                 <span aria-hidden="true">·</span>
-                <span>{CATEGORY_LABELS[tpl.category]}</span>
+                <span>
+                  {tpl.channel === 'email'
+                    ? EMAIL_CATEGORY_LABELS[tpl.email.category]
+                    : CATEGORY_LABELS[tpl.category]}
+                </span>
                 <span aria-hidden="true">·</span>
                 <span>{tpl.language}</span>
               </div>
@@ -841,6 +1088,367 @@ function SmsEditor({
   );
 }
 
+function EmailEditor({
+  template,
+  onPatch,
+}: {
+  template: StudioTemplate;
+  onPatch: (patch: Partial<StudioTemplate['email']>) => void;
+}) {
+  const email = template.email;
+  return (
+    <div className="flex flex-col gap-5">
+      <section
+        aria-labelledby="email-subject-label"
+        className="flex flex-col gap-2"
+      >
+        <Label
+          id="email-subject-label"
+          htmlFor="email-subject"
+          className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+        >
+          Subject
+        </Label>
+        <Input
+          id="email-subject"
+          value={email.subject}
+          placeholder="e.g. Your order {{1}} has shipped"
+          onChange={(e) => onPatch({ subject: e.target.value })}
+        />
+      </section>
+
+      <section
+        aria-labelledby="email-body-label"
+        className="flex flex-col gap-2"
+      >
+        <Label
+          id="email-body-label"
+          className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+        >
+          Body
+        </Label>
+        <Textarea
+          value={email.body}
+          rows={12}
+          placeholder={
+            'Write your email. Plain text with variables — {{first_name}}, {{company}}…\n\nMarketing emails must include an unsubscribe line.'
+          }
+          onChange={(e) => onPatch({ body: e.target.value })}
+          className="resize-y font-sans text-sm leading-relaxed"
+        />
+        <VariableChips
+          onInsert={(token) =>
+            onPatch({
+              body: `${email.body}${email.body && !email.body.endsWith(' ') ? ' ' : ''}${token}`,
+            })
+          }
+        />
+      </section>
+    </div>
+  );
+}
+
+/**
+ * Advanced email preview (Litmus/Mailchimp pattern): two views —
+ *
+ * - "Inbox": a Gmail-style list row showing exactly what recipients
+ *   see before opening: sender, subject, and the body's first line
+ *   as the snippet/preheader. Includes truncation guidance (mobile
+ *   clients cut subjects around 40 chars, snippets around 90).
+ * - "Message": the opened email — header, subject, body with
+ *   variables resolved, plus the unsubscribe footer zone.
+ *
+ * A desktop/mobile width toggle simulates both breakpoints, since
+ * 40-60% of opens happen on phones.
+ */
+function EmailPreview({
+  email,
+  customVariables,
+}: {
+  email: StudioTemplate['email'];
+  customVariables?: CustomTemplateVariable[];
+}) {
+  const [view, setView] = useState<'inbox' | 'message'>('message');
+  const [mobile, setMobile] = useState(false);
+
+  const fill = (text: string) => withSampleValues(text, customVariables);
+  const subject = email.subject.trim()
+    ? fill(email.subject)
+    : 'Subject preview';
+  const body = email.body.trim()
+    ? fill(email.body)
+    : 'Your email body will appear here as you type.';
+  // Snippet = first non-empty line (what Gmail shows after the subject).
+  const snippet =
+    body
+      .split('\n')
+      .map((l) => l.trim())
+      .find(Boolean) ?? '';
+  const subjectLimit = mobile ? 40 : 70;
+  const subjectTooLong = subject.length > subjectLimit;
+  const needsUnsub =
+    email.category === 'newsletter' || email.category === 'promotional';
+  const hasUnsub = /unsub|opt[ -]?out/i.test(email.body);
+
+  return (
+    <div className="flex w-full flex-col gap-2">
+      {/* View + device toggles */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="bg-muted flex rounded-lg p-0.5">
+          {(['inbox', 'message'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors',
+                view === v
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        <div className="bg-muted flex rounded-lg p-0.5">
+          <button
+            type="button"
+            onClick={() => setMobile(false)}
+            aria-pressed={!mobile}
+            aria-label="Desktop width preview"
+            className={cn(
+              'flex items-center justify-center rounded-md px-2 py-1 transition-colors',
+              !mobile
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Monitor className="size-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobile(true)}
+            aria-pressed={mobile}
+            aria-label="Mobile width preview"
+            className={cn(
+              'flex items-center justify-center rounded-md px-2 py-1 transition-colors',
+              mobile
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Smartphone className="size-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          'border-border bg-card overflow-hidden rounded-xl border shadow-sm transition-all duration-300',
+          mobile ? 'mx-auto w-full max-w-70' : 'w-full'
+        )}
+      >
+        {view === 'inbox' ? (
+          /* Gmail-style inbox row: what the recipient sees pre-open */
+          <div className="flex items-start gap-2.5 px-3.5 py-3">
+            <div className="bg-primary/15 text-primary flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+              A
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-foreground truncate text-xs font-bold">
+                  Acme Workspace
+                </p>
+                <p className="text-muted-foreground shrink-0 text-[10px]">
+                  9:41 AM
+                </p>
+              </div>
+              <p className="text-foreground truncate text-xs font-semibold">
+                {mobile && subject.length > 40
+                  ? `${subject.slice(0, 40)}…`
+                  : subject}
+              </p>
+              <p className="text-muted-foreground truncate text-[11px]">
+                {snippet.length > 90 ? `${snippet.slice(0, 90)}…` : snippet}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="border-border flex items-center gap-2.5 border-b px-4 py-3">
+              <div className="bg-primary/15 text-primary flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                A
+              </div>
+              <div className="min-w-0">
+                <p className="text-foreground truncate text-xs font-semibold">
+                  Acme Workspace
+                </p>
+                <p className="text-muted-foreground truncate text-[11px]">
+                  to customer@example.com
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 px-4 py-3">
+              <p className="text-foreground text-sm font-semibold text-balance">
+                {subject}
+              </p>
+              <p className="text-foreground/90 text-xs leading-relaxed whitespace-pre-wrap">
+                {body}
+              </p>
+              {needsUnsub && (
+                <p
+                  className={cn(
+                    'border-border mt-1 border-t pt-2 text-[10px]',
+                    hasUnsub
+                      ? 'text-muted-foreground'
+                      : 'text-destructive font-medium'
+                  )}
+                >
+                  {hasUnsub
+                    ? 'Unsubscribe footer detected — required for marketing email.'
+                    : 'Missing unsubscribe link — required for newsletters and promotional email (CAN-SPAM / India DPDP).'}
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Truncation guidance under the preview */}
+      <p
+        className={cn(
+          'text-[10px] leading-snug',
+          subjectTooLong ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground'
+        )}
+      >
+        Subject: {subject.length}/{subjectLimit} chars
+        {subjectTooLong
+          ? ` — will truncate on ${mobile ? 'mobile' : 'desktop'} clients.`
+          : mobile
+            ? ' — fits mobile clients.'
+            : ' — fits desktop clients.'}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * End-to-end test delivery: sends the SAVED template to one explicit
+ * address through the workspace email layer (tenant provider first,
+ * platform Resend fallback). Disabled until the template is saved so
+ * what lands in the inbox always matches what the server has.
+ */
+function SendTestEmail({
+  templateId,
+  hasUnsavedEdits,
+}: {
+  templateId: string | null;
+  hasUnsavedEdits: boolean;
+}) {
+  const [to, setTo] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
+  const disabled = !templateId || sending;
+
+  const handleSend = async () => {
+    if (!templateId || !to.trim()) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/templates/test-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId, to: to.trim() }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        sent?: boolean;
+        provider?: string;
+        error?: string;
+      };
+      if (res.ok && data.sent) {
+        setResult({
+          ok: true,
+          message: `Sent via ${data.provider === 'platform_resend' ? 'Resend' : (data.provider ?? 'email provider')}. Check the inbox.`,
+        });
+      } else {
+        setResult({
+          ok: false,
+          message: data.error ?? 'Send failed. Try again.',
+        });
+      }
+    } catch {
+      setResult({ ok: false, message: 'Network error. Try again.' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="border-border bg-card w-full rounded-xl border p-3 shadow-sm">
+      <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        Send a test
+      </p>
+      <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
+        {templateId
+          ? hasUnsavedEdits
+            ? 'Save first — the test sends the last saved version.'
+            : 'Delivers the saved template with sample data to one address.'
+          : 'Save the template to enable test sending.'}
+      </p>
+      <div className="mt-2 flex gap-1.5">
+        <Input
+          type="email"
+          value={to}
+          placeholder="you@company.com"
+          onChange={(e) => setTo(e.target.value)}
+          onKeyDown={(e) => {
+            if (
+              e.key === 'Enter' &&
+              !e.nativeEvent.isComposing &&
+              e.keyCode !== 229
+            ) {
+              handleSend();
+            }
+          }}
+          disabled={disabled}
+          className="h-8 flex-1 text-xs"
+          aria-label="Test recipient email"
+        />
+        <Button
+          size="sm"
+          onClick={handleSend}
+          disabled={disabled || !to.trim()}
+          className="h-8"
+        >
+          {sending ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Send className="size-3.5" aria-hidden="true" />
+          )}
+          Send
+        </Button>
+      </div>
+      {result && (
+        <p
+          role="status"
+          className={cn(
+            'mt-2 text-[11px] leading-snug',
+            result.ok ? 'text-emerald-600 dark:text-emerald-500' : 'text-destructive'
+          )}
+        >
+          {result.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------
 // Studio shell
 // ------------------------------------------------------------
@@ -867,14 +1475,36 @@ export function TemplateStudio() {
   const [edits, setEdits] = useState<Record<string, StudioTemplate>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [device, setDevice] = useState<DeviceKind>('iphone');
+  // Which studio is open (WhatsApp / SMS / Email). Templates are
+  // stored per channel — the rail only ever lists the open studio's
+  // templates, so each channel keeps its own library.
+  const [studioChannel, setStudioChannel] =
+    useState<TemplateChannel>('whatsapp');
   const [busy, setBusy] = useState<
     'save' | 'submit' | 'delete' | 'sync' | null
   >(null);
 
-  const templates = useMemo(
+  const allTemplates = useMemo(
     () => [...newDrafts, ...serverTemplates.map((t) => edits[t.id] ?? t)],
     [newDrafts, serverTemplates, edits]
   );
+
+  const templates = useMemo(
+    () => allTemplates.filter((t) => t.channel === studioChannel),
+    [allTemplates, studioChannel]
+  );
+
+  // Per-channel library sizes, surfaced in the channel rail so you
+  // can see at a glance where templates live before switching.
+  const channelCounts = useMemo(() => {
+    const counts: Record<TemplateChannel, number> = {
+      whatsapp: 0,
+      sms: 0,
+      email: 0,
+    };
+    for (const t of allTemplates) counts[t.channel] += 1;
+    return counts;
+  }, [allTemplates]);
 
   const active =
     templates.find((t) => t.id === activeId) ?? templates[0] ?? null;
@@ -893,6 +1523,17 @@ export function TemplateStudio() {
         body: active.whatsapp.body,
         footer: active.whatsapp.footer,
         hasButtons: active.whatsapp.buttons.length > 0,
+      }).issues;
+    }
+    if (active.channel === 'email') {
+      // Email reuses the SMS rule set (opt-out language for
+      // marketing, disclosure checks) — CAN-SPAM/GDPR-style
+      // guardrails without a separate rules engine.
+      if (!active.email.body.trim()) return [];
+      return checkCompliance({
+        channel: 'sms',
+        category: SMS_CATEGORY_FOR_CHECK[active.category],
+        body: `${active.email.subject} ${active.email.body}`,
       }).issues;
     }
     if (!active.sms.body.trim()) return [];
@@ -914,9 +1555,16 @@ export function TemplateStudio() {
   };
 
   const createTemplate = () => {
-    const tpl = blankTemplate();
+    const tpl = blankTemplate(studioChannel);
     setNewDrafts((prev) => [tpl, ...prev]);
     setActiveId(tpl.id);
+  };
+
+  const switchStudio = (channel: TemplateChannel) => {
+    setStudioChannel(channel);
+    // Selection belongs to the previous channel's list — reset so
+    // the new studio opens on its own first template.
+    setActiveId(null);
   };
 
   const clearLocal = (id: string) => {
@@ -935,9 +1583,9 @@ export function TemplateStudio() {
       clearLocal(active.id);
       setActiveId(savedId);
       toast.success(
-        active.channel === 'sms'
-          ? 'SMS template saved and active.'
-          : 'Draft saved.'
+        active.channel === 'whatsapp'
+          ? 'Draft saved.'
+          : `${CHANNEL_META[active.channel].label} template saved and active.`
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed.');
@@ -1023,31 +1671,52 @@ export function TemplateStudio() {
 
   if (!active) {
     return (
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <TemplateRail
-          templates={templates}
-          activeId=""
-          isLoading={isLoading}
-          onSelect={setActiveId}
-          onCreate={createTemplate}
-          onSync={handleImportTemplates}
-          isSyncing={busy === 'sync'}
+      <div className="flex h-full min-h-0 w-full">
+        <ChannelRail
+          active={studioChannel}
+          counts={channelCounts}
+          onSelect={switchStudio}
         />
-        <div className="border-border text-muted-foreground flex min-h-64 flex-1 items-center justify-center rounded-xl border border-dashed text-sm">
-          {loadError ??
-            (isLoading
-              ? 'Loading templates…'
-              : 'Select a template or create a new one.')}
+        <div
+          key={studioChannel}
+          className="studio-switch app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:flex-row lg:items-start"
+        >
+          <TemplateRail
+            templates={templates}
+            activeId=""
+            channel={studioChannel}
+            isLoading={isLoading}
+            onSelect={setActiveId}
+            onCreate={createTemplate}
+            onSync={handleImportTemplates}
+            isSyncing={busy === 'sync'}
+          />
+          <div className="border-border text-muted-foreground flex min-h-64 flex-1 items-center justify-center rounded-xl border border-dashed text-sm">
+            {loadError ??
+              (isLoading
+                ? 'Loading templates…'
+                : `Select a ${CHANNEL_META[studioChannel].label} template or create a new one.`)}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+    <div className="flex h-full min-h-0 w-full">
+      <ChannelRail
+        active={studioChannel}
+        counts={channelCounts}
+        onSelect={switchStudio}
+      />
+      <div
+        key={studioChannel}
+        className="studio-switch app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:flex-row lg:items-start"
+      >
       <TemplateRail
         templates={templates}
         activeId={active.id}
+        channel={studioChannel}
         isLoading={isLoading}
         onSelect={setActiveId}
         onCreate={createTemplate}
@@ -1077,21 +1746,55 @@ export function TemplateStudio() {
             <Label className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
               Category
             </Label>
-            <Select
-              value={active.category}
-              onValueChange={(v) =>
-                patchActive({ category: v as StudioTemplate['category'] })
-              }
-            >
-              <SelectTrigger className="mt-1.5 w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="marketing">Marketing</SelectItem>
-                <SelectItem value="utility">Utility</SelectItem>
-                <SelectItem value="authentication">Authentication</SelectItem>
-              </SelectContent>
-            </Select>
+            {active.channel === 'email' ? (
+              // Email intent categories — they drive compliance rules
+              // (newsletter/promotional require unsubscribe; OTP must
+              // not carry marketing content).
+              <Select
+                value={active.email.category}
+                onValueChange={(v) =>
+                  v &&
+                  patchActive({
+                    email: {
+                      ...active.email,
+                      category: v as EmailCategory,
+                    },
+                  })
+                }
+              >
+                <SelectTrigger className="mt-1.5 w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(
+                    Object.entries(EMAIL_CATEGORY_LABELS) as [
+                      EmailCategory,
+                      string,
+                    ][]
+                  ).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select
+                value={active.category}
+                onValueChange={(v) =>
+                  patchActive({ category: v as StudioTemplate['category'] })
+                }
+              >
+                <SelectTrigger className="mt-1.5 w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="marketing">Marketing</SelectItem>
+                  <SelectItem value="utility">Utility</SelectItem>
+                  <SelectItem value="authentication">Authentication</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div>
             <Label className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
@@ -1115,22 +1818,20 @@ export function TemplateStudio() {
           </div>
         </div>
 
-        {/* Channel switch */}
-        <Tabs
-          value={active.channel}
-          onValueChange={(v) => patchActive({ channel: v as TemplateChannel })}
-          className="mt-5"
-        >
-          <TabsList className="grid w-full max-w-xs grid-cols-2">
-            <TabsTrigger value="whatsapp" className="gap-1.5">
-              <MessageSquareText className="size-4" aria-hidden="true" />{' '}
-              WhatsApp
-            </TabsTrigger>
-            <TabsTrigger value="sms" className="gap-1.5">
-              <Smartphone className="size-4" aria-hidden="true" /> SMS
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/* Studio badge — the channel is fixed per studio; switch
+            studios with the vertical rail on the far left. */}
+        <div className="mt-5 flex items-center gap-2">
+          <span className="bg-primary/10 text-primary inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold">
+            {studioChannel === 'whatsapp' ? (
+              <MessageSquareText className="size-3.5" aria-hidden="true" />
+            ) : studioChannel === 'sms' ? (
+              <Smartphone className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Mail className="size-3.5" aria-hidden="true" />
+            )}
+            {CHANNEL_META[studioChannel].studioLabel}
+          </span>
+        </div>
 
         <Separator className="my-5" />
 
@@ -1140,6 +1841,11 @@ export function TemplateStudio() {
             onPatch={(p) =>
               patchActive({ whatsapp: { ...active.whatsapp, ...p } })
             }
+          />
+        ) : active.channel === 'email' ? (
+          <EmailEditor
+            template={active}
+            onPatch={(p) => patchActive({ email: { ...active.email, ...p } })}
           />
         ) : (
           <SmsEditor
@@ -1232,7 +1938,7 @@ export function TemplateStudio() {
               {busy === 'save' && (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               )}
-              {active.channel === 'sms' ? 'Save template' : 'Save draft'}
+              {active.channel === 'whatsapp' ? 'Save draft' : 'Save template'}
             </Button>
           {active.channel === 'whatsapp' &&
             active.provider === 'twilio' &&
@@ -1269,29 +1975,48 @@ export function TemplateStudio() {
         className="flex w-full shrink-0 flex-col items-center gap-4 lg:w-[320px]"
         aria-label="Live preview"
       >
-        <Tabs value={device} onValueChange={(v) => setDevice(v as DeviceKind)}>
-          <TabsList>
-            <TabsTrigger value="iphone" className="px-4">
-              iPhone
-            </TabsTrigger>
-            <TabsTrigger value="android" className="px-4">
-              Android
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <PhonePreview
-          device={device}
-          channel={active.channel}
-          whatsapp={active.whatsapp}
-          sms={active.sms}
-          customVariables={customVariables}
-        />
+        {active.channel === 'email' ? (
+          <>
+            <EmailPreview
+              email={active.email}
+              customVariables={customVariables}
+            />
+            <SendTestEmail
+              templateId={active.isNew ? null : active.id}
+              hasUnsavedEdits={Boolean(edits[active.id] || active.isNew)}
+            />
+          </>
+        ) : (
+          <>
+            <Tabs
+              value={device}
+              onValueChange={(v) => setDevice(v as DeviceKind)}
+            >
+              <TabsList>
+                <TabsTrigger value="iphone" className="px-4">
+                  iPhone
+                </TabsTrigger>
+                <TabsTrigger value="android" className="px-4">
+                  Android
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <PhonePreview
+              device={device}
+              channel={active.channel === 'sms' ? 'sms' : 'whatsapp'}
+              whatsapp={active.whatsapp}
+              sms={active.sms}
+              customVariables={customVariables}
+            />
+          </>
+        )}
         <p className="text-muted-foreground text-center text-[11px] leading-snug">
           Live preview with sample data — variables like{' '}
           <span className="text-primary font-mono">{'{{first_name}}'}</span> are
           filled automatically.
         </p>
       </aside>
+      </div>
     </div>
   );
 }

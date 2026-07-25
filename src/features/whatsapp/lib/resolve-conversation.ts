@@ -111,6 +111,9 @@ export async function resolveConversationByPhone(
         user_id: ownerUserId,
         phone: sanitized,
         name: name || sanitized,
+        // First-touch attribution: created because WE messaged them
+        // first through the public API (external automation).
+        source: 'api_outbound',
       })
       .select('id')
       .single();

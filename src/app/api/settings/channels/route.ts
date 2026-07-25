@@ -32,6 +32,7 @@ const providers = [
   'microsoft',
   'resend',
   'smtp',
+  'mailtrap',
 ] as const;
 const channels = ['whatsapp', 'sms', 'email'] as const;
 const safeColumns =
@@ -286,6 +287,23 @@ export async function POST(request: Request) {
         { status: 409 }
       );
 
+    // Platform provider policy: operators can withdraw a provider
+    // from the catalog. Existing connections keep working; new ones
+    // are blocked here. No policy row means enabled by default.
+    const { data: policy } = await channelAdmin()
+      .from('platform_provider_policies')
+      .select('is_enabled')
+      .eq('provider', provider)
+      .eq('channel', channel)
+      .maybeSingle();
+    if (policy && !policy.is_enabled)
+      return NextResponse.json(
+        {
+          error: `${PROVIDER_LABEL[provider as ChannelProvider]} is currently not offered on this platform. Contact support for alternatives.`,
+        },
+        { status: 409 }
+      );
+
     const suppliedCredentials = buildProviderCredentials(
       provider,
       parsed.data.credentials
@@ -482,12 +500,18 @@ export async function PATCH(request: Request) {
         { status: 403 }
       );
     }
-    if (
-      parsed.data.isEnabled &&
-      !['connected', 'degraded'].includes(existing.status)
-    )
+    // Test-before-enable: only a connection whose LAST test passed
+    // ('connected') may be enabled. 'degraded' means the last test
+    // failed — it must pass a new test first, otherwise a broken
+    // provider silently swallows sends.
+    if (parsed.data.isEnabled && existing.status !== 'connected')
       return NextResponse.json(
-        { error: 'Test this provider before enabling it' },
+        {
+          error:
+            existing.status === 'degraded'
+              ? 'The last connection test failed. Run "Test connection" and fix the credentials before enabling.'
+              : 'Test this provider before enabling it',
+        },
         { status: 409 }
       );
     if (parsed.data.isPrimary)

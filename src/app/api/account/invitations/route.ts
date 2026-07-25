@@ -400,6 +400,9 @@ export async function POST(request: Request) {
           inviterProfile?.full_name ?? inviterProfile?.email ?? 'A teammate',
         inviteUrl: url,
         expiresInDays: expiryDays,
+        // Prefer the workspace's own provider (Settings → Email
+        // delivery: SMTP / Resend / MSG91) over platform fallbacks.
+        workspace: { db: ctx.supabase, accountId: ctx.accountId },
       });
       emailSent = result.sent;
       emailProvider = result.provider;

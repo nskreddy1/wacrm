@@ -8,11 +8,43 @@
 // in hooks/use-studio-templates.ts.
 // ============================================================
 
-export type TemplateChannel = 'whatsapp' | 'sms';
+export type TemplateChannel = 'whatsapp' | 'sms' | 'email';
+
+/** Channel metadata for the studio's channel rail. */
+export const CHANNEL_META: Record<
+  TemplateChannel,
+  { label: string; studioLabel: string }
+> = {
+  whatsapp: { label: 'WhatsApp', studioLabel: 'WhatsApp Studio' },
+  sms: { label: 'SMS', studioLabel: 'SMS Studio' },
+  email: { label: 'Email', studioLabel: 'Email Studio' },
+};
 
 export type TemplateStatus = 'approved' | 'pending' | 'draft' | 'rejected';
 
 export type TemplateCategory = 'marketing' | 'utility' | 'authentication';
+
+/**
+ * Email has its own category set — email isn't carrier-reviewed, so
+ * categories describe intent (and pick the compliance tier) rather
+ * than Meta's fixed three. Newsletter/promotional require an
+ * unsubscribe link; onboarding/transactional don't; OTP must not
+ * carry marketing content.
+ */
+export type EmailCategory =
+  | 'newsletter'
+  | 'promotional'
+  | 'transactional'
+  | 'onboarding'
+  | 'otp';
+
+export const EMAIL_CATEGORY_LABELS: Record<EmailCategory, string> = {
+  newsletter: 'Newsletter',
+  promotional: 'Promotional',
+  transactional: 'Transactional',
+  onboarding: 'Onboarding',
+  otp: 'One-time password',
+};
 
 /** Which provider a WhatsApp template submits through. */
 export type TemplateProvider = 'meta' | 'twilio' | 'none';
@@ -36,6 +68,13 @@ export interface SmsDraft {
   body: string;
 }
 
+export interface EmailDraft {
+  subject: string;
+  body: string;
+  /** Email-only category (WhatsApp/SMS use StudioTemplate.category). */
+  category: EmailCategory;
+}
+
 export interface StudioTemplate {
   id: string;
   name: string;
@@ -47,6 +86,7 @@ export interface StudioTemplate {
   updatedAt: string;
   whatsapp: WhatsAppDraft;
   sms: SmsDraft;
+  email: EmailDraft;
   /** Provider rejection / submission error, surfaced in the editor. */
   errorMessage?: string | null;
   /** True for rows that only exist locally (never saved). */
