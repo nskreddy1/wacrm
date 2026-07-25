@@ -237,12 +237,21 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 });
 
 describe('dispatchInboundToAiReply — handoff', () => {
-  it('disables auto-reply, writes a summary, and does not send on handoff', async () => {
+  it('disables auto-reply, writes a summary, and sends a warm bridge message on handoff', async () => {
     h.generateReply.mockResolvedValue({ text: '', handoff: true });
     // Round-robin finds no eligible agent (empty account).
     h.state.claim = null as unknown as boolean;
     await dispatchInboundToAiReply(ARGS);
-    expect(h.sendChannelMessage).not.toHaveBeenCalled();
+    // Warm handoff: the customer never faces silence — the model wrote
+    // no bridge text here, so the static fallback bridge is sent.
+    expect(h.sendChannelMessage).toHaveBeenCalledTimes(1);
+    const bridgeArg = h.sendChannelMessage.mock.calls[0]?.[0] as {
+      payload: { kind: string; text: string };
+      senderType: string;
+    };
+    expect(bridgeArg.senderType).toBe('bot');
+    expect(bridgeArg.payload.kind).toBe('text');
+    expect(bridgeArg.payload.text).toContain('looping in');
     // No handoff target configured → one round-robin RPC attempt.
     expect(h.state.rpcCalls).toHaveLength(1);
     expect(h.state.rpcCalls[0]?.name).toBe('claim_round_robin_agent');

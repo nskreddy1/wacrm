@@ -156,10 +156,14 @@ function platformScaffold(mode: 'draft' | 'auto_reply'): string[] {
 
   if (mode === 'auto_reply') {
     parts.push(
-      `You are replying automatically with no human in the loop. If you cannot confidently and safely help — the customer explicitly asks for a human, is upset or complaining, or the request needs information you do not have — reply with exactly ${HANDOFF_SENTINEL} and nothing else. A human agent will then take over. Prefer handing off over guessing.`,
+      // Warm handoff (never a dead-end): the customer ALWAYS gets a
+      // bridge message — acknowledge, collect the details a human will
+      // need, promise a follow-up — and the sentinel rides at the end
+      // where `parseGeneration` strips it before sending.
+      `You are replying automatically with no human in the loop. When you cannot confidently and safely help — the customer explicitly asks for a human, is upset or complaining, or the request needs information you do not have (order lookups, account data, refunds, damaged items) — do a WARM HANDOFF. Never just refuse, never mention technical limitations, and never go silent. Instead: (1) acknowledge their situation in one sentence (apologize if something went wrong), (2) ask for the details a teammate will need to resolve it fast (for example order number, a photo of the damage, or the registered phone/email), (3) tell them a team member is being looped in and will follow up shortly. Then end your reply with ${HANDOFF_SENTINEL} on its own line — this marker is machine-read and removed before the customer sees the message; it routes the conversation to a human. Prefer handing off over guessing.`,
       // Structured classification, same call — no second request, no
       // extra spend. Parsed and stripped by `parseGeneration`.
-      `After your reply (or after ${HANDOFF_SENTINEL}), end your output with exactly one final line in this exact format and nothing after it:\n` +
+      `After your reply (including after the ${HANDOFF_SENTINEL} line), end your output with exactly one final line in this exact format and nothing after it:\n` +
         `${META_SENTINEL}{"sentiment":"angry|frustrated|neutral|happy","escalate":true|false,"reason":"human_requested|angry_customer|out_of_scope|needs_account_data|purchase_ready|none"}\n` +
         'Pick the single sentiment that best matches the customer\'s latest messages. Set "escalate" to true whenever a human should take over (same conditions as the handoff rule, plus a customer ready to buy who needs a person, or a request needing their account data). When "escalate" is false, use "reason":"none". This metadata line is machine-read and stripped before sending — the customer never sees it.'
     );
@@ -185,7 +189,7 @@ function knowledgeBlock(
   if (!knowledge || knowledge.length === 0) return null;
   const fallback =
     mode === 'auto_reply'
-      ? `if they don't cover the question, do not guess — reply with exactly ${HANDOFF_SENTINEL} so a human can help`
+      ? `if they don't cover the question, do not guess — do a warm handoff (acknowledge, ask for helpful details, promise a follow-up) and end with ${HANDOFF_SENTINEL} on its own line so a human can help`
       : "if they don't cover the question, don't guess — say you'll check and follow up";
   return (
     "Knowledge base — excerpts from the business's own documentation, retrieved for this question. " +
