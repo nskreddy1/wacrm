@@ -70,9 +70,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Drafts are the Support Copilot's surface — only ITS agent row
-    // (own provider, key, model, prompt) powers this route.
-    const config = await loadAgentConfig(supabase, accountId, 'copilot').catch(
+    // Drafts are the "AI suggestions" capability of the account's
+    // single agent — gated on its suggestions_enabled column.
+    const config = await loadAgentConfig(
+      supabase,
+      accountId,
+      'suggestions'
+    ).catch(
       (err) => {
         // Decrypt failure — surface distinctly from "not configured".
         console.error('[ai/draft] loadAgentConfig error:', err);
@@ -86,7 +90,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            'The Support Copilot is not set up. Configure it in AI agents.',
+            'AI suggestions are not set up. Configure your agent in AI Agents.',
           code: 'ai_not_configured',
         },
         { status: 400 }

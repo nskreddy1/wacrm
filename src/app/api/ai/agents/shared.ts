@@ -133,14 +133,16 @@ export async function parseAgentPayload(
     return err('api_key is required');
   }
 
-  // ---- kind-specific settings ------------------------------------
+  // ---- behavior settings -----------------------------------------
+  // The single agent owns all behavior knobs; auto-reply-specific ones
+  // (cap, hours, handoff) only take effect while autoreply_enabled.
   const rawSettings =
     body.settings && typeof body.settings === 'object'
       ? (body.settings as Record<string, unknown>)
       : {};
   const settings: Record<string, unknown> = {};
 
-  if (kind === 'autoreply') {
+  {
     if ('replyCap' in rawSettings || !partial) {
       let cap = Number(rawSettings.replyCap);
       if (!Number.isFinite(cap)) cap = 3;
@@ -255,6 +257,14 @@ export async function parseAgentPayload(
       system_prompt: systemPrompt,
       is_enabled:
         typeof body.is_enabled === 'boolean' ? body.is_enabled : undefined,
+      suggestions_enabled:
+        typeof body.suggestions_enabled === 'boolean'
+          ? body.suggestions_enabled
+          : undefined,
+      autoreply_enabled:
+        typeof body.autoreply_enabled === 'boolean'
+          ? body.autoreply_enabled
+          : undefined,
       settings,
     },
     plainApiKey: plainApiKey || null,

@@ -12,7 +12,7 @@ import {
 import { encrypt } from '@/features/whatsapp/lib/encryption';
 import {
   AGENT_COLUMNS,
-  isAgentKind,
+  fetchAgentRow,
   toClientAgent,
   type AgentRow,
 } from '@/features/assistant/lib/ai/agents';
@@ -21,32 +21,30 @@ import { parseAgentPayload, validateAgentCredentials } from './shared';
 /**
  * GET /api/ai/agents
  *
- * List the account's agents (0–2 rows: copilot / autoreply). Any member
- * may read — the inbox banner and draft button need to know whether an
- * agent is live. Keys are reduced to has-flags, never returned.
+ * Return the account's single default agent (or null before first
+ * setup). Any member may read — the inbox banner and draft button need
+ * to know whether the agent is live. Keys are reduced to has-flags,
+ * never returned.
  */
 export async function GET() {
   try {
     const { supabase, accountId } = await getCurrentAccount();
 
-    const { data, error } = await supabase
-      .from('ai_agents')
-      .select(AGENT_COLUMNS)
-      .eq('account_id', accountId)
-      .order('kind');
-
-    if (error) {
+    const row = await fetchAgentRow(supabase, accountId).catch((error) => {
       console.error('[ai/agents GET] fetch error:', error);
+      throw new Error('fetch_failed');
+    });
+
+    return NextResponse.json({
+      agent: row ? toClientAgent(row) : null,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'fetch_failed') {
       return NextResponse.json(
-        { error: 'Failed to load agents' },
+        { error: 'Failed to load the agent' },
         { status: 500 }
       );
     }
-
-    return NextResponse.json({
-      agents: (data as AgentRow[]).map(toClientAgent),
-    });
-  } catch (err) {
     return toErrorResponse(err);
   }
 }
@@ -54,11 +52,15 @@ export async function GET() {
 /**
  * POST /api/ai/agents  (admin+)
  *
- * Create ONE agent of a given kind (unique per account+kind — a second
- * create of the same kind 409s; use PATCH /api/ai/agents/[id] to edit).
- * The provider key is validated live before persisting ("verify before
- * save", same discipline as the WhatsApp config with Meta) and stored
- * AES-256-GCM-encrypted.
+ * First-time setup of the account's single default agent (unique per
+ * account — a second create 409s; use PATCH /api/ai/agents/[id] to
+ * edit). The provider key is validated live before persisting
+ * ("verify before save", same discipline as the WhatsApp config with
+ * Meta) and stored AES-256-GCM-encrypted.
+ *
+ * Capabilities start how the wizard sends them (suggestions_enabled /
+ * autoreply_enabled booleans) — each is its own column, independently
+ * toggleable later.
  */
 export async function POST(request: Request) {
   try {
@@ -78,17 +80,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!isAgentKind(body.kind)) {
-      return NextResponse.json(
-        { error: "kind must be 'copilot' or 'autoreply'" },
-        { status: 400 }
-      );
-    }
-
     // Full-payload parse: create requires provider+model (+key for
     // non-Ollama). Field errors come back as {error} 400s.
     const parsed = await parseAgentPayload(body, {
-      kind: body.kind,
       partial: false,
       supabase,
       accountId,
@@ -107,14 +101,16 @@ export async function POST(request: Request) {
       .insert({
         account_id: accountId,
         created_by: userId,
-        kind: body.kind,
+        kind: 'default',
         display_name: values.display_name,
         provider: values.provider,
         model: values.model,
         api_key: plainApiKey ? encrypt(plainApiKey) : null,
         base_url: values.base_url,
         system_prompt: values.system_prompt,
-        is_enabled: values.is_enabled ?? false,
+        is_enabled: values.is_enabled ?? true,
+        suggestions_enabled: values.suggestions_enabled ?? true,
+        autoreply_enabled: values.autoreply_enabled ?? false,
         settings: values.settings ?? {},
       })
       .select(AGENT_COLUMNS)
@@ -124,7 +120,7 @@ export async function POST(request: Request) {
       // 23505 = unique_violation on (account_id, kind).
       if (error.code === '23505') {
         return NextResponse.json(
-          { error: 'An agent of this kind already exists — edit it instead.' },
+          { error: 'This account already has an agent — edit it instead.' },
           { status: 409 }
         );
       }

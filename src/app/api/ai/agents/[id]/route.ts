@@ -67,7 +67,6 @@ export async function PATCH(
     const row = existing as AgentRow;
 
     const parsed = await parseAgentPayload(body, {
-      kind: row.kind,
       partial: true,
       supabase,
       accountId,
@@ -90,6 +89,14 @@ export async function PATCH(
     }
     if (typeof values.is_enabled === 'boolean') {
       patch.is_enabled = values.is_enabled;
+    }
+    // The two capabilities are independent first-class columns — each
+    // toggle patches only its own flag.
+    if (typeof values.suggestions_enabled === 'boolean') {
+      patch.suggestions_enabled = values.suggestions_enabled;
+    }
+    if (typeof values.autoreply_enabled === 'boolean') {
+      patch.autoreply_enabled = values.autoreply_enabled;
     }
     if (values.settings && Object.keys(values.settings).length > 0) {
       // Shallow-merge jsonb: untouched settings keys survive.
@@ -118,8 +125,12 @@ export async function PATCH(
 
     // Enabling a half-configured agent is refused with a clear message
     // instead of letting the runtime silently no-op later.
+    const turningSomethingOn =
+      patch.is_enabled === true ||
+      patch.suggestions_enabled === true ||
+      patch.autoreply_enabled === true;
     if (
-      patch.is_enabled === true &&
+      turningSomethingOn &&
       (!effProvider || !effModel || (!row.api_key && !plainApiKey && effProvider !== 'ollama'))
     ) {
       return NextResponse.json(
