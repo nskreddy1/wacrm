@@ -34,15 +34,11 @@ export default async function AdminLayout({
   return (
     <div className="flex h-0 min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 md:p-6">
       <header className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-balance">
-            Admin console
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Platform-wide workspace, support and channel operations. Every
-            mutation is recorded in the audit trail.
-          </p>
-        </div>
+        {/* Enterprise consoles are self-evident: a title and the nav,
+            no explanatory paragraph. */}
+        <h1 className="text-xl font-semibold tracking-tight text-balance">
+          Admin console
+        </h1>
         <AdminNav />
       </header>
       <main className="flex-1">{children}</main>

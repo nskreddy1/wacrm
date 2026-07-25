@@ -6,18 +6,18 @@ import {
   Bot,
   Building2,
   LifeBuoy,
-  Plug,
   Radio,
   SlidersHorizontal,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
+// Providers is intentionally absent: it is a standalone page with
+// its own sidebar entry, not a console tab.
 const items = [
   { href: '/admin/workspaces', label: 'Workspaces', icon: Building2 },
   { href: '/admin/tickets', label: 'Tickets', icon: LifeBuoy },
   { href: '/admin/channels', label: 'Channels', icon: Radio },
-  { href: '/admin/providers', label: 'Providers', icon: Plug },
   { href: '/admin/ai-agent', label: 'AI Agent', icon: Bot },
   { href: '/admin/platform', label: 'Platform', icon: SlidersHorizontal },
 ] as const;
