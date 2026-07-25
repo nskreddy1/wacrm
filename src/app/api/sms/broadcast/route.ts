@@ -12,6 +12,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
+import { logAuditEvent } from '@/lib/audit-events';
 import type { ChannelConnection } from '@/types';
 
 interface SmsBroadcastRecipient {
@@ -214,6 +215,20 @@ export async function POST(request: Request) {
         failedCount++;
       }
     }
+
+    // Audit: counts only — no message bodies or phone numbers.
+    await logAuditEvent(supabase, {
+      accountId,
+      actorId: user.id,
+      action: 'broadcast.sent',
+      entity: 'sms:broadcast',
+      meta: {
+        channel: 'sms',
+        total: recipients.length,
+        sent: sentCount,
+        failed: failedCount,
+      },
+    });
 
     return NextResponse.json({
       success: true,
