@@ -11,11 +11,14 @@ import {
   type AiProvider,
 } from '@/features/assistant/lib/ai/types';
 import { OLLAMA_PLACEHOLDER_KEY } from '@/features/assistant/lib/ai/defaults';
-import type { AgentKind } from '@/features/assistant/lib/ai/agents';
 
 // ============================================================
-// Shared request parsing + live validation for the per-agent CRUD
-// routes (POST /api/ai/agents, PATCH /api/ai/agents/[id]).
+// Shared request parsing + live validation for the single default
+// agent's CRUD routes (POST /api/ai/agents, PATCH /api/ai/agents/[id]).
+//
+// The agent has one config (provider, key, model, persona) and two
+// independently toggleable capabilities, each a first-class column:
+// suggestions_enabled (inbox drafts) and autoreply_enabled.
 //
 // Design: one parser with a `partial` switch instead of two diverging
 // validators — create demands a complete, provider-verified agent;
@@ -39,6 +42,8 @@ export interface ParsedAgentPayload {
     base_url: string | null;
     system_prompt: string | null;
     is_enabled?: boolean;
+    suggestions_enabled?: boolean;
+    autoreply_enabled?: boolean;
     settings?: Record<string, unknown>;
   };
   /** New plaintext key from this request; null = keep the stored one. */
@@ -50,13 +55,12 @@ export interface ParsedAgentPayload {
 export async function parseAgentPayload(
   body: Record<string, unknown>,
   opts: {
-    kind: AgentKind;
     partial: boolean;
     supabase: SupabaseClient;
     accountId: string;
   }
 ): Promise<ParsedAgentPayload | { errorResponse: NextResponse }> {
-  const { kind, partial, supabase, accountId } = opts;
+  const { partial, supabase, accountId } = opts;
   const provided = new Set(Object.keys(body));
   const err = (m: string) => ({ errorResponse: bad(m) });
 

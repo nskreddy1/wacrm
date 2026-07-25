@@ -32,9 +32,12 @@ where a.account_id = b.account_id
   and a.created_at < b.created_at;
 
 -- 3) One row per account; `kind` no longer distinguishes rows.
+--    Drop the old per-kind CHECK BEFORE rewriting values, otherwise
+--    the update itself violates it.
+alter table ai_agents drop constraint if exists ai_agents_kind_check;
+
 update ai_agents set kind = 'default';
 
-alter table ai_agents drop constraint if exists ai_agents_kind_check;
 alter table ai_agents
   add constraint ai_agents_kind_check check (kind = 'default');
 
