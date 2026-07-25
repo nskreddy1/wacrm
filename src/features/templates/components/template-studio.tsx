@@ -66,10 +66,12 @@ import {
   analyzeSms,
   CATEGORY_LABELS,
   CHANNEL_META,
+  EMAIL_CATEGORY_LABELS,
   STATUS_META,
   TEMPLATE_VARIABLES,
   withSampleValues,
   type CustomTemplateVariable,
+  type EmailCategory,
   type HeaderKind,
   type StudioTemplate,
   type TemplateButton,
@@ -117,7 +119,7 @@ function blankTemplate(channel: TemplateChannel = 'whatsapp'): StudioTemplate {
       buttons: [],
     },
     sms: { body: '' },
-    email: { subject: '', body: '' },
+    email: { subject: '', body: '', category: 'promotional' },
     isNew: true,
   };
 }
@@ -439,7 +441,11 @@ function TemplateRail({
                   {CHANNEL_META[tpl.channel].label}
                 </span>
                 <span aria-hidden="true">·</span>
-                <span>{CATEGORY_LABELS[tpl.category]}</span>
+                <span>
+                  {tpl.channel === 'email'
+                    ? EMAIL_CATEGORY_LABELS[tpl.email.category]
+                    : CATEGORY_LABELS[tpl.category]}
+                </span>
                 <span aria-hidden="true">·</span>
                 <span>{tpl.language}</span>
               </div>
@@ -1479,21 +1485,55 @@ export function TemplateStudio() {
             <Label className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
               Category
             </Label>
-            <Select
-              value={active.category}
-              onValueChange={(v) =>
-                patchActive({ category: v as StudioTemplate['category'] })
-              }
-            >
-              <SelectTrigger className="mt-1.5 w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="marketing">Marketing</SelectItem>
-                <SelectItem value="utility">Utility</SelectItem>
-                <SelectItem value="authentication">Authentication</SelectItem>
-              </SelectContent>
-            </Select>
+            {active.channel === 'email' ? (
+              // Email intent categories — they drive compliance rules
+              // (newsletter/promotional require unsubscribe; OTP must
+              // not carry marketing content).
+              <Select
+                value={active.email.category}
+                onValueChange={(v) =>
+                  v &&
+                  patchActive({
+                    email: {
+                      ...active.email,
+                      category: v as EmailCategory,
+                    },
+                  })
+                }
+              >
+                <SelectTrigger className="mt-1.5 w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(
+                    Object.entries(EMAIL_CATEGORY_LABELS) as [
+                      EmailCategory,
+                      string,
+                    ][]
+                  ).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select
+                value={active.category}
+                onValueChange={(v) =>
+                  patchActive({ category: v as StudioTemplate['category'] })
+                }
+              >
+                <SelectTrigger className="mt-1.5 w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="marketing">Marketing</SelectItem>
+                  <SelectItem value="utility">Utility</SelectItem>
+                  <SelectItem value="authentication">Authentication</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div>
             <Label className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">

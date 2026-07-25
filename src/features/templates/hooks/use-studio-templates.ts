@@ -80,8 +80,10 @@ function categoryFromDb(
   category: string
 ): TemplateCategory {
   if (channel === 'sms' || channel === 'email') {
-    if (category === 'transactional') return 'utility';
+    if (category === 'transactional' || category === 'onboarding')
+      return 'utility';
     if (category === 'otp') return 'authentication';
+    // marketing, newsletter, promotional
     return 'marketing';
   }
   const lower = category.toLowerCase();
@@ -248,7 +250,9 @@ function saveBody(tpl: StudioTemplate) {
       channel: 'email' as const,
       id: tpl.isNew ? undefined : tpl.id,
       name: tpl.name.trim() || 'Untitled template',
-      category: SMS_CATEGORY[tpl.category],
+      // Email carries its own category set (newsletter, promotional,
+      // transactional, onboarding, otp) straight to the API.
+      category: tpl.email.category,
       language: tpl.language,
       subject_text: tpl.email.subject,
       body_text: tpl.email.body,
