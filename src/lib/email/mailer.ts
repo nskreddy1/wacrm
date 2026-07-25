@@ -19,7 +19,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { decrypt, encrypt } from '@/features/whatsapp/lib/encryption';
 
-export type EmailProvider = 'smtp' | 'resend' | 'msg91';
+export type EmailProvider = 'smtp' | 'resend' | 'msg91' | 'mailtrap';
 
 export interface EmailMessage {
   to: string;
@@ -32,7 +32,7 @@ export interface EmailMessage {
 export interface EmailSendResult {
   sent: boolean;
   /** Which adapter actually handled the send. */
-  provider: EmailProvider | 'platform_resend' | null;
+  provider: EmailProvider | 'platform_resend' | 'platform_mailtrap' | null;
   error?: string;
 }
 
@@ -54,10 +54,16 @@ export interface Msg91Credentials {
   domain: string;
 }
 
+export interface MailtrapCredentials {
+  /** Mailtrap API token (Sending → API Tokens). */
+  token: string;
+}
+
 export type EmailCredentials =
   | SmtpCredentials
   | ResendCredentials
-  | Msg91Credentials;
+  | Msg91Credentials
+  | MailtrapCredentials;
 
 export interface AccountEmailSettings {
   provider: EmailProvider;
@@ -221,6 +227,43 @@ async function sendViaMsg91(
 }
 
 // ------------------------------------------------------------
+// Adapter: Mailtrap Email Sending API
+// ------------------------------------------------------------
+async function sendViaMailtrapToken(
+  token: string,
+  fromEmail: string,
+  fromName: string | null,
+  msg: EmailMessage,
+  provider: EmailSendResult['provider']
+): Promise<EmailSendResult> {
+  try {
+    const res = await fetch('https://send.api.mailtrap.io/api/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: { email: fromEmail, ...(fromName ? { name: fromName } : {}) },
+        to: [{ email: msg.to }],
+        subject: msg.subject,
+        html: msg.html,
+        ...(msg.text ? { text: msg.text } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.error('[mailer] mailtrap send failed:', res.status, detail);
+      return { sent: false, provider, error: `mailtrap ${res.status}` };
+    }
+    return { sent: true, provider };
+  } catch (err) {
+    console.error('[mailer] mailtrap network error:', err);
+    return { sent: false, provider, error: 'network error' };
+  }
+}
+
+// ------------------------------------------------------------
 // Dispatch
 // ------------------------------------------------------------
 
@@ -241,6 +284,14 @@ export async function sendWithSettings(
       );
     case 'msg91':
       return sendViaMsg91(settings, msg);
+    case 'mailtrap':
+      return sendViaMailtrapToken(
+        (settings.credentials as MailtrapCredentials).token,
+        settings.fromEmail,
+        settings.fromName,
+        msg,
+        'mailtrap'
+      );
     default:
       return { sent: false, provider: null, error: 'unknown provider' };
   }
@@ -264,12 +315,35 @@ export async function sendEmail(
     // fall through to platform fallback so mail still goes out.
   }
 
-  const platformKey = process.env.RESEND_API_KEY;
-  if (platformKey) {
+  // Platform fallback chain: Resend first, then Mailtrap. Each is
+  // tried only when its env key exists; a Resend failure (unverified
+  // domain, revoked key) falls through to Mailtrap so mail still
+  // goes out.
+  const resendKey = process.env.RESEND_API_KEY;
+  if (resendKey) {
     const from =
       process.env.EMAIL_FROM?.trim() ||
       'Workspace Notifications <onboarding@resend.dev>';
-    return sendViaResendKey(platformKey, from, msg, 'platform_resend');
+    const result = await sendViaResendKey(
+      resendKey,
+      from,
+      msg,
+      'platform_resend'
+    );
+    if (result.sent) return result;
+  }
+
+  const mailtrapToken = process.env.MAILTRAP_API_TOKEN;
+  if (mailtrapToken) {
+    const fromEmail =
+      process.env.MAILTRAP_FROM_EMAIL?.trim() || 'hello@demomailtrap.co';
+    return sendViaMailtrapToken(
+      mailtrapToken,
+      fromEmail,
+      'Workspace Notifications',
+      msg,
+      'platform_mailtrap'
+    );
   }
 
   return { sent: false, provider: null, error: 'no email provider configured' };
