@@ -119,9 +119,12 @@ export async function PUT(
       patch.unlimited_all = body.unlimited_all;
     }
     if ('reason' in body) {
-      if (body.reason !== null && typeof body.reason !== 'string') {
+      if (
+        body.reason !== null &&
+        (typeof body.reason !== 'string' || body.reason.length > 500)
+      ) {
         return NextResponse.json(
-          { error: 'reason must be a string or null' },
+          { error: 'reason must be a string (max 500 chars) or null' },
           { status: 400 }
         );
       }

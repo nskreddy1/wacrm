@@ -21,7 +21,7 @@ import {
 function stubClient(opts: {
   planId?: string;
   planLimits?: Record<string, number | null>;
-  override?: Record<string, number | null> | null;
+  override?: Record<string, number | boolean | null> | null;
   liveCount?: number;
   monthlyUsed?: number | null;
   rpcResult?: number;
@@ -54,10 +54,19 @@ function stubClient(opts: {
       if (failWith) throw failWith;
       if (table === 'account_limit_overrides') {
         return {
-          select: (col: string) => ({
+          select: (cols: string) => ({
             eq: () => ({
+              // Real PostgREST returns one key per selected column —
+              // mirror that by splitting the comma-separated list.
               maybeSingle: async () => ({
-                data: override ? { [col]: override[col] ?? null } : null,
+                data: override
+                  ? Object.fromEntries(
+                      cols
+                        .split(',')
+                        .map((c) => c.trim())
+                        .map((c) => [c, override[c] ?? null])
+                    )
+                  : null,
                 error: null,
               }),
             }),
@@ -169,6 +178,32 @@ describe('canAddResource (point-in-time limits)', () => {
     const d = await canAddResource(ACCOUNT, 'max_contacts');
     expect(d.allowed).toBe(true);
     expect(d.limit).toBe(2000);
+  });
+
+  it('unlimited_all override makes every limit unlimited', async () => {
+    __setQuotaClientForTests(
+      stubClient({
+        planLimits: { max_contacts: 500 },
+        override: { unlimited_all: true },
+        liveCount: 999999,
+      })
+    );
+    const d = await canAddResource(ACCOUNT, 'max_contacts');
+    expect(d.allowed).toBe(true);
+    expect(d.limit).toBeNull();
+  });
+
+  it('per-feature -1 sentinel makes that one feature unlimited', async () => {
+    __setQuotaClientForTests(
+      stubClient({
+        planLimits: { max_contacts: 500 },
+        override: { max_contacts: -1 },
+        liveCount: 999999,
+      })
+    );
+    const d = await canAddResource(ACCOUNT, 'max_contacts');
+    expect(d.allowed).toBe(true);
+    expect(d.limit).toBeNull();
   });
 
   it('respects bulk amount (batch add crossing the cap)', async () => {

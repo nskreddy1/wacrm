@@ -46,6 +46,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { WorkspaceLimitsPanel } from '@/features/admin/components/workspace-limits-panel';
 
 interface WorkspaceRow {
   id: string;

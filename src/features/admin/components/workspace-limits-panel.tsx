@@ -126,7 +126,12 @@ export function WorkspaceLimitsPanel({ workspaceId }: { workspaceId: string }) {
         <Label htmlFor="ws-plan" className="text-sm">
           Plan
         </Label>
-        <Select value={planId} onValueChange={setPlanId}>
+        <Select
+          value={planId}
+          onValueChange={(value) => {
+            if (value !== null) setPlanId(value);
+          }}
+        >
           <SelectTrigger id="ws-plan" className="w-44">
             <SelectValue placeholder="Select plan" />
           </SelectTrigger>
