@@ -98,7 +98,10 @@ export default function NewBroadcastPage() {
               found.add(connection.channel);
           }
         }
-      } catch {}
+      } catch (error) {
+        // Non-fatal: fall through to the direct whatsapp_config check below.
+        console.warn('channel connections fetch failed, using fallback', error);
+      }
       if (!found.has('whatsapp')) {
         const supabase = createClient();
         const { data } = await supabase
