@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GridLayout, { useContainerWidth, type Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
-import { GripVertical, Pencil, Plus, X } from 'lucide-react';
+import { GripVertical, LayoutDashboard, Pencil, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { DashboardOverview } from '@/lib/data/dashboard/types';
@@ -170,32 +170,47 @@ export function CustomDashboard({
     persist(widgets.map((w) => (w.id === next.id ? next : w)));
   }
 
-  if (widgets.length === 0) {
+  const panelOpen = (editing && selected !== null) || addOpen;
+
+  if (widgets.length === 0 && !editing && !addOpen) {
     return (
-      <>
-        <div className="border-border flex min-h-[50vh] flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center">
-          <p className="text-sm font-medium">This dashboard is empty.</p>
-          <p className="text-muted-foreground max-w-sm text-xs leading-relaxed text-pretty">
-            Add KPI cards, charts, target meters and panels to build a view
-            that matches how you work.
-          </p>
-          <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
-            <Plus className="size-4" aria-hidden="true" /> Add widget
-          </Button>
-        </div>
-        <WidgetConfigPanel
-          open={addOpen}
-          onOpenChange={setAddOpen}
-          overview={overview}
-          onAdd={(w) => persist([...widgets, w])}
-        />
-      </>
+      <div className="border-border flex min-h-[50vh] flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center">
+        <p className="text-sm font-medium">This dashboard is empty.</p>
+        <p className="text-muted-foreground max-w-sm text-xs leading-relaxed text-pretty">
+          Add KPI cards, charts, target meters and panels to build a view
+          that matches how you work.
+        </p>
+        <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+          <Plus className="size-4" aria-hidden="true" /> Add widget
+        </Button>
+      </div>
     );
   }
 
+  // Rows of faint background cells shown in edit mode (Twenty-style):
+  // enough rows to cover the content plus breathing room to drop into.
+  const contentRows = layout.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+  const bgRows = Math.max(contentRows + 3, 8);
+
   return (
-    <>
-      <div ref={containerRef} className="min-w-0">
+    <div className="flex min-w-0 flex-col items-stretch gap-4 sm:flex-row sm:items-start">
+      <div ref={containerRef} className="relative min-w-0 flex-1">
+        {/* Edit-mode canvas: the full grid of drop cells. */}
+        {editing && !isMobile && mounted && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 grid content-start"
+            style={{
+              gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
+              gridAutoRows: ROW_HEIGHT,
+              gap: GRID_MARGIN[0],
+            }}
+          >
+            {Array.from({ length: bgRows * GRID_COLS }, (_, i) => (
+              <div key={i} className="border-border/50 bg-muted/20 rounded-lg border" />
+            ))}
+          </div>
+        )}
         {isMobile ? (
           // Twenty's phone layout: widgets stack full-width in grid order.
           <div className="flex flex-col gap-4">
@@ -306,22 +321,43 @@ export function CustomDashboard({
             </GridLayout>
           )
         )}
+        {/* Twenty-style Add Widget card, sitting on the canvas. */}
+        {editing && !isMobile && (
+          <div
+            className="relative mt-4 flex justify-center"
+            style={
+              widgets.length === 0
+                ? { paddingTop: ROW_HEIGHT * 2 }
+                : undefined
+            }
+          >
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className={cn(
+                'bg-card border-border flex w-72 flex-col items-center gap-3 rounded-xl border px-6 py-8 text-center shadow-sm',
+                'hover:border-primary/40 transition-[border-color,transform] duration-150 ease-out active:scale-[0.98]'
+              )}
+            >
+              <span className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-2xl">
+                <LayoutDashboard className="size-7" aria-hidden="true" />
+              </span>
+              <span className="text-sm font-semibold">Add widget</span>
+              <span className="text-muted-foreground text-xs leading-relaxed">
+                {widgets.length === 0
+                  ? 'Click to add your first widget'
+                  : 'KPIs, charts, targets and panels'}
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {editing && !isMobile && (
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          className="border-border text-muted-foreground hover:border-primary/40 hover:text-foreground mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed py-6 text-sm font-medium transition-colors"
-        >
-          <Plus className="size-4" aria-hidden="true" /> Add widget
-        </button>
-      )}
-
-      {/* One panel, two flows: edit (live, seeded from the widget)
+      {/* One panel, two flows, docked side-by-side with the grid so
+          every change is visible live: edit (seeded from the widget)
           and add (type list first). Same design either way. */}
       <WidgetConfigPanel
-        open={(editing && selected !== null) || addOpen}
+        open={panelOpen}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedId(null);
@@ -333,6 +369,6 @@ export function CustomDashboard({
         onUpdate={updateWidget}
         onAdd={(w) => persist([...widgets, w])}
       />
-    </>
+    </div>
   );
 }

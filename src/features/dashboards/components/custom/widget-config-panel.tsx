@@ -21,8 +21,10 @@ import {
   BarChart3,
   Gauge,
   LayoutList,
+  Plus,
   Shapes,
   TrendingUp,
+  X,
 } from 'lucide-react';
 
 import type { DashboardOverview } from '@/lib/data/dashboard/types';
@@ -52,13 +54,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
 import { GraphConfigForm } from './graph-config-form';
 
 const TYPE_OPTIONS: Array<{
@@ -134,6 +129,11 @@ interface PanelProps {
   onUpdate?: (widget: DashboardWidget) => void;
 }
 
+/**
+ * Docked side-by-side panel (Twenty-style): lives INLINE next to the
+ * dashboard grid, never over it, so every change is visible live.
+ * The parent owns the flex layout; this renders the panel column.
+ */
 export function WidgetConfigPanel({
   open,
   onOpenChange,
@@ -143,22 +143,28 @@ export function WidgetConfigPanel({
   onUpdate,
 }: PanelProps) {
   const editing = Boolean(widget);
+  if (!open) return null;
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-        {open && (
-          <PanelBody
-            key={widget?.id ?? 'new'}
-            editing={editing}
-            widget={widget ?? null}
-            overview={overview}
-            onAdd={onAdd}
-            onUpdate={onUpdate}
-            close={() => onOpenChange(false)}
-          />
-        )}
-      </SheetContent>
-    </Sheet>
+    <aside
+      aria-label={editing ? 'Edit widget' : 'New widget'}
+      className={cn(
+        'border-border bg-background flex w-full shrink-0 flex-col overflow-y-auto border-l',
+        'sm:sticky sm:top-4 sm:max-h-[calc(100vh-6rem)] sm:w-90',
+        // Entrance: ease-out, fast — the panel is opened constantly
+        // while editing, so it must feel immediate.
+        'animate-in fade-in slide-in-from-right-4 duration-200 ease-out'
+      )}
+    >
+      <PanelBody
+        key={widget?.id ?? 'new'}
+        editing={editing}
+        widget={widget ?? null}
+        overview={overview}
+        onAdd={onAdd}
+        onUpdate={onUpdate}
+        close={() => onOpenChange(false)}
+      />
+    </aside>
   );
 }
 
@@ -341,11 +347,24 @@ function PanelBody({
   if (step === 'type') {
     return (
       <>
-        <SheetHeader>
-          <SheetTitle>New widget</SheetTitle>
-          <SheetDescription>Widget type</SheetDescription>
-        </SheetHeader>
-        <div className="flex flex-col gap-1 px-4 pb-6">
+        <div className="border-border flex items-center gap-2 border-b px-4 py-3">
+          <span className="bg-primary/10 text-primary flex size-6 items-center justify-center rounded-md">
+            <Plus className="size-4" aria-hidden="true" />
+          </span>
+          <h2 className="text-sm font-semibold">New widget</h2>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close panel"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto flex size-7 items-center justify-center rounded-md transition-[background-color,transform] duration-150 ease-out active:scale-[0.97]"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+        <p className="text-muted-foreground px-4 pt-3 pb-1 text-xs font-medium">
+          Widget type
+        </p>
+        <div className="flex flex-col gap-1 px-3 pb-6">
           {TYPE_OPTIONS.map((opt, i) => (
             <button
               key={opt.type}
@@ -383,33 +402,44 @@ function PanelBody({
 
   return (
     <>
-      <SheetHeader>
-        <div className="flex items-center gap-2">
-          {!editing && (
-            <button
-              type="button"
-              onClick={() => setStep('type')}
-              aria-label="Back to widget types"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1 flex size-7 items-center justify-center rounded-md transition-[background-color,transform] duration-150 ease-out active:scale-[0.97]"
-            >
-              <ArrowLeft className="size-4" aria-hidden="true" />
-            </button>
-          )}
-          <SheetTitle className="min-w-0 truncate">
-            {title.trim() || draftTitle}
-          </SheetTitle>
-          <span className="text-muted-foreground shrink-0 text-sm">
-            {typeMeta?.label}
+      <div className="border-border flex items-center gap-2 border-b px-4 py-3">
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => setStep('type')}
+            aria-label="Back to widget types"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-[background-color,transform] duration-150 ease-out active:scale-[0.97]"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+          </button>
+        )}
+        {typeMeta && (
+          <span className="text-muted-foreground flex size-6 shrink-0 items-center justify-center">
+            <typeMeta.icon className="size-4" aria-hidden="true" />
           </span>
-        </div>
-        <SheetDescription>
-          {editing
-            ? 'Changes apply to the dashboard immediately.'
-            : 'Configure the widget, then add it to the dashboard.'}
-        </SheetDescription>
-      </SheetHeader>
+        )}
+        <h2 className="min-w-0 truncate text-sm font-semibold">
+          {title.trim() || draftTitle}
+        </h2>
+        <span className="text-muted-foreground shrink-0 text-sm">
+          {typeMeta?.label}
+        </span>
+        <button
+          type="button"
+          onClick={close}
+          aria-label="Close panel"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto flex size-7 shrink-0 items-center justify-center rounded-md transition-[background-color,transform] duration-150 ease-out active:scale-[0.97]"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+      <p className="text-muted-foreground sr-only">
+        {editing
+          ? 'Changes apply to the dashboard immediately.'
+          : 'Configure the widget, then add it to the dashboard.'}
+      </p>
 
-      <div className="flex flex-col gap-4 px-4 pb-6">
+      <div className="flex flex-col gap-4 px-4 pt-4 pb-6">
         <FormRow label="Title" htmlFor="wcp-title">
           <Input
             id="wcp-title"
