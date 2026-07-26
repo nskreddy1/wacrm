@@ -215,6 +215,33 @@ export async function POST(request: Request) {
       // teammate edits collide with the editor's own same-named
       // templates on the legacy (user_id, name, language) index.
       const { user_id: _userId, ...updateRow } = row;
+
+      // Server-side provider lock (mirrors the studio UI): once a
+      // WhatsApp row is tied to a provider-side object (Twilio
+      // Content SID / Meta template id) or has left DRAFT, its
+      // provider is immutable — "switching" would orphan the remote
+      // link while keeping the stale SID on the row.
+      if (isWhatsApp) {
+        const { data: existing } = await supabase
+          .from('message_templates')
+          .select('provider, status, twilio_content_sid, meta_template_id')
+          .eq('id', input.id)
+          .eq('account_id', accountId)
+          .maybeSingle();
+        const locked =
+          existing &&
+          (existing.twilio_content_sid ||
+            existing.meta_template_id ||
+            existing.status !== 'DRAFT');
+        if (locked && existing.provider !== input.provider) {
+          return NextResponse.json(
+            {
+              error: `This template already exists in ${existing.provider === 'twilio' ? 'Twilio' : 'Meta'}'s system — its provider can't be changed. Create a new template to target a different provider.`,
+            },
+            { status: 409 }
+          );
+        }
+      }
       const { data, error } = await supabase
         .from('message_templates')
         .update(updateRow)

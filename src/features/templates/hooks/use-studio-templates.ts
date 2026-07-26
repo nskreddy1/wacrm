@@ -52,6 +52,9 @@ interface DbTemplateRow {
   compliance: unknown;
   rejection_reason: string | null;
   submission_error: string | null;
+  /** Set when the row mirrors a template in the provider's system. */
+  meta_template_id: string | null;
+  twilio_content_sid: string | null;
   updated_at: string;
   created_at: string;
 }
@@ -115,6 +118,14 @@ function rowToStudio(row: DbTemplateRow): StudioTemplate {
     language: row.language,
     status: statusFromDb(row.status),
     provider: row.provider ?? (row.channel === 'whatsapp' ? 'meta' : 'none'),
+    // Locked once the row mirrors a provider-side object (synced from
+    // Twilio/Meta) or has been submitted for review — switching
+    // provider then would break the link. Local never-submitted
+    // drafts stay switchable.
+    providerLocked:
+      Boolean(row.twilio_content_sid) ||
+      Boolean(row.meta_template_id) ||
+      statusFromDb(row.status) !== 'draft',
     updatedAt: (row.updated_at ?? row.created_at ?? '').slice(0, 10),
     errorMessage: row.rejection_reason || row.submission_error || null,
     whatsapp: {

@@ -91,6 +91,15 @@ export interface StudioTemplate {
   errorMessage?: string | null;
   /** True for rows that only exist locally (never saved). */
   isNew?: boolean;
+  /**
+   * True once the template is tied to a provider — synced/imported
+   * from Twilio or Meta (has a Content SID / Meta template id) or
+   * already submitted for review. The provider selector locks then:
+   * the row mirrors an object living in that provider's system, so
+   * "switching" provider would orphan it. Only fresh app-created
+   * drafts may choose their provider.
+   */
+  providerLocked?: boolean;
 }
 
 /**

@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Link2,
   Loader2,
+  Lock,
   Mail,
   MessageSquareText,
   Phone,
@@ -1905,20 +1906,36 @@ export function TemplateStudio() {
                 <Label className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                   Provider
                 </Label>
-                <Select
-                  value={active.provider === 'twilio' ? 'twilio' : 'meta'}
-                  onValueChange={(v) =>
-                    patchActive({ provider: v as StudioTemplate['provider'] })
-                  }
-                >
-                  <SelectTrigger className="h-8 w-40" size="sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="meta">Meta (Cloud API)</SelectItem>
-                    <SelectItem value="twilio">Twilio</SelectItem>
-                  </SelectContent>
-                </Select>
+                {active.providerLocked ? (
+                  // Provider is immutable once the template lives in a
+                  // provider's system (synced from Twilio/Meta, or
+                  // submitted for review) — the row mirrors a remote
+                  // object and re-homing it would orphan that link.
+                  <span
+                    className="bg-muted text-muted-foreground inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium"
+                    title="Provider is locked because this template exists in the provider's system. Create a new template to target a different provider."
+                  >
+                    <Lock className="size-3" aria-hidden="true" />
+                    {active.provider === 'twilio'
+                      ? 'Twilio'
+                      : 'Meta (Cloud API)'}
+                  </span>
+                ) : (
+                  <Select
+                    value={active.provider === 'twilio' ? 'twilio' : 'meta'}
+                    onValueChange={(v) =>
+                      patchActive({ provider: v as StudioTemplate['provider'] })
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-40" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="meta">Meta (Cloud API)</SelectItem>
+                      <SelectItem value="twilio">Twilio</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             )}
             {isDirty && (

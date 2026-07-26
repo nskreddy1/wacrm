@@ -171,7 +171,11 @@ export async function POST(request: Request) {
       const contents = await listTwilioContentAndApprovals(credentials);
 
       // Twilio allows many Content SIDs with the same friendly_name,
-      // but our table is unique on (name, language). Without ranking,
+      // but our table is unique on (account_id, provider, name,
+      // language). Provider IS part of that key, so a Meta Cloud API
+      // template with the same name coexists as its own row — this
+      // dedup only ranks duplicates WITHIN the Twilio catalog. Without
+      // ranking,
       // whichever duplicate the API listed LAST won the upsert — an
       // old "unsubmitted" copy would stomp the in-review/approved one
       // back to DRAFT (the exact bug seen with
