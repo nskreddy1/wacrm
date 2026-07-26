@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import type { NavAccess } from '@/lib/navigation/config';
 import {
   getSessionPayload,
@@ -50,6 +51,20 @@ export default async function DashboardLayout({
   } catch {
     initialSession = null;
     initialAccess = null;
+  }
+
+  // First-run gate: a brand-new OWNER lands in the wizard before the
+  // dashboard. Owners only — invited members join a workspace that is
+  // already set up, and they could not complete owner steps (rename
+  // workspace, invite team) anyway. Session-resolution failures fall
+  // through: the proxy already bounces unauthenticated visitors, and
+  // a broken gate must never lock a paying customer out of their app.
+  if (
+    initialSession &&
+    initialSession.data.profile.is_owner &&
+    initialSession.data.account.onboarding_completed_at === null
+  ) {
+    redirect('/onboarding');
   }
 
   return (

@@ -28,6 +28,8 @@ export type SessionAccount = {
   id: string;
   name: string;
   default_currency: string | null;
+  /** NULL = the first-run wizard has not been finished (or skipped). */
+  onboarding_completed_at: string | null;
 };
 
 export type SessionUser = {
@@ -76,7 +78,7 @@ export async function getSessionPayload(): Promise<SessionPayload> {
       .single(),
     context.supabase
       .from('accounts')
-      .select('id, name, default_currency')
+      .select('id, name, default_currency, onboarding_completed_at')
       .eq('id', context.accountId)
       .single(),
   ]);
