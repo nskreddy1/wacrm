@@ -13,6 +13,13 @@ const PUBLIC_PREFIXES = [
   // Provider webhooks authenticate via request signatures inside the route handlers.
   '/api/channels/webhooks/',
   '/api/whatsapp/webhook',
+  // Scheduler endpoint. It has no user session by definition (Vercel Cron
+  // sends `Authorization: Bearer $CRON_SECRET`; external pingers send
+  // `x-cron-secret`) and authenticates with a constant-time compare inside
+  // the route handler. Without this exemption the proxy 307-redirects the
+  // scheduler to /login, so the flow engine's time-based work — resuming
+  // `wait` steps, starting scheduled flows, sweeping stale runs — never runs.
+  '/api/flows/cron',
 ];
 
 function isPublicPath(pathname: string) {

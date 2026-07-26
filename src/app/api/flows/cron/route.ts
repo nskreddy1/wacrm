@@ -30,22 +30,43 @@ import {
  * default; once per hour would also be acceptable for low-volume
  * tenants.
  */
-export async function GET(request: Request) {
-  const expected = process.env.AUTOMATION_CRON_SECRET;
-  if (!expected) {
-    return NextResponse.json({ error: 'cron not configured' }, { status: 503 });
-  }
-  // Constant-time compare so an attacker who can hit the endpoint
-  // can't recover the secret byte-by-byte from response-time deltas.
-  // Length pre-check is required by timingSafeEqual (throws otherwise)
-  // and leaks only the length itself, which isn't sensitive.
-  const supplied = request.headers.get('x-cron-secret') ?? '';
+/**
+ * Constant-time secret compare. Length pre-check is required by
+ * `timingSafeEqual` (it throws on length mismatch) and leaks only the
+ * length, which isn't sensitive.
+ */
+function secretMatches(supplied: string, expected: string): boolean {
   const suppliedBuf = Buffer.from(supplied);
   const expectedBuf = Buffer.from(expected);
-  if (
-    suppliedBuf.length !== expectedBuf.length ||
-    !timingSafeEqual(suppliedBuf, expectedBuf)
-  ) {
+  return (
+    suppliedBuf.length === expectedBuf.length &&
+    timingSafeEqual(suppliedBuf, expectedBuf)
+  );
+}
+
+export async function GET(request: Request) {
+  // Two accepted callers, because Vercel Cron CANNOT send custom headers:
+  //   1. Vercel Cron  → `Authorization: Bearer $CRON_SECRET` (platform-injected)
+  //   2. External pinger (GitHub Actions / uptime robot / manual curl)
+  //      → `x-cron-secret: $AUTOMATION_CRON_SECRET`
+  // Either is sufficient. If neither secret is configured we fail closed
+  // with 503 rather than leaving the endpoint open.
+  const automationSecret = process.env.AUTOMATION_CRON_SECRET;
+  const vercelCronSecret = process.env.CRON_SECRET;
+  if (!automationSecret && !vercelCronSecret) {
+    return NextResponse.json({ error: 'cron not configured' }, { status: 503 });
+  }
+
+  const bearer = (request.headers.get('authorization') ?? '').replace(
+    /^Bearer\s+/i,
+    ''
+  );
+  const authorized =
+    (!!vercelCronSecret && secretMatches(bearer, vercelCronSecret)) ||
+    (!!automationSecret &&
+      secretMatches(request.headers.get('x-cron-secret') ?? '', automationSecret));
+
+  if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
