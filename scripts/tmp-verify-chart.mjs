@@ -10,13 +10,8 @@ await client.connect();
 await client.query('BEGIN');
 
 try {
-  // Minimal object graph: account -> user -> pipeline -> stages -> deals
-  const {
-    rows: [acct],
-  } = await client.query(
-    `insert into accounts (name) values ('__chart_test__') returning id`
-  );
-
+  // Minimal object graph: user -> account -> pipeline -> stages -> deals
+  // (accounts.owner_user_id is NOT NULL, so the user must exist first)
   const {
     rows: [usr],
   } = await client.query(
@@ -26,11 +21,30 @@ try {
      returning id`
   );
 
-  await client.query(
-    `insert into profiles (user_id, full_name, email, account_id, account_role)
-     values ($1, 'Chart Tester', '__charttest__@example.test', $2, 'owner')`,
-    [usr.id, acct.id]
+  // A trigger on auth.users auto-provisions the account + profile, and a
+  // unique index enforces one account per owner — so read it back rather
+  // than inserting a second one.
+  let {
+    rows: [acct],
+  } = await client.query(
+    `select id from accounts where owner_user_id = $1 limit 1`,
+    [usr.id]
   );
+
+  if (!acct) {
+    ({
+      rows: [acct],
+    } = await client.query(
+      `insert into accounts (name, owner_user_id)
+       values ('__chart_test__', $1) returning id`,
+      [usr.id]
+    ));
+    await client.query(
+      `insert into profiles (user_id, full_name, email, account_id, account_role)
+       values ($1, 'Chart Tester', '__charttest__@example.test', $2, 'owner')`,
+      [usr.id, acct.id]
+    );
+  }
 
   const {
     rows: [pipe],
@@ -62,9 +76,9 @@ try {
 
   // 5 deals: 3 New (100,200,300), 1 Won (1000), 1 Lost (50)
   const deals = [
-    ['New', 100, 'active'],
-    ['New', 200, 'active'],
-    ['New', 300, 'active'],
+    ['New', 100, 'open'],
+    ['New', 200, 'open'],
+    ['New', 300, 'open'],
     ['Won', 1000, 'won'],
     ['Lost', 50, 'lost'],
   ];
@@ -72,9 +86,9 @@ try {
     await client.query(
       `insert into deals
          (user_id, account_id, pipeline_id, stage_id, contact_id,
-          title, value, status, priority, probability, position, assigned_to,
+          title, value, status, priority, probability, position,
           created_at)
-       values ($1,$2,$3,$4,$5,'Deal',$6,$7,'medium',50,0,$1, now())`,
+       values ($1,$2,$3,$4,$5,'Deal',$6,$7,'normal',50,0, now())`,
       [usr.id, acct.id, pipe.id, stageIds[stage], contact.id, value, status]
     );
   }
