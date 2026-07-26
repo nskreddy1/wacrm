@@ -105,16 +105,96 @@ New tables:
 
 ---
 
-## 7. Build order (folds into `../TODO.md`)
+## 7. Build order (folds into `../TODO.md`) — REVISED after review
 
-This is a **Phase 0.5 foundation** BEFORE we verticalize Phase 1 revenue
-features, so invoices/projects/portal are pack-aware from day one:
-1. Add `vertical`, `compliance_profile`, `enabled_modules` to workspace + RLS.
-2. Generalize `module_field_settings` into a reusable custom-object/field engine.
-3. Vertical Pack loader + seed 2 packs to validate the abstraction
-   (Real estate + Ecommerce — most distinct from current agency default).
-4. Compliance-profile middleware (baseline vs elevated) + access logging.
-5. Onboarding industry/plan picker that applies a pack.
+**Key revision from the 2026-07 three-lens review (§8–§10): do NOT design the
+pack abstraction upfront and hope it fits.** Extract it from one working
+vertical instead:
 
-Validation gate (per `research-2026-07.md` §4): prove the pack abstraction with
-2 real design-partner verticals before authoring the long tail.
+1. **Ship Phase 1 revenue features (invoices → projects → portal) for ONE
+   hand-picked design-partner vertical first** — hardcoded where necessary.
+   Learn where the config seams actually are.
+2. Add `vertical`, `compliance_profile`, `enabled_modules` columns + RLS
+   (cheap, non-blocking — do alongside step 1).
+3. **Extract** the Vertical Pack loader from the working example; generalize
+   `module_field_settings` into a custom-object/field engine only where the
+   partner actually hit its limits.
+4. Seed the 2nd pack (most distinct vertical from the first) + onboarding
+   industry picker. Validate with a 2nd design partner.
+5. Compliance-profile middleware (baseline vs elevated) + access logging —
+   scoped by the honest compliance program in §9, not just a column.
+
+---
+
+## 8. Falsifiable gates (added from `/what am I missing` review)
+
+These keep the 80/20 claim honest. Breaking a gate = stop and rethink.
+
+- **G1 — No third vertical** until 2 paying design partners in 2 different
+  verticals have run **60 days without us writing vertical-specific code.**
+- **G2 — No pack marketplace/SDK work** until 5 packs exist and at least 1 was
+  authored end-to-end by a non-founder without code review escalations.
+- **G3 — No "Elevated" compliance tier is SOLD** until the §9 vendor-chain
+  audit is complete. Half-promised security is worse than none.
+- **G4 — Abstraction escape-hatch rule:** the moment a vertical needs true
+  custom *logic* (not fields/stages/labels), it becomes a flagged core module,
+  never a fork and never pack-embedded code.
+
+### Config test-matrix strategy
+The config space is combinatorial: `vertical` × `compliance_profile` ×
+`enabled_modules`. Untested combinations are where "only happens for Elevated
+real-estate workspaces with module X off" bugs live. Policy:
+- Maintain a **canonical matrix fixture** (one seeded test workspace per
+  supported combination — start with 4: default/baseline, default/elevated,
+  vertical-A/baseline, vertical-A/elevated).
+- Every new module ships with a smoke test run against ALL matrix fixtures.
+- Unsupported combinations are **rejected at write time** (DB constraint), not
+  discovered at render time.
+
+### Vertical migration story
+Clients outgrow packs (Sales shop → Agency). Rules:
+- Pack switch is **additive-only by default**: new fields/stages/labels are
+  added, existing data and stages are never deleted or renamed silently.
+- Terminology remaps instantly (it's a label map, data is untouched).
+- Removed-module data is retained and hidden, never dropped — re-enabling the
+  module restores it.
+- Every migration writes a tenant audit event with a before/after snapshot.
+
+---
+
+## 9. Compliance is a PROGRAM, not a column (honest scope)
+
+The §4 tiers stand, but "Elevated" is only sellable after:
+- **Vendor-chain audit:** Twilio and Supabase plan tiers must themselves
+  support the promises we make (BAA availability, India data residency,
+  encryption guarantees). We cannot be more compliant than our vendors.
+- **DPDP Act mechanics:** consent capture, purpose limitation, breach
+  notification workflow, right-to-erasure that actually cascades (messages,
+  media, logs, backups).
+- **Auditability:** access logs that survive legal discovery; retention
+  policies enforced by jobs, not by promise.
+- Until all three exist, healthcare/finance prospects get **Baseline + honest
+  roadmap**, not "Elevated".
+
+---
+
+## 10. 10x upgrades (from the `/10x` review — candidate pull-forwards)
+
+Ordered by leverage; none are gated on the others:
+
+1. **AI-generated packs (STRONG pull-forward candidate — AI SDK already
+   wired).** Onboarding asks "describe your business" ("I run a dental clinic
+   in Pune") → LLM generates the starter pack: fields, stages, 5 WhatsApp
+   templates in the right compliance category, auto-reply flows, dashboard —
+   human approves before apply. Collapses time-to-value to ~90 seconds and
+   makes the long tail of verticals free. Supersedes hand-authoring packs
+   beyond the first two.
+2. **Conversation intelligence re-pointed by pack.** One "Rios"-style engine
+   scoring chats against the active pack's goals (RE: site-visit intent;
+   clinic: no-show risk; ecom: cart intent). Structural moat: incumbents own
+   either messaging OR vertical config, never both.
+3. **Compliance-as-a-product.** Once §9 is real, "CRM for Healthcare —
+   DPDP-ready, audit-logged" is a certified SKU at 3–5x price, not a tier.
+4. **Pack SDK + marketplace (LAST — gated by G2).** Agencies author and sell
+   packs to their niche; we take a cut. Flips us from CRM vendor to the
+   platform vertical CRMs are built on. Do not start before G2 passes.
