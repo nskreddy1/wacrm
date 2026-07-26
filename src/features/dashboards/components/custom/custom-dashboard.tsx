@@ -14,7 +14,11 @@
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import GridLayout, { useContainerWidth, type Layout } from 'react-grid-layout';
+import GridLayout, {
+  useContainerWidth,
+  verticalCompactor,
+  type Layout,
+} from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { GripVertical, LayoutDashboard, Pencil, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -83,6 +87,7 @@ export function CustomDashboard({
   overview,
   refresh,
   onWidgetsSaved,
+  resetToken = 0,
 }: {
   dashboardId: string;
   initialWidgets: DashboardWidget[];
@@ -91,6 +96,8 @@ export function CustomDashboard({
   refresh: () => void;
   /** Bubble the saved widgets up so the SWR cache stays in sync. */
   onWidgetsSaved: (widgets: DashboardWidget[]) => void;
+  /** Bumped by the parent to force a re-sync (Cancel reverts edits). */
+  resetToken?: number;
 }) {
   const [widgets, setWidgets] = useState<DashboardWidget[]>(initialWidgets);
   const [addOpen, setAddOpen] = useState(false);
@@ -98,12 +105,16 @@ export function CustomDashboard({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width, mounted, containerRef } = useContainerWidth();
 
-  // Re-sync local state when switching dashboards.
-  const [syncedFor, setSyncedFor] = useState(dashboardId);
-  if (syncedFor !== dashboardId) {
-    setSyncedFor(dashboardId);
+  // Re-sync local state when switching dashboards or when the
+  // parent reverts edits (Cancel bumps resetToken).
+  const syncKey = `${dashboardId}:${resetToken}`;
+  const [syncedFor, setSyncedFor] = useState(syncKey);
+  if (syncedFor !== syncKey) {
+    setSyncedFor(syncKey);
     setWidgets(initialWidgets);
     setSelectedId(null);
+    setAddOpen(false);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
   }
 
   const isMobile = mounted && width < 640;
@@ -248,6 +259,9 @@ export function CustomDashboard({
                 margin: GRID_MARGIN,
                 containerPadding: [0, 0],
               }}
+              // Twenty-style: shrinking or removing a widget pulls
+              // everything below it up to fill the freed rows.
+              compactor={verticalCompactor}
               dragConfig={{
                 enabled: editing,
                 handle: '.widget-drag-handle',

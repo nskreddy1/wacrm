@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import {
+  Ban,
   Building2,
   Check,
   ChevronDown,
@@ -23,6 +24,7 @@ import {
   Pencil,
   Plus,
   RotateCw,
+  Save,
   Trash2,
   TrendingUp,
 } from 'lucide-react';
@@ -95,6 +97,11 @@ export function DashboardRoot() {
 
   const [selectedId, setSelectedId] = useState<string>(OVERVIEW_ID);
   const [editing, setEditing] = useState(false);
+  // Snapshot of widgets at edit start — Cancel restores it.
+  const [editSnapshot, setEditSnapshot] = useState<DashboardWidget[] | null>(
+    null
+  );
+  const [resetToken, setResetToken] = useState(0);
   const [dialog, setDialog] = useState<'create' | 'rename' | 'delete' | null>(
     null
   );
@@ -132,6 +139,7 @@ export function DashboardRoot() {
       // Blank dashboards drop straight into edit mode; template
       // dashboards open in view mode so the seeded charts show first.
       setEditing(widgets.length === 0);
+      setEditSnapshot(widgets.length === 0 ? [] : null);
       setDialog(null);
       setNameDraft('');
       toast.success(`Dashboard "${name}" created`);
@@ -183,6 +191,39 @@ export function DashboardRoot() {
       toast.error('Failed to delete dashboard');
     } finally {
       setBusy(false);
+    }
+  }
+
+  function startEditing() {
+    if (!selected) return;
+    setEditSnapshot(structuredClone(selected.widgets));
+    setEditing(true);
+  }
+
+  /** Save = keep everything the autosave already persisted. */
+  function saveEditing() {
+    setEditing(false);
+    setEditSnapshot(null);
+    toast.success('Dashboard saved');
+  }
+
+  /** Cancel = restore the snapshot taken when editing started. */
+  async function cancelEditing() {
+    const snapshot = editSnapshot;
+    setEditing(false);
+    setEditSnapshot(null);
+    if (!selected || !snapshot) return;
+    try {
+      const res = await fetch(`/api/dashboards/${selected.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ widgets: snapshot }),
+      });
+      if (!res.ok) throw new Error();
+      handleWidgetsSaved(snapshot);
+      setResetToken((t) => t + 1);
+    } catch {
+      toast.error('Failed to discard changes');
     }
   }
 
@@ -258,22 +299,31 @@ export function DashboardRoot() {
 
       {!isOverview && (
         <>
-          <Button
-            variant={editing ? 'default' : 'outline'}
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setEditing((e) => !e)}
-          >
-            {editing ? (
-              <>
-                <Check className="size-4" aria-hidden="true" /> Done
-              </>
-            ) : (
-              <>
-                <Pencil className="size-3.5" aria-hidden="true" /> Edit layout
-              </>
-            )}
-          </Button>
+          {editing ? (
+            // Twenty-style edit toolbar: Cancel discards, Save keeps.
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => void cancelEditing()}
+              >
+                <Ban className="size-3.5" aria-hidden="true" /> Cancel
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={saveEditing}>
+                <Save className="size-3.5" aria-hidden="true" /> Save
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={startEditing}
+            >
+              <Pencil className="size-3.5" aria-hidden="true" /> Edit layout
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -354,6 +404,7 @@ export function DashboardRoot() {
                   overview={overview}
                   refresh={refresh}
                   onWidgetsSaved={handleWidgetsSaved}
+                  resetToken={resetToken}
                 />
               )}
             </div>
