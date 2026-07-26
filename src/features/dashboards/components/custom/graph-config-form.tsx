@@ -14,7 +14,7 @@
 // options automatically honor per-account custom module names.
 // ============================================================
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
   BarChart3,
@@ -278,9 +278,16 @@ export function GraphConfigForm({
     legend,
   ]);
 
+  // Push config up only when its CONTENT changes. Depending on the
+  // `onChange` identity here loops forever in live-edit mode: parent
+  // persists → re-renders → new onChange → effect refires → persists…
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const configKey = useMemo(() => JSON.stringify(config), [config]);
   useEffect(() => {
-    onChange(config);
-  }, [config, onChange]);
+    onChangeRef.current(config);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- configKey is config's content hash
+  }, [configKey]);
 
   if (error) {
     return (

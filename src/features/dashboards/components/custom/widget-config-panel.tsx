@@ -585,7 +585,9 @@ function PanelBody({
       </div>
 
       {!editing && (
-        <div className="border-border bg-background/95 sticky bottom-0 mt-auto flex items-center justify-end gap-2 border-t px-4 py-3 backdrop-blur">
+        // pr-20 keeps the actions clear of the floating chat launcher
+        // that sits fixed in the bottom-right corner of the app shell.
+        <div className="border-border bg-background/95 sticky bottom-0 mt-auto flex items-center justify-end gap-2 border-t px-4 py-3 pr-20 backdrop-blur">
           <Button variant="outline" onClick={close}>
             Cancel
           </Button>
