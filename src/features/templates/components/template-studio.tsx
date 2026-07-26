@@ -455,6 +455,24 @@ function TemplateRail({
                 <span className="uppercase">
                   {CHANNEL_META[tpl.channel].label}
                 </span>
+                {/* Provider origin — Twilio and Meta templates coexist
+                    (unique key includes provider), so the rail must
+                    show which system each row lives in. */}
+                {tpl.channel === 'whatsapp' && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span
+                      className={cn(
+                        'font-medium',
+                        tpl.provider === 'twilio'
+                          ? 'text-[#F22F46]/80'
+                          : 'text-[#25D366]/90'
+                      )}
+                    >
+                      {tpl.provider === 'twilio' ? 'Twilio' : 'Meta'}
+                    </span>
+                  </>
+                )}
                 <span aria-hidden="true">·</span>
                 <span>
                   {tpl.channel === 'email'
