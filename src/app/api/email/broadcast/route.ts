@@ -7,6 +7,8 @@ import {
   RATE_LIMITS,
 } from '@/lib/rate-limit';
 import { logAuditEvent } from '@/lib/audit-events';
+import { checkMonthlyQuota, consumeMonthlyQuota } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 
 interface EmailBroadcastRecipient {
   email: string;
@@ -143,6 +145,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // Plan quota: monthly broadcast-recipient budget, checked for the
+    // WHOLE batch before any send so a campaign never half-delivers
+    // on a quota boundary. Consumed after the loop by actual sends.
+    const quota = await checkMonthlyQuota(
+      accountId,
+      'broadcast_recipients',
+      recipients.length
+    );
+    if (!quota.allowed) {
+      return quotaExceededResponse(quota, 'Monthly broadcast recipient');
+    }
+
     // Opt-out compliance: skip contacts that unsubscribed from
     // marketing email (CAN-SPAM / CASL / India DPDP).
     const addresses = recipients
@@ -200,6 +214,12 @@ export async function POST(request: Request) {
         });
         failedCount++;
       }
+    }
+
+    // Meter actual deliveries only (fire-and-forget — metering loss
+    // must never fail a delivered campaign).
+    if (sentCount > 0) {
+      void consumeMonthlyQuota(accountId, 'broadcast_recipients', sentCount);
     }
 
     // Audit: counts only — no message bodies or addresses.

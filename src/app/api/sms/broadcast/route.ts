@@ -13,6 +13,8 @@ import {
   RATE_LIMITS,
 } from '@/lib/rate-limit';
 import { logAuditEvent } from '@/lib/audit-events';
+import { checkMonthlyQuota, consumeMonthlyQuota } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 import type { ChannelConnection } from '@/types';
 
 interface SmsBroadcastRecipient {
@@ -95,6 +97,18 @@ export async function POST(request: Request) {
         { error: 'Every recipient needs a non-empty message body' },
         { status: 400 }
       );
+    }
+
+    // Plan quota: monthly broadcast-recipient budget, checked for the
+    // WHOLE batch before any send so a campaign never half-delivers
+    // on a quota boundary. Consumed after the loop by actual sends.
+    const quota = await checkMonthlyQuota(
+      accountId,
+      'broadcast_recipients',
+      recipients.length
+    );
+    if (!quota.allowed) {
+      return quotaExceededResponse(quota, 'Monthly broadcast recipient');
     }
 
     // Resolve the account's SMS sender — a Twilio SMS channel
@@ -214,6 +228,12 @@ export async function POST(request: Request) {
         });
         failedCount++;
       }
+    }
+
+    // Meter actual deliveries only (fire-and-forget — metering loss
+    // must never fail a delivered campaign).
+    if (sentCount > 0) {
+      void consumeMonthlyQuota(accountId, 'broadcast_recipients', sentCount);
     }
 
     // Audit: counts only — no message bodies or phone numbers.

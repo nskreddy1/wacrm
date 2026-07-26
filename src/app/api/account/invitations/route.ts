@@ -18,6 +18,8 @@
 // ============================================================
 
 import { NextResponse } from 'next/server';
+import { canAddResource } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 
 import {
   requirePermission,
@@ -185,6 +187,15 @@ export async function POST(request: Request) {
       RATE_LIMITS.adminAction
     );
     if (!limit.success) return rateLimitResponse(limit);
+
+    // Plan quota: seat cap. Checked at invite time (not just redeem
+    // time) so admins learn about the cap before sending a link that
+    // can't be used. Live count = current members; the redeem route
+    // re-checks in case seats filled while an invite sat unused.
+    const quota = await canAddResource(ctx.accountId, 'max_members');
+    if (!quota.allowed) {
+      return quotaExceededResponse(quota, 'Member seat');
+    }
 
     const body = (await request.json().catch(() => null)) as {
       role?: unknown;
