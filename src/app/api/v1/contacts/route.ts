@@ -24,6 +24,7 @@ import {
   resolveAuditUserId,
   ContactError,
 } from '@/lib/api/v1/contacts';
+import { canAddResource } from '@/lib/quotas';
 
 // PostgREST filter values are comma/paren-delimited; strip anything
 // that could break the `.or()` grammar before interpolating a search
@@ -108,6 +109,19 @@ export async function POST(request: Request) {
     const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
     if (!phone) {
       return fail('bad_request', "'phone' is required", 400);
+    }
+
+    // Plan quota: contact cap. Checked pre-insert; find-or-create of
+    // an EXISTING contact is unaffected (it doesn't add a row), so a
+    // capped account can still update known contacts via the API.
+    // v1 uses its own error envelope, not the app's 402 helper.
+    const quota = await canAddResource(ctx.accountId, 'max_contacts');
+    if (!quota.allowed) {
+      return fail(
+        'quota_exceeded',
+        `Contact limit reached (${quota.used}/${quota.limit} on the ${quota.planName} plan). Upgrade to add more contacts.`,
+        402
+      );
     }
 
     const auditUserId = await resolveAuditUserId(ctx.supabase, ctx.accountId);

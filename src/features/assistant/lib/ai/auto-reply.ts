@@ -12,6 +12,7 @@ import { latestUserMessage } from './query';
 import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule';
 import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { checkMonthlyQuota, consumeMonthlyQuota } from '@/lib/quotas';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -101,6 +102,18 @@ export async function dispatchInboundToAiReply(
     if (!acctLimit.success) {
       console.warn(
         `[ai auto-reply] account ${accountId} hit the per-account rate limit — skipping this inbound.`
+      );
+      return;
+    }
+
+    // Plan quota: monthly AI-reply budget. Webhook context — there is
+    // no user to show a 402 to, so over-quota means the bot silently
+    // stands down and the inbound waits in the inbox for a human,
+    // exactly like the schedule and reply-cap gates below.
+    const aiQuota = await checkMonthlyQuota(accountId, 'ai_replies');
+    if (!aiQuota.allowed) {
+      console.warn(
+        `[ai auto-reply] account ${accountId} exhausted its monthly AI reply quota (${aiQuota.limit}) — skipping this inbound.`
       );
       return;
     }
@@ -349,6 +362,9 @@ export async function dispatchInboundToAiReply(
         senderType: 'bot',
         aiGenerated: true,
       });
+      // Meter the plan's monthly AI-reply budget only after the send
+      // landed (fire-and-forget — metering loss never fails a reply).
+      void consumeMonthlyQuota(accountId, 'ai_replies');
     } catch (sendErr) {
       const { error: releaseErr } = await db.rpc('release_ai_reply_slot', {
         conversation_id: conversationId,

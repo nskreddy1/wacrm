@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
+import { canAddResource } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -375,6 +377,15 @@ export async function POST(request: Request) {
         { error: 'Provider credentials are required' },
         { status: 400 }
       );
+
+    // Plan quota: cap on connected channels — creates only, edits of
+    // an existing connection never re-count against the cap.
+    if (!parsed.data.id) {
+      const quota = await canAddResource(accountId, 'max_channels');
+      if (!quota.allowed) {
+        return quotaExceededResponse(quota, 'Channel connection');
+      }
+    }
 
     const values = {
       account_id: accountId,

@@ -19,6 +19,8 @@ import type {
   FieldType,
 } from '@/lib/data/contacts/types';
 import { getDataSource } from '@/lib/data/runtime';
+import { canAddResource } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,15 +82,19 @@ export async function POST(request: Request) {
       );
     }
     if (!body.values) throw new Error('Contact values are required');
+    const account = await getCurrentAccount();
+    // Plan quota: contact cap for user-initiated creation (manual add
+    // and CSV import). Inbound-created contacts (webhooks) are never
+    // capped — dropping an inbound lead is worse than a soft overage.
+    const quota = await canAddResource(account.accountId, 'max_contacts');
+    if (!quota.allowed) {
+      return quotaExceededResponse(quota, 'Contact');
+    }
     // Attribution: only allowlisted client-supplied sources are
     // accepted (import flow) — everything else records as 'manual'.
     const source = body.source === 'import' ? 'import' : 'manual';
     return response(
-      await createSupabaseContact(
-        await getCurrentAccount(),
-        body.values,
-        source
-      ),
+      await createSupabaseContact(account, body.values, source),
       201
     );
   } catch (error) {

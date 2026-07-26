@@ -92,7 +92,7 @@ export async function POST(
     .from('account_invitations')
     .select('account_id')
     .eq('token_hash', hashInviteToken(token))
-    .is('redeemed_at', null)
+    .is('accepted_at', null)
     .maybeSingle();
   if (invite?.account_id) {
     const quota = await canAddResource(
