@@ -35,7 +35,7 @@ export async function PATCH(
     const { id } = await params;
     const { supabase, accountId, userId } = await requireRole('admin');
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `ai-agents:${userId}`,
       RATE_LIMITS.adminAction
     );

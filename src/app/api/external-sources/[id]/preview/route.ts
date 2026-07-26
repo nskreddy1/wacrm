@@ -43,7 +43,7 @@ export async function POST(
     const ctx = await getCurrentAccount();
 
     // Previews hit external systems — keep the cadence modest.
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `externalSourcePreview:${ctx.userId}`,
       RATE_LIMITS.adminAction
     );

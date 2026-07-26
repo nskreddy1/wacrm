@@ -29,7 +29,7 @@ export async function POST(
     const admin = platformAdmin();
     const { id } = await params;
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `support:adminReply:${ctx.userId}`,
       RATE_LIMITS.supportReply
     );

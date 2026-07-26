@@ -143,7 +143,7 @@ export async function POST(request: Request) {
     const { accountId, userId } = await requireRole('admin');
     // Save + test both hit external provider APIs (Twilio health check,
     // SMTP handshake) — bound the rate per user like /api/whatsapp/config.
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `config:${userId}`,
       RATE_LIMITS.configMutation
     );
@@ -454,7 +454,7 @@ export async function PATCH(request: Request) {
   try {
     const { accountId, userId } = await requireRole('admin');
     // Same bucket as POST — enable/primary toggles are config mutations.
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `config:${userId}`,
       RATE_LIMITS.configMutation
     );

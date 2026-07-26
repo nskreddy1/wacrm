@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     }
 
     // Same per-user campaign budget as WhatsApp broadcasts.
-    const limit = checkRateLimit(`broadcast:${user.id}`, RATE_LIMITS.broadcast);
+    const limit = await checkRateLimit(`broadcast:${user.id}`, RATE_LIMITS.broadcast);
     if (!limit.success) {
       return rateLimitResponse(limit);
     }

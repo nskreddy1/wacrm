@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   try {
     const { supabase, accountId, userId } = await requireRole('admin');
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `ai-config:${userId}`,
       RATE_LIMITS.adminAction
     );
@@ -422,7 +422,7 @@ export async function PATCH(request: Request) {
   try {
     const { supabase, accountId, userId } = await requireRole('admin');
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `ai-config:${userId}`,
       RATE_LIMITS.adminAction
     );

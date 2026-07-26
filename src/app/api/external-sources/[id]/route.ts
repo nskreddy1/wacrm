@@ -44,7 +44,7 @@ export async function PATCH(
   try {
     const ctx = await requireRole('admin');
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `admin:externalSourceUpdate:${ctx.userId}`,
       RATE_LIMITS.adminAction
     );
@@ -191,7 +191,7 @@ export async function DELETE(
   try {
     const ctx = await requireRole('admin');
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `admin:externalSourceDelete:${ctx.userId}`,
       RATE_LIMITS.adminAction
     );

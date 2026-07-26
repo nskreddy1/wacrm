@@ -1,26 +1,35 @@
 /**
- * In-memory per-key rate limiter.
+ * Per-key rate limiter — Redis-backed (Upstash), in-memory fallback.
  *
- * Fixed-window counter (not token bucket): every identifier gets a
- * fresh N-request budget each window. Simple, allocation-light, and
- * fine for a single-instance VPS — which is how forkers of this
- * template will usually deploy.
+ * Fixed-window counter: every identifier gets a fresh N-request budget
+ * each window.
  *
- * Trade-off: a single Node process holds the Map, so horizontal scale
- * (multiple regions, multiple Hostinger nodes, Vercel serverless fan-
- * out) silently defeats the limit. If you scale beyond one instance,
- * swap the `check` implementation for Redis / Upstash / Cloudflare
- * Durable Objects keeping the same return shape. The call sites won't
- * change.
+ * WHY REDIS: on serverless (Vercel), each concurrent invocation is its
+ * own process with its own memory. An in-memory Map therefore gives
+ * every invocation a fresh budget, which silently DEFEATS the limit
+ * exactly when it matters (a burst of parallel requests). Upstash
+ * Redis via REST gives one shared counter across all instances.
+ * This was RISK-1 in `.agents/context/report-inbound-scale.md`.
  *
- * Memory: entries are ~50 bytes each. With LIGHT_SWEEP below, expired
- * keys get cleared opportunistically on every ~1 000th call, so a
- * healthy instance stays in the low-MB range even with thousands of
- * distinct users. No background timer — works in serverless edge
- * runtimes that don't keep timers alive across requests.
+ * FALLBACK: when `KV_REST_API_URL` / `KV_REST_API_TOKEN` are absent
+ * (local dev, unit tests, single-instance VPS deploys of this
+ * template), we degrade to the previous in-memory fixed window. Same
+ * semantics, per-process scope.
+ *
+ * FAILURE MODE: if Redis errors at runtime (network blip, quota), we
+ * FAIL OPEN — the request is allowed and a warning is logged. Rate
+ * limiting is an abuse bound, not an authz control; a limiter outage
+ * must not take down messaging. Nothing security-critical may rely on
+ * this module to deny access.
+ *
+ * ATOMICITY: the Redis path uses INCR (atomic) + PEXPIRE on first hit
+ * of the window. Concurrent requests can't overshoot the count the way
+ * a read-modify-write would; the worst race is an extra PEXPIRE, which
+ * is idempotent.
  */
 
 import { NextResponse } from 'next/server';
+import { Redis } from '@upstash/redis';
 
 export interface RateLimitOptions {
   /** Max requests allowed in `windowMs`. */
@@ -37,6 +46,57 @@ export interface RateLimitResult {
   reset: number;
   limit: number;
 }
+
+/* ------------------------------------------------------------------ */
+/* Redis backend                                                       */
+/* ------------------------------------------------------------------ */
+
+let redisClient: Redis | null | undefined;
+
+/** Lazily construct the client; `null` means "not configured". */
+function getRedis(): Redis | null {
+  if (redisClient !== undefined) return redisClient;
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  redisClient = url && token ? new Redis({ url, token }) : null;
+  return redisClient;
+}
+
+const REDIS_PREFIX = 'rl:';
+
+async function checkWithRedis(
+  redis: Redis,
+  key: string,
+  { limit, windowMs }: RateLimitOptions
+): Promise<RateLimitResult> {
+  const redisKey = REDIS_PREFIX + key;
+
+  // INCR is atomic across all serverless instances. Pipeline the PTTL
+  // read so the common case is a single REST round trip.
+  const [count, ttlMs] = await Promise.all([
+    redis.incr(redisKey),
+    redis.pttl(redisKey),
+  ]);
+
+  let resetAt: number;
+  if (count === 1 || ttlMs < 0) {
+    // First hit of a window (or key existed without expiry after a
+    // crash between INCR and PEXPIRE) — stamp the window now.
+    await redis.pexpire(redisKey, windowMs);
+    resetAt = Date.now() + windowMs;
+  } else {
+    resetAt = Date.now() + ttlMs;
+  }
+
+  if (count > limit) {
+    return { success: false, remaining: 0, reset: resetAt, limit };
+  }
+  return { success: true, remaining: limit - count, reset: resetAt, limit };
+}
+
+/* ------------------------------------------------------------------ */
+/* In-memory fallback (dev / tests / single-instance deploys)          */
+/* ------------------------------------------------------------------ */
 
 interface Entry {
   count: number;
@@ -57,7 +117,7 @@ function sweepExpired(now: number) {
   }
 }
 
-export function checkRateLimit(
+function checkInMemory(
   key: string,
   { limit, windowMs }: RateLimitOptions
 ): RateLimitResult {
@@ -92,6 +152,31 @@ export function checkRateLimit(
     reset: entry.resetAt,
     limit,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Public API                                                          */
+/* ------------------------------------------------------------------ */
+
+export async function checkRateLimit(
+  key: string,
+  options: RateLimitOptions
+): Promise<RateLimitResult> {
+  const redis = getRedis();
+  if (!redis) return checkInMemory(key, options);
+
+  try {
+    return await checkWithRedis(redis, key, options);
+  } catch (error) {
+    // Fail open: a limiter outage must not block legitimate traffic.
+    console.warn('[rate-limit] redis unavailable, failing open', error);
+    return {
+      success: true,
+      remaining: options.limit,
+      reset: Date.now() + options.windowMs,
+      limit: options.limit,
+    };
+  }
 }
 
 /**
@@ -152,9 +237,8 @@ export const RATE_LIMITS = {
   /** Public REST API (`/api/v1/*`), keyed per API key. 120/min ≈ 2
    *  req/s sustained — comfortable for a polling integration or an
    *  automation firing on inbound events, while bounding a runaway
-   *  script. Like every bucket here it's per-process; a multi-
-   *  instance deploy needs the Redis swap described at the top of
-   *  this file (the per-key call sites don't change). */
+   *  script. With the Redis backend this budget is now enforced
+   *  globally across all serverless instances. */
   publicApi: { limit: 120, windowMs: 60_000 },
   /** AI draft-reply generation, per user. 20/min is generous for an
    *  agent clicking "Draft with AI" while working a thread, and bounds
@@ -199,4 +283,5 @@ export const RATE_LIMITS = {
 export function __resetRateLimitForTests() {
   buckets.clear();
   callsSinceSweep = 0;
+  redisClient = undefined;
 }

@@ -36,7 +36,7 @@ export async function PATCH(
     const ctx = await requirePermission('members:manage');
     const { profileId } = await params;
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `admin:profileUpdate:${ctx.userId}`,
       RATE_LIMITS.adminAction
     );
@@ -153,7 +153,7 @@ export async function DELETE(
     const ctx = await requirePermission('members:manage');
     const { profileId } = await params;
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `admin:profileDelete:${ctx.userId}`,
       RATE_LIMITS.adminAction
     );

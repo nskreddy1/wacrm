@@ -30,7 +30,7 @@ export async function POST(
     const ctx = await getCurrentAccount();
     const { id } = await params;
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `support:reply:${ctx.userId}`,
       RATE_LIMITS.supportReply
     );

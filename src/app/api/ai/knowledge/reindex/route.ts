@@ -20,7 +20,7 @@ import { AiError } from '@/features/assistant/lib/ai/types';
 export async function POST() {
   try {
     const { supabase, accountId, userId } = await requireRole('admin');
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `ai-kb-reindex:${userId}`,
       RATE_LIMITS.adminAction
     );
