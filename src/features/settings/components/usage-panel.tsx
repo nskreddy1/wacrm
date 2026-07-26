@@ -20,6 +20,7 @@
 import useSWR from 'swr';
 import { Infinity as InfinityIcon } from 'lucide-react';
 
+import { AnimatedBar } from '@/components/ui/animated-bar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -55,20 +56,21 @@ const fetcher = async (url: string): Promise<UsageSummary> => {
 
 const nf = new Intl.NumberFormat();
 
-/** Bar tint by pressure — quiet until it actually matters. */
-function tone(used: number, limit: number | null) {
-  if (limit === null || limit === 0) return 'bg-primary';
+/** Fill color by pressure — quiet until it actually matters. */
+function tone(used: number, limit: number | null): string {
+  if (limit === null || limit === 0) return 'var(--primary)';
   const pct = used / limit;
-  if (pct >= 1) return 'bg-destructive';
-  if (pct >= 0.8) return 'bg-amber-500';
-  return 'bg-primary';
+  if (pct >= 1) return 'var(--destructive)';
+  if (pct >= 0.8) return 'var(--color-amber-500, #f59e0b)';
+  return 'var(--primary)';
 }
 
-function UsageMeter({ row }: { row: UsageRow }) {
-  const unlimited = row.limit === null;
+function UsageMeter({ row, index }: { row: UsageRow; index: number }) {
+  const { limit } = row;
+  const unlimited = limit === null;
   const pct = unlimited
     ? 0
-    : Math.min(100, row.limit === 0 ? 100 : (row.used / row.limit) * 100);
+    : Math.min(100, limit === 0 ? 100 : (row.used / limit) * 100);
   const lifted = row.source !== 'plan';
 
   return (
@@ -91,12 +93,11 @@ function UsageMeter({ row }: { row: UsageRow }) {
               <span className="sr-only">unlimited</span>
             </span>
           ) : (
-            `${nf.format(row.used)} / ${nf.format(row.limit)}`
+            `${nf.format(row.used)} / ${nf.format(limit)}`
           )}
         </span>
       </div>
       <div
-        className="bg-muted h-1.5 w-full overflow-hidden rounded-full"
         role="progressbar"
         aria-label={row.label}
         aria-valuenow={unlimited ? undefined : Math.round(pct)}
@@ -106,10 +107,13 @@ function UsageMeter({ row }: { row: UsageRow }) {
           unlimited ? `${nf.format(row.used)} used, unlimited` : undefined
         }
       >
-        {!unlimited && (
-          <div
-            className={`h-full rounded-full transition-[width] ${tone(row.used, row.limit)}`}
-            style={{ width: `${pct}%` }}
+        {unlimited ? (
+          <div className="bg-muted h-1.5 w-full rounded-full" />
+        ) : (
+          <AnimatedBar
+            percent={pct}
+            color={tone(row.used, row.limit)}
+            delay={index * 0.04}
           />
         )}
       </div>
@@ -176,8 +180,8 @@ export function UsagePanel() {
       <section className="flex flex-col gap-3" aria-label="Workspace totals">
         <h3 className="text-sm font-semibold">Workspace totals</h3>
         <ul className="flex flex-col gap-4">
-          {workspaceRows.map((row) => (
-            <UsageMeter key={row.key} row={row} />
+          {workspaceRows.map((row, i) => (
+            <UsageMeter key={row.key} row={row} index={i} />
           ))}
         </ul>
       </section>
@@ -194,8 +198,8 @@ export function UsagePanel() {
           </span>
         </div>
         <ul className="flex flex-col gap-4">
-          {monthlyRows.map((row) => (
-            <UsageMeter key={row.key} row={row} />
+          {monthlyRows.map((row, i) => (
+            <UsageMeter key={row.key} row={row} index={workspaceRows.length + i} />
           ))}
         </ul>
       </section>
