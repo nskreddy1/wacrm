@@ -93,6 +93,18 @@ function nextId(prefix: string) {
   return `${prefix}-${idCounter}`;
 }
 
+/** Email category → compliance tier (mirrors the API's mapping). */
+const EMAIL_TIER_FOR_CHECK: Record<
+  StudioTemplate['email']['category'],
+  'marketing' | 'transactional' | 'otp'
+> = {
+  newsletter: 'marketing',
+  promotional: 'marketing',
+  transactional: 'transactional',
+  onboarding: 'transactional',
+  otp: 'otp',
+};
+
 /** Studio category → SMS compliance category (mirrors the hook's DB mapping). */
 const SMS_CATEGORY_FOR_CHECK: Record<
   StudioTemplate['category'],
@@ -1526,14 +1538,15 @@ export function TemplateStudio() {
       }).issues;
     }
     if (active.channel === 'email') {
-      // Email reuses the SMS rule set (opt-out language for
-      // marketing, disclosure checks) — CAN-SPAM/GDPR-style
-      // guardrails without a separate rules engine.
+      // Email runs its own CAN-SPAM / Gmail-Yahoo bulk-sender rule
+      // set (unsubscribe link, postal address, deceptive subjects,
+      // spam-filter triggers) — same checks the API enforces at save.
       if (!active.email.body.trim()) return [];
       return checkCompliance({
-        channel: 'sms',
-        category: SMS_CATEGORY_FOR_CHECK[active.category],
-        body: `${active.email.subject} ${active.email.body}`,
+        channel: 'email',
+        category: EMAIL_TIER_FOR_CHECK[active.email.category],
+        subject: active.email.subject,
+        body: active.email.body,
       }).issues;
     }
     if (!active.sms.body.trim()) return [];

@@ -147,9 +147,9 @@ export async function POST(request: Request) {
 
     // Server-side compliance gate. Error-level violations block the
     // save; warnings are persisted so the UI can keep surfacing them.
-    // Email reuses the SMS rule set (marketing opt-out language,
-    // required disclosures) — there is no carrier review for email,
-    // so this is the only guardrail before a template goes live.
+    // Email runs the CAN-SPAM / Gmail-Yahoo bulk-sender rule set —
+    // there is no carrier review for email, so this is the only
+    // guardrail before a template goes live.
     const compliance = checkCompliance(
       input.channel === 'whatsapp'
         ? {
@@ -159,17 +159,18 @@ export async function POST(request: Request) {
             footer: input.footer_text ?? '',
             hasButtons: (input.buttons?.length ?? 0) > 0,
           }
-        : {
-            channel: 'sms',
-            category:
-              input.channel === 'email'
-                ? EMAIL_COMPLIANCE_TIER[input.category]
-                : input.category,
-            body:
-              input.channel === 'email'
-                ? `${input.subject_text} ${input.body_text}`
-                : input.body_text,
-          }
+        : input.channel === 'email'
+          ? {
+              channel: 'email',
+              category: EMAIL_COMPLIANCE_TIER[input.category],
+              subject: input.subject_text,
+              body: input.body_text,
+            }
+          : {
+              channel: 'sms',
+              category: input.category,
+              body: input.body_text,
+            }
     );
     if (!compliance.ok) {
       return NextResponse.json(

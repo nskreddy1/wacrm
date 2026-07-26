@@ -23,6 +23,21 @@
  *  - Public URL shorteners (bit.ly etc.) trigger carrier filters.
  *  - OTP messages should not contain links (phishing heuristics).
  *
+ * Email (US CAN-SPAM Act + Gmail/Yahoo/Outlook bulk-sender rules,
+ * enforced at SMTP level since 2024 — GDPR/CASL mirror the consent
+ * side):
+ *  - Marketing email MUST carry a visible unsubscribe mechanism
+ *    (CAN-SPAM §316.5; Gmail/Yahoo additionally require RFC 8058
+ *    one-click List-Unsubscribe headers at the sender level).
+ *  - CAN-SPAM requires the sender's valid physical postal address
+ *    in every commercial message.
+ *  - Subject lines must not be deceptive (no fake "RE:"/"FWD:",
+ *    no misleading claims) — FTC enforcement, fines per email.
+ *  - OTP/security emails must not carry links or promo content
+ *    (phishing heuristics used by all major mailbox providers).
+ *  - Public URL shorteners and spam-trigger punctuation ($$$, !!!)
+ *    hurt deliverability and raise the >0.3% spam-rate ceiling.
+ *
  * Pure functions — no I/O — so they run identically client-side
  * (live compose feedback) and server-side (enforcement at save).
  */
@@ -42,7 +57,7 @@ export interface ComplianceResult {
   /** Persisted to message_templates.compliance for auditability. */
   audit: {
     checked_at: string;
-    channel: 'whatsapp' | 'sms';
+    channel: 'whatsapp' | 'sms' | 'email';
     category: string;
     passed: string[];
     failed: string[];
@@ -259,11 +274,122 @@ export function checkSmsCompliance(input: {
   return issues;
 }
 
+/** US street address or PO Box heuristic — CAN-SPAM postal address. */
+const POSTAL_ADDRESS_RE =
+  /\b(P\.?\s?O\.?\s?Box\s+\d+|\d{1,6}\s+[A-Za-z0-9'. ]+\s(St(?:reet)?|Ave(?:nue)?|R(?:oa)?d|Blvd|Boulevard|Lane|Ln|Dr(?:ive)?|Suite|Ste|Floor|Fl)\.?\b)/i;
+const FAKE_REPLY_SUBJECT_RE = /^\s*(re|fwd?|fw)\s*:/i;
+const SPAM_PUNCTUATION_RE = /(!{3,}|\${3,}|100% free|act now|urgent!)/i;
+
+export function checkEmailCompliance(input: {
+  /** Compliance tier: newsletter/promotional → marketing,
+   *  transactional/onboarding → transactional, otp → otp. */
+  category: 'marketing' | 'transactional' | 'otp';
+  subject: string;
+  body: string;
+}): ComplianceIssue[] {
+  const { category, subject, body } = input;
+  const text = `${subject}\n${body}`;
+  const issues: ComplianceIssue[] = [];
+
+  if (category === 'marketing') {
+    if (!OPT_OUT_RE.test(body)) {
+      issues.push(
+        issue(
+          'error',
+          'email-marketing-missing-unsubscribe',
+          'Marketing email must include an unsubscribe link or instructions — required by CAN-SPAM, GDPR and CASL, and Gmail/Yahoo reject bulk mail without one.'
+        )
+      );
+    }
+    if (!POSTAL_ADDRESS_RE.test(body) && !/\{\{\s*company_address\s*\}\}/i.test(body)) {
+      issues.push(
+        issue(
+          'warning',
+          'email-marketing-missing-postal-address',
+          "CAN-SPAM requires your valid physical postal address in every commercial email — add it to the footer (or a {{company_address}} variable)."
+        )
+      );
+    }
+  }
+
+  if (FAKE_REPLY_SUBJECT_RE.test(subject)) {
+    issues.push(
+      issue(
+        'error',
+        'email-deceptive-subject',
+        'Subject lines that fake a reply or forward ("RE:", "FWD:") are deceptive under CAN-SPAM — the FTC fines per email sent.'
+      )
+    );
+  }
+  const letters = subject.replace(/[^a-zA-Z]/g, '');
+  if (letters.length >= 8 && letters === letters.toUpperCase()) {
+    issues.push(
+      issue(
+        'warning',
+        'email-shouting-subject',
+        'ALL-CAPS subject lines are a top spam-filter trigger — mailbox providers count them against your <0.3% spam-rate budget.'
+      )
+    );
+  }
+  if (SPAM_PUNCTUATION_RE.test(text)) {
+    issues.push(
+      issue(
+        'warning',
+        'email-spam-punctuation',
+        'Spam-trigger phrasing detected (!!!, $$$, "act now", "100% free") — this hurts deliverability with Gmail/Yahoo/Outlook filters.'
+      )
+    );
+  }
+  if (PUBLIC_SHORTENER_RE.test(text)) {
+    issues.push(
+      issue(
+        'error',
+        'email-public-shortener',
+        'Public URL shorteners (bit.ly, tinyurl…) are heavily penalized by email spam filters. Link your own domain instead.'
+      )
+    );
+  }
+
+  if (category === 'otp') {
+    if (URL_RE.test(body)) {
+      issues.push(
+        issue(
+          'error',
+          'email-otp-contains-url',
+          'OTP/security emails must not contain links — mailbox providers flag them as phishing.'
+        )
+      );
+    }
+    if (PROMO_WORDS_RE.test(text)) {
+      issues.push(
+        issue(
+          'error',
+          'email-otp-promo-language',
+          'OTP emails are security messages — remove marketing language.'
+        )
+      );
+    }
+  }
+
+  if (SHAFT_RE.test(text)) {
+    issues.push(
+      issue(
+        'warning',
+        'email-restricted-content',
+        'Possible restricted content (alcohol / gambling / adult / weapons) — most ESPs (Resend, MSG91, Mailtrap) restrict these categories in their acceptable-use policies.'
+      )
+    );
+  }
+
+  return issues;
+}
+
 /** Run the channel-appropriate checks and produce the audit blob. */
 export function checkCompliance(input: {
-  channel: 'whatsapp' | 'sms';
+  channel: 'whatsapp' | 'sms' | 'email';
   category: string;
   body: string;
+  subject?: string;
   footer?: string;
   hasButtons?: boolean;
 }): ComplianceResult {
@@ -276,10 +402,16 @@ export function checkCompliance(input: {
           footer: input.footer ?? '',
           hasButtons: input.hasButtons ?? false,
         })
-      : checkSmsCompliance({
-          category: input.category as 'marketing' | 'transactional' | 'otp',
-          body: input.body,
-        });
+      : input.channel === 'email'
+        ? checkEmailCompliance({
+            category: input.category as 'marketing' | 'transactional' | 'otp',
+            subject: input.subject ?? '',
+            body: input.body,
+          })
+        : checkSmsCompliance({
+            category: input.category as 'marketing' | 'transactional' | 'otp',
+            body: input.body,
+          });
 
   const failed = issues.map((i) => i.code);
   const ALL_CODES =
@@ -296,13 +428,25 @@ export function checkCompliance(input: {
           'wa-auth-promo-language',
           'wa-restricted-content',
         ]
-      : [
-          'sms-marketing-missing-stop',
-          'sms-marketing-missing-sender',
-          'sms-otp-contains-url',
-          'sms-public-shortener',
-          'sms-shaft-content',
-        ];
+      : input.channel === 'email'
+        ? [
+            'email-marketing-missing-unsubscribe',
+            'email-marketing-missing-postal-address',
+            'email-deceptive-subject',
+            'email-shouting-subject',
+            'email-spam-punctuation',
+            'email-public-shortener',
+            'email-otp-contains-url',
+            'email-otp-promo-language',
+            'email-restricted-content',
+          ]
+        : [
+            'sms-marketing-missing-stop',
+            'sms-marketing-missing-sender',
+            'sms-otp-contains-url',
+            'sms-public-shortener',
+            'sms-shaft-content',
+          ];
 
   return {
     ok: !issues.some((i) => i.level === 'error'),
