@@ -162,25 +162,30 @@ export function AssistantWidget() {
 
   return (
     <>
-      {/* Launcher */}
-      <Button
-        type="button"
-        size="icon"
-        aria-label={open ? 'Close Mira' : 'Open Mira, your CRM copilot'}
-        onClick={() => setOpen((v) => !v)}
-        className="fixed right-20 bottom-4 z-40 size-12 rounded-full shadow-lg"
-      >
-        {open ? <X className="size-5" /> : <Sparkles className="size-5" />}
-      </Button>
+      {/* Launcher — hidden while the docked panel is open (the panel
+          covers this spot and carries its own close button). */}
+      {!open ? (
+        <Button
+          type="button"
+          size="icon"
+          aria-label="Open Mira, your CRM copilot"
+          onClick={() => setOpen(true)}
+          className="fixed right-20 bottom-4 z-40 size-12 rounded-full shadow-lg"
+        >
+          <Sparkles className="size-5" />
+        </Button>
+      ) : null}
 
-      {/* Panel */}
+      {/* Panel — Twenty CRM's "Ask AI" pattern: a full-height rail docked
+          to the right edge (not a floating bubble), so long agent sessions
+          read like a workspace surface instead of a chat toy. */}
       {open ? (
         <div
           role="dialog"
           aria-label="Mira — CRM copilot chat"
-          className="border-border bg-background fixed right-4 bottom-20 z-50 flex h-[min(600px,calc(100dvh-7rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_64px_-16px_rgba(0,0,0,0.4)]"
+          className="border-border bg-background animate-in slide-in-from-right fixed inset-y-0 right-0 z-50 flex w-[min(420px,100vw)] flex-col overflow-hidden border-l shadow-[-16px_0_48px_-24px_rgba(0,0,0,0.35)] duration-200"
         >
-          {/* Header */}
+          {/* Title bar */}
           <div className="border-border flex items-center gap-2.5 border-b px-4 py-3">
             <span className="bg-primary/10 relative flex size-8 items-center justify-center rounded-lg">
               <Sparkles className="text-primary size-4" aria-hidden />
@@ -213,19 +218,22 @@ export function AssistantWidget() {
             className="app-scrollbar flex-1 overflow-y-auto px-4 py-4"
           >
             {messages.length === 0 ? (
-              <div className="flex h-full flex-col justify-end gap-5 px-1 pb-2">
-                <div className="flex flex-col gap-2">
-                  <h2 className="text-lg font-semibold text-balance">
-                    {"Hi, I'm Mira"}
+              /* Twenty's empty state: everything gravity-settles to the
+                 bottom next to the composer, so the eye lands where typing
+                 happens. Suggestions are quiet rows, not bordered cards —
+                 they read as actions, not content. */
+              <div className="flex h-full flex-col justify-end gap-4 px-1 pb-2">
+                <div className="flex flex-col gap-1.5">
+                  <h2 className="text-sm font-semibold text-balance">
+                    What can I help you with?
                   </h2>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    I can read your whole workspace and build workflows for
-                    you end to end — from a simple welcome reply to multi-step
-                    sequences. Anything that changes data asks for your
-                    approval first.
+                    I can read your whole workspace and build workflows end
+                    to end. Anything that changes data asks for your approval
+                    first.
                   </p>
                 </div>
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col">
                   {SUGGESTIONS.map((s) => (
                     <button
                       key={s.label}
@@ -233,7 +241,7 @@ export function AssistantWidget() {
                       onClick={() => {
                         if (!busy) void sendMessage({ text: s.label });
                       }}
-                      className="border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted/60 flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left text-[13px] transition-colors"
+                      className="text-foreground hover:bg-muted/60 -mx-2 flex items-center gap-2.5 rounded-lg px-2 py-2 text-left text-[13px] transition-colors"
                     >
                       {s.icon === 'workflow' ? (
                         <Workflow
@@ -320,7 +328,10 @@ export function AssistantWidget() {
             ) : null}
           </div>
 
-          {/* Composer — pill input with inline send, copilot style */}
+          {/* Composer — Twenty's tall block: the textarea sits on top and
+              an action row lives INSIDE the frame at the bottom, so the
+              whole rect reads as one input surface. Focus lights up the
+              border, matching their blue-ring treatment. */}
           <form
             className="px-3 pt-1 pb-3"
             onSubmit={(e) => {
@@ -328,7 +339,7 @@ export function AssistantWidget() {
               submit();
             }}
           >
-            <div className="border-border bg-card focus-within:border-primary/50 flex items-end gap-1.5 rounded-2xl border px-3 py-2 transition-colors">
+            <div className="border-border bg-card focus-within:border-primary flex flex-col gap-2 rounded-xl border px-3 pt-2.5 pb-2 transition-colors">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -343,21 +354,30 @@ export function AssistantWidget() {
                     submit();
                   }
                 }}
-                placeholder="Ask or build anything…"
+                placeholder="Ask, search or make anything…"
                 aria-label="Message the helper agent"
-                rows={1}
-                className="text-foreground placeholder:text-muted-foreground max-h-28 min-h-6 flex-1 resize-none bg-transparent text-sm leading-6 outline-none"
+                rows={2}
+                className="text-foreground placeholder:text-muted-foreground max-h-36 min-h-12 flex-1 resize-none bg-transparent text-sm leading-6 outline-none"
                 disabled={busy && messages.length === 0}
               />
-              <Button
-                type="submit"
-                size="icon"
-                aria-label="Send"
-                disabled={!input.trim() || busy}
-                className="size-7 shrink-0 rounded-full"
-              >
-                <ArrowUp className="size-3.5" />
-              </Button>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground text-[11px]">
+                  Enter to send · Shift+Enter for a new line
+                </span>
+                <Button
+                  type="submit"
+                  size="icon"
+                  aria-label="Send"
+                  disabled={!input.trim() || busy}
+                  className="size-7 shrink-0 rounded-full"
+                >
+                  {busy ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <ArrowUp className="size-3.5" />
+                  )}
+                </Button>
+              </div>
             </div>
           </form>
         </div>
