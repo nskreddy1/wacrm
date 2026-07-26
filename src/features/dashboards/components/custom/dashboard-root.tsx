@@ -12,19 +12,29 @@
 import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import {
+  Building2,
   Check,
   ChevronDown,
+  Headset,
+  HeartPulse,
   LayoutDashboard,
+  LayoutGrid,
   MoreHorizontal,
   Pencil,
   Plus,
   RotateCw,
   Trash2,
+  TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useDashboardOverview } from '@/features/dashboards/hooks/use-dashboard-overview';
 import type { DashboardWidget } from '@/features/dashboards/lib/widgets';
+import {
+  DASHBOARD_TEMPLATES,
+  getTemplate,
+} from '@/features/dashboards/lib/templates';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -59,6 +69,17 @@ interface DashboardRow {
 
 const OVERVIEW_ID = 'overview';
 
+const TEMPLATE_ICONS: Record<
+  string,
+  React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' }>
+> = {
+  'trending-up': TrendingUp,
+  'building-2': Building2,
+  'heart-pulse': HeartPulse,
+  headset: Headset,
+  'layout-grid': LayoutGrid,
+};
+
 async function jsonFetcher(url: string) {
   const res = await fetch(url);
   if (!res.ok) throw new Error('Request failed');
@@ -78,6 +99,7 @@ export function DashboardRoot() {
     null
   );
   const [nameDraft, setNameDraft] = useState('');
+  const [templateKey, setTemplateKey] = useState('blank');
   const [busy, setBusy] = useState(false);
 
   // Overview data is fetched once here and shared with custom
@@ -92,16 +114,24 @@ export function DashboardRoot() {
     if (!name) return;
     setBusy(true);
     try {
+      // Instantiate the chosen template — ids are minted client-side
+      // so each widget is independently editable afterwards.
+      const template = getTemplate(templateKey);
+      const widgets: DashboardWidget[] = (template?.widgets ?? []).map(
+        (w) => ({ ...w, id: crypto.randomUUID() })
+      );
       const res = await fetch('/api/dashboards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, widgets }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? 'Failed to create dashboard');
       await mutate();
       setSelectedId(body.dashboard.id as string);
-      setEditing(true);
+      // Blank dashboards drop straight into edit mode; template
+      // dashboards open in view mode so the seeded charts show first.
+      setEditing(widgets.length === 0);
       setDialog(null);
       setNameDraft('');
       toast.success(`Dashboard "${name}" created`);
@@ -217,6 +247,7 @@ export function DashboardRoot() {
           <DropdownMenuItem
             onClick={() => {
               setNameDraft('');
+              setTemplateKey('blank');
               setDialog('create');
             }}
           >
@@ -337,17 +368,62 @@ export function DashboardRoot() {
           if (!open) setDialog(null);
         }}
       >
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent
+          className={dialog === 'create' ? 'sm:max-w-lg' : 'sm:max-w-sm'}
+        >
           <DialogHeader>
             <DialogTitle>
               {dialog === 'create' ? 'New dashboard' : 'Rename dashboard'}
             </DialogTitle>
             <DialogDescription>
               {dialog === 'create'
-                ? 'Create a personal dashboard and add the components you need.'
+                ? 'Start from a template or build your own from scratch.'
                 : 'Give this dashboard a new name.'}
             </DialogDescription>
           </DialogHeader>
+          {dialog === 'create' && (
+            <div
+              role="radiogroup"
+              aria-label="Dashboard template"
+              className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+            >
+              {DASHBOARD_TEMPLATES.map((t) => {
+                const Icon = TEMPLATE_ICONS[t.icon] ?? LayoutGrid;
+                const active = templateKey === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setTemplateKey(t.key)}
+                    className={cn(
+                      'flex items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+                      active
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted/50'
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        'mt-0.5 size-4 shrink-0',
+                        active ? 'text-primary' : 'text-muted-foreground'
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">
+                        {t.name}
+                      </span>
+                      <span className="text-muted-foreground block text-xs leading-relaxed text-pretty">
+                        {t.description}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <Input
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value)}
