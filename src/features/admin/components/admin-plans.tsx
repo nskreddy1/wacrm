@@ -441,11 +441,9 @@ function CreatePlanDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm">
-          <Plus className="size-4" aria-hidden="true" />
-          New plan
-        </Button>
+      <DialogTrigger render={<Button size="sm" />}>
+        <Plus className="size-4" aria-hidden="true" />
+        New plan
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
