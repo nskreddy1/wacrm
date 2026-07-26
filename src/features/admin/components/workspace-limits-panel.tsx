@@ -46,6 +46,14 @@ const LIMIT_ROWS = [
 
 type LimitKey = (typeof LIMIT_ROWS)[number]['key'];
 
+/** Every limit key present and set to null ("inherit the plan value"). */
+function emptyValues(): Record<LimitKey, number | null> {
+  return Object.fromEntries(LIMIT_ROWS.map((r) => [r.key, null])) as Record<
+    LimitKey,
+    number | null
+  >;
+}
+
 interface LimitsPayload {
   account: { id: string; name: string; plan_id: string };
   override:
@@ -66,8 +74,11 @@ export function WorkspaceLimitsPanel({ workspaceId }: { workspaceId: string }) {
 
   const [planId, setPlanId] = useState('');
   const [unlimitedAll, setUnlimitedAll] = useState(false);
-  const [values, setValues] = useState<Record<LimitKey, number | null>>(
-    {} as Record<LimitKey, number | null>
+  // Seeded with every key present (null = "use plan value") so the number
+  // inputs are controlled from their very first render — an initially
+  // `undefined` value would flip them uncontrolled -> controlled.
+  const [values, setValues] = useState<Record<LimitKey, number | null>>(() =>
+    emptyValues()
   );
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
@@ -78,7 +89,7 @@ export function WorkspaceLimitsPanel({ workspaceId }: { workspaceId: string }) {
     setPlanId(data.account.plan_id);
     setUnlimitedAll(data.override?.unlimited_all ?? false);
     setReason(data.override?.reason ?? '');
-    const next = {} as Record<LimitKey, number | null>;
+    const next = emptyValues();
     for (const row of LIMIT_ROWS) {
       next[row.key] = data.override?.[row.key] ?? null;
     }
@@ -127,7 +138,7 @@ export function WorkspaceLimitsPanel({ workspaceId }: { workspaceId: string }) {
           Plan
         </Label>
         <Select
-          value={planId}
+          value={planId || data.account.plan_id}
           onValueChange={(value) => {
             if (value !== null) setPlanId(value);
           }}
@@ -167,7 +178,7 @@ export function WorkspaceLimitsPanel({ workspaceId }: { workspaceId: string }) {
             unlimited or type a custom cap.
           </p>
           {LIMIT_ROWS.map((row) => {
-            const value = values[row.key];
+            const value = values[row.key] ?? null;
             const isUnlimited = value === -1;
             return (
               <div

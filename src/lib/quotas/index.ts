@@ -259,6 +259,179 @@ export async function consumeMonthlyQuota(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Usage summary (Settings -> Plan & usage, and the admin console)
+// ---------------------------------------------------------------------------
+
+/** One row of the account's plan allowance vs. current consumption. */
+export interface UsageSummaryRow {
+  /** Limit column on `plans` / `account_limit_overrides`. */
+  key: string;
+  label: string;
+  kind: 'point_in_time' | 'monthly';
+  /** null = unlimited. */
+  limit: number | null;
+  used: number;
+  /** Where the effective limit came from. */
+  source: 'plan' | 'override' | 'unlimited_all';
+}
+
+export interface AccountUsageSummary {
+  planId: string;
+  planName: string;
+  /** True when any per-account override applies — surface as "Custom". */
+  isCustom: boolean;
+  unlimitedAll: boolean;
+  /** First day of the current UTC billing month (YYYY-MM-DD). */
+  periodStart: string;
+  rows: UsageSummaryRow[];
+}
+
+const SUMMARY_ROWS: Array<
+  | { key: PointInTimeLimit; label: string; kind: 'point_in_time' }
+  | { key: string; label: string; kind: 'monthly'; metric: MonthlyMetric }
+> = [
+  { key: 'max_contacts', label: 'Contacts', kind: 'point_in_time' },
+  { key: 'max_active_flows', label: 'Active flows', kind: 'point_in_time' },
+  { key: 'max_members', label: 'Member seats', kind: 'point_in_time' },
+  { key: 'max_channels', label: 'Connected channels', kind: 'point_in_time' },
+  {
+    key: 'monthly_messages',
+    label: 'Messages',
+    kind: 'monthly',
+    metric: 'messages_sent',
+  },
+  {
+    key: 'monthly_broadcast_recipients',
+    label: 'Broadcast recipients',
+    kind: 'monthly',
+    metric: 'broadcast_recipients',
+  },
+  {
+    key: 'monthly_ai_replies',
+    label: 'AI replies',
+    kind: 'monthly',
+    metric: 'ai_replies',
+  },
+];
+
+/** First day of the current UTC month, as a Postgres date string. */
+function currentPeriod(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+}
+
+/**
+ * Every limit + current usage for one account in a fixed number of
+ * round trips: plan, override and monthly counters are each fetched
+ * ONCE (not per-limit, which `resolveLimit` would do), then the four
+ * live counts run in parallel.
+ *
+ * Unlike the enforcement helpers this throws on failure — it backs a
+ * read-only screen, where a wrong number is worse than an error state.
+ */
+export async function getAccountUsageSummary(
+  accountId: string
+): Promise<AccountUsageSummary> {
+  const db = admin();
+  const period = currentPeriod();
+
+  const { data: account, error: accountError } = await db
+    .from('accounts')
+    .select('plan_id')
+    .eq('id', accountId)
+    .single();
+  if (accountError) throw accountError;
+  const planId = (account as { plan_id?: string } | null)?.plan_id ?? 'free';
+
+  const [
+    { data: plan, error: planError },
+    { data: override, error: overrideError },
+    { data: counters, error: countersError },
+  ] = await Promise.all([
+    db.from('plans').select('*').eq('id', planId).single(),
+    db
+      .from('account_limit_overrides')
+      .select('*')
+      .eq('account_id', accountId)
+      .maybeSingle(),
+    db
+      .from('usage_counters')
+      .select('metric, used')
+      .eq('account_id', accountId)
+      .eq('period_start', period),
+  ]);
+  if (planError) throw planError;
+  if (overrideError) throw overrideError;
+  if (countersError) throw countersError;
+
+  const planRow = (plan ?? {}) as Record<string, unknown>;
+  const overrideRow = (override ?? null) as Record<string, unknown> | null;
+  const unlimitedAll = overrideRow?.unlimited_all === true;
+
+  const usedByMetric = new Map<string, number>(
+    ((counters ?? []) as Array<{ metric: string; used: number }>).map((c) => [
+      c.metric,
+      c.used,
+    ])
+  );
+
+  // Live counts for the point-in-time limits, all in flight together.
+  const liveKeys = SUMMARY_ROWS.filter(
+    (r) => r.kind === 'point_in_time'
+  ) as Array<{ key: PointInTimeLimit }>;
+  const liveCounts = await Promise.all(
+    liveKeys.map(async ({ key }) => {
+      const { table, filter } = LIVE_COUNTS[key];
+      let query = db
+        .from(table)
+        .select('*', { count: 'exact', head: true })
+        .eq('account_id', accountId);
+      for (const [k, v] of Object.entries(filter ?? {})) {
+        query = query.eq(k, v as string);
+      }
+      const { count, error } = await query;
+      if (error) throw error;
+      return [key, count ?? 0] as const;
+    })
+  );
+  const usedByResource = new Map<string, number>(liveCounts);
+
+  const rows: UsageSummaryRow[] = SUMMARY_ROWS.map((row) => {
+    const overrideValue = overrideRow?.[row.key] as number | null | undefined;
+    const hasOverride = overrideValue !== undefined && overrideValue !== null;
+
+    let limit: number | null;
+    let source: UsageSummaryRow['source'];
+    if (unlimitedAll) {
+      limit = null;
+      source = 'unlimited_all';
+    } else if (hasOverride) {
+      limit = overrideValue === UNLIMITED_SENTINEL ? null : overrideValue;
+      source = 'override';
+    } else {
+      limit = (planRow[row.key] as number | null) ?? null;
+      source = 'plan';
+    }
+
+    const used =
+      row.kind === 'monthly'
+        ? (usedByMetric.get(row.metric) ?? 0)
+        : (usedByResource.get(row.key) ?? 0);
+
+    return { key: row.key, label: row.label, kind: row.kind, limit, used, source };
+  });
+
+  return {
+    planId,
+    planName: (planRow.display_name as string) ?? planId,
+    isCustom: unlimitedAll || rows.some((r) => r.source === 'override'),
+    unlimitedAll,
+    periodStart: period,
+    rows,
+  };
+}
+
 /**
  * Convenience: check-then-consume in one call for the common
  * "send one thing" path. NOT transactional across concurrent callers
