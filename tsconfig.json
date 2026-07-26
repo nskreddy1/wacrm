@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "v0_memories"]
+  "exclude": ["node_modules", "v0_memories", "reference"]
 }
