@@ -457,6 +457,44 @@ html[data-theme='rose'] {
   animation: auth-shake 280ms var(--ease-out-strong);
 }
 
+/* Assistant "working" status — a light-band sweeping across the text
+   (Twenty CRM's ShimmeringText pattern). Communicates live progress
+   without a spinner: the text itself is the activity indicator. */
+@keyframes assistant-shimmer {
+  0% {
+    background-position: 200% top;
+  }
+  100% {
+    background-position: -200% top;
+  }
+}
+
+.assistant-shimmer {
+  animation: assistant-shimmer 1.2s infinite linear;
+  background: var(--muted-foreground)
+    linear-gradient(
+      90deg,
+      var(--muted-foreground) 0%,
+      var(--foreground) 50%,
+      var(--muted-foreground) 100%
+    );
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-position: -200% top;
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-shimmer {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    color: var(--muted-foreground);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   @keyframes auth-rise {
     from {

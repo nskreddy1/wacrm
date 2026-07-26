@@ -6,6 +6,7 @@ import { Streamdown } from 'streamdown';
 import {
   ArrowUpRight,
   Check,
+  ChevronRight,
   ChevronDown,
   Loader2,
   ShieldCheck,
@@ -90,6 +91,85 @@ export const MessageText = memo(function MessageText({
     </div>
   );
 });
+
+// ------------------------------------------------------------
+// Shimmering status text (Twenty CRM pattern)
+// ------------------------------------------------------------
+
+/** Live-progress label: a light band sweeps across the text itself,
+ *  so no separate spinner is needed. */
+export function ShimmeringText({ children }: { children: React.ReactNode }) {
+  return <span className="assistant-shimmer">{children}</span>;
+}
+
+// ------------------------------------------------------------
+// Grouped thinking steps (Twenty CRM's ThinkingStepsDisplay)
+// ------------------------------------------------------------
+
+export type ThinkingStepData = {
+  key: string;
+  toolName: string;
+  state: string;
+  output?: unknown;
+};
+
+/** Collapses a contiguous run of tool activity into one quiet summary
+ *  row — "Worked for N steps" — the way Twenty CRM renders agent work.
+ *  While the agent is still acting, the summary shows the current tool
+ *  label with a shimmer sweep; once the text answer starts, the group
+ *  collapses so the transcript stays about the conversation, not the
+ *  machinery. A chevron (0° → 90°) expands the full step rail. */
+export function ThinkingSteps({
+  steps,
+  active,
+}: {
+  steps: ThinkingStepData[];
+  active: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const currentLabel = active
+    ? (TOOL_LABELS[steps[steps.length - 1]?.toolName] ?? 'Working')
+    : null;
+  const summary =
+    steps.length === 1 ? 'Worked for 1 step' : `Worked for ${steps.length} steps`;
+
+  return (
+    <div className="flex w-full flex-col gap-1">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="text-muted-foreground hover:text-foreground flex min-h-6 w-fit items-center gap-2 text-xs transition-colors"
+      >
+        <ChevronRight
+          className={cn(
+            'size-3.5 shrink-0 transition-transform duration-150 ease-in-out',
+            expanded && 'rotate-90'
+          )}
+          aria-hidden
+        />
+        {active && currentLabel ? (
+          <ShimmeringText>{`${currentLabel}…`}</ShimmeringText>
+        ) : (
+          <span>{summary}</span>
+        )}
+      </button>
+      {expanded ? (
+        <div className="flex flex-col gap-1.5 pt-1 pb-1 pl-5">
+          {steps.map((s) => (
+            <ToolStep
+              key={s.key}
+              toolName={s.toolName}
+              state={s.state}
+              output={s.output}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 // ------------------------------------------------------------
 // Tool activity step (quiet rail row)

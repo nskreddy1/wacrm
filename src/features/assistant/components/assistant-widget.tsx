@@ -18,7 +18,9 @@ import { cn } from '@/lib/utils';
 import {
   ApprovalCard,
   MessageText,
-  ToolStep,
+  ShimmeringText,
+  ThinkingSteps,
+  type ThinkingStepData,
   toolNameFromPart,
 } from './agent-parts';
 
@@ -40,6 +42,89 @@ const SUGGESTIONS: { label: string; icon?: 'workflow' }[] = [
   { label: 'How many contacts do I have?' },
   { label: 'What appointments are coming up?' },
 ];
+
+type RenderItem =
+  | { kind: 'text'; key: string; text: string }
+  | {
+      kind: 'approval';
+      key: string;
+      toolName: string;
+      input: unknown;
+      approvalId: string;
+    }
+  | {
+      kind: 'thinking';
+      key: string;
+      steps: ThinkingStepData[];
+      active: boolean;
+    };
+
+/** Twenty CRM's transcript shape: contiguous tool activity collapses
+ *  into one "thinking steps" group; text parts break groups; approval
+ *  cards always stand alone — a pending write must never be hidden
+ *  inside a collapsed rail where the user could miss it. */
+function groupMessageParts(
+  message: { id: string; role: string; parts: unknown[] },
+  busy: boolean
+): RenderItem[] {
+  const items: RenderItem[] = [];
+
+  for (let i = 0; i < message.parts.length; i++) {
+    const part = message.parts[i] as Record<string, unknown> & {
+      type: string;
+    };
+
+    if (part.type === 'text') {
+      const text = typeof part.text === 'string' ? part.text : '';
+      if (text) items.push({ kind: 'text', key: `${message.id}-${i}`, text });
+      continue;
+    }
+
+    const toolName = toolNameFromPart(part.type);
+    if (!toolName || typeof part.state !== 'string') continue;
+
+    // Pending write approval → standalone card, outside any group.
+    const approval = part.approval as
+      | { id: string; isAutomatic?: boolean }
+      | undefined;
+    if (part.state === 'approval-requested' && approval && !approval.isAutomatic) {
+      items.push({
+        kind: 'approval',
+        key: `${message.id}-${i}`,
+        toolName,
+        input: 'input' in part ? part.input : null,
+        approvalId: approval.id,
+      });
+      continue;
+    }
+
+    const step: ThinkingStepData = {
+      key: `${message.id}-${i}`,
+      toolName,
+      state: part.state,
+      output: 'output' in part ? part.output : undefined,
+    };
+    const last = items[items.length - 1];
+    if (last?.kind === 'thinking') {
+      last.steps.push(step);
+    } else {
+      items.push({
+        kind: 'thinking',
+        key: `${message.id}-${i}-group`,
+        steps: [step],
+        active: false,
+      });
+    }
+  }
+
+  // A thinking group is "live" only when it's the transcript's last item
+  // and the agent is still running — then its summary shimmers with the
+  // current tool label instead of the step count.
+  const lastItem = items[items.length - 1];
+  if (busy && lastItem?.kind === 'thinking') lastItem.active = true;
+
+  return items;
+}
 
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
@@ -176,65 +261,48 @@ export function AssistantWidget() {
                       message.role === 'user' ? 'items-end' : 'items-start'
                     )}
                   >
-                    {message.parts.map((part, i) => {
-                      if (part.type === 'text') {
-                        if (!part.text) return null;
+                    {groupMessageParts(
+                      message,
+                      busy &&
+                        message.id === messages[messages.length - 1]?.id
+                    ).map((item) => {
+                      if (item.kind === 'text') {
                         return (
                           <MessageText
-                            key={`${message.id}-${i}`}
+                            key={item.key}
                             role={message.role}
-                            text={part.text}
+                            text={item.text}
                           />
                         );
                       }
-
-                      const toolName = toolNameFromPart(part.type);
-                      if (
-                        !toolName ||
-                        !('state' in part) ||
-                        typeof part.state !== 'string'
-                      )
-                        return null;
-                      const key = `${message.id}-${i}`;
-
-                      // Approval card for write tools
-                      if (
-                        part.state === 'approval-requested' &&
-                        'approval' in part &&
-                        part.approval &&
-                        !part.approval.isAutomatic
-                      ) {
-                        const approvalId = part.approval.id;
+                      if (item.kind === 'approval') {
                         return (
                           <ApprovalCard
-                            key={key}
-                            toolName={toolName}
-                            input={'input' in part ? part.input : null}
+                            key={item.key}
+                            toolName={item.toolName}
+                            input={item.input}
                             onRespond={(approved) =>
                               addToolApprovalResponse({
-                                id: approvalId,
+                                id: item.approvalId,
                                 approved,
                               })
                             }
                           />
                         );
                       }
-
                       return (
-                        <ToolStep
-                          key={key}
-                          toolName={toolName}
-                          state={part.state}
-                          output={'output' in part ? part.output : undefined}
+                        <ThinkingSteps
+                          key={item.key}
+                          steps={item.steps}
+                          active={item.active}
                         />
                       );
                     })}
                   </div>
                 ))}
                 {busy && messages[messages.length - 1]?.role !== 'assistant' ? (
-                  <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                    <Loader2 className="size-3 animate-spin" aria-hidden />
-                    Thinking…
+                  <div className="flex min-h-6 items-center text-xs">
+                    <ShimmeringText>Thinking…</ShimmeringText>
                   </div>
                 ) : null}
               </div>
