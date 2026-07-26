@@ -285,6 +285,18 @@ export const RATE_LIMITS = {
    *  capping a stampede; excess inbounds simply don't get an auto-reply
    *  (they still land in the inbox for a human). */
   aiAutoReplyAccount: { limit: 30, windowMs: 60_000 },
+  /** Platform assistant chat, per user. Unlike `aiDraft` (which spends
+   *  the account's own BYO key) this burns the PLATFORM key, so the cost
+   *  lands on us, not the tenant. A turn can fan out to `stepCountIs`
+   *  tool steps, making each call several model round-trips. 15/min is
+   *  well above a human conversing while bounding a hold-down or script. */
+  assistantChat: { limit: 15, windowMs: 60_000 },
+  /** Platform assistant chat, per account. Stops N seats in one
+   *  workspace from each sitting under the per-user cap and collectively
+   *  stampeding the shared platform key. Deliberately per-account rather
+   *  than one global platform budget — a global cap would let a single
+   *  noisy tenant deny the assistant to every other customer. */
+  assistantChatAccount: { limit: 40, windowMs: 60_000 },
   /** Provider/channel configuration mutations: saving WhatsApp config,
    *  creating/updating/testing channel connections. These verify
    *  credentials against external provider APIs (Meta, Twilio) on

@@ -20,6 +20,11 @@ import {
   buildAssistantTools,
   WRITE_TOOL_NAMES,
 } from '@/features/assistant/lib/tools';
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  RATE_LIMITS,
+} from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -27,6 +32,21 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   try {
     const ctx = await getCurrentAccount();
+
+    // This endpoint spends the PLATFORM key, so cap it twice: per user
+    // (stops one seat holding down send / running a script) and per
+    // account (stops N seats in one workspace collectively stampeding
+    // the shared key while each stays under the per-user cap).
+    const userLimit = await checkRateLimit(
+      `assistant-chat:${ctx.userId}`,
+      RATE_LIMITS.assistantChat
+    );
+    if (!userLimit.success) return rateLimitResponse(userLimit);
+    const accountLimit = await checkRateLimit(
+      `assistant-chat-acct:${ctx.accountId}`,
+      RATE_LIMITS.assistantChatAccount
+    );
+    if (!accountLimit.success) return rateLimitResponse(accountLimit);
 
     const config = await loadAssistantConfig();
     if (!config) {

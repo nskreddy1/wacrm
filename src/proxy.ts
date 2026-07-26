@@ -118,6 +118,11 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // `robots.txt` and `icon` are generated metadata routes that must stay
+    // publicly reachable. Without excluding them the auth guard 307s
+    // crawlers to /login, so our "do not index" rules are never actually
+    // delivered — the guard silently defeats the very file meant to keep
+    // this private CRM out of search results.
+    '/((?!_next/static|_next/image|favicon.ico|robots.txt|icon|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
