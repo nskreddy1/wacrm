@@ -71,6 +71,28 @@ capacity ≈ dozens of low-volume tenants today without the fixes.
 
 ## 3. Are user tasks actually AUTOMATED? — the biggest finding
 
+> **STATUS: CRITICAL-1 FIXED on 2026-07-26.** The clock is now running.
+> Root cause was **three** stacked faults, not one:
+> 1. **No schedule** — no `vercel.json`, so nothing ever invoked the endpoint.
+>    → created `vercel.json` with `*/5 * * * *` on `/api/flows/cron`.
+> 2. **Wrong auth contract** — the route only accepted a custom
+>    `x-cron-secret` header, but **Vercel Cron cannot send custom headers**;
+>    it sends `Authorization: Bearer $CRON_SECRET`. Adding a schedule alone
+>    would have 401'd on every run. → now accepts both callers.
+> 3. **Auth proxy interception** — `/api/flows/cron` was absent from
+>    `PUBLIC_PREFIXES` in `src/proxy.ts`, so the scheduler was **307-redirected
+>    to `/login`** before the handler ran. → exempted (it authenticates itself).
+>
+> Auth logic extracted to `src/features/flows/lib/cron-auth.ts` with 14 unit
+> tests (incl. constant-time compare, fail-closed-when-unconfigured, and
+> cross-header misuse rejection). `CRON_SECRET` now set.
+> **Live verification:** no auth → 401, wrong bearer → 401, correct bearer →
+> 200 `{"swept":0,"resumed":0,"scheduled":0}` (zeros = no pending work, not
+> failure). Full flows suite: 133/133 pass.
+>
+> Lesson worth keeping: a scheduled job needs **schedule + auth contract +
+> proxy exemption + secret** — any one missing fails silently.
+
 ### Automation surface that EXISTS (rich)
 9 flow trigger types in `flows/lib/types.ts`:
 `keyword`, `first_inbound_message`, `manual`, `new_message_received`,
