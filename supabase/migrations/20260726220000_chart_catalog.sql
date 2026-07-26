@@ -530,12 +530,21 @@ BEGIN
 END;
 $$;
 
+-- Postgres grants EXECUTE to PUBLIC by default on new functions, and anon
+-- inherits from PUBLIC — so revoking from anon alone is not enough. Revoke
+-- from PUBLIC first, then grant back only to authenticated.
+REVOKE ALL ON FUNCTION chart_aggregate(
+  text, text, text, text, text, text, text, text,
+  timestamptz, timestamptz, text, integer
+) FROM PUBLIC, anon;
+
+REVOKE ALL ON FUNCTION chart_dimension_expression(text, text, text, text)
+  FROM PUBLIC, anon;
+
 GRANT EXECUTE ON FUNCTION chart_aggregate(
   text, text, text, text, text, text, text, text,
   timestamptz, timestamptz, text, integer
 ) TO authenticated;
 
-REVOKE ALL ON FUNCTION chart_aggregate(
-  text, text, text, text, text, text, text, text,
-  timestamptz, timestamptz, text, integer
-) FROM anon;
+GRANT EXECUTE ON FUNCTION chart_dimension_expression(text, text, text, text)
+  TO authenticated;
