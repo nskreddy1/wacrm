@@ -24,6 +24,8 @@ routes, schema, or security posture.
 | `problems-100.md` | **100-problem audit** of the current app: bugs, security, enterprise gaps, architecture, data model, testing, observability, UX — each scored S1–S4 with a fix-order summary for the ship-blockers |
 | `go-to-market.md` | **Client acquisition + pricing strategy** (Jul 2026 research): selling without a registered company (MoR, GST rules, when to incorporate), subscription tiers vs Wati/Interakt, phase-by-phase plan 0→10→100→1k→10k clients, KPIs per phase, build-before-selling gate order |
 | `feature-<name>.md` | **Per-feature HLD + LLD docs.** Naming convention: one doc per shipped feature, covering architecture, file map, DB columns, invariants, and extension points. First: `feature-template-studio.md` (multi-channel Template Studio, Twilio/Meta provider model, sync dedup ranking, provider lock, compliance engines) |
+| `research-2026-07.md` | **Market research + current-architecture analysis (Jul 2026).** What we are today (25 modules + gaps), India WhatsApp-CRM competitor landscape (Wati/Interakt/AiSensy/DoubleTick) and their weak spots, the Clienter parity model, the 360 Labs "Rios" conversation-intelligence signal, the client-happiness/retention thesis, and the feature-validation framework. Read before proposing new features. |
+| `../TODO.md` | **Master sorted backlog** (`.agents/TODO.md`) — phased plan (P0 stabilize → email block builder → Clienter-parity core: invoices→projects→portal → AI differentiators → GTM). Every item is gated by the validation framework in `research-2026-07.md`. |
 
 Also mandatory reading:
 - `.agents/skills/` — installed skill library (security-review, emil-design-eng, etc.). Team memory says: check for a relevant skill before ANY feature work.
