@@ -1821,9 +1821,36 @@ export function TemplateStudio() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="marketing">Marketing</SelectItem>
-                  <SelectItem value="utility">Utility</SelectItem>
-                  <SelectItem value="authentication">Authentication</SelectItem>
+                  {/* Meta bills per delivered template message and the
+                      gap is large (marketing ≈ 7× utility; utility is
+                      free inside an open 24h service window) — surface
+                      that at decision time. Meta reviews the CONTENT,
+                      so promo copy in a "utility" template gets
+                      rejected or force-recategorized. */}
+                  <SelectItem value="utility">
+                    <span className="flex flex-col items-start">
+                      <span>Utility</span>
+                      <span className="text-muted-foreground text-xs">
+                        Order updates, reminders — lowest cost
+                      </span>
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="marketing">
+                    <span className="flex flex-col items-start">
+                      <span>Marketing</span>
+                      <span className="text-muted-foreground text-xs">
+                        Promos, offers — highest per-message cost
+                      </span>
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="authentication">
+                    <span className="flex flex-col items-start">
+                      <span>Authentication</span>
+                      <span className="text-muted-foreground text-xs">
+                        OTP codes only — fixed Meta format
+                      </span>
+                    </span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             )}
