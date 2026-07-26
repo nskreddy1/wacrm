@@ -59,6 +59,8 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.107.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "@xyflow/react": "^12.11.0",
     "ai": "^7.0.36",
     "class-variance-authority": "^0.7.1",
@@ -67,7 +69,7 @@
     "lucide-react": "^1.22.0",
     "mcp-handler": "^1.1.0",
     "motion": "^12.42.2",
-    "next": "16.2.6",
+    "next": "16.2.12",
     "next-intl": "^4.13.1",
     "nodemailer": "^9.0.3",
     "opus-recorder": "^8.0.5",
@@ -93,7 +95,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.12",
     "prettier": "^3.9.1",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4",
@@ -101,12 +103,25 @@
     "vitest": "^4.1.9"
   },
   "overrides": {
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.18",
     "ip-address": "^10.1.1",
-    "fast-uri": "^3.1.2",
+    "fast-uri": "^3.1.4",
     "hono": "^4.12.25",
     "js-yaml": "^4.2.0",
     "@babel/core": "^7.29.6"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.18",
+      "ip-address": "^10.1.1",
+      "fast-uri": "^3.1.4",
+      "hono": "^4.12.25",
+      "js-yaml": "^4.2.0",
+      "@babel/core": "^7.29.6",
+      "sharp": "^0.35.0",
+      "brace-expansion@5": "^5.0.8",
+      "@hono/node-server": "^2.0.5"
+    }
   },
   "packageManager": "pnpm@10.34.3"
 }

@@ -13,6 +13,13 @@ const PUBLIC_PREFIXES = [
   // Provider webhooks authenticate via request signatures inside the route handlers.
   '/api/channels/webhooks/',
   '/api/whatsapp/webhook',
+  // Scheduler endpoint. It has no user session by definition (Vercel Cron
+  // sends `Authorization: Bearer $CRON_SECRET`; external pingers send
+  // `x-cron-secret`) and authenticates with a constant-time compare inside
+  // the route handler. Without this exemption the proxy 307-redirects the
+  // scheduler to /login, so the flow engine's time-based work — resuming
+  // `wait` steps, starting scheduled flows, sweeping stale runs — never runs.
+  '/api/flows/cron',
 ];
 
 function isPublicPath(pathname: string) {
@@ -111,6 +118,11 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // `robots.txt` and `icon` are generated metadata routes that must stay
+    // publicly reachable. Without excluding them the auth guard 307s
+    // crawlers to /login, so our "do not index" rules are never actually
+    // delivered — the guard silently defeats the very file meant to keep
+    // this private CRM out of search results.
+    '/((?!_next/static|_next/image|favicon.ico|robots.txt|icon|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   try {
     const ctx = await requirePermission('members:manage');
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `admin:profileCreate:${ctx.userId}`,
       RATE_LIMITS.adminAction
     );

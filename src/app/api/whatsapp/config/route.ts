@@ -197,7 +197,7 @@ export async function POST(request: Request) {
     // every save — bound the rate so a stuck retry loop can't hammer
     // Meta with a bad token (which reads as credential stuffing from
     // their side).
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `config:${user.id}`,
       RATE_LIMITS.configMutation
     );

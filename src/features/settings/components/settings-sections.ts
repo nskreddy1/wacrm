@@ -2,6 +2,7 @@ import {
   Activity,
   Coins,
   Database,
+  Gauge,
   KeyRound,
   LayoutGrid,
   LifeBuoy,
@@ -37,6 +38,7 @@ export const SETTINGS_SECTIONS = [
   'fields',
   'deals',
   'members',
+  'usage',
   'activity',
   'api',
   'external-sources',
@@ -97,6 +99,12 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
     id: 'members',
     label: 'Users and Controls',
     icon: UsersRound,
+    group: 'general',
+  },
+  usage: {
+    id: 'usage',
+    label: 'Plan & usage',
+    icon: Gauge,
     group: 'general',
   },
   activity: {

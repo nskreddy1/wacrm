@@ -43,7 +43,7 @@ export async function POST(
 
     // Same cadence as starting broadcasts — this endpoint is only
     // called at send time.
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `externalSourceRecipients:${ctx.userId}`,
       RATE_LIMITS.broadcast
     );

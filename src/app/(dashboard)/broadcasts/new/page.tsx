@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   Check,
   FileText,
+  Mail,
   MessageCircle,
   MessageSquare,
   SlidersHorizontal,
@@ -39,7 +40,7 @@ const steps = [
   },
 ] as const;
 
-type BroadcastChannel = 'whatsapp' | 'sms';
+type BroadcastChannel = 'whatsapp' | 'sms' | 'email';
 
 export default function NewBroadcastPage() {
   const router = useRouter();
@@ -93,12 +94,16 @@ export default function NewBroadcastPage() {
             if (
               connection.is_enabled &&
               (connection.channel === 'whatsapp' ||
-                connection.channel === 'sms')
+                connection.channel === 'sms' ||
+                connection.channel === 'email')
             )
               found.add(connection.channel);
           }
         }
-      } catch {}
+      } catch (error) {
+        // Non-fatal: fall through to the direct whatsapp_config check below.
+        console.warn('channel connections fetch failed, using fallback', error);
+      }
       if (!found.has('whatsapp')) {
         const supabase = createClient();
         const { data } = await supabase
@@ -107,9 +112,23 @@ export default function NewBroadcastPage() {
           .maybeSingle();
         if (data?.status === 'connected') found.add('whatsapp');
       }
+      // Email can also ride the platform sender (Resend/Mailtrap env
+      // keys) with no workspace connection row — the broadcast API's
+      // GET reports effective availability either way.
+      if (!found.has('email')) {
+        try {
+          const res = await fetch('/api/email/broadcast');
+          if (res.ok) {
+            const data: { available?: boolean } = await res.json();
+            if (data.available) found.add('email');
+          }
+        } catch {
+          // Non-fatal: email simply isn't offered this session.
+        }
+      }
       if (cancelled) return;
-      const channels = (['whatsapp', 'sms'] as const).filter((value) =>
-        found.has(value)
+      const channels = (['whatsapp', 'sms', 'email'] as const).filter(
+        (value) => found.has(value)
       );
       setEnabledChannels(channels);
       if (channels.length === 1) setChannel(channels[0]);
@@ -319,13 +338,24 @@ export default function NewBroadcastPage() {
               <div className="bg-muted h-20 animate-pulse rounded-lg" />
             ) : enabledChannels.length === 0 ? (
               <p className="text-destructive text-xs leading-5">
-                Connect WhatsApp or SMS in Settings before creating a broadcast.
+                Connect WhatsApp, SMS, or Email in Settings before creating a
+                broadcast.
               </p>
             ) : (
               <div className="flex flex-col gap-2">
                 {enabledChannels.map((value) => {
                   const Icon =
-                    value === 'whatsapp' ? MessageCircle : MessageSquare;
+                    value === 'whatsapp'
+                      ? MessageCircle
+                      : value === 'sms'
+                        ? MessageSquare
+                        : Mail;
+                  const label =
+                    value === 'whatsapp'
+                      ? 'WhatsApp'
+                      : value === 'sms'
+                        ? 'SMS'
+                        : 'Email';
                   return (
                     <button
                       key={value}
@@ -339,7 +369,7 @@ export default function NewBroadcastPage() {
                       )}
                     >
                       <Icon className="size-4" />
-                      {value === 'whatsapp' ? 'WhatsApp' : 'SMS'}
+                      {label}
                     </button>
                   );
                 })}

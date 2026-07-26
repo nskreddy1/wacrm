@@ -1,6 +1,6 @@
-import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { authorizeCronRequest } from '@/features/flows/lib/cron-auth';
 import { resolveFallbackPolicy } from '@/features/flows/lib/fallback';
 import {
   resumeWaitingRuns,
@@ -31,22 +31,19 @@ import {
  * tenants.
  */
 export async function GET(request: Request) {
-  const expected = process.env.AUTOMATION_CRON_SECRET;
-  if (!expected) {
-    return NextResponse.json({ error: 'cron not configured' }, { status: 503 });
-  }
-  // Constant-time compare so an attacker who can hit the endpoint
-  // can't recover the secret byte-by-byte from response-time deltas.
-  // Length pre-check is required by timingSafeEqual (throws otherwise)
-  // and leaks only the length itself, which isn't sensitive.
-  const supplied = request.headers.get('x-cron-secret') ?? '';
-  const suppliedBuf = Buffer.from(supplied);
-  const expectedBuf = Buffer.from(expected);
-  if (
-    suppliedBuf.length !== expectedBuf.length ||
-    !timingSafeEqual(suppliedBuf, expectedBuf)
-  ) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Auth matrix lives in `cron-auth.ts` and is unit-tested there.
+  const auth = authorizeCronRequest(
+    {
+      authorization: request.headers.get('authorization'),
+      xCronSecret: request.headers.get('x-cron-secret'),
+    },
+    {
+      automationCronSecret: process.env.AUTOMATION_CRON_SECRET,
+      vercelCronSecret: process.env.CRON_SECRET,
+    }
+  );
+  if (auth.status !== 200) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   // Wake `wait`-parked runs first — a run that both woke late AND

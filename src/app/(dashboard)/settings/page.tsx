@@ -17,6 +17,7 @@ import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-ta
 import { DealsSettings } from '@/features/settings/components/deals-settings';
 import { MembersTab } from '@/features/settings/components/members-tab';
 import { ActivityPanel } from '@/features/settings/components/activity-panel';
+import { UsagePanel } from '@/features/settings/components/usage-panel';
 import { ApiKeysSettings } from '@/features/settings/components/api-keys-settings';
 import { ExternalSourcesSettings } from '@/features/settings/components/external-sources-settings';
 import { SupportTab } from '@/features/settings/components/support-tab';
@@ -71,6 +72,7 @@ export default function SettingsPage() {
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,
     members: <MembersTab />,
+    usage: <UsagePanel />,
     activity: <ActivityPanel />,
     api: <ApiKeysSettings />,
     'external-sources': <ExternalSourcesSettings />,

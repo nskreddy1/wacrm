@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   try {
     const { supabase, accountId, userId } = await requireRole('agent');
 
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `ai-playground:${userId}`,
       RATE_LIMITS.aiDraft
     );

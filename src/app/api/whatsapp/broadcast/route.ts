@@ -16,6 +16,8 @@ import {
   RATE_LIMITS,
 } from '@/lib/rate-limit';
 import { logAuditEvent } from '@/lib/audit-events';
+import { checkMonthlyQuota, consumeMonthlyQuota } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 
 interface BroadcastResult {
   phone: string;
@@ -75,7 +77,7 @@ export async function POST(request: Request) {
     // Per-user broadcast budget. Note: this limits how often a user
     // can *start* a campaign, not how many messages go out inside
     // one — the fan-out loop below runs without additional gating.
-    const limit = checkRateLimit(`broadcast:${user.id}`, RATE_LIMITS.broadcast);
+    const limit = await checkRateLimit(`broadcast:${user.id}`, RATE_LIMITS.broadcast);
     if (!limit.success) {
       return rateLimitResponse(limit);
     }
@@ -133,6 +135,18 @@ export async function POST(request: Request) {
         { error: 'template_name is required' },
         { status: 400 }
       );
+    }
+
+    // Plan quota: monthly broadcast-recipient budget, checked for the
+    // WHOLE batch before any send so a campaign never half-delivers
+    // on a quota boundary. Consumed after the loop by actual sends.
+    const quota = await checkMonthlyQuota(
+      accountId,
+      'broadcast_recipients',
+      recipients.length
+    );
+    if (!quota.allowed) {
+      return quotaExceededResponse(quota, 'Monthly broadcast recipient');
     }
 
     const { data: config, error: configError } = await supabase
@@ -245,6 +259,12 @@ export async function POST(request: Request) {
         });
         failedCount++;
       }
+    }
+
+    // Meter actual deliveries only (fire-and-forget — metering loss
+    // must never fail a delivered campaign).
+    if (sentCount > 0) {
+      void consumeMonthlyQuota(accountId, 'broadcast_recipients', sentCount);
     }
 
     // Audit: who blasted what to how many people — counts only, no

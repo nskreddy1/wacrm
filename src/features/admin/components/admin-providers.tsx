@@ -232,7 +232,7 @@ export function AdminProviders() {
   return (
     <div className="flex flex-col gap-5">
       {/* ---------- KPI strip ---------- */}
-      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-5">
+      <dl className="@lg/console:grid-cols-3 @3xl/console:grid-cols-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border">
         {(
           [
             ['Offered', kpis.offered, false],
@@ -292,7 +292,7 @@ export function AdminProviders() {
           <p className="text-muted-foreground mb-3 text-sm">
             Off stops new connections. Existing ones keep working.
           </p>
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="@3xl/console:grid-cols-2 @6xl/console:grid-cols-3 grid gap-4">
             {(['whatsapp', 'sms', 'email'] as ChannelKind[]).map(
               (channel, channelIndex) => {
                 const entries = catalogByChannel[channel] ?? [];
@@ -597,7 +597,7 @@ export function AdminProviders() {
       {section === 'consent' ? (
         <section
           aria-label="Consent and audit"
-          className="grid gap-4 md:grid-cols-2"
+          className="@2xl/console:grid-cols-2 grid gap-4"
         >
           <div className="bg-card rounded-lg border p-4">
             <h3 className="mb-2 flex items-center gap-2 text-sm font-medium">

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
+import { canAddResource } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -143,7 +145,7 @@ export async function POST(request: Request) {
     const { accountId, userId } = await requireRole('admin');
     // Save + test both hit external provider APIs (Twilio health check,
     // SMTP handshake) — bound the rate per user like /api/whatsapp/config.
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `config:${userId}`,
       RATE_LIMITS.configMutation
     );
@@ -376,6 +378,15 @@ export async function POST(request: Request) {
         { status: 400 }
       );
 
+    // Plan quota: cap on connected channels — creates only, edits of
+    // an existing connection never re-count against the cap.
+    if (!parsed.data.id) {
+      const quota = await canAddResource(accountId, 'max_channels');
+      if (!quota.allowed) {
+        return quotaExceededResponse(quota, 'Channel connection');
+      }
+    }
+
     const values = {
       account_id: accountId,
       created_by_user_id: userId,
@@ -454,7 +465,7 @@ export async function PATCH(request: Request) {
   try {
     const { accountId, userId } = await requireRole('admin');
     // Same bucket as POST — enable/primary toggles are config mutations.
-    const limit = checkRateLimit(
+    const limit = await checkRateLimit(
       `config:${userId}`,
       RATE_LIMITS.configMutation
     );

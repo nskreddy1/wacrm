@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Contact, CustomField, MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ interface VariableMapping {
 }
 
 interface Step3Props {
-  channel?: 'whatsapp' | 'sms';
+  channel?: 'whatsapp' | 'sms' | 'email';
   template: MessageTemplate;
   variables: Record<string, VariableMapping>;
   onUpdate: (variables: Record<string, VariableMapping>) => void;
@@ -141,13 +141,23 @@ export function Step3Personalize({
     };
   }, []);
 
+  // SMS and email templates use named {{placeholders}} rendered by us;
+  // WhatsApp uses Meta's numbered {{1}} params rendered by Meta.
+  const isTextChannel = channel === 'sms' || channel === 'email';
+
   const placeholders = useMemo(() => {
-    const pattern =
-      channel === 'sms' ? /\{\{\s*[\w.]+\s*\}\}/g : /\{\{\s*\d+\s*\}\}/g;
-    const matches = template.body_text.match(pattern);
+    const pattern = isTextChannel
+      ? /\{\{\s*[\w.]+\s*\}\}/g
+      : /\{\{\s*\d+\s*\}\}/g;
+    // Email also personalizes the subject line with the same rules.
+    const source =
+      channel === 'email'
+        ? `${template.subject_text ?? ''}\n${template.body_text}`
+        : template.body_text;
+    const matches = source.match(pattern);
     if (!matches) return [];
     return [...new Set(matches)].sort();
-  }, [channel, template.body_text]);
+  }, [channel, isTextChannel, template.body_text, template.subject_text]);
 
   // Templates with an IMAGE/VIDEO/DOCUMENT header need a media URL at
   // send time — Meta requires the media component on every delivery and
@@ -209,48 +219,64 @@ export function Step3Personalize({
    * Substitute placeholders using the first real contact where
    * possible. Placeholders keyed by "{{N}}" map to variable key "N".
    */
-  const previewText = useMemo(() => {
-    const contact = firstContact ?? SAMPLE_CONTACT;
-    const customValues = firstContact
-      ? firstContactCustomValues
-      : new Map<string, string>();
+  const applyMappings = useCallback(
+    (source: string) => {
+      const contact = firstContact ?? SAMPLE_CONTACT;
+      const customValues = firstContact
+        ? firstContactCustomValues
+        : new Map<string, string>();
 
-    let text = template.body_text;
-    for (const placeholder of placeholders) {
-      const key = placeholder.replace(/^\{\{\s*|\s*\}\}$/g, '');
-      const mapping = variables[key];
-      let replacement = placeholder;
+      let text = source;
+      for (const placeholder of placeholders) {
+        const key = placeholder.replace(/^\{\{\s*|\s*\}\}$/g, '');
+        const mapping = variables[key];
+        let replacement = placeholder;
 
-      if (mapping) {
-        if (mapping.type === 'static' && mapping.value) {
-          replacement = mapping.value;
-        } else if (mapping.type === 'field' && mapping.value) {
-          const fieldMap: Record<string, string | undefined> = {
-            name: contact.name,
-            phone: contact.phone,
-            email: contact.email,
-            company: contact.company,
-          };
-          replacement = fieldMap[mapping.value] ?? placeholder;
-        } else if (mapping.type === 'custom_field' && mapping.value) {
-          replacement = customValues.get(mapping.value) || placeholder;
-        } else if (mapping.type === 'external_param' && mapping.value) {
-          // Real values only exist at send time (pulled from the
-          // source) — show the mapped column name as a stand-in.
-          replacement = `⟨${externalParamMap?.[mapping.value] ?? mapping.value}⟩`;
+        if (mapping) {
+          if (mapping.type === 'static' && mapping.value) {
+            replacement = mapping.value;
+          } else if (mapping.type === 'field' && mapping.value) {
+            const fieldMap: Record<string, string | undefined> = {
+              name: contact.name,
+              phone: contact.phone,
+              email: contact.email,
+              company: contact.company,
+            };
+            replacement = fieldMap[mapping.value] ?? placeholder;
+          } else if (mapping.type === 'custom_field' && mapping.value) {
+            replacement = customValues.get(mapping.value) || placeholder;
+          } else if (mapping.type === 'external_param' && mapping.value) {
+            // Real values only exist at send time (pulled from the
+            // source) — show the mapped column name as a stand-in.
+            replacement = `⟨${externalParamMap?.[mapping.value] ?? mapping.value}⟩`;
+          }
         }
+        text = text.replaceAll(placeholder, replacement);
       }
-      text = text.replaceAll(placeholder, replacement);
-    }
-    return text;
-  }, [
-    template.body_text,
-    variables,
-    placeholders,
-    firstContact,
-    firstContactCustomValues,
-    externalParamMap,
-  ]);
+      return text;
+    },
+    [
+      variables,
+      placeholders,
+      firstContact,
+      firstContactCustomValues,
+      externalParamMap,
+    ]
+  );
+
+  const previewText = useMemo(
+    () => applyMappings(template.body_text),
+    [applyMappings, template.body_text]
+  );
+
+  /** Email-only: subject line with the same per-recipient mappings. */
+  const previewSubject = useMemo(
+    () =>
+      channel === 'email'
+        ? applyMappings(template.subject_text?.trim() || template.name)
+        : '',
+    [applyMappings, channel, template.subject_text, template.name]
+  );
 
   const previewLabel = firstContact
     ? firstContact.name || firstContact.phone
@@ -317,8 +343,13 @@ export function Step3Personalize({
             No variables to map
           </p>
           <p className="text-muted-foreground mt-1 text-xs">
-            This {channel === 'sms' ? 'SMS' : 'WhatsApp'} template is ready as
-            written. Review the complete message below.
+            This{' '}
+            {channel === 'sms'
+              ? 'SMS'
+              : channel === 'email'
+                ? 'email'
+                : 'WhatsApp'}{' '}
+            template is ready as written. Review the complete message below.
           </p>
         </div>
       ) : placeholders.length === 0 ? null : (
@@ -468,7 +499,11 @@ export function Step3Personalize({
         <div className="mb-3 flex items-center gap-2">
           <Eye className="text-primary size-4" />
           <p className="text-foreground text-sm font-medium">
-            {channel === 'sms' ? 'SMS preview' : t('personalize.preview')}
+            {channel === 'sms'
+              ? 'SMS preview'
+              : channel === 'email'
+                ? 'Email preview'
+                : t('personalize.preview')}
           </p>
           <span className="text-muted-foreground text-xs">
             ({previewLabel})
@@ -477,7 +512,28 @@ export function Step3Personalize({
             <Loader2 className="text-primary size-3.5 animate-spin" />
           ) : null}
         </div>
-        {channel === 'sms' ? (
+        {channel === 'email' ? (
+          <div className="border-border bg-muted/30 mx-auto max-w-md rounded-2xl border p-3">
+            <div className="border-border mb-3 space-y-1 border-b pb-3">
+              <div className="flex items-center justify-between">
+                <p className="text-muted-foreground text-[11px]">
+                  To: {previewLabel}
+                </p>
+                <span className="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
+                  Preview
+                </span>
+              </div>
+              <p className="text-foreground text-sm font-semibold">
+                {previewSubject}
+              </p>
+            </div>
+            <div className="border-border bg-background rounded-xl border px-3 py-2.5 shadow-sm">
+              <p className="text-foreground text-sm leading-6 whitespace-pre-wrap">
+                {previewText}
+              </p>
+            </div>
+          </div>
+        ) : channel === 'sms' ? (
           <div className="border-border bg-muted/30 mx-auto max-w-md rounded-2xl border p-3">
             <div className="border-border mb-3 flex items-center justify-between border-b pb-3">
               <div>

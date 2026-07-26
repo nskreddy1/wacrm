@@ -46,6 +46,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { WorkspaceLimitsPanel } from '@/features/admin/components/workspace-limits-panel';
 
 interface WorkspaceRow {
   id: string;
@@ -315,6 +316,14 @@ function WorkspaceDetailSheet({
                     </TableBody>
                   </Table>
                 </div>
+              </section>
+
+              <section
+                aria-label="Plan and limits"
+                className="flex flex-col gap-2"
+              >
+                <h3 className="text-sm font-semibold">Plan &amp; limits</h3>
+                <WorkspaceLimitsPanel workspaceId={data.workspace.id} />
               </section>
 
               <section aria-label="Channels" className="flex flex-col gap-2">

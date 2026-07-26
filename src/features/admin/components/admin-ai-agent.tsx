@@ -131,7 +131,7 @@ export function AdminAiAgent() {
       aria-label="AI agent provisioning"
     >
       {/* Context bar: which tenant are we operating on + live status */}
-      <div className="bg-card flex flex-col gap-3 rounded-xl border p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+      <div className="@xl/console:flex-row @xl/console:items-center @xl/console:justify-between bg-card flex flex-col gap-3 rounded-xl border p-4 shadow-xs">
         <div className="flex items-center gap-3">
           <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-lg border">
             <Building2
@@ -282,7 +282,7 @@ function SettingsSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-6 p-5 sm:p-6 md:grid-cols-[220px_1fr] md:gap-10">
+    <div className="@container/wizard @2xl/console:grid-cols-[220px_1fr] @2xl/console:gap-10 grid gap-6 p-5 sm:p-6">
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
           <Icon className="text-muted-foreground size-4" aria-hidden="true" />
@@ -422,7 +422,7 @@ function AgentForm({
           title="Connection"
           description="Which LLM answers on behalf of this workspace. The key is validated with the provider, encrypted at rest and never shown again."
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="@md/wizard:grid-cols-2 grid gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="agent-provider">Provider</Label>
               <Select
@@ -587,7 +587,7 @@ function AgentForm({
             </label>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="@md/wizard:grid-cols-2 grid gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="agent-max-per">
                 Max auto-replies / conversation
@@ -661,7 +661,7 @@ function AgentForm({
 
       {/* ------------------- Danger zone -------------------- */}
       {config.configured && (
-        <div className="border-destructive/40 flex flex-col gap-3 rounded-xl border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="@xl/console:flex-row @xl/console:items-center @xl/console:justify-between border-destructive/40 flex flex-col gap-3 rounded-xl border p-5 sm:p-6">
           <div className="flex items-start gap-3">
             <ShieldAlert
               className="text-destructive mt-0.5 size-4 shrink-0"

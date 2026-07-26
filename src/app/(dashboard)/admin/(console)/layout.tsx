@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
 import { routes } from '@/lib/routing/routes';
-import { AdminNav } from '@/features/admin/components/admin-nav';
+import { AdminSidebar } from '@/features/admin/components/admin-sidebar';
 
 // ============================================================
 // /admin — platform operator console (server-gated layout).
@@ -32,16 +32,21 @@ export default async function AdminLayout({
   if (!authorized) redirect(routes.app.dashboard);
 
   return (
-    <div className="flex h-0 min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 md:p-6">
-      <header className="flex flex-col gap-4">
-        {/* Enterprise consoles are self-evident: a title and the nav,
-            no explanatory paragraph. */}
-        <h1 className="text-xl font-semibold tracking-tight text-balance">
-          Admin console
-        </h1>
-        <AdminNav />
-      </header>
-      <main className="flex-1">{children}</main>
+    <div className="flex h-0 min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain p-4 md:p-6">
+      {/* Enterprise consoles are self-evident: a title and the nav,
+          no explanatory paragraph. */}
+      <h1 className="text-xl font-semibold tracking-tight text-balance">
+        Admin console
+      </h1>
+      <div className="flex flex-col gap-5 md:flex-row md:gap-8">
+        <AdminSidebar />
+        {/* @container/console: admin pages must respond to the width they
+            actually get, not the viewport. The app sidebar (48px collapsed →
+            256px expanded) plus this nav consume ~450px of chrome, so viewport
+            breakpoints like `xl:` fire while the real column is still narrow,
+            and cards overflow. Container queries measure the truth. */}
+        <main className="@container/console min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }

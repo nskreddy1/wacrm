@@ -27,6 +27,9 @@ import {
   RATE_LIMITS,
 } from '@/lib/rate-limit';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { canAddResource } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 
 function getClientIp(request: Request): string {
   const xff = request.headers.get('x-forwarded-for');
@@ -58,7 +61,7 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const ip = getClientIp(request);
-  const limit = checkRateLimit(`redeem:${ip}`, RATE_LIMITS.invitationRedeem);
+  const limit = await checkRateLimit(`redeem:${ip}`, RATE_LIMITS.invitationRedeem);
   if (!limit.success) return rateLimitResponse(limit);
 
   const { token } = await params;
@@ -79,6 +82,26 @@ export async function POST(
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Plan quota: seat cap, re-checked at redeem time (the invite may
+  // have been created when a seat was free). The lookup needs the
+  // service role — the caller isn't a member of the target account
+  // yet, so RLS hides the invitation row from their session client.
+  const { data: invite } = await supabaseAdmin()
+    .from('account_invitations')
+    .select('account_id')
+    .eq('token_hash', hashInviteToken(token))
+    .is('accepted_at', null)
+    .maybeSingle();
+  if (invite?.account_id) {
+    const quota = await canAddResource(
+      invite.account_id as string,
+      'max_members'
+    );
+    if (!quota.allowed) {
+      return quotaExceededResponse(quota, 'Member seat');
+    }
   }
 
   const { data: accountId, error } = await supabase.rpc('redeem_invitation', {
