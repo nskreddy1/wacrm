@@ -74,6 +74,16 @@ try {
     [usr.id, acct.id]
   );
 
+  // deals.assigned_to references profiles(id) — grab the auto-provisioned
+  // profile and pin its name so the owner-lookup assertion is deterministic.
+  const {
+    rows: [prof],
+  } = await client.query(
+    `update profiles set full_name = 'Chart Tester'
+     where user_id = $1 returning id`,
+    [usr.id]
+  );
+
   // 5 deals: 3 New (100,200,300), 1 Won (1000), 1 Lost (50)
   const deals = [
     ['New', 100, 'open'],
@@ -87,9 +97,10 @@ try {
       `insert into deals
          (user_id, account_id, pipeline_id, stage_id, contact_id,
           title, value, status, priority, probability, position,
-          created_at)
-       values ($1,$2,$3,$4,$5,'Deal',$6,$7,'normal',50,0, now())`,
-      [usr.id, acct.id, pipe.id, stageIds[stage], contact.id, value, status]
+          assigned_to, created_at)
+       values ($1,$2,$3,$4,$5,'Deal',$6,$7,'normal',50,0,$8, now())`,
+      [usr.id, acct.id, pipe.id, stageIds[stage], contact.id, value, status,
+       prof?.id ?? null]
     );
   }
 
@@ -141,8 +152,8 @@ try {
     (await q(['deals', 'count', 'COUNT', 'status', 'month', null, 'month', null, null, null, 'bucket', 50]))
       .map((r) => [r.bucket, Number(r.value)]),
     [
-      ['active', 3],
       ['lost', 1],
+      ['open', 3],
       ['won', 1],
     ]
   );
@@ -172,7 +183,7 @@ try {
     'ordered valueDesc',
     (await q(['deals', 'value', 'SUM', 'status', 'month', null, 'month', null, null, null, 'valueDesc', 50]))
       .map((r) => r.bucket),
-    ['won', 'active', 'lost']
+    ['won', 'open', 'lost']
   );
 
   // Two dimensions: stage x status
@@ -182,7 +193,7 @@ try {
       .map((r) => [r.bucket, r.series, Number(r.value)]),
     [
       ['Lost', 'lost', 1],
-      ['New', 'active', 3],
+      ['New', 'open', 3],
       ['Won', 'won', 1],
     ]
   );
