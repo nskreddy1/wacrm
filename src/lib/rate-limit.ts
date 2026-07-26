@@ -16,11 +16,15 @@
  * template), we degrade to the previous in-memory fixed window. Same
  * semantics, per-process scope.
  *
- * FAILURE MODE: if Redis errors at runtime (network blip, quota), we
- * FAIL OPEN — the request is allowed and a warning is logged. Rate
- * limiting is an abuse bound, not an authz control; a limiter outage
- * must not take down messaging. Nothing security-critical may rely on
- * this module to deny access.
+ * FAILURE MODE: if Redis errors at runtime (network blip, or the
+ * Upstash FREE-TIER monthly command quota running out), we do NOT
+ * throw and do NOT fail fully open. A circuit breaker trips: for the
+ * next `REDIS_COOLDOWN_MS` all checks go to the in-memory fallback —
+ * limits stay enforced per-process, requests keep flowing, and we
+ * stop hammering (and paying latency on) a dead Redis. One warning is
+ * logged per trip, not per request. Rate limiting is an abuse bound,
+ * not an authz control; nothing security-critical may rely on this
+ * module to deny access.
  *
  * ATOMICITY: the Redis path uses INCR (atomic) + PEXPIRE on first hit
  * of the window. Concurrent requests can't overshoot the count the way
@@ -58,11 +62,26 @@ function getRedis(): Redis | null {
   if (redisClient !== undefined) return redisClient;
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
-  redisClient = url && token ? new Redis({ url, token }) : null;
+  // retries: 1 (not the default 5-with-backoff) — a rate-limit check
+  // sits on the hot request path, so when Upstash is down or its
+  // free-tier quota is exhausted we want to trip the circuit breaker
+  // in ~100ms, not stall requests for seconds of retry backoff.
+  redisClient =
+    url && token
+      ? new Redis({ url, token, retry: { retries: 1, backoff: () => 100 } })
+      : null;
   return redisClient;
 }
 
 const REDIS_PREFIX = 'rl:';
+
+/**
+ * Circuit breaker for the free-tier / outage case. While tripped, all
+ * checks use the in-memory fallback and Redis isn't touched at all —
+ * no per-request errors, no added latency, no log spam.
+ */
+const REDIS_COOLDOWN_MS = 60_000;
+let redisDownUntil = 0;
 
 async function checkWithRedis(
   redis: Redis,
@@ -71,12 +90,14 @@ async function checkWithRedis(
 ): Promise<RateLimitResult> {
   const redisKey = REDIS_PREFIX + key;
 
-  // INCR is atomic across all serverless instances. Pipeline the PTTL
-  // read so the common case is a single REST round trip.
-  const [count, ttlMs] = await Promise.all([
-    redis.incr(redisKey),
-    redis.pttl(redisKey),
-  ]);
+  // INCR is atomic across all serverless instances. A real pipeline
+  // sends both commands in ONE REST request — halves both latency and
+  // Upstash command-quota burn versus two parallel calls.
+  const [count, ttlMs] = (await redis
+    .pipeline()
+    .incr(redisKey)
+    .pttl(redisKey)
+    .exec()) as [number, number];
 
   let resetAt: number;
   if (count === 1 || ttlMs < 0) {
@@ -163,19 +184,24 @@ export async function checkRateLimit(
   options: RateLimitOptions
 ): Promise<RateLimitResult> {
   const redis = getRedis();
-  if (!redis) return checkInMemory(key, options);
+  // Not configured, or breaker tripped (outage / free-tier quota
+  // exhausted): enforce per-process in memory. Requests never fail
+  // because the limiter's backend is down.
+  if (!redis || Date.now() < redisDownUntil) {
+    return checkInMemory(key, options);
+  }
 
   try {
     return await checkWithRedis(redis, key, options);
   } catch (error) {
-    // Fail open: a limiter outage must not block legitimate traffic.
-    console.warn('[rate-limit] redis unavailable, failing open', error);
-    return {
-      success: true,
-      remaining: options.limit,
-      reset: Date.now() + options.windowMs,
-      limit: options.limit,
-    };
+    // Trip the breaker: one warning per cooldown, then quiet in-memory
+    // enforcement until Redis is worth retrying.
+    redisDownUntil = Date.now() + REDIS_COOLDOWN_MS;
+    console.warn(
+      `[rate-limit] redis unavailable (quota or outage), using in-memory fallback for ${REDIS_COOLDOWN_MS / 1000}s`,
+      error
+    );
+    return checkInMemory(key, options);
   }
 }
 
@@ -284,4 +310,5 @@ export function __resetRateLimitForTests() {
   buckets.clear();
   callsSinceSweep = 0;
   redisClient = undefined;
+  redisDownUntil = 0;
 }
