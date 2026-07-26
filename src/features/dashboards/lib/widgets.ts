@@ -197,11 +197,24 @@ export type PanelKind = keyof typeof PANEL_KINDS;
 // Widget instance stored in user_dashboards.widgets.
 // ------------------------------------------------------------
 
+/** Free-grid placement (12-col, Twenty-style drag + resize). */
+export interface WidgetGridPos {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface DashboardWidget {
   /** Client-generated uuid — stable identity for dnd + updates. */
   id: string;
   type: WidgetType;
   size: WidgetSize;
+  /**
+   * Grid placement. Optional for backward compat — widgets saved
+   * before the grid migration derive a position from `size`.
+   */
+  grid?: WidgetGridPos;
   /** Optional custom title; falls back to the registry label. */
   title?: string;
   config: {
@@ -240,9 +253,41 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * callers drop silently — a forward-compat guard so old rows survive
  * registry changes.
  */
+const GRID_COLS = 12;
+const GRID_MAX_H = 24;
+
+function sanitizeGrid(raw: unknown): WidgetGridPos | undefined {
+  if (!isRecord(raw)) return undefined;
+  const { x, y, w, h } = raw;
+  if (
+    typeof x !== 'number' ||
+    typeof y !== 'number' ||
+    typeof w !== 'number' ||
+    typeof h !== 'number'
+  )
+    return undefined;
+  if (![x, y, w, h].every((n) => Number.isInteger(n) && n >= 0))
+    return undefined;
+  const width = Math.min(Math.max(w, 2), GRID_COLS);
+  return {
+    x: Math.min(x, GRID_COLS - width),
+    y: Math.min(y, 500),
+    w: width,
+    h: Math.min(Math.max(h, 2), GRID_MAX_H),
+  };
+}
+
+/** Default grid footprint per legacy `size`, used when `grid` is absent. */
+export const SIZE_TO_GRID: Record<WidgetSize, { w: number; h: number }> = {
+  sm: { w: 3, h: 3 },
+  md: { w: 6, h: 4 },
+  lg: { w: 9, h: 4 },
+  full: { w: 12, h: 4 },
+};
+
 export function sanitizeWidget(raw: unknown): DashboardWidget | null {
   if (!isRecord(raw)) return null;
-  const { id, type, size, title, config } = raw;
+  const { id, type, size, title, config, grid } = raw;
 
   if (typeof id !== 'string' || id.length === 0 || id.length > 64) return null;
   if (
@@ -265,6 +310,9 @@ export function sanitizeWidget(raw: unknown): DashboardWidget | null {
     size: widgetSize,
     config: {},
   };
+
+  const gridPos = sanitizeGrid(grid);
+  if (gridPos) out.grid = gridPos;
 
   if (typeof title === 'string' && title.trim().length > 0) {
     out.title = title.trim().slice(0, 80);
