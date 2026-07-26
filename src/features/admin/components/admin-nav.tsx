@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   Bot,
   Building2,
+  CreditCard,
   LifeBuoy,
   Radio,
   SlidersHorizontal,

@@ -118,7 +118,9 @@ async function resolveLimit(
     .single();
   if (error) throw error;
 
-  return (plan as Record<string, number | null>)[column];
+  // Dynamic column selects defeat supabase-js's string-literal type
+  // parser (it infers GenericStringError) — bridge through unknown.
+  return (plan as unknown as Record<string, number | null>)[column];
 }
 
 // ---------------------------------------------------------------------------
