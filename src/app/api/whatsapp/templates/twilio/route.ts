@@ -169,9 +169,47 @@ export async function POST(request: Request) {
       // paginated call instead of one ApprovalRequests fetch per
       // template (docs: /docs/content/content-api-resources).
       const contents = await listTwilioContentAndApprovals(credentials);
+
+      // Twilio allows many Content SIDs with the same friendly_name,
+      // but our table is unique on (name, language). Without ranking,
+      // whichever duplicate the API listed LAST won the upsert — an
+      // old "unsubmitted" copy would stomp the in-review/approved one
+      // back to DRAFT (the exact bug seen with
+      // customer_support_routing_template × 4). Keep the copy with the
+      // best approval status; tie-break on most recently updated.
+      const STATUS_RANK: Record<string, number> = {
+        approved: 6,
+        received: 5,
+        pending: 5,
+        paused: 4,
+        disabled: 3,
+        rejected: 2,
+        unsubmitted: 1,
+      };
+      const byKey = new Map<string, (typeof contents)[number]>();
+      for (const content of contents) {
+        const key = `${content.friendly_name}::${content.language}`;
+        const prev = byKey.get(key);
+        if (!prev) {
+          byKey.set(key, content);
+          continue;
+        }
+        const rank = (c: (typeof contents)[number]) =>
+          STATUS_RANK[c.approval_requests?.status?.toLowerCase() ?? ''] ?? 0;
+        const newer = (c: (typeof contents)[number]) =>
+          Date.parse(c.date_updated ?? c.date_created ?? '') || 0;
+        if (
+          rank(content) > rank(prev) ||
+          (rank(content) === rank(prev) && newer(content) > newer(prev))
+        ) {
+          byKey.set(key, content);
+        }
+      }
+      const deduped = Array.from(byKey.values());
+
       let inserted = 0;
       let updated = 0;
-      for (const content of contents) {
+      for (const content of deduped) {
         const normalized = normalizeTwilioContent(content);
         const approval = content.approval_requests ?? null;
         const row = {

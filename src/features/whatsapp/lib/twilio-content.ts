@@ -9,6 +9,10 @@ export interface TwilioContentItem {
   sid: string;
   friendly_name: string;
   language: string;
+  /** ISO timestamps from Twilio — used to rank same-name duplicates
+   *  during sync so the newest copy wins ties. */
+  date_created?: string;
+  date_updated?: string;
   variables?: Record<string, string>;
   types?: Record<string, Record<string, unknown>>;
 }
