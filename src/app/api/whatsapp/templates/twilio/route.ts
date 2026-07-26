@@ -52,6 +52,32 @@ async function connectionFor(accountId: string) {
 }
 
 /**
+ * Category for synced templates. Twilio only reports a category once
+ * a template has been SUBMITTED for WhatsApp review — templates that
+ * are session-only ("user initiated" in the console) have none.
+ * Defaulting those to Marketing was wrong: it slapped the marketing
+ * opt-out compliance blocker on order-tracking/support templates.
+ * Infer from the name instead (matches how Meta auto-categorizes),
+ * falling back to Utility — the least restrictive tier for the
+ * transactional templates people actually build.
+ */
+function inferCategory(approvalCategory: string | undefined, name: string) {
+  if (approvalCategory === 'UTILITY') return 'Utility';
+  if (approvalCategory === 'AUTHENTICATION') return 'Authentication';
+  if (approvalCategory === 'MARKETING') return 'Marketing';
+  const n = name.toLowerCase();
+  if (/\b(otp|verif|auth|2fa|passcode|login[_ ]?code|one[_ ]?time)/.test(n))
+    return 'Authentication';
+  if (
+    /(promo|offer|discount|sale|campaign|marketing|newsletter|announce|opt[_ ]?in)/.test(
+      n
+    )
+  )
+    return 'Marketing';
+  return 'Utility';
+}
+
+/**
  * Twilio approval status → our MessageTemplateStatus.
  * Full set per the Content API docs: unsubmitted, received, pending,
  * approved, rejected, paused, disabled. `received` AND `pending` both
@@ -143,9 +169,51 @@ export async function POST(request: Request) {
       // paginated call instead of one ApprovalRequests fetch per
       // template (docs: /docs/content/content-api-resources).
       const contents = await listTwilioContentAndApprovals(credentials);
+
+      // Twilio allows many Content SIDs with the same friendly_name,
+      // but our table is unique on (account_id, provider, name,
+      // language). Provider IS part of that key, so a Meta Cloud API
+      // template with the same name coexists as its own row — this
+      // dedup only ranks duplicates WITHIN the Twilio catalog. Without
+      // ranking,
+      // whichever duplicate the API listed LAST won the upsert — an
+      // old "unsubmitted" copy would stomp the in-review/approved one
+      // back to DRAFT (the exact bug seen with
+      // customer_support_routing_template × 4). Keep the copy with the
+      // best approval status; tie-break on most recently updated.
+      const STATUS_RANK: Record<string, number> = {
+        approved: 6,
+        received: 5,
+        pending: 5,
+        paused: 4,
+        disabled: 3,
+        rejected: 2,
+        unsubmitted: 1,
+      };
+      const byKey = new Map<string, (typeof contents)[number]>();
+      for (const content of contents) {
+        const key = `${content.friendly_name}::${content.language}`;
+        const prev = byKey.get(key);
+        if (!prev) {
+          byKey.set(key, content);
+          continue;
+        }
+        const rank = (c: (typeof contents)[number]) =>
+          STATUS_RANK[c.approval_requests?.status?.toLowerCase() ?? ''] ?? 0;
+        const newer = (c: (typeof contents)[number]) =>
+          Date.parse(c.date_updated ?? c.date_created ?? '') || 0;
+        if (
+          rank(content) > rank(prev) ||
+          (rank(content) === rank(prev) && newer(content) > newer(prev))
+        ) {
+          byKey.set(key, content);
+        }
+      }
+      const deduped = Array.from(byKey.values());
+
       let inserted = 0;
       let updated = 0;
-      for (const content of contents) {
+      for (const content of deduped) {
         const normalized = normalizeTwilioContent(content);
         const approval = content.approval_requests ?? null;
         const row = {
@@ -156,12 +224,7 @@ export async function POST(request: Request) {
           meta_template_id: null,
           name: content.friendly_name,
           language: content.language,
-          category:
-            approval?.category === 'UTILITY'
-              ? 'Utility'
-              : approval?.category === 'AUTHENTICATION'
-                ? 'Authentication'
-                : 'Marketing',
+          category: inferCategory(approval?.category, content.friendly_name),
           body_text: normalized.body,
           header_type: normalized.mediaUrl ? 'image' : null,
           header_content: normalized.mediaUrl,

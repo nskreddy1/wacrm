@@ -147,9 +147,9 @@ export async function POST(request: Request) {
 
     // Server-side compliance gate. Error-level violations block the
     // save; warnings are persisted so the UI can keep surfacing them.
-    // Email reuses the SMS rule set (marketing opt-out language,
-    // required disclosures) — there is no carrier review for email,
-    // so this is the only guardrail before a template goes live.
+    // Email runs the CAN-SPAM / Gmail-Yahoo bulk-sender rule set —
+    // there is no carrier review for email, so this is the only
+    // guardrail before a template goes live.
     const compliance = checkCompliance(
       input.channel === 'whatsapp'
         ? {
@@ -159,17 +159,18 @@ export async function POST(request: Request) {
             footer: input.footer_text ?? '',
             hasButtons: (input.buttons?.length ?? 0) > 0,
           }
-        : {
-            channel: 'sms',
-            category:
-              input.channel === 'email'
-                ? EMAIL_COMPLIANCE_TIER[input.category]
-                : input.category,
-            body:
-              input.channel === 'email'
-                ? `${input.subject_text} ${input.body_text}`
-                : input.body_text,
-          }
+        : input.channel === 'email'
+          ? {
+              channel: 'email',
+              category: EMAIL_COMPLIANCE_TIER[input.category],
+              subject: input.subject_text,
+              body: input.body_text,
+            }
+          : {
+              channel: 'sms',
+              category: input.category,
+              body: input.body_text,
+            }
     );
     if (!compliance.ok) {
       return NextResponse.json(
@@ -214,6 +215,33 @@ export async function POST(request: Request) {
       // teammate edits collide with the editor's own same-named
       // templates on the legacy (user_id, name, language) index.
       const { user_id: _userId, ...updateRow } = row;
+
+      // Server-side provider lock (mirrors the studio UI): once a
+      // WhatsApp row is tied to a provider-side object (Twilio
+      // Content SID / Meta template id) or has left DRAFT, its
+      // provider is immutable — "switching" would orphan the remote
+      // link while keeping the stale SID on the row.
+      if (isWhatsApp) {
+        const { data: existing } = await supabase
+          .from('message_templates')
+          .select('provider, status, twilio_content_sid, meta_template_id')
+          .eq('id', input.id)
+          .eq('account_id', accountId)
+          .maybeSingle();
+        const locked =
+          existing &&
+          (existing.twilio_content_sid ||
+            existing.meta_template_id ||
+            existing.status !== 'DRAFT');
+        if (locked && existing.provider !== input.provider) {
+          return NextResponse.json(
+            {
+              error: `This template already exists in ${existing.provider === 'twilio' ? 'Twilio' : 'Meta'}'s system — its provider can't be changed. Create a new template to target a different provider.`,
+            },
+            { status: 409 }
+          );
+        }
+      }
       const { data, error } = await supabase
         .from('message_templates')
         .update(updateRow)

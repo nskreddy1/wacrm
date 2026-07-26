@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Link2,
   Loader2,
+  Lock,
   Mail,
   MessageSquareText,
   Phone,
@@ -92,6 +93,18 @@ function nextId(prefix: string) {
   idCounter += 1;
   return `${prefix}-${idCounter}`;
 }
+
+/** Email category → compliance tier (mirrors the API's mapping). */
+const EMAIL_TIER_FOR_CHECK: Record<
+  StudioTemplate['email']['category'],
+  'marketing' | 'transactional' | 'otp'
+> = {
+  newsletter: 'marketing',
+  promotional: 'marketing',
+  transactional: 'transactional',
+  onboarding: 'transactional',
+  otp: 'otp',
+};
 
 /** Studio category → SMS compliance category (mirrors the hook's DB mapping). */
 const SMS_CATEGORY_FOR_CHECK: Record<
@@ -442,6 +455,24 @@ function TemplateRail({
                 <span className="uppercase">
                   {CHANNEL_META[tpl.channel].label}
                 </span>
+                {/* Provider origin — Twilio and Meta templates coexist
+                    (unique key includes provider), so the rail must
+                    show which system each row lives in. */}
+                {tpl.channel === 'whatsapp' && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span
+                      className={cn(
+                        'font-medium',
+                        tpl.provider === 'twilio'
+                          ? 'text-[#F22F46]/80'
+                          : 'text-[#25D366]/90'
+                      )}
+                    >
+                      {tpl.provider === 'twilio' ? 'Twilio' : 'Meta'}
+                    </span>
+                  </>
+                )}
                 <span aria-hidden="true">·</span>
                 <span>
                   {tpl.channel === 'email'
@@ -1526,14 +1557,15 @@ export function TemplateStudio() {
       }).issues;
     }
     if (active.channel === 'email') {
-      // Email reuses the SMS rule set (opt-out language for
-      // marketing, disclosure checks) — CAN-SPAM/GDPR-style
-      // guardrails without a separate rules engine.
+      // Email runs its own CAN-SPAM / Gmail-Yahoo bulk-sender rule
+      // set (unsubscribe link, postal address, deceptive subjects,
+      // spam-filter triggers) — same checks the API enforces at save.
       if (!active.email.body.trim()) return [];
       return checkCompliance({
-        channel: 'sms',
-        category: SMS_CATEGORY_FOR_CHECK[active.category],
-        body: `${active.email.subject} ${active.email.body}`,
+        channel: 'email',
+        category: EMAIL_TIER_FOR_CHECK[active.email.category],
+        subject: active.email.subject,
+        body: active.email.body,
       }).issues;
     }
     if (!active.sms.body.trim()) return [];
@@ -1789,9 +1821,36 @@ export function TemplateStudio() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="marketing">Marketing</SelectItem>
-                  <SelectItem value="utility">Utility</SelectItem>
-                  <SelectItem value="authentication">Authentication</SelectItem>
+                  {/* Meta bills per delivered template message and the
+                      gap is large (marketing ≈ 7× utility; utility is
+                      free inside an open 24h service window) — surface
+                      that at decision time. Meta reviews the CONTENT,
+                      so promo copy in a "utility" template gets
+                      rejected or force-recategorized. */}
+                  <SelectItem value="utility">
+                    <span className="flex flex-col items-start">
+                      <span>Utility</span>
+                      <span className="text-muted-foreground text-xs">
+                        Order updates, reminders — lowest cost
+                      </span>
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="marketing">
+                    <span className="flex flex-col items-start">
+                      <span>Marketing</span>
+                      <span className="text-muted-foreground text-xs">
+                        Promos, offers — highest per-message cost
+                      </span>
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="authentication">
+                    <span className="flex flex-col items-start">
+                      <span>Authentication</span>
+                      <span className="text-muted-foreground text-xs">
+                        OTP codes only — fixed Meta format
+                      </span>
+                    </span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -1892,20 +1951,36 @@ export function TemplateStudio() {
                 <Label className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                   Provider
                 </Label>
-                <Select
-                  value={active.provider === 'twilio' ? 'twilio' : 'meta'}
-                  onValueChange={(v) =>
-                    patchActive({ provider: v as StudioTemplate['provider'] })
-                  }
-                >
-                  <SelectTrigger className="h-8 w-40" size="sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="meta">Meta (Cloud API)</SelectItem>
-                    <SelectItem value="twilio">Twilio</SelectItem>
-                  </SelectContent>
-                </Select>
+                {active.providerLocked ? (
+                  // Provider is immutable once the template lives in a
+                  // provider's system (synced from Twilio/Meta, or
+                  // submitted for review) — the row mirrors a remote
+                  // object and re-homing it would orphan that link.
+                  <span
+                    className="bg-muted text-muted-foreground inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium"
+                    title="Provider is locked because this template exists in the provider's system. Create a new template to target a different provider."
+                  >
+                    <Lock className="size-3" aria-hidden="true" />
+                    {active.provider === 'twilio'
+                      ? 'Twilio'
+                      : 'Meta (Cloud API)'}
+                  </span>
+                ) : (
+                  <Select
+                    value={active.provider === 'twilio' ? 'twilio' : 'meta'}
+                    onValueChange={(v) =>
+                      patchActive({ provider: v as StudioTemplate['provider'] })
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-40" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="meta">Meta (Cloud API)</SelectItem>
+                      <SelectItem value="twilio">Twilio</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             )}
             {isDirty && (
