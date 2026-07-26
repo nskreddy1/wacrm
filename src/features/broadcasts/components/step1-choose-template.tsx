@@ -17,10 +17,11 @@ interface Step1Props {
   /**
    * Broadcast channel picked in the wizard header. Templates are
    * channel-specific (WhatsApp templates go through Meta review, SMS
-   * templates are plain text), so the list is scoped to this value.
+   * templates are plain text, email templates carry a subject line),
+   * so the list is scoped to this value.
    * Optional for backward compatibility — defaults to 'whatsapp'.
    */
-  channel?: 'whatsapp' | 'sms';
+  channel?: 'whatsapp' | 'sms' | 'email';
   selectedTemplate: MessageTemplate | null;
   onSelect: (template: MessageTemplate) => void;
   onNext: () => void;
