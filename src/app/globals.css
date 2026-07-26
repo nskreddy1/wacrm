@@ -569,3 +569,42 @@ html[data-theme='rose'] {
 .scrollbar-invisible::-webkit-scrollbar {
   display: none;
 }
+
+/* ============================================================
+   Dashboard grid (react-grid-layout) — Twenty-style feedback.
+   The placeholder marks the target cells while dragging or
+   resizing; the SE handle is a subtle corner affordance.
+   ============================================================ */
+.react-grid-item.react-grid-placeholder {
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+  border: 1px dashed color-mix(in oklch, var(--primary) 45%, transparent);
+  border-radius: calc(var(--radius) + 4px);
+  opacity: 1;
+  transition-duration: 100ms;
+}
+
+.react-grid-item > .react-resizable-handle {
+  background-image: none;
+  width: 18px;
+  height: 18px;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid
+    color-mix(in oklch, var(--muted-foreground) 70%, transparent);
+  border-bottom: 2px solid
+    color-mix(in oklch, var(--muted-foreground) 70%, transparent);
+  border-bottom-right-radius: 3px;
+}
+
+.react-grid-item.resizing,
+.react-grid-item.react-draggable-dragging {
+  z-index: 20;
+  opacity: 0.9;
+}

@@ -128,10 +128,27 @@ function ConfigRow({
   );
 }
 
+/** Map a saved configuration back to a CHART_TYPE_OPTIONS index. */
+function typeIndexFor(config: ChartConfiguration): number {
+  const idx = CHART_TYPE_OPTIONS.findIndex((opt) => {
+    if (opt.type !== config.configurationType) return false;
+    if (opt.type === 'BAR_CHART') {
+      const horizontal =
+        'layout' in config && config.layout === 'horizontal';
+      return Boolean(opt.horizontal) === horizontal;
+    }
+    return true;
+  });
+  return idx === -1 ? 0 : idx;
+}
+
 export function GraphConfigForm({
   onChange,
+  initial,
 }: {
   onChange: (config: ChartConfiguration | null) => void;
+  /** Seed the form from an existing widget config (live editing). */
+  initial?: ChartConfiguration;
 }) {
   const { data: sources, error } = useSWR(
     '/api/v1/dashboard/chart-sources',
@@ -139,16 +156,37 @@ export function GraphConfigForm({
     { revalidateOnFocus: false }
   );
 
-  const [sourceKey, setSourceKey] = useState<string | null>(null);
-  const [typeIndex, setTypeIndex] = useState(0); // index into CHART_TYPE_OPTIONS
-  const [measureKey, setMeasureKey] = useState<string | null>(null);
-  const [operation, setOperation] = useState<AggregateOperation>('COUNT');
-  const [groupByKey, setGroupByKey] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<TimeRange>('30d');
-  const [granularity, setGranularity] = useState<DateGranularity | null>(null);
-  const [stacked, setStacked] = useState(false);
-  const [cumulative, setCumulative] = useState(false);
-  const [legend, setLegend] = useState(true);
+  const [sourceKey, setSourceKey] = useState<string | null>(
+    initial?.source ?? null
+  );
+  const [typeIndex, setTypeIndex] = useState(() =>
+    initial ? typeIndexFor(initial) : 0
+  ); // index into CHART_TYPE_OPTIONS
+  const [measureKey, setMeasureKey] = useState<string | null>(
+    initial?.measure ?? null
+  );
+  const [operation, setOperation] = useState<AggregateOperation>(
+    initial?.operation ?? 'COUNT'
+  );
+  const [groupByKey, setGroupByKey] = useState<string | null>(
+    initial && 'groupBy' in initial ? initial.groupBy : null
+  );
+  const [timeRange, setTimeRange] = useState<TimeRange>(
+    initial?.timeRange ?? '30d'
+  );
+  const [granularity, setGranularity] = useState<DateGranularity | null>(
+    initial && 'dateGranularity' in initial
+      ? (initial.dateGranularity ?? null)
+      : null
+  );
+  const [stacked, setStacked] = useState(
+    initial?.configurationType === 'BAR_CHART' && Boolean(initial.isStacked)
+  );
+  const [cumulative, setCumulative] = useState(
+    initial?.configurationType === 'LINE_CHART' &&
+      Boolean(initial.isCumulative)
+  );
+  const [legend, setLegend] = useState(initial?.displayLegend !== false);
 
   const source = useMemo(
     () => sources?.find((s) => s.key === sourceKey) ?? sources?.[0] ?? null,
