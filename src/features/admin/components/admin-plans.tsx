@@ -111,7 +111,11 @@ export function AdminPlans() {
         <CreatePlanDialog onCreated={() => mutate()} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      {/* Container-query columns: a plan card needs ~360px to hold its
+          two-up fields and footer buttons. Splitting on the console's real
+          width (not the viewport) keeps cards honest whether the app
+          sidebar is collapsed or expanded. */}
+      <div className="@3xl/console:grid-cols-2 @6xl/console:grid-cols-3 grid gap-4">
         {plans.map((plan) => (
           <PlanCard
             key={plan.id}
@@ -210,18 +214,18 @@ function PlanCard({
     <section
       aria-label={`Plan ${draft.display_name}`}
       className={cn(
-        'bg-card flex flex-col gap-4 rounded-lg border p-4',
+        '@container/plan bg-card flex flex-col gap-4 rounded-lg border p-4',
         !draft.is_active && 'opacity-70'
       )}
     >
-      <header className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
+      <header className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 basis-48">
+          <div className="flex min-w-0 items-center gap-2">
             <Input
               value={draft.display_name}
               onChange={(e) => update('display_name', e.target.value)}
               aria-label="Plan name"
-              className="h-8 max-w-40 text-sm font-semibold"
+              className="h-8 min-w-0 flex-1 text-sm font-semibold @xs/plan:max-w-40"
             />
             {draft.is_default && (
               <span className="text-primary flex shrink-0 items-center gap-1 text-xs font-medium">
@@ -254,7 +258,7 @@ function PlanCard({
         </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="@xs/plan:grid-cols-2 grid gap-3">
         <div className="flex flex-col gap-1">
           <Label className="text-xs">Monthly price (paise)</Label>
           <Input
@@ -295,7 +299,7 @@ function PlanCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="@xs/plan:grid-cols-2 grid gap-3">
         <div className="flex flex-col gap-1">
           <Label className="text-xs">Badge</Label>
           <Input
@@ -346,7 +350,7 @@ function PlanCard({
         <legend className="text-xs font-medium">
           Limits (blank = unlimited)
         </legend>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="@xs/plan:grid-cols-2 grid gap-2">
           {LIMIT_FIELDS.map(({ key, label }) => (
             <div key={key} className="flex flex-col gap-1">
               <Label className="text-muted-foreground text-[11px]">
@@ -372,8 +376,10 @@ function PlanCard({
         </div>
       </fieldset>
 
-      <footer className="mt-auto flex items-center justify-between gap-2 border-t pt-3">
-        <div className="flex items-center gap-2">
+      {/* Wraps instead of overflowing: on a narrow card the actions stack
+          onto their own row rather than pushing Save past the border. */}
+      <footer className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+        <div className="flex min-w-0 items-center gap-2">
           {!draft.is_default && (
             <Button
               variant="outline"

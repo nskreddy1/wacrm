@@ -40,7 +40,12 @@ export default async function AdminLayout({
       </h1>
       <div className="flex flex-col gap-5 md:flex-row md:gap-8">
         <AdminSidebar />
-        <main className="min-w-0 flex-1">{children}</main>
+        {/* @container/console: admin pages must respond to the width they
+            actually get, not the viewport. The app sidebar (48px collapsed →
+            256px expanded) plus this nav consume ~450px of chrome, so viewport
+            breakpoints like `xl:` fire while the real column is still narrow,
+            and cards overflow. Container queries measure the truth. */}
+        <main className="@container/console min-w-0 flex-1">{children}</main>
       </div>
     </div>
   );
