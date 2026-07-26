@@ -111,6 +111,22 @@ export const CHART_KINDS = {
     label: 'Broadcast funnel',
     description: 'Sent, delivered, read, replied, failed',
   },
+  leadSourceDonut: {
+    label: 'Lead sources (donut)',
+    description: 'New-lead attribution as a donut (30d)',
+  },
+  leadSourceBars: {
+    label: 'Lead sources (bars)',
+    description: 'New-lead attribution ranked by volume (30d)',
+  },
+  salesTrend: {
+    label: 'Won revenue trend (line)',
+    description: 'Monthly won deal value over the last 6 months',
+  },
+  salesOutcome: {
+    label: 'Won vs lost (bars)',
+    description: 'Deals won and lost per month (6 months)',
+  },
 } as const;
 
 export type ChartKind = keyof typeof CHART_KINDS;
@@ -151,6 +167,10 @@ export const PANEL_KINDS = {
   broadcasts: {
     label: 'Recent broadcasts',
     description: 'Latest campaigns with delivery stats',
+  },
+  performers: {
+    label: 'Sales leaderboard',
+    description: 'Top members by won value (30d)',
   },
 } as const;
 

@@ -35,7 +35,12 @@ import { BroadcastFunnel } from '../broadcast-funnel';
 import { ChartCard } from '../chart-card';
 import { ContactsGrowth } from '../contacts-growth';
 import { KpiCard } from '../kpi-card';
+import { LeadSources } from '../lead-sources';
+import { LeadSourcesDonut } from '../lead-sources-donut';
 import { PipelineFunnel } from '../pipeline-funnel';
+import { SalesLeaderboard } from '../sales-leaderboard';
+import { SalesOutcomeBar } from '../sales-outcome-bar';
+import { SalesTrendLine } from '../sales-trend-line';
 import { TasksPanel } from '../tasks-panel';
 import { TeamPerformance } from '../team-performance';
 import { UpcomingAppointments } from '../upcoming-appointments';
@@ -372,6 +377,50 @@ export function WidgetRenderer({
               />
             </ChartCard>
           );
+        case 'leadSourceDonut':
+          return (
+            <ChartCard
+              title={title}
+              caption="Where new leads came from, last 30 days"
+              href="/contacts"
+              className="h-full"
+            >
+              <LeadSourcesDonut data={overview.leadSources} />
+            </ChartCard>
+          );
+        case 'leadSourceBars':
+          return (
+            <ChartCard
+              title={title}
+              caption="Top lead sources, last 30 days"
+              href="/contacts"
+              className="h-full"
+            >
+              <LeadSources data={overview.leadSources} />
+            </ChartCard>
+          );
+        case 'salesTrend':
+          return (
+            <ChartCard
+              title={title}
+              caption="Won deal value per month, last 6 months"
+              href="/pipelines"
+              className="h-full"
+            >
+              <SalesTrendLine data={overview.salesTrend} currency={currency} />
+            </ChartCard>
+          );
+        case 'salesOutcome':
+          return (
+            <ChartCard
+              title={title}
+              caption="Deals won vs lost per month"
+              href="/pipelines"
+              className="h-full"
+            >
+              <SalesOutcomeBar data={overview.salesTrend} />
+            </ChartCard>
+          );
         default:
           return null;
       }
@@ -417,6 +466,20 @@ export function WidgetRenderer({
               <BroadcastFunnel
                 totals={overview.broadcasts.totals}
                 recent={overview.broadcasts.recent}
+              />
+            </ChartCard>
+          );
+        case 'performers':
+          return (
+            <ChartCard
+              title={title}
+              caption="Top members by won value, last 30 days"
+              href="/pipelines"
+              className="h-full"
+            >
+              <SalesLeaderboard
+                performers={overview.performers}
+                currency={currency}
               />
             </ChartCard>
           );
