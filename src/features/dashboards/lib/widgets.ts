@@ -10,10 +10,27 @@
 // (picker, config forms, renderers).
 // ============================================================
 
+import {
+  chartConfigurationSchema,
+  type ChartConfiguration,
+} from './chart-config';
+
 export const WIDGET_SIZES = ['sm', 'md', 'lg', 'full'] as const;
 export type WidgetSize = (typeof WIDGET_SIZES)[number];
 
-export const WIDGET_TYPES = ['kpi', 'chart', 'target', 'panel'] as const;
+/**
+ * 'graph' is the generic, Twenty-style widget: the user composes it
+ * from source + measure + operation + groupBy and it fetches its own
+ * data via /api/v1/dashboard/chart-data. The other types are the
+ * original prebuilt projections of the overview payload.
+ */
+export const WIDGET_TYPES = [
+  'kpi',
+  'chart',
+  'target',
+  'panel',
+  'graph',
+] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 
 // ------------------------------------------------------------
@@ -196,6 +213,8 @@ export interface DashboardWidget {
     panel?: PanelKind;
     /** target */
     goal?: number;
+    /** graph — generic Twenty-style chart configuration */
+    chart?: ChartConfiguration;
   };
 }
 
@@ -208,6 +227,7 @@ export const DEFAULT_SIZE: Record<WidgetType, WidgetSize> = {
   chart: 'md',
   target: 'sm',
   panel: 'md',
+  graph: 'md',
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -282,6 +302,12 @@ export function sanitizeWidget(raw: unknown): DashboardWidget | null {
       out.config.panel = panel as PanelKind;
       break;
     }
+    case 'graph': {
+      const parsed = chartConfigurationSchema.safeParse(cfg.chart);
+      if (!parsed.success) return null;
+      out.config.chart = parsed.data;
+      break;
+    }
   }
 
   return out;
@@ -318,5 +344,11 @@ export function widgetTitle(w: DashboardWidget): string {
         : 'Target meter';
     case 'panel':
       return w.config.panel ? PANEL_KINDS[w.config.panel].label : 'Panel';
+    case 'graph': {
+      const c = w.config.chart;
+      if (!c) return 'Chart';
+      const op = c.operation === 'COUNT' ? 'Count' : c.operation.toLowerCase();
+      return `${op} of ${c.measure} by ${'groupBy' in c ? c.groupBy : c.source}`;
+    }
   }
 }
