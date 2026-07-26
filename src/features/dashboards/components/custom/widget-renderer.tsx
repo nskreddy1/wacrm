@@ -38,6 +38,7 @@ import { KpiCard } from '../kpi-card';
 import { LeadSources } from '../lead-sources';
 import { LeadSourcesDonut } from '../lead-sources-donut';
 import { PipelineFunnel } from '../pipeline-funnel';
+import { GenericChartWidget } from './generic-chart-widget';
 import { SalesLeaderboard } from '../sales-leaderboard';
 import { SalesOutcomeBar } from '../sales-outcome-bar';
 import { SalesTrendLine } from '../sales-trend-line';
@@ -486,6 +487,15 @@ export function WidgetRenderer({
         default:
           return null;
       }
+    }
+
+    case 'graph': {
+      if (!widget.config.chart) return null;
+      return (
+        <ChartCard title={title} className="h-full">
+          <GenericChartWidget config={widget.config.chart} />
+        </ChartCard>
+      );
     }
 
     default:

@@ -153,11 +153,27 @@ export function GenericChartWidget({
           showLegend={config.displayLegend !== false}
         />
       );
-    case 'LINE_CHART':
+    case 'LINE_CHART': {
+      const lineRows = config.isCumulative ? accumulate(rows) : rows;
       return (
-        <GenericLine rows={rows} showLegend={config.displayLegend !== false} />
+        <GenericLine
+          rows={lineRows}
+          showLegend={config.displayLegend !== false}
+        />
       );
+    }
   }
+}
+
+/** Running total per series, in bucket order (for cumulative lines). */
+function accumulate(rows: ChartDataRow[]): ChartDataRow[] {
+  const totals = new Map<string, number>();
+  return rows.map((r) => {
+    const key = r.series ?? '__single__';
+    const next = (totals.get(key) ?? 0) + r.value;
+    totals.set(key, next);
+    return { ...r, value: next };
+  });
 }
 
 function AggregateNumber({

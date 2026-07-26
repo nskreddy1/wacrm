@@ -7,10 +7,18 @@
 // Cancel / Add & another / Add component.
 // ============================================================
 
-import { useMemo, useState } from 'react';
-import { BarChart3, Gauge, LayoutList, TrendingUp } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  BarChart3,
+  Gauge,
+  LayoutList,
+  Shapes,
+  TrendingUp,
+} from 'lucide-react';
 
 import type { DashboardOverview } from '@/lib/data/dashboard/types';
+import type { ChartConfiguration } from '@/features/dashboards/lib/chart-config';
+import { GraphConfigForm } from './graph-config-form';
 import {
   CHART_KINDS,
   DEFAULT_SIZE,
@@ -52,6 +60,7 @@ const TYPE_OPTIONS: Array<{
 }> = [
   { type: 'kpi', label: 'KPI', icon: TrendingUp },
   { type: 'chart', label: 'Chart', icon: BarChart3 },
+  { type: 'graph', label: 'Custom chart', icon: Shapes },
   { type: 'target', label: 'Target Meter', icon: Gauge },
   { type: 'panel', label: 'Panel', icon: LayoutList },
 ];
@@ -102,7 +111,15 @@ export function AddWidgetDialog({
     useState<TargetMetric>('newContacts30d');
   const [goal, setGoal] = useState('100');
   const [panel, setPanel] = useState<PanelKind>('tasks');
+  const [chartConfig, setChartConfig] = useState<ChartConfiguration | null>(
+    null
+  );
   const [title, setTitle] = useState('');
+
+  const handleChartConfigChange = useCallback(
+    (config: ChartConfiguration | null) => setChartConfig(config),
+    []
+  );
 
   // Draft widget mirrors the form; powers both preview and submit.
   const draft = useMemo<DashboardWidget>(() => {
@@ -117,14 +134,26 @@ export function AddWidgetDialog({
           ? { metric: kpiMetric }
           : type === 'chart'
             ? { kind: chartKind }
-            : type === 'target'
-              ? {
-                  metric: targetMetric,
-                  goal: Number.isFinite(goalNum) && goalNum > 0 ? goalNum : 100,
-                }
-              : { panel },
+            : type === 'graph'
+              ? { chart: chartConfig ?? undefined }
+              : type === 'target'
+                ? {
+                    metric: targetMetric,
+                    goal:
+                      Number.isFinite(goalNum) && goalNum > 0 ? goalNum : 100,
+                  }
+                : { panel },
     };
-  }, [type, kpiMetric, chartKind, targetMetric, goal, panel, title]);
+  }, [
+    type,
+    kpiMetric,
+    chartKind,
+    chartConfig,
+    targetMetric,
+    goal,
+    panel,
+    title,
+  ]);
 
   function reset() {
     setTitle('');
@@ -298,6 +327,15 @@ export function AddWidgetDialog({
               </>
             )}
 
+            {type === 'graph' && (
+              <div className="grid gap-1.5 sm:grid-cols-[150px_1fr] sm:gap-3">
+                <span className="text-muted-foreground text-sm sm:justify-self-end sm:pt-2 sm:text-right">
+                  Configuration
+                </span>
+                <GraphConfigForm onChange={handleChartConfigChange} />
+              </div>
+            )}
+
             {type === 'panel' && (
               <FormRow
                 label="Panel"
@@ -329,10 +367,19 @@ export function AddWidgetDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="secondary" onClick={() => handleAdd(true)}>
+          <Button
+            variant="secondary"
+            disabled={type === 'graph' && !chartConfig}
+            onClick={() => handleAdd(true)}
+          >
             Add &amp; another
           </Button>
-          <Button onClick={() => handleAdd(false)}>Add component</Button>
+          <Button
+            disabled={type === 'graph' && !chartConfig}
+            onClick={() => handleAdd(false)}
+          >
+            Add component
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
