@@ -20,7 +20,6 @@ import { GripVertical, Pencil, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { DashboardOverview } from '@/lib/data/dashboard/types';
-import type { ChartConfiguration } from '@/features/dashboards/lib/chart-config';
 import {
   SIZE_TO_GRID,
   widgetTitle,
@@ -28,17 +27,7 @@ import {
 } from '@/features/dashboards/lib/widgets';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { AddWidgetDialog } from './add-widget-dialog';
-import { GraphConfigForm } from './graph-config-form';
+import { WidgetConfigPanel } from './widget-config-panel';
 import { WidgetRenderer } from './widget-renderer';
 
 const GRID_COLS = 12;
@@ -177,22 +166,8 @@ export function CustomDashboard({
     persist(widgets.filter((w) => w.id !== id));
   }
 
-  function updateSelected(patch: Partial<DashboardWidget>) {
-    if (!selected) return;
-    persist(
-      widgets.map((w) => (w.id === selected.id ? { ...w, ...patch } : w))
-    );
-  }
-
-  function updateSelectedChart(config: ChartConfiguration | null) {
-    if (!selected || !config) return;
-    persist(
-      widgets.map((w) =>
-        w.id === selected.id
-          ? { ...w, config: { ...w.config, chart: config } }
-          : w
-      )
-    );
+  function updateWidget(next: DashboardWidget) {
+    persist(widgets.map((w) => (w.id === next.id ? next : w)));
   }
 
   if (widgets.length === 0) {
@@ -205,10 +180,10 @@ export function CustomDashboard({
             that matches how you work.
           </p>
           <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
-            <Plus className="size-4" aria-hidden="true" /> Add component
+            <Plus className="size-4" aria-hidden="true" /> Add widget
           </Button>
         </div>
-        <AddWidgetDialog
+        <WidgetConfigPanel
           open={addOpen}
           onOpenChange={setAddOpen}
           overview={overview}
@@ -339,76 +314,23 @@ export function CustomDashboard({
           onClick={() => setAddOpen(true)}
           className="border-border text-muted-foreground hover:border-primary/40 hover:text-foreground mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed py-6 text-sm font-medium transition-colors"
         >
-          <Plus className="size-4" aria-hidden="true" /> Add component
+          <Plus className="size-4" aria-hidden="true" /> Add widget
         </button>
       )}
 
-      {/* Twenty-style live config panel: edits apply to the widget
-          immediately, autosave handles persistence. */}
-      <Sheet
-        open={editing && selected !== null}
+      {/* One panel, two flows: edit (live, seeded from the widget)
+          and add (type list first). Same design either way. */}
+      <WidgetConfigPanel
+        open={(editing && selected !== null) || addOpen}
         onOpenChange={(open) => {
-          if (!open) setSelectedId(null);
+          if (!open) {
+            setSelectedId(null);
+            setAddOpen(false);
+          }
         }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full overflow-y-auto sm:max-w-md"
-        >
-          {selected && (
-            <>
-              <SheetHeader>
-                <SheetTitle>{widgetTitle(selected)}</SheetTitle>
-                <SheetDescription>
-                  Changes apply to the dashboard immediately.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="grid gap-3.5 px-4 pb-6">
-                <div className="grid items-center gap-1.5 sm:grid-cols-[150px_1fr] sm:gap-3">
-                  <Label
-                    htmlFor="widget-title"
-                    className="text-muted-foreground sm:justify-self-end sm:text-right"
-                  >
-                    Title
-                  </Label>
-                  <Input
-                    id="widget-title"
-                    value={selected.title ?? ''}
-                    placeholder={widgetTitle(selected)}
-                    maxLength={80}
-                    onChange={(e) =>
-                      updateSelected({
-                        title: e.target.value.trim()
-                          ? e.target.value
-                          : undefined,
-                      })
-                    }
-                  />
-                </div>
-                {selected.type === 'graph' && (
-                  <GraphConfigForm
-                    key={selected.id}
-                    initial={selected.config.chart}
-                    onChange={updateSelectedChart}
-                  />
-                )}
-                {selected.type !== 'graph' && (
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    This is a prebuilt component — drag to move it, or resize
-                    from the bottom-right corner. Custom charts offer full
-                    data configuration.
-                  </p>
-                )}
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
-
-      <AddWidgetDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
         overview={overview}
+        widget={editing ? selected : null}
+        onUpdate={updateWidget}
         onAdd={(w) => persist([...widgets, w])}
       />
     </>
