@@ -10,6 +10,8 @@ import {
   validateSendMessageParams,
   SendMessageError,
 } from '@/features/whatsapp/lib/send-message';
+import { checkMonthlyQuota, consumeMonthlyQuota } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 
 // The dashboard's outbound-send endpoint. It owns auth, per-user rate
 // limiting, and the two ways the UI targets a thread — an existing
@@ -55,6 +57,15 @@ export async function POST(request: Request) {
         { error: 'Your profile is not linked to an account.' },
         { status: 403 }
       );
+    }
+
+    // Plan quota: monthly outbound message budget. Checked before any
+    // side effects (find-or-create conversation) and consumed only
+    // after the provider accepts the send, so failed sends don't burn
+    // quota.
+    const quota = await checkMonthlyQuota(accountId, 'messages_sent');
+    if (!quota.allowed) {
+      return quotaExceededResponse(quota, 'Monthly message');
     }
 
     const body = await request.json();
@@ -185,6 +196,10 @@ export async function POST(request: Request) {
         interactivePayload: interactive_payload,
         replyToMessageId: reply_to_message_id,
       });
+
+      // Meter only after Meta accepted the send (fire-and-forget —
+      // metering loss must never fail a delivered message).
+      void consumeMonthlyQuota(accountId, 'messages_sent');
 
       return NextResponse.json({
         success: true,

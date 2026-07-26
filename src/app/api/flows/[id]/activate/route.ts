@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
 import { supabaseAdmin } from '@/features/flows/lib/admin-client';
 import { validateFlowForActivation } from '@/features/flows/lib/validate';
+import { canAddResource } from '@/lib/quotas';
+import { quotaExceededResponse } from '@/lib/quotas/response';
 
 /**
  * POST /api/flows/[id]/activate
@@ -28,8 +30,10 @@ export async function POST(
   // flows_update policy requires `agent`, but the service-role client
   // below bypasses RLS, so enforce the role here (a viewer passes the
   // membership-only ownership check).
+  let accountId: string;
   try {
-    await requireRole('agent');
+    const ctx = await requireRole('agent');
+    accountId = ctx.accountId;
   } catch (err) {
     return toErrorResponse(err);
   }
@@ -66,6 +70,24 @@ export async function POST(
   const admin = supabaseAdmin();
 
   if (status === 'active') {
+    // Plan quota: cap on concurrently active flows. Counts live from
+    // the flows table, so re-activating after archiving frees a slot.
+    // (Idempotent re-activation of an already-active flow is fine —
+    // the live count includes this flow, but +1 over an inclusive
+    // count only rejects when the account is genuinely at the cap and
+    // this flow isn't active yet.)
+    const { data: current } = await admin
+      .from('flows')
+      .select('status')
+      .eq('id', id)
+      .maybeSingle();
+    if (current?.status !== 'active') {
+      const quota = await canAddResource(accountId, 'max_active_flows');
+      if (!quota.allowed) {
+        return quotaExceededResponse(quota, 'Active flow');
+      }
+    }
+
     // Re-load with the full payload the validator needs.
     const [{ data: flow }, { data: nodes }] = await Promise.all([
       admin
