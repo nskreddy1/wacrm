@@ -63,8 +63,14 @@ const jsonFetcher = async (url: string) => {
 export function AdminPlatform() {
   return (
     <div className="flex flex-col gap-8">
-      <EngineFlagSection />
-      <AssistantConfigSection />
+      {/* The two config cards pair up once the console column can hold
+          them (container width, not viewport — the app sidebar swallows
+          up to 256px that a media query cannot see). `items-start` keeps
+          the short engine card from stretching to the assistant's height. */}
+      <div className="@3xl/console:grid-cols-2 grid items-start gap-6">
+        <EngineFlagSection />
+        <AssistantConfigSection />
+      </div>
       <AuditTrailSection />
     </div>
   );
@@ -188,7 +194,7 @@ function AssistantConfigSection() {
         ) : null}
       </header>
 
-      <div className="flex flex-col gap-4 rounded-lg border p-4 sm:max-w-lg">
+      <div className="@container/card bg-card flex flex-col gap-4 rounded-lg border p-4">
         <p className="text-muted-foreground text-xs leading-relaxed">
           Powers the in-app helper agent for every workspace. The key is owned
           by the founder/support team, stored encrypted, and never shown again
@@ -284,7 +290,7 @@ function AssistantConfigSection() {
             )}
 
             <div className="grid gap-1.5">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <Label htmlFor="assistant-system-prompt">
                   System prompt
                   <span className="text-muted-foreground ml-1 font-normal">
@@ -331,6 +337,7 @@ function AssistantConfigSection() {
                 id="assistant-enabled"
                 checked={enabled}
                 onCheckedChange={setEnabled}
+                className="shrink-0"
               />
             </div>
 
@@ -356,6 +363,23 @@ function AssistantConfigSection() {
     </section>
   );
 }
+
+const ENGINE_OPTIONS: {
+  value: AiEngine;
+  title: string;
+  description: string;
+}[] = [
+  {
+    value: 'direct',
+    title: 'Direct',
+    description: 'Calls model providers directly through the AI SDK.',
+  },
+  {
+    value: 'langchain',
+    title: 'LangChain',
+    description: 'Routes AI workloads through the LangChain pipeline.',
+  },
+];
 
 function EngineFlagSection() {
   const { data, isLoading, mutate } = useSWR<{ ai_engine: AiEngine }>(
@@ -394,7 +418,7 @@ function EngineFlagSection() {
         <h2 className="text-sm font-semibold">Platform settings</h2>
       </header>
 
-      <div className="flex flex-col gap-4 rounded-lg border p-4 sm:max-w-lg">
+      <div className="@container/card bg-card flex flex-col gap-4 rounded-lg border p-4">
         <div className="grid leading-tight">
           <span className="text-sm font-medium">AI engine</span>
           <span className="text-muted-foreground text-xs">
@@ -411,35 +435,34 @@ function EngineFlagSection() {
             onValueChange={(v) => {
               if (v === 'direct' || v === 'langchain') void setEngine(v);
             }}
-            className="flex flex-col gap-3"
+            className="@md/card:grid-cols-2 grid gap-3"
             aria-label="AI engine"
           >
-            <div className="flex items-start gap-2">
-              <RadioGroupItem
-                value="direct"
-                id="engine-direct"
-                disabled={saving}
-              />
-              <Label htmlFor="engine-direct" className="grid leading-tight">
-                <span>Direct</span>
-                <span className="text-muted-foreground text-xs font-normal">
-                  Calls model providers directly through the AI SDK.
-                </span>
-              </Label>
-            </div>
-            <div className="flex items-start gap-2">
-              <RadioGroupItem
-                value="langchain"
-                id="engine-langchain"
-                disabled={saving}
-              />
-              <Label htmlFor="engine-langchain" className="grid leading-tight">
-                <span>LangChain</span>
-                <span className="text-muted-foreground text-xs font-normal">
-                  Routes AI workloads through the LangChain pipeline.
-                </span>
-              </Label>
-            </div>
+            {/* Selectable cards: the whole tile is the hit target, and the
+                selected state is carried by the border/tint via `has-*` so
+                no extra state plumbing is needed. */}
+            {ENGINE_OPTIONS.map(({ value, title, description }) => (
+              <div
+                key={value}
+                className="has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5 hover:border-muted-foreground/40 flex items-start gap-2 rounded-lg border p-3 transition-[border-color,background-color] duration-150 ease-out"
+              >
+                <RadioGroupItem
+                  value={value}
+                  id={`engine-${value}`}
+                  disabled={saving}
+                  className="mt-0.5"
+                />
+                <Label
+                  htmlFor={`engine-${value}`}
+                  className="grid cursor-pointer gap-0.5 leading-tight"
+                >
+                  <span>{title}</span>
+                  <span className="text-muted-foreground text-xs font-normal">
+                    {description}
+                  </span>
+                </Label>
+              </div>
+            ))}
           </RadioGroup>
         )}
 
@@ -482,8 +505,11 @@ function AuditTrailSection() {
         <h2 className="text-sm font-semibold">Audit trail</h2>
       </header>
 
-      <div className="rounded-lg border">
-        <Table>
+      {/* overflow-hidden clips the scroll container to the rounded corners.
+          min-w on the table makes the 5 columns scroll horizontally on
+          mobile instead of crushing into unreadable slivers. */}
+      <div className="overflow-hidden rounded-lg border">
+        <Table className="min-w-3xl">
           <TableHeader>
             <TableRow>
               <TableHead>When</TableHead>
