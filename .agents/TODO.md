@@ -7,6 +7,10 @@
 >
 > Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 > Priority: **P0** now · **P1** next · **P2** later · **P3** differentiator
+>
+> Ordering note: revenue-generating Clienter-parity features come first. The
+> **email block builder is intentionally scheduled last** (Phase 6) — it is
+> polish, not a wedge, and depends on nothing else.
 
 ---
 
@@ -24,8 +28,53 @@ Foundation must be solid before we stack the business layer on top.
       tiers (Free/Pro/Ultra) + entitlement checks. Prereq for monetizing
       everything below.
 
-## Phase 1 — Email block builder (P1, in-flight request)
-Complete the earlier ask; small, self-contained, high polish.
+## Phase 1 — Invoices & payments (P1 — biggest draw, do first)
+The #1 gap vs Clienter and the single biggest reason clients pay for a CRM.
+
+- [ ] Schema: `invoices`, `invoice_line_items`, `payments` (tenant-scoped, RLS).
+- [ ] GST-ready invoice builder — line items, tax, discounts, branded header.
+- [ ] PDF export (use `in-repo-pdf` skill / server render).
+- [ ] Send invoice over WhatsApp + email; record payments; outstanding view.
+- [ ] Live revenue analytics on dashboard (paid vs outstanding, MRR).
+- [ ] Razorpay payment links on invoices (depends on Phase 0 billing rails).
+- [ ] Validate — problem interviews + design-partner test + adoption gate.
+
+## Phase 2 — Projects & tasks (P1)
+Turn a won deal into delivered work without leaving the app.
+
+- [ ] Schema: `projects` (per contact/client, budget, deadline), `tasks`.
+- [ ] Kanban board (To-do → In progress → Done), assignable to team members.
+- [ ] Link projects to pipeline deals + invoices.
+- [ ] 1-click **lead → client** conversion (carry contact data, no retyping).
+- [ ] Validate — adoption gate before promoting past design partners.
+
+## Phase 3 — Client portal + verified reviews (P1 — the "wow" differentiator)
+Depends on Phase 1 + 2. The client-facing surface competitors leave open.
+
+- [ ] Branded per-workspace portal (agency logo, custom subdomain/slug).
+- [ ] Client view: project progress, invoice download + pay, shared files.
+- [ ] E-sign contracts/proposals.
+- [ ] **Verified reviews growth loop** — post-project review from the portal →
+      public profile page; only real clients can post (verified trust) →
+      shareable profile drives organic acquisition. Track as its own KPI.
+- [ ] Validate — measure portal logins + review-submission rate.
+
+## Phase 4 — Calendar sync (P2)
+- [ ] Google Calendar 2-way sync for `appointments`.
+- [ ] In-app scheduling links (client picks a slot).
+
+## Phase 5 — AI differentiators (P3)
+Where we beat both Clienter and the messaging incumbents.
+
+- [ ] **Conversation intelligence** (Rios-style, on chat not just calls):
+      score WhatsApp conversations for sentiment, script adherence, outcome;
+      surface coaching insights per agent; feed scores back into pipeline.
+- [ ] **AI copilot in inbox** — suggested replies, summarize thread, draft
+      follow-up, auto-fill CRM fields from conversation.
+- [ ] **Predictive lead scoring** from engagement signals.
+
+## Phase 6 — Email block builder (P2 — scheduled LAST, polish not wedge)
+Complete the earlier ask once the revenue core is in place.
 
 - [ ] **Choose lib** — use maintained upstream **EmailBuilder.js**
       (`@usewaypoint/email-builder`) rather than the stale `itswadesh` fork
@@ -40,44 +89,7 @@ Complete the earlier ask; small, self-contained, high polish.
 - [ ] **Send path** — render to HTML on send; respect `email_opt_out`.
 - [ ] **Validate** — design-partner test, adoption gate before promoting.
 
-## Phase 2 — Client-happiness core (P1 → the Clienter parity block)
-The white space competitors leave open. Build in revenue-first order.
-
-### 2a. Invoices & payments (do first — biggest draw)
-- [ ] Schema: `invoices`, `invoice_line_items`, `payments` (tenant-scoped, RLS).
-- [ ] GST-ready invoice builder — line items, tax, discounts, branded header.
-- [ ] PDF export (use `in-repo-pdf` skill / server render).
-- [ ] Send invoice over WhatsApp + email; record payments; outstanding view.
-- [ ] Live revenue analytics on dashboard (paid vs outstanding, MRR).
-- [ ] Razorpay payment links on invoices (depends on Phase 0 billing rails).
-
-### 2b. Projects & tasks
-- [ ] Schema: `projects` (per contact/client, budget, deadline), `tasks`.
-- [ ] Kanban board (To-do → In progress → Done), assignable to team members.
-- [ ] Link projects to pipeline deals + invoices.
-- [ ] 1-click **lead → client** conversion (carry contact data, no retyping).
-
-### 2c. Client portal (depends on 2a + 2b)
-- [ ] Branded per-workspace portal (agency logo, custom subdomain/slug).
-- [ ] Client view: project progress, invoice download + pay, shared files.
-- [ ] E-sign contracts/proposals.
-- [ ] Verified reviews: post-project review from portal → public profile page
-      (only real clients can post = growth loop).
-
-### 2d. Calendar sync
-- [ ] Google Calendar 2-way sync for `appointments`.
-
-## Phase 3 — AI differentiators (P3)
-Where we beat both Clienter and the messaging incumbents.
-
-- [ ] **Conversation intelligence** (Rios-style, on chat not just calls):
-      score WhatsApp conversations for sentiment, script adherence, outcome;
-      surface coaching insights per agent; feed scores back into pipeline.
-- [ ] **AI copilot in inbox** — suggested replies, summarize thread, draft
-      follow-up, auto-fill CRM fields from conversation.
-- [ ] **Predictive lead scoring** from engagement signals.
-
-## Phase 4 — Go-to-market execution (P1, parallel track)
+## Phase 7 — Go-to-market execution (P1, parallel track)
 See `go-to-market.md` for detail; track the build-gated launch here.
 
 - [ ] Public marketing site + pricing page (Free/Pro/Ultra, launch offers).
@@ -89,8 +101,10 @@ See `go-to-market.md` for detail; track the build-gated launch here.
 ---
 
 ## Immediate next actions (start here)
-1. Phase 0 → **usage instrumentation** + **feature-flag scaffold** (unblocks
-   validation for everything else).
-2. Phase 1 → **Email block builder** (finish the in-flight ask end to end).
-3. In parallel, run **problem interviews** for Invoices (Phase 2a) so it's
-   validated by the time the email builder ships.
+1. Phase 0 → **usage instrumentation** + **feature-flag scaffold** + **Razorpay
+   billing rails** (unblocks validation + monetization for everything else).
+2. Phase 1 → **Invoices & payments** end to end (biggest draw, revenue-first).
+3. In parallel, run **problem interviews** for Projects (Phase 2) so it's
+   validated by the time invoices ship.
+4. Email block builder stays **last (Phase 6)** — do not start it until the
+   revenue core (Phases 1–3) is shipped.
