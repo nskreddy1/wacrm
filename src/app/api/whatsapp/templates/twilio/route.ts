@@ -52,6 +52,32 @@ async function connectionFor(accountId: string) {
 }
 
 /**
+ * Category for synced templates. Twilio only reports a category once
+ * a template has been SUBMITTED for WhatsApp review — templates that
+ * are session-only ("user initiated" in the console) have none.
+ * Defaulting those to Marketing was wrong: it slapped the marketing
+ * opt-out compliance blocker on order-tracking/support templates.
+ * Infer from the name instead (matches how Meta auto-categorizes),
+ * falling back to Utility — the least restrictive tier for the
+ * transactional templates people actually build.
+ */
+function inferCategory(approvalCategory: string | undefined, name: string) {
+  if (approvalCategory === 'UTILITY') return 'Utility';
+  if (approvalCategory === 'AUTHENTICATION') return 'Authentication';
+  if (approvalCategory === 'MARKETING') return 'Marketing';
+  const n = name.toLowerCase();
+  if (/\b(otp|verif|auth|2fa|passcode|login[_ ]?code|one[_ ]?time)/.test(n))
+    return 'Authentication';
+  if (
+    /(promo|offer|discount|sale|campaign|marketing|newsletter|announce|opt[_ ]?in)/.test(
+      n
+    )
+  )
+    return 'Marketing';
+  return 'Utility';
+}
+
+/**
  * Twilio approval status → our MessageTemplateStatus.
  * Full set per the Content API docs: unsubmitted, received, pending,
  * approved, rejected, paused, disabled. `received` AND `pending` both
@@ -156,12 +182,7 @@ export async function POST(request: Request) {
           meta_template_id: null,
           name: content.friendly_name,
           language: content.language,
-          category:
-            approval?.category === 'UTILITY'
-              ? 'Utility'
-              : approval?.category === 'AUTHENTICATION'
-                ? 'Authentication'
-                : 'Marketing',
+          category: inferCategory(approval?.category, content.friendly_name),
           body_text: normalized.body,
           header_type: normalized.mediaUrl ? 'image' : null,
           header_content: normalized.mediaUrl,
