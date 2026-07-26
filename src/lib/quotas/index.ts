@@ -86,7 +86,16 @@ export function __setQuotaClientForTests(client: SupabaseClient | null) {
 
 // ---------------------------------------------------------------------------
 // Limit resolution: override row (if any) beats plan value
+//
+// Override semantics (migration 20260726140000):
+//   unlimited_all = true -> every limit is unlimited (VIP/internal account)
+//   column = -1          -> that ONE feature is unlimited
+//   column = NULL        -> no override, fall back to the plan value
+//   column = N >= 0      -> hard per-account cap of N
 // ---------------------------------------------------------------------------
+
+/** Sentinel stored in override columns meaning "unlimited for this feature". */
+export const UNLIMITED_SENTINEL = -1;
 
 async function resolveLimit(
   accountId: string,
@@ -97,17 +106,20 @@ async function resolveLimit(
   const [{ data: override }, { data: account }] = await Promise.all([
     db
       .from('account_limit_overrides')
-      .select(column)
+      .select(`${column}, unlimited_all`)
       .eq('account_id', accountId)
       .maybeSingle(),
     db.from('accounts').select('plan_id').eq('id', accountId).single(),
   ]);
 
-  const overrideValue = (override as Record<string, number | null> | null)?.[
-    column
-  ];
+  const overrideRow = override as
+    | ({ unlimited_all?: boolean } & Record<string, number | boolean | null>)
+    | null;
+  if (overrideRow?.unlimited_all) return null;
+
+  const overrideValue = overrideRow?.[column] as number | null | undefined;
   if (overrideValue !== undefined && overrideValue !== null) {
-    return overrideValue;
+    return overrideValue === UNLIMITED_SENTINEL ? null : overrideValue;
   }
 
   const planId = (account as { plan_id?: string } | null)?.plan_id ?? 'free';

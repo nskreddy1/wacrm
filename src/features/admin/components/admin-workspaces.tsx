@@ -317,6 +317,14 @@ function WorkspaceDetailSheet({
                 </div>
               </section>
 
+              <section
+                aria-label="Plan and limits"
+                className="flex flex-col gap-2"
+              >
+                <h3 className="text-sm font-semibold">Plan &amp; limits</h3>
+                <WorkspaceLimitsPanel workspaceId={data.workspace.id} />
+              </section>
+
               <section aria-label="Channels" className="flex flex-col gap-2">
                 <h3 className="text-sm font-semibold">Channels</h3>
                 {data.channels.length === 0 ? (

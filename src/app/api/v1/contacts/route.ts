@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     if (!quota.allowed) {
       return fail(
         'quota_exceeded',
-        `Contact limit reached (${quota.used}/${quota.limit} on the ${quota.planName} plan). Upgrade to add more contacts.`,
+        `Contact limit reached (${quota.used}/${quota.limit} on your current plan). Upgrade to add more contacts.`,
         402
       );
     }
