@@ -430,6 +430,17 @@ export interface MessageTemplate {
   sample_values?: TemplateSampleValues;
   status?: MessageTemplateStatus;
   provider?: 'meta' | 'twilio';
+  /**
+   * Delivery channel this template belongs to (migration 047 +
+   * email_templates migration). NULL/undefined rows predate the
+   * column and are treated as WhatsApp.
+   */
+  channel?: 'whatsapp' | 'sms' | 'email';
+  /**
+   * Email subject line — {{placeholders}} allowed, resolved per
+   * recipient at send time. NULL for whatsapp/sms rows.
+   */
+  subject_text?: string;
   meta_template_id?: string;
   twilio_content_sid?: string;
   rejection_reason?: string;
@@ -492,11 +503,12 @@ export interface Broadcast {
   user_id: string;
   name: string;
   /**
-   * Messaging channel the campaign fans out on (migration 049).
-   * Optional because rows created before the column default to
-   * 'whatsapp' in older fetch paths.
+   * Messaging channel the campaign fans out on (migration 049;
+   * email added with the email templates migration). Optional
+   * because rows created before the column default to 'whatsapp'
+   * in older fetch paths.
    */
-  channel?: 'whatsapp' | 'sms';
+  channel?: 'whatsapp' | 'sms' | 'email';
   template_name: string;
   template_language: string;
   template_variables?: Record<string, unknown>;

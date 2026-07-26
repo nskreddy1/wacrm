@@ -72,9 +72,11 @@ interface BroadcastPayload {
    * Messaging channel for this campaign. WhatsApp fans out through
    * /api/whatsapp/broadcast (Meta template sends); SMS renders each
    * recipient's body client-side and fans out through
-   * /api/sms/broadcast (Twilio). Defaults to 'whatsapp'.
+   * /api/sms/broadcast (Twilio); email renders subject + body
+   * client-side and fans out through /api/email/broadcast (the
+   * workspace email layer). Defaults to 'whatsapp'.
    */
-  channel?: 'whatsapp' | 'sms';
+  channel?: 'whatsapp' | 'sms' | 'email';
 }
 
 interface UseBroadcastSendingReturn {
@@ -99,7 +101,10 @@ function sleep(ms: number) {
 }
 
 interface BroadcastApiResult {
-  phone: string;
+  /** Set for whatsapp/sms results. */
+  phone?: string;
+  /** Set for email results — /api/email/broadcast keys by address. */
+  email?: string;
   status: 'sent' | 'failed';
   whatsapp_message_id?: string;
   /** Provider message id from the SMS broadcast API (Twilio SM…). */
@@ -629,14 +634,24 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         const batch = recipients.slice(i, i + SEND_BATCH_SIZE);
 
         // Per-channel request shape: WhatsApp sends template name +
-        // per-recipient params (Meta renders); SMS sends fully rendered
-        // bodies (we render). Both APIs return the same results shape.
+        // per-recipient params (Meta renders); SMS and email send fully
+        // rendered content (we render — email additionally renders the
+        // subject line with the same variable rules as the body). All
+        // three APIs return the same results shape, keyed by phone for
+        // whatsapp/sms and by email address for email.
         const apiRecipients =
-          channel === 'sms'
+          channel === 'email'
             ? batch
-                .filter((r) => r.contact?.phone)
+                .filter((r) => r.contact?.email)
                 .map((r) => ({
-                  phone: r.contact!.phone as string,
+                  email: r.contact!.email as string,
+                  subject: renderSmsBody(
+                    payload.template.subject_text?.trim() ||
+                      payload.template.name,
+                    payload.variables,
+                    r.contact!,
+                    customValueIndex.get(r.contact!.id)
+                  ),
                   body: renderSmsBody(
                     payload.template.body_text ?? '',
                     payload.variables,
@@ -644,32 +659,46 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                     customValueIndex.get(r.contact!.id)
                   ),
                 }))
-            : batch
-                .filter((r) => r.contact?.phone)
-                .map((r) => ({
-                  phone: r.contact!.phone as string,
-                  params: r.contact
-                    ? resolveVariables(
-                        payload.variables,
-                        r.contact,
-                        customValueIndex.get(r.contact.id)
-                      )
-                    : [],
-                  ...(messageParams ? { messageParams } : {}),
-                }));
+            : channel === 'sms'
+              ? batch
+                  .filter((r) => r.contact?.phone)
+                  .map((r) => ({
+                    phone: r.contact!.phone as string,
+                    body: renderSmsBody(
+                      payload.template.body_text ?? '',
+                      payload.variables,
+                      r.contact!,
+                      customValueIndex.get(r.contact!.id)
+                    ),
+                  }))
+              : batch
+                  .filter((r) => r.contact?.phone)
+                  .map((r) => ({
+                    phone: r.contact!.phone as string,
+                    params: r.contact
+                      ? resolveVariables(
+                          payload.variables,
+                          r.contact,
+                          customValueIndex.get(r.contact.id)
+                        )
+                      : [],
+                    ...(messageParams ? { messageParams } : {}),
+                  }));
 
         if (apiRecipients.length === 0) continue;
 
         try {
           const res = await fetch(
-            channel === 'sms'
-              ? '/api/sms/broadcast'
-              : '/api/whatsapp/broadcast',
+            channel === 'email'
+              ? '/api/email/broadcast'
+              : channel === 'sms'
+                ? '/api/sms/broadcast'
+                : '/api/whatsapp/broadcast',
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(
-                channel === 'sms'
+                channel === 'sms' || channel === 'email'
                   ? { recipients: apiRecipients }
                   : {
                       recipients: apiRecipients,
@@ -686,14 +715,22 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
             throw new Error(data.error || 'Broadcast API request failed');
           }
 
-          const resultsByPhone = new Map<string, BroadcastApiResult>();
+          // Results are keyed by whichever address the channel targets:
+          // phone (whatsapp/sms) or email address (email).
+          const resultsByAddress = new Map<string, BroadcastApiResult>();
           for (const r of (data.results ?? []) as BroadcastApiResult[]) {
-            resultsByPhone.set(r.phone, r);
+            const key = channel === 'email' ? r.email : r.phone;
+            if (key) resultsByAddress.set(key, r);
           }
 
           for (const recipient of batch) {
-            const phone = recipient.contact?.phone;
-            const result = phone ? resultsByPhone.get(phone) : undefined;
+            const address =
+              channel === 'email'
+                ? recipient.contact?.email
+                : recipient.contact?.phone;
+            const result = address
+              ? resultsByAddress.get(address)
+              : undefined;
 
             if (!result) {
               failedCount++;
@@ -701,7 +738,10 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                 .from('broadcast_recipients')
                 .update({
                   status: 'failed',
-                  error_message: 'No phone number on contact',
+                  error_message:
+                    channel === 'email'
+                      ? 'No email address on contact'
+                      : 'No phone number on contact',
                 })
                 .eq('id', recipient.id);
               continue;
