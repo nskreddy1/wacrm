@@ -206,6 +206,9 @@ export function PipelineDealEditor({
       snapshot.members.map((member) => ({
         userId: member.id,
         name: member.name,
+        // Already fetched and mapped — the picker renders the real photo now
+        // instead of falling back to initials for everyone.
+        avatarUrl: member.avatarUrl,
       })),
     [snapshot.members]
   );
