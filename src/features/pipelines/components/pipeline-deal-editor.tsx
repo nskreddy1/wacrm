@@ -53,7 +53,8 @@ function draftFrom(
   snapshot: PipelineSnapshot,
   stageId: string,
   currency: string,
-  currentUserId: string
+  /** Profile row id (`profiles.id`) of the signed-in member, or '' if unknown. */
+  currentMemberId: string
 ): DealInput {
   return {
     id: deal?.id,
@@ -67,7 +68,7 @@ function draftFrom(
     // Only the create path is seeded: an existing deal keeps its stored owner
     // (including a deliberately empty one) so merely opening the editor can
     // never silently reassign someone else's deal to the current viewer.
-    assignedTo: deal ? deal.assignedTo : (currentUserId || null),
+    assignedTo: deal ? deal.assignedTo : (currentMemberId || null),
     title: deal?.title ?? '',
     value: deal?.value ?? 0,
     // Deals always carry the workspace currency (Settings → Deals);
@@ -110,9 +111,15 @@ export function PipelineDealEditor({
   ) => Promise<ActionResult<PipelineDeal>>;
 }) {
   const { defaultCurrency: workspaceCurrency, user } = useAuth();
-  const currentUserId = user?.id ?? '';
+  // `deals.assigned_to` FKs to `profiles(id)` (the profile row PK), but the
+  // session only exposes the *auth* user id — `profile.id` is set from
+  // `profile.user_id`, so it is the auth id too, not the PK. `snapshot.members`
+  // is the only place carrying both, so resolve through it. Using an auth id
+  // here would violate `deals_assigned_to_fkey` on save.
+  const currentMemberId =
+    snapshot.members.find((member) => member.userId === user?.id)?.id ?? '';
   const [draft, setDraft] = useState(() =>
-    draftFrom(deal, snapshot, defaultStageId, workspaceCurrency, currentUserId)
+    draftFrom(deal, snapshot, defaultStageId, workspaceCurrency, currentMemberId)
   );
   const [subPipelineId, setSubPipelineId] = useState(
     () =>
@@ -301,7 +308,7 @@ export function PipelineDealEditor({
               value={draft.assignedTo ?? ''}
               // Without this the picker's "(You)" marker never rendered here,
               // so the list gave no clue which member you are.
-              currentUserId={currentUserId}
+              currentUserId={currentMemberId}
               disabled={false}
               onChange={(userId) => update('assignedTo', userId || null)}
             />

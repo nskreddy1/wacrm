@@ -309,23 +309,37 @@ export function RecordOwnerPicker({
           {owners.length === 0 ? (
             <DropdownMenuItem disabled>No team members found</DropdownMenuItem>
           ) : (
-            owners.map((owner) => (
-              <DropdownMenuItem
-                key={owner.userId}
-                onClick={() => onChange(owner.userId)}
-              >
-                <span className="bg-primary/15 text-primary flex size-6 items-center justify-center rounded-full text-xs font-semibold">
-                  {recordOwnerInitials(owner.name)}
+            <>
+              {/* The trigger can render "Unassigned", but the menu used to
+                  list members only — so an owner could never be cleared once
+                  set. This makes that displayable state selectable again. */}
+              <DropdownMenuItem onClick={() => onChange('')}>
+                <span className="bg-muted text-muted-foreground flex size-6 items-center justify-center rounded-full text-xs font-semibold">
+                  ?
                 </span>
-                <span className="flex-1 truncate">
-                  {owner.name}
-                  {owner.userId === currentUserId ? ' (You)' : ''}
-                </span>
-                {owner.userId === value ? (
+                <span className="flex-1 truncate">Unassigned</span>
+                {value === '' ? (
                   <Check className="text-primary size-4" />
                 ) : null}
               </DropdownMenuItem>
-            ))
+              {owners.map((owner) => (
+                <DropdownMenuItem
+                  key={owner.userId}
+                  onClick={() => onChange(owner.userId)}
+                >
+                  <span className="bg-primary/15 text-primary flex size-6 items-center justify-center rounded-full text-xs font-semibold">
+                    {recordOwnerInitials(owner.name)}
+                  </span>
+                  <span className="flex-1 truncate">
+                    {owner.name}
+                    {owner.userId === currentUserId ? ' (You)' : ''}
+                  </span>
+                  {owner.userId === value ? (
+                    <Check className="text-primary size-4" />
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
