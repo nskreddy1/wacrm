@@ -474,6 +474,41 @@ completions, so this likely needs a direct provider call rather than the
 AI Gateway path used for text models — confirm when building the
 endpoint, do not assume.
 
+#### Free / zero-cost endpoints (searched, 2026)
+
+There is **no perpetually free ASR endpoint suitable for production** —
+every provider eventually charges. What exists is a pilot runway:
+
+| Option | What's actually free | Verdict for us |
+|---|---|---|
+| **Deepgram credits** | **$200 one-time (~433–775 hrs), no credit card** | Best pilot runway by far |
+| AssemblyAI credits | $50 one-time (~135–333 hrs), no card | Secondary runway |
+| **Bhashini (Govt. of India)** | **Free for PoC; 22 Indic languages** | Best free *Indic quality* benchmark |
+| Groq free tier | 8 hrs/day, renewable | Best free *dev* loop |
+| Google Cloud STT | 60 min/month, renewable | Too small to matter |
+| HF Serverless Inference | Rate-limited prototyping | Not a transcription service |
+| IndicConformer self-host | Model is free (Apache/MIT) | Free model, paid compute — see sidecar |
+
+Two of these matter strategically:
+
+- **Bhashini** runs AI4Bharat's IndicConformer over 22 Indian languages
+  and is free for proof-of-concept — making it the natural *quality
+  reference* for exactly the Tamil/Telugu/Kannada/Malayalam cases where
+  Whisper-turbo is weakest. But it is **not a production dependency**:
+  developers report inconsistent support, API-key approval delays, and
+  no transparent timelines, and production requires negotiating an SLA
+  directly with their team. Use it to measure, not to serve.
+- **Deepgram's $200** is ~433–775 hours of audio, which is almost
+  certainly more voice-note volume than the entire pilot will produce.
+
+**This changes nothing about the production default** (Groq paid, $0.04/hr
+— ASR cost is already negligible), but it changes how action item 20's
+golden set gets built: **the same real Indic audio can be transcribed by
+Groq, Bhashini, and Deepgram at zero cost and compared**, which is the
+only honest way to settle whether Whisper-turbo's script drift on
+romanized Telugu/Tamil is a real problem or a theoretical one. Free
+credits buy *evidence*, not steady-state savings.
+
 Transcript text then flows through the EXISTING pipeline unchanged —
 language mirroring, emotion META, and RAG all operate on text and never
 know it arrived as audio.
@@ -529,6 +564,13 @@ this touches the agent core.
         established tag; a native-script tag appearing on a previously
         `-latn` conversation signals transliteration, not a real
         language switch.
+17b.[ ] Zero-cost ASR bake-off before committing: transcribe the same
+        real romanized Tamil/Telugu/Hindi voice notes through Groq
+        (free tier), Bhashini (free PoC, Indic-specialist), and Deepgram
+        ($200 free credits) and compare word error rate AND script
+        fidelity. Settles 17a with evidence instead of assumption, at no
+        spend. Bhashini is a measurement tool only — never a production
+        dependency (no SLA, key-approval delays).
 18. [ ] Only once clients exist: live-call adapter (LiveKit/Pipecat), with
         per-tenant spend caps enforced before the first minute.
 
