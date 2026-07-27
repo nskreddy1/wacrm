@@ -7,6 +7,13 @@ import { buildCrmContext } from './crm-context';
 import { generateReply } from './generate';
 import { buildPromptParts } from './defaults';
 import { buildHandoffSummary } from './handoff';
+import {
+  resolveHandoffPosture,
+  canSendCaretakerMessage,
+  caretakerPromptOverlay,
+  fallbackCaretakerMessage,
+} from './caretaker';
+import { recordSentimentEvent } from './sentiment';
 import { logAiUsage } from './usage';
 import { latestUserMessage } from './query';
 import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule';
@@ -80,12 +87,31 @@ export async function dispatchInboundToAiReply(
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
-      .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
+      .select(
+        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_handoff_state, ai_human_first_reply_at, ai_caretaker_count, ai_last_caretaker_at, ai_escalation_reason, ai_sentiment, ai_escalated_at'
+      )
       .eq('id', conversationId)
       .maybeSingle();
     if (convErr || !conv) return;
-    if (conv.assigned_agent_id) return; // a human owns this thread
-    if (conv.ai_autoreply_disabled) return; // handed off / turned off here
+
+    // Operator kill-switch. Distinct from the handoff lifecycle: this is
+    // "a human explicitly turned the bot off here", which we always obey.
+    if (conv.ai_autoreply_disabled) return;
+
+    /*
+     * Who owns the customer right now?
+     *
+     * This replaces two gates that used to short-circuit on
+     * `assigned_agent_id` and on the handoff flag. Because the escalation
+     * path sets BOTH of those itself, the assistant muted itself the
+     * instant it announced the handoff — so the customer's next message
+     * got nothing, indefinitely, even when no human had ever looked at
+     * the thread. `resolveHandoffPosture` distinguishes "assigned" from
+     * "a human actually replied" and only silences us for the latter.
+     */
+    const posture = resolveHandoffPosture(conv);
+    if (posture === 'silent') return;
+    const isCaretaker = posture === 'caretaker';
 
     const messages = await buildConversationContext(db, conversationId);
     if (messages.length === 0) return;
@@ -143,13 +169,20 @@ export async function dispatchInboundToAiReply(
     //                      authoritative check is the atomic claim below.
     //  - per_day:          cap resets at midnight in the agent's
     //                      timezone; counted from today's bot messages.
+    //
+    // Caretaker turns are exempt from all three. Holding messages are
+    // bounded by their own budget (CARETAKER_LIMITS) and letting the
+    // normal cap apply here would recreate the original bug: a thread
+    // that escalated at its reply limit would fall straight back into
+    // silence while still waiting on a human.
     if (
+      !isCaretaker &&
       activeConfig.autoReplyLimitMode === 'per_conversation' &&
       conv.ai_reply_count >= activeConfig.autoReplyMaxPerConversation
     ) {
       return;
     }
-    if (activeConfig.autoReplyLimitMode === 'per_day') {
+    if (!isCaretaker && activeConfig.autoReplyLimitMode === 'per_day') {
       const dayStart = startOfTodayUtc(activeConfig.autoReplyTimezone);
       const { count, error: cntErr } = await db
         .from('messages')
@@ -167,12 +200,34 @@ export async function dispatchInboundToAiReply(
       if ((count ?? 0) >= activeConfig.autoReplyMaxPerConversation) return;
     }
 
+    // Caretaker budget / cool-off. Checked before spending an LLM call so
+    // a customer firing off "hello?" three times in a row doesn't cost us
+    // three generations to produce three near-identical reassurances.
+    if (isCaretaker) {
+      const gate = canSendCaretakerMessage(conv);
+      if (!gate.allowed) {
+        console.log(
+          `[ai auto-reply] caretaker suppressed on ${conversationId}: ${gate.reason}`
+        );
+        return;
+      }
+    }
+
     // Ground the reply in the account's knowledge base and the
     // contact's live CRM record (both best-effort, fetched in parallel).
     const [knowledge, crmContext] = await Promise.all([
       retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
       buildCrmContext(db, contactId),
     ]);
+
+    // How long the customer has already been waiting on a human. Fed to
+    // the overlay so a long wait gets acknowledged rather than papered
+    // over with another cheerful holding line.
+    const waitedMinutes = conv.ai_escalated_at
+      ? Math.floor(
+          (Date.now() - new Date(conv.ai_escalated_at).getTime()) / 60_000
+        )
+      : null;
 
     // Cache-aligned prompt (the only path — benchmarked at ~70% fewer
     // full-price input tokens than the legacy single-string prompt):
