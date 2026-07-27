@@ -316,7 +316,7 @@ export async function dispatchInboundToAiReply(
     // stable blocks become the system prefix and the retrieved
     // knowledge rides as the final user turn, so providers reuse the
     // cached prefix across replies.
-    const { text, handoff, usage, sentiment, escalationReason, language } =
+    const { text, handoff, usage, sentiment, escalationReason, language, affect } =
       await generateReply({
         config: activeConfig,
         messages,
@@ -330,6 +330,29 @@ export async function dispatchInboundToAiReply(
         }),
         cacheKey: conversationId,
       });
+
+    // Append to the affective history (ADR-002 §3). APPEND, never
+    // update: the single overwritten ai_sentiment column is what made
+    // "is this customer getting angrier?" unanswerable. Fire-and-forget
+    // — a lost event costs one data point, never a customer reply. Runs
+    // on BOTH branches below (escalation and normal reply): the
+    // escalation turn is the most emotionally informative one of all.
+    if (affect) {
+      void db
+        .from('conversation_affective_events')
+        .insert({
+          account_id: accountId,
+          conversation_id: conversationId,
+          emotions: affect.emotions,
+          source: affect.source,
+          language,
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.error('[ai auto-reply] affect event insert failed:', error);
+          }
+        });
+    }
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
     // never adds latency to the customer-facing send: `logAiUsage`

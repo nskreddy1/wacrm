@@ -416,6 +416,42 @@ Why not an Edge Function for inference: 256 MB / 2 s CPU, and the built-in
 unusable for Hinglish). Edge Functions remain the right home for
 *orchestration* (the watchdog schedule target), not models.
 
+### Voice-note ASR: managed API first, sidecar when volume justifies it
+
+"Do we need ElevenLabs Scribe / Whisper in a Supabase Edge Function?"
+splits into two questions with opposite answers:
+
+- **Running a model IN an Edge Function: no, impossible.** 256 MB / 2 s
+  CPU cannot hold Whisper or any ASR model. Hard platform ceiling, not a
+  tuning problem.
+- **Calling a managed ASR API FROM an Edge Function: yes, ideal.** The
+  transcription call is plain HTTP; an Edge Function (or the existing
+  media webhook path) forwards the voice-note audio URL and stores the
+  result. No GPU, no container, no cold start we own.
+
+Verified options (2026 pricing):
+
+| Provider | Cost | Code-mixed (Hinglish/Tanglish/Teglish) |
+|---|---|---|
+| ElevenLabs Scribe v2 | $0.22/hr (~$0.004/min) | Yes — keeps English terms in Latin script |
+| OpenAI Whisper API | ~$0.006/min | Multilingual, weaker on noisy code-mixed telephony |
+| Sarvam Saaras | ₹1.5/min (~$0.018/min) | Best-in-class; 1M+ hrs Indian audio, built for code-mixing |
+| SenseVoiceSmall (Render) | ~$25/mo flat | Self-hosted; emotion included; ops burden ours |
+
+**Decision: start with a managed API behind the same HTTP contract**
+(`{audio_url} → {transcript, language, affect?}`). Voice-note volume at
+zero clients rounds to zero, so a flat-monthly sidecar is the wrong cost
+shape and per-use pricing is right. Scribe v2 is the cost/quality
+default; Sarvam Saaras is the upgrade if code-mixed accuracy on real
+traffic disappoints; the Render sidecar becomes worthwhile only when
+monthly ASR spend approaches its flat cost, or when prosodic emotion
+(which no managed transcription API returns) is actually needed. The
+contract makes each swap a config change, not a rewrite.
+
+Transcript text then flows through the EXISTING pipeline unchanged —
+language mirroring, emotion META, and RAG all operate on text and never
+know it arrived as audio.
+
 ### Sidecar deployment target: Render (decided)
 
 The team already deploys Python on Render, so the sidecar goes there. What

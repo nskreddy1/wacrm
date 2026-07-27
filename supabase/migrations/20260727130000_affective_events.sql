@@ -39,13 +39,13 @@ CREATE INDEX IF NOT EXISTS idx_affective_events_account_time
 
 ALTER TABLE conversation_affective_events ENABLE ROW LEVEL SECURITY;
 
--- Same membership model as ai_knowledge (see migration 032): members of
--- the owning account may read; writes come only from the service role
--- (auto-reply pipeline), so no INSERT/UPDATE/DELETE policies exist.
+-- Same membership model as ai_knowledge (migrations 030/032): account
+-- members may read, via the canonical `is_account_member()` helper —
+-- this schema has no `account_members` table; membership lives in
+-- `profiles` + `workspace_profiles` behind that function. Writes come
+-- only from the service role (auto-reply pipeline), which bypasses
+-- RLS, so no INSERT/UPDATE/DELETE policies exist — the table is
+-- append-only for every authenticated user by construction.
 CREATE POLICY "affective_events_select" ON conversation_affective_events
-  FOR SELECT USING (
-    account_id IN (
-      SELECT am.account_id FROM account_members am
-      WHERE am.user_id = auth.uid()
-    )
-  );
+  FOR SELECT TO authenticated
+  USING (is_account_member(account_id));
