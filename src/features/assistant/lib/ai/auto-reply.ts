@@ -316,7 +316,7 @@ export async function dispatchInboundToAiReply(
     // stable blocks become the system prefix and the retrieved
     // knowledge rides as the final user turn, so providers reuse the
     // cached prefix across replies.
-    const { text, handoff, usage, sentiment, escalationReason } =
+    const { text, handoff, usage, sentiment, escalationReason, language } =
       await generateReply({
         config: activeConfig,
         messages,

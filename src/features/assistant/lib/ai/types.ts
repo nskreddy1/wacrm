@@ -165,6 +165,16 @@ export interface GenerateResult {
   /** Escalation reason when handing off; null when not escalating (or
    *  when only the legacy bare [[HANDOFF]] sentinel was emitted). */
   escalationReason: AiEscalationReason | null;
+  /**
+   * Customer language classified in the same [[META]] tail, as a
+   * lowercase BCP-47-ish tag. Deliberately an open string, not a union:
+   * India alone has 22 scheduled languages, and an enum here would turn
+   * every new one into a code change. Script is significant — `hi-latn`
+   * (romanized Hinglish) is not `hi` (Devanagari), and replying in the
+   * wrong script is as jarring as the wrong language. Null when the
+   * model omitted it or the tag failed the sanity check.
+   */
+  language: string | null;
 }
 
 /**

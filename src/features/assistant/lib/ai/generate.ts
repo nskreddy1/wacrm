@@ -179,12 +179,22 @@ const ESCALATION_REASONS: readonly AiEscalationReason[] = [
  * `usage` is passed straight through (null when the provider didn't
  * report it).
  */
+/**
+ * Language tags are validated by SHAPE, not against a whitelist: two or
+ * three lowercase letters plus an optional subtag (`hi`, `ta`, `hi-latn`,
+ * `pa-guru`). A whitelist of India's 22 scheduled languages would make
+ * every newly-encountered language a code change; the shape check is
+ * enough to reject hallucinated junk while staying open.
+ */
+const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/;
+
 export function parseGeneration(
   raw: string,
   usage: AiUsage | null = null
 ): GenerateResult {
   let sentiment: AiSentiment = 'neutral';
   let escalationReason: AiEscalationReason | null = null;
+  let language: string | null = null;
   let metaEscalate = false;
 
   let body = raw;
@@ -209,6 +219,10 @@ export function parseGeneration(
       ) {
         escalationReason = meta.reason as AiEscalationReason;
       }
+      if (typeof meta.language === 'string') {
+        const tag = meta.language.trim().toLowerCase();
+        if (LANGUAGE_TAG.test(tag)) language = tag;
+      }
     } catch {
       // Malformed meta → keep the defaults; the reply itself still goes out.
     }
@@ -216,7 +230,7 @@ export function parseGeneration(
 
   const handoff = body.includes(HANDOFF_SENTINEL) || metaEscalate;
   const text = body.split(HANDOFF_SENTINEL).join('').trim();
-  return { text, handoff, usage, sentiment, escalationReason };
+  return { text, handoff, usage, sentiment, escalationReason, language };
 }
 
 /** Best-effort first `{...}` block from the meta tail — providers
