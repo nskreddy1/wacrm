@@ -266,7 +266,16 @@ export function PipelineWorkspace({
           }) * (ascending ? 1 : -1)
         );
       });
-  }, [activeSubPipeline, ascending, owner, query, snapshot.deals, sort, stage]);
+  }, [
+    activeSubPipeline,
+    ascending,
+    owner,
+    query,
+    snapshot.deals,
+    snapshot.pipeline.id,
+    sort,
+    stage,
+  ]);
 
   const insights = useMemo(
     () => ({

@@ -460,7 +460,10 @@ export function AppSidebar({
         <BrandHeader />
         <CollapseToggle />
       </SidebarHeader>
-      <SidebarContent>
+      {/* The sidebar primitive renders plain <div>s, so the app had no
+          navigation landmark at all — screen reader users could not jump to
+          the nav. Marking the link region as one satisfies WCAG 1.3.1. */}
+      <SidebarContent aria-label="Main navigation" role="navigation">
         <NavGroups initialAccess={initialAccess} />
         <PlatformGroup />
       </SidebarContent>
