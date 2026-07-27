@@ -1,140 +1,211 @@
 # ADR-001: Per-workspace module enablement
 
-**Status:** Proposed — awaiting sign-off
+**Status:** Proposed — revision 2 (self-critique applied), awaiting sign-off
 **Date:** 2026-07-27
 **Deciders:** Product owner (nskreddy1)
 
 ## Context
 
 Every workspace currently sees every module. Invoices and Payments are coming,
-so the list will grow. A platform admin needs to decide which modules a given
-workspace gets, with onboarding picking a preset per business type (e.g.
-freelancing) and an advanced editor for changing it later.
+so the list will grow. Modules must become configurable per workspace, with
+onboarding picking a preset per business type (e.g. freelancing) and an
+advanced editor for changing it later.
 
 ### What already exists (do not rebuild)
-
-Research found most of the machinery already present:
 
 | Piece | Location | State |
 |---|---|---|
 | Nav registry | `src/lib/navigation/config.ts` — `NAV_GROUPS` | Serializable, 11 items, 4 groups |
 | Nav filtering | `navigationForAccess(access)` | Already filters each item by `permission` slug |
-| Permission model | `workspace_profiles` + slugs, `hasPermission`, `requirePermission` | Mature Zoho-style model, ~30 call sites |
-| Per-tenant override by platform admin | `account_limit_overrides`, `/api/admin/workspaces/[id]/limits` | Proven: service-role write + `logPlatformAudit` |
-| Platform admin console | `src/app/(dashboard)/admin/**`, `requireSuperAdmin()` | Sidebar, layouts, audit logging |
+| Permission model | `workspace_profiles` + slugs, `hasPermission` | Mature Zoho-style model, ~30 call sites |
+| Single-round-trip context | `get_account_context()` RPC + React `cache()` | `getCurrentAccount()` runs at most once per request |
+| Cookie-auth chokepoints | `requirePermission(slug)`, `requireRole(min)` | Every dashboard page/action funnels here |
+| API-key chokepoint | `requireApiKey(request, scope)` | All 25 `/api/v1` routes funnel here |
+| Per-tenant platform override | `account_limit_overrides`, `/api/admin/workspaces/[id]/limits` | Proven: service-role write + `logPlatformAudit` |
 
-This is therefore **one new orthogonal axis** on an existing system, not a new
-navigation system.
+This is **one new orthogonal axis** on an existing system, not a new nav system.
+`plans.features` is only marketing copy ("500 contacts"), not entitlements.
 
-`plans.features` is only an array of marketing strings ("500 contacts") consumed
-by pricing UI — not an entitlement mechanism. This ADR introduces the first one.
+---
+
+## Self-critique of revision 1
+
+Revision 1 was rewritten after five findings. Recording them because each one
+changes the design, not just the wording.
+
+### C1 — Product: I collapsed two different concerns into one question
+
+Revision 1 asked "where should this live?", got "platform admin", and built a
+single axis. But the original request contained **both** concerns:
+
+> "he can **allow the people to go there** to the pipeline" → tenant-side
+> "they can **ask us**" → platform-side
+> "or they will have the **customization in the advanced mode**" → tenant-side
+
+Entitlement and preference are genuinely different:
+
+| | Entitlement | Preference |
+|---|---|---|
+| Question | What is this tenant *allowed* to have? | What does this tenant *want to show*? |
+| Owner | Platform admin (us) | Workspace admin (them) |
+| Driver | Plan, contract, provisioning | Team size, rollout pace, clutter |
+| Tenant can change? | No — must ask us | Yes, self-service |
+
+A platform-only build means a tenant entitled to Invoices cannot hide it until
+they are ready — which was the original ask. A tenant-only build means we cannot
+gate by plan. **Both are needed**, and cheaply (see Option A).
+
+### C2 — Architecture: revision 1 was fail-open by omission (highest severity)
+
+Action item 10 said "apply `requireModule` across all 11 module pages and their
+actions". That is opt-in enforcement: every forgotten call site is a silent
+hole, and the real surface is far larger than revision 1 assumed —
+
+- 11 module pages + their server actions
+- **25 `/api/v1` routes** (API-key auth) — not mentioned in revision 1
+- **`/api/mcp/[transport]`** — AI agent access, not mentioned
+- **`/api/v1/workspace/navigation`** — an external nav consumer, not mentioned
+- **`/api/flows/cron`** — background execution, not mentioned
+
+Verified: the cron uses a service-role client and scans every tenant's active
+runs (`.eq('status','active')`) with no account filter, so a "disabled" Flows
+module **keeps executing automations** — a correctness and billing bug, and the
+worst kind because it is invisible.
+
+**Fix — enforce inside the chokepoints that already exist.** Permission slugs
+are already namespaced by module (`broadcasts:send`, `catalog:manage`), and API
+scopes likewise. So map slug-prefix → module and check enablement *inside*
+`requirePermission` / `requireApiKey`. Every existing call site is then covered
+with no per-file edits, and a new module is enforced the moment its slug is
+registered. This converts the boundary from opt-in to **fail-closed by
+construction** and deletes the most dangerous action item in revision 1.
+
+### C3 — Performance: revision 1 invented a second round trip
+
+Revision 1 proposed `moduleSettingsFor(accountId)` with its own cache. But
+`get_account_context()` already returns the whole context in one RPC wrapped in
+React `cache()`. Adding a separate reader means **one extra query on every page
+load and every nav render**. Extending the existing RPC to return module state
+costs nothing.
+
+### C4 — Integrity: `disabled TEXT[]` silently accepts typos
+
+`{'pipeline'}` (missing `s`) is a valid array and a silent no-op — the module
+stays on and nobody notices. An entitlement store needs validation against the
+registry at write time, plus a DB-level guard.
+
+### C5 — Missing: module dependencies are unmodelled
+
+- `inbox-sms` is a child of `inbox` — disabling the parent orphans the child
+- `broadcasts` needs `contacts` and `templates` to be useful
+- `pipelines` deals reference contacts
+
+Disabling a dependency silently breaks its dependents. Needs an explicit
+`requires` edge and a warning at write time.
+
+---
+
+## Scenario walkthrough
+
+Testing revision 1 against concrete situations is what surfaced most of the
+above.
+
+| # | Scenario | Revision 1 behaviour | Verdict |
+|---|---|---|---|
+| 1 | Freelancer provisioned without Broadcasts | Nav hides it; page redirects | Works |
+| 2 | Tenant has Invoices but wants it hidden until trained | **Impossible** — only we can toggle | **C1** |
+| 3 | Flows disabled mid-flight; automations scheduled | **Keeps firing** via cron | **C2** |
+| 4 | Integrator's API key POSTs to `/api/v1/broadcasts` with Broadcasts off | **Succeeds** | **C2** |
+| 5 | AI agent calls a disabled module over MCP | **Succeeds** | **C2** |
+| 6 | User bookmarked `/catalog`, gets disabled | Silent redirect, no reason given | **C-P2** |
+| 7 | Module disabled 6 months, then re-enabled | Data intact (never deleted) | Works — but must be stated |
+| 8 | Admin disables `inbox` but not `inbox-sms` | Orphaned child in nav | **C5** |
+| 9 | Platform admin disables Dashboard | Redirect loop | Caught in rev 1 |
+| 10 | Typo `'pipeline'` written to the array | Silent no-op | **C4** |
+| 11 | Tenant hides a module the platform later revokes | Two axes must not fight | Needs precedence rule |
+
+Scenario 11 gives the precedence rule: **entitlement wins**. If the platform
+revokes a module, the tenant's preference for it is irrelevant. Re-granting it
+must restore the tenant's prior preference rather than silently forcing it on.
+
+---
 
 ## Decision
 
-Add a per-account **module enablement** axis, written by platform admins, ANDed
-with the existing permission checks:
+Three-layer resolution, evaluated in order:
 
 ```
-allowed = moduleEnabled(account, module) AND hasPermission(user, slug)
+visible/allowed =
+      entitled(account, module)      -- platform admin; commercial boundary
+  AND tenantEnabled(account, module)  -- workspace admin; presentation choice
+  AND hasPermission(user, slug)       -- existing per-member gate (unchanged)
 ```
 
-Storage mirrors `account_limit_overrides`: one row per account, service-role
-writes only, tenant-readable via RLS.
+One row per account holding both axes, so a single read serves both and the
+precedence rule is local:
 
 ```sql
 account_module_settings (
-  account_id UUID PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-  disabled   TEXT[] NOT NULL DEFAULT '{}',   -- module keys that are OFF
-  reason     TEXT,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  account_id       UUID PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  platform_disabled TEXT[] NOT NULL DEFAULT '{}',  -- written by super admin only
+  tenant_disabled   TEXT[] NOT NULL DEFAULT '{}',  -- written by workspace admin
+  reason            TEXT,                          -- platform note, shown to tenant
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by        UUID
 )
 ```
 
-Storing **disabled** keys (not enabled ones) means a newly shipped module is on
-by default for every existing tenant, with no backfill.
+Storing **disabled** keys (not enabled) keeps a newly shipped module on by
+default for every existing tenant with no backfill. Keeping the axes in separate
+columns means re-granting entitlement restores the tenant's prior choice
+automatically (scenario 11).
 
-## Options considered
+### Why not one column
 
-### Option A: per-account disabled list (chosen)
+Collapsing both into a single `disabled` array loses *who* turned it off, so
+re-granting cannot restore tenant intent and the tenant could clear a platform
+restriction. Rejected on both counts.
 
-| Dimension | Assessment |
-|---|---|
-| Complexity | Low — one table, one helper, mirrors an existing pattern |
-| New module rollout | On by default, no backfill |
-| Scalability | Single indexed PK lookup, cacheable per request |
-| Team familiarity | High — same shape as `account_limit_overrides` |
+---
 
-**Pros:** additive; no tenant migration; new modules safe by default.
-**Cons:** "off" is implicit absence, so UI must render from the registry.
+## Enforcement (revised — fail-closed)
 
-### Option B: reuse `plans.features` as entitlements
+| Layer | Mechanism | Covers |
+|---|---|---|
+| 1. Data | Extend `get_account_context()` to return both arrays | Zero extra round trips (C3) |
+| 2. Nav | `navigationForAccess()` also filters on module state | Cosmetic only |
+| 3. Cookie auth | Module check **inside** `requirePermission` / `requireRole` | All pages + server actions, automatically (C2) |
+| 4. API key | Module check **inside** `requireApiKey` via scope→module | All 25 `/api/v1` routes + MCP, automatically (C2) |
+| 5. Background | `flows/cron` filters runs by entitled accounts | Stops invisible execution (C2) |
+| 6. Write-time | Validate keys against registry; warn on dependency breaks | C4, C5 |
 
-**Pros:** ties modules to billing tiers for free.
-**Cons:** `features` is display copy; overloading it couples billing text to
-access control. Per-tenant exceptions still need an override table, so Option A
-is required anyway.
+Layers 3 and 4 are the design's core: enforcement lives at the chokepoint, so
+no future module can forget it.
 
-### Option C: boolean columns on `accounts`
+### Tenant-facing denial UX (C-P2)
 
-**Pros:** simplest read.
-**Cons:** a migration and deploy per new module — defeats the stated goal of
-adding modules without a deploy. Rejected.
+A bare redirect produces support tickets. Three distinct states, three
+messages:
 
-## Trade-off analysis
-
-**The two axes must AND, never OR.** Module enablement must not *be* the
-permission check. If it were, enabling a module would grant access to members
-lacking the slug — privilege escalation. Each nav item keeps its `permission`
-and gains a `module` key.
-
-**Default-on when config is missing or unreadable.** Per the insecure-defaults
-review this resembles fail-open, so stating it explicitly: it is not a security
-regression, because permissions still gate every surface, so the effective
-access set is identical to today's. Default-deny would black out every module
-for every tenant on one failed read — an outage for no security gain. The
-entitlement boundary is commercial; the trust boundary remains the permission
-slug.
-
-**`settings` is never disableable.** Otherwise a workspace can be stripped of
-the UI needed to fix itself.
-
-**Dashboard needs a redirect fallback (blocking issue).** `/dashboard` is the
-hardcoded post-login destination in `proxy.ts:48`, `auth/callback/route.ts`,
-`app/page.tsx`, `join/[token]`, `reset-password`, and both admin layouts. Since
-Dashboard is toggleable, disabling it without a fallback strands users in a
-redirect loop: the proxy sends them to `/dashboard`, the module guard bounces
-them off it. Mitigation: a `firstAllowedModule(access)` resolver that every
-post-login redirect uses instead of a literal `/dashboard`.
-
-## Enforcement layers
-
-Nav hiding is cosmetic; a hidden item whose action stays callable is the footgun
-to avoid. Three layers:
-
-1. **Nav** — `navigationForAccess()` also filters on module state. Cosmetic.
-2. **Page** — each module's server component calls `requireModule(key)`, which
-   redirects when disabled. Blocks direct URL entry.
-3. **Server actions / route handlers** — `requireModule(key)` beside the
-   existing `requirePermission(slug)`. Blocks crafted POSTs.
-
-Layer 3 is what makes this an entitlement boundary rather than a UI preference.
+- **Not entitled** → "Not included in your plan" + contact/upgrade path, with
+  the platform `reason` if set
+- **Tenant-disabled** → "Turned off for this workspace" + link for admins
+- **No permission** → existing behaviour, unchanged
 
 ## Consequences
 
-**Easier:** new modules register in one place; per-tenant provisioning with no
-deploy; onboarding presets become a list of keys.
+**Easier:** new modules register in one place and are enforced everywhere by
+construction; per-tenant provisioning with no deploy; onboarding presets become
+a list of keys; tenants self-serve presentation without a support request.
 
-**Harder:** each new module must remember `requireModule` in all three layers —
-mitigated by a single `MODULES` registry as the source of truth.
+**Harder:** `get_account_context()` gains a small amount of surface; two write
+paths need separate authorization (super admin vs workspace admin).
 
-**Note:** placing this in the platform admin console makes modules a
-provisioning/entitlement decision, not tenant self-service. The onboarding idea
-("freelancing → these features") therefore becomes a platform-side preset
-applied at signup rather than something the tenant picks.
+**Guarantees:** disabling a module never deletes data; re-enabling restores the
+prior state (scenario 7).
 
-**To revisit:** role-level overrides (schema is compatible — add
-`profile_module_settings` later, ANDed identically); onboarding writing presets;
-whether modules should map onto billing plans.
+**To revisit:** role-level overrides (add `profile_module_settings`, ANDed
+identically); mapping entitlement onto billing plans; onboarding presets.
 
 ## Scope (confirmed)
 
@@ -142,20 +213,30 @@ whether modules should map onto billing plans.
   `appointments`, `catalog`, `broadcasts`, `templates`, `flows`, `agents`,
   `dashboard`
 - Core / never disableable: `settings`
-- Placement: platform admin console
-- Enforcement: nav + page + server action
+- Enforcement: nav + page + server action + public API + MCP + cron
 - Out of scope: Invoices/Payments features — this only makes room for them
 
 ## Action items
 
-1. [ ] Migration `account_module_settings` — RLS read-own, service-role writes
-2. [ ] `src/lib/navigation/modules.ts` — `MODULES` registry + `CORE_MODULES`
-3. [ ] Add a `module` key to each `NAV_GROUPS` item
-4. [ ] `moduleSettingsFor(accountId)` reader with request-level cache
-5. [ ] Extend `NavAccess` with disabled modules; filter in `navigationForAccess`
-6. [ ] `requireModule(key)` guard for pages and actions
-7. [ ] `firstAllowedModule(access)`; replace hardcoded `/dashboard` redirects
-8. [ ] `GET`/`PATCH /api/admin/workspaces/[id]/modules` + `logPlatformAudit`
-9. [ ] Platform admin panel UI (mirrors `workspace-limits-panel.tsx`)
-10. [ ] Apply `requireModule` across all 11 module pages and their actions
-11. [ ] Future: onboarding presets; Invoices/Payments registration
+**Phase 1 — foundation (no behaviour change)**
+1. [ ] `src/lib/navigation/modules.ts` — `MODULES` registry, `CORE_MODULES`,
+       `requires` edges, slug-prefix→module and scope→module maps
+2. [ ] Add a `module` key to each `NAV_GROUPS` item
+3. [ ] Migration: `account_module_settings` + RLS (read-own; service-role and
+       workspace-admin writes separated) + CHECK validating keys
+4. [ ] Extend `get_account_context()` RPC to return both arrays (C3)
+
+**Phase 2 — enforcement (fail-closed)**
+5. [ ] Module check inside `requirePermission` / `requireRole`
+6. [ ] Module check inside `requireApiKey` (covers v1 + MCP)
+7. [ ] Filter `flows/cron` by entitled accounts
+8. [ ] `firstAllowedModule()`; replace the 6 hardcoded `/dashboard` redirects
+9. [ ] `module-unavailable` page with the three states
+
+**Phase 3 — control surfaces**
+10. [ ] `GET`/`PATCH /api/admin/workspaces/[id]/modules` + `logPlatformAudit`
+11. [ ] Platform admin panel (mirrors `workspace-limits-panel.tsx`)
+12. [ ] Tenant-side toggles (workspace admin, `tenant_disabled` only)
+
+**Phase 4 — later**
+13. [ ] Onboarding presets; Invoices/Payments registration
