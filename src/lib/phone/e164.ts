@@ -32,8 +32,10 @@
 
 import {
   parsePhoneNumberFromString,
+  getExampleNumber,
   type CountryCode,
 } from 'libphonenumber-js';
+import examples from 'libphonenumber-js/examples.mobile.json';
 
 /** Default country for bare national numbers when none is supplied. */
 export const DEFAULT_PHONE_COUNTRY: CountryCode = 'US';
@@ -84,26 +86,50 @@ function attempt(
   return ok ? build(parsed) : null;
 }
 
+/** Cache of `country -> length of a typical national number`. */
+const nationalLengthCache = new Map<CountryCode, number | undefined>();
+
+/**
+ * How many digits a normal national number has in `country` (10 for US
+ * and IN, 9 for AE, 8 for LT…). Derived from libphonenumber's own example
+ * numbers so it stays correct as metadata is updated.
+ */
+function nationalLength(country: CountryCode): number | undefined {
+  if (!nationalLengthCache.has(country)) {
+    let length: number | undefined;
+    try {
+      length = getExampleNumber(country, examples)?.nationalNumber.length;
+    } catch {
+      length = undefined;
+    }
+    nationalLengthCache.set(country, length);
+  }
+  return nationalLengthCache.get(country);
+}
+
 /**
  * Normalize any phone input to E.164, or return `null` if it can't be.
  *
- * Interpretation order — most trustworthy signal first, so a confident
- * reading always beats a speculative one:
+ * Deciding whether bare digits already include a country code
+ * ------------------------------------------------------------
+ * `918328510888` and `8328510888` are both "an Indian number" but only
+ * one carries the `91`. We can't ask libphonenumber which is which — its
+ * metadata is lenient enough that `15555000001` parses as a *valid* 11
+ * digit Indian national number (becoming `+9115555000001`), which is
+ * exactly the corruption this function has to prevent.
  *
- *   1. Input already has `+`. The caller declared the country; accept any
- *      possible number.
- *   2. Bare digits that parse as a *valid* international number. Covers
- *      provider webhooks, which always send full international digits
- *      (`918328510888` → `+918328510888`).
- *   3. Bare digits that are a *valid* national number for
- *      `defaultCountry` (`8328510888` + `IN` → `+918328510888`).
- *   4. Same as 2 but only *possible*. Rescues real numbers whose range
- *      libphonenumber doesn't know, and reserved test ranges.
- *   5. Same as 3 but only *possible*.
+ * So we compare digit count against the length of a normal national
+ * number in `defaultCountry`:
  *
- * Steps 2–3 demand `isValid` before the `isPossible` fallbacks so a
- * genuine national number is never mangled by a speculative country-code
- * guess: bare `8328510888` must not become `+8328510888`.
+ *   - **Longer** than that ⇒ the extra digits must be a country code, so
+ *     read it as international. `15555000001` (11 > 10) → `+15555000001`,
+ *     and `918328510888` (12 > 10) → `+918328510888`.
+ *   - **Equal or shorter** ⇒ it's a bare national number, so apply
+ *     `defaultCountry`. `8328510888` + `IN` → `+918328510888`.
+ *
+ * Within each branch we try `isValid` before `isPossible`, so a
+ * confidently-real reading beats a merely plausible one while reserved
+ * test ranges like `+1 555 500 0001` still get through.
  */
 export function toE164(
   raw: string | null | undefined,
@@ -113,17 +139,32 @@ export function toE164(
   const cleaned = clean(String(raw));
   if (!cleaned) return null;
 
+  // An explicit `+` is authoritative: the country code is already stated.
   if (cleaned.startsWith('+')) return attempt(cleaned, undefined, 'possible');
 
   const digits = cleaned.replace(/\D/g, '');
-  if (!digits) return null;
+  // Too short to be any real number; avoids nonsense like `12` → `+12`.
+  if (digits.length < 5) return null;
   const asIntl = `+${digits}`;
 
+  const expected = defaultCountry ? nationalLength(defaultCountry) : undefined;
+  const carriesCountryCode =
+    expected !== undefined && digits.length > expected;
+
+  if (carriesCountryCode) {
+    return (
+      attempt(asIntl, undefined, 'valid') ??
+      attempt(asIntl, undefined, 'possible') ??
+      attempt(digits, defaultCountry, 'valid') ??
+      attempt(digits, defaultCountry, 'possible')
+    );
+  }
+
   return (
-    attempt(asIntl, undefined, 'valid') ??
     attempt(digits, defaultCountry, 'valid') ??
-    attempt(asIntl, undefined, 'possible') ??
-    attempt(digits, defaultCountry, 'possible')
+    attempt(digits, defaultCountry, 'possible') ??
+    attempt(asIntl, undefined, 'valid') ??
+    attempt(asIntl, undefined, 'possible')
   );
 }
 

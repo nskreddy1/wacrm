@@ -77,6 +77,11 @@ const PHONE_COUNTRIES = getCountries()
   }))
   .sort((a, b) => a.label.localeCompare(b.label));
 
+/** `value -> label` map so the Select trigger shows the country name. */
+const PHONE_COUNTRY_LABELS = Object.fromEntries(
+  PHONE_COUNTRIES.map(({ code, label }) => [code, label])
+);
+
 type Store = { data: { fields: ContactField[] } };
 type CsvData = { headers: string[]; rows: string[][] };
 type ImportError = { row: number; message: string; source: string[] };
@@ -359,9 +364,9 @@ export function ImportModal({
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="flex max-h-[92dvh] w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-        {/* shrink-0 on header/footer + min-h-0 on the scroll area: without
-            it the flex children size to content and the footer gets pushed
-            past the dialog edge, clipping the primary action. */}
+        {/* Header and footer stay `shrink-0` while the scroll area takes
+            `min-h-0 flex-1`, so only the middle section scrolls and the
+            footer keeps its place at the bottom of the panel. */}
         <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex items-center gap-3">
             <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-lg border">
@@ -513,14 +518,18 @@ export function ImportModal({
                       </p>
                     </div>
                     <Select
+                      // Base UI renders the raw value in the trigger unless
+                      // it is given a value -> label map, which is why this
+                      // showed a bare "IN" instead of the country name.
+                      items={PHONE_COUNTRY_LABELS}
                       value={defaultCountry}
                       onValueChange={(value) =>
-                        setDefaultCountry(value as CountryCode)
+                        value && setDefaultCountry(value as CountryCode)
                       }
                     >
                       <SelectTrigger
                         id="import-default-country"
-                        className="sm:w-64"
+                        className="w-full sm:w-72"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -570,18 +579,31 @@ export function ImportModal({
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.map((row, rowIndex) => (
-                          <tr key={rowIndex} className="border-t">
-                            {csv.headers.map((header, columnIndex) => (
-                              <td
-                                key={header}
-                                className="max-w-64 truncate border-r p-3 last:border-r-0"
-                              >
-                                {row[columnIndex] || '—'}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
+                        {preview.map((row, rowIndex) => {
+                          // Show mapped values so the phone column reflects
+                          // the country code that will actually be stored,
+                          // rather than the raw spreadsheet text.
+                          const rowValues = valuesForRow(row);
+                          return (
+                            <tr key={rowIndex} className="border-t">
+                              {csv.headers.map((header, columnIndex) => {
+                                const target = mapping[header];
+                                const value =
+                                  target && target !== IGNORE
+                                    ? rowValues[target]
+                                    : row[columnIndex];
+                                return (
+                                  <td
+                                    key={header}
+                                    className="max-w-64 truncate border-r p-3 last:border-r-0"
+                                  >
+                                    {String(value ?? '') || '—'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -715,7 +737,11 @@ export function ImportModal({
             )}
           </div>
         </ScrollArea>
-        <DialogFooter className="bg-background shrink-0 border-t px-4 py-3 sm:px-6 sm:py-4">
+        {/* DialogFooter ships `-mx-4 -mb-4` to bleed into the default
+            padded dialog. This dialog is `p-0`, so those negative margins
+            pulled the footer outside the panel and it overlapped the last
+            rows of content — `m-0` puts it back in flow. */}
+        <DialogFooter className="bg-muted/50 m-0 shrink-0 border-t px-4 py-3 sm:px-6 sm:py-4">
           <Button
             variant="outline"
             onClick={() =>

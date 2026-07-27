@@ -50,6 +50,26 @@ describe('toE164', () => {
     expect(toE164('15555000001')?.e164).toBe('+15555000001');
   });
 
+  it('keeps an existing country code instead of prepending the default', () => {
+    // The reported CSV bug: `15555000001` already carries the US `1`, but
+    // with an India default it was read as an 11-digit Indian national
+    // number and corrupted into `+9115555000001`. Digit count (11) exceeds
+    // a normal Indian national number (10), so it must stay a `+1` number.
+    expect(toE164('15555000001', 'IN')?.e164).toBe('+15555000001');
+    expect(toE164('15555000008', 'IN')?.e164).toBe('+15555000008');
+    expect(toE164('918328510888', 'IN')?.e164).toBe('+918328510888');
+  });
+
+  it('still applies the default country to same-length national numbers', () => {
+    // Guards the other half of the length rule: a 10-digit number with an
+    // India default is national, so it must gain `+91` and not be read as
+    // some other country's international number.
+    expect(toE164('8328510888', 'IN')?.e164).toBe('+918328510888');
+    expect(toE164('9876543210', 'IN')?.e164).toBe('+919876543210');
+    // 10-digit US national starting with `55` must not become Brazilian.
+    expect(toE164('5555000001', 'US')?.e164).toBe('+15555000001');
+  });
+
   it('rejects input that cannot be a phone number', () => {
     expect(toE164('')).toBeNull();
     expect(toE164(null)).toBeNull();
