@@ -227,11 +227,24 @@ export function buildPromptParts(args: {
    * never invalidate the cached system prefix.
    */
   crmContext?: string | null;
+  /**
+   * Situational guidance for this turn (e.g. the caretaker overlay used
+   * while an escalated thread waits on a human).
+   *
+   * Appended as its own trailing system block rather than merged into
+   * the business block, so the platform + business prefix stays byte-
+   * identical and remains cacheable. Only turns that actually pass an
+   * overlay carry the extra block.
+   */
+  extraInstructions?: string | null;
 }): { systemBlocks: string[]; volatileContext: string | null } {
-  const { userPrompt, mode, knowledge, crmContext } = args;
+  const { userPrompt, mode, knowledge, crmContext, extraInstructions } = args;
   const systemBlocks = [platformScaffold(mode).join('\n\n')];
   const biz = businessBlock(userPrompt);
   if (biz) systemBlocks.push(biz);
+  if (extraInstructions && extraInstructions.trim().length > 0) {
+    systemBlocks.push(extraInstructions.trim());
+  }
 
   const kb = knowledgeBlock(knowledge, mode);
   const volatileParts = [crmContext ?? null, kb].filter(

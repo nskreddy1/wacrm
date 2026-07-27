@@ -59,6 +59,11 @@ interface AiThreadBannerProps {
   disabled: boolean;
   /** `conversations.ai_handoff_summary` — note the bot left on handoff. */
   handoffSummary?: string | null;
+  /**
+   * `conversations.ai_handoff_state` — handoff lifecycle:
+   * `none` | `awaiting_human` (bot is caretaking) | `human_active`.
+   */
+  handoffState?: string | null;
   /** Current assignee; when a human owns the thread the bot won't run,
    *  so the "AI active" banner is suppressed. */
   assignedAgentId?: string | null;
@@ -85,6 +90,7 @@ export function AiThreadBanner({
   conversationId,
   disabled,
   handoffSummary,
+  handoffState,
   assignedAgentId,
   currentUserId,
   onChange,
@@ -174,6 +180,40 @@ export function AiThreadBanner({
       </Banner>
     );
   }
+
+  /*
+   * Escalated, waiting on a human.
+   *
+   * Distinct from "paused" on purpose: the assistant is still replying
+   * here, on a small budget, so labelling it paused would be wrong and
+   * would hide the fact that the customer is being held. Agents need to
+   * see this state to know the thread is genuinely unattended.
+   */
+  if (handoffState === 'awaiting_human') {
+    return (
+      <Banner tone="muted">
+        <div className="min-w-0 flex-1">
+          <p className="text-foreground font-medium">
+            {t('awaitingHumanTitle')}
+          </p>
+          {handoffSummary && (
+            <p
+              className="text-muted-foreground truncate"
+              title={handoffSummary}
+            >
+              {handoffSummary}
+            </p>
+          )}
+        </div>
+        <BannerButton onClick={() => toggle(true)} busy={busy} icon={Hand}>
+          {t('takeOver')}
+        </BannerButton>
+      </Banner>
+    );
+  }
+
+  // A human has replied → the bot is silent; nothing to act on.
+  if (handoffState === 'human_active') return null;
 
   // Active, but a human already owns it → the bot won't fire; no banner.
   if (assignedAgentId) return null;
