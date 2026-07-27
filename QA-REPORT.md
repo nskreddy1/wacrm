@@ -7,7 +7,35 @@
 | **Browser** | Chromium (agent-browser), viewport 1208x682, dark mode |
 | **Account** | `admin@gmail.com` (workspace admin, **not** super-admin) |
 | **Method** | Automated control sweep + scripted DOM assertions + manual CRUD flows |
-| **Scope** | Report only — **no code was changed** (see §9) |
+| **Scope** | Report + fixes — all 9 findings triaged, 8 fixed and verified (see §10) |
+
+---
+
+## 0. Fix status
+
+All findings have since been actioned and re-verified in the browser.
+
+| ID | Severity | Status | Fix |
+|---|---|---|---|
+| BUG-01 | Critical | **Fixed** | Per-instance presence channel topic (`useId`) — no more channel reuse crash |
+| BUG-02 | Major | **Fixed** | `.fab-safe-area` gutter — Revoke reachable at every scroll position |
+| BUG-03 | Major | **Fixed** | Root pipeline tab no longer filters by a stale `dealIds` snapshot |
+| BUG-04 | Major | **Fixed** | Duplicate `<main>` removed app-wide (shell owns the sole landmark) |
+| BUG-05 | Minor | **Fixed** | Deal export toast pluralised |
+| BUG-06 | Minor | **Fixed** | Covered by the same `.fab-safe-area` gutter as BUG-02 |
+| BUG-07 | Minor | **Not a bug** | False positive — currency label is driven by account settings, not hardcoded |
+| BUG-08 | Minor | **Fixed** | Google button relabelled "Continue with Google" to disambiguate |
+| BUG-09 | Minor | **Fixed** | Sidebar marked as `navigation`; `h1` added to all 8 routes |
+
+Two further defects were found *while fixing* and also resolved:
+
+- **Hydration mismatch on `/pipelines`** — `@dnd-kit` generated non-deterministic
+  `aria-describedby` ids, so React discarded the SSR-ed board. Fixed with a
+  stable `useId()` on `DndContext`.
+- **Stage counter read "0 Deal"** — `count > 1` treated zero as singular.
+
+**Still not verified** (unchanged from §7): the `/admin` console and realtime
+latency. Both remain blocked by environment, not by code.
 
 ---
 
