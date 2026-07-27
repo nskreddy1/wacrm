@@ -52,7 +52,9 @@ function draftFrom(
   deal: PipelineDeal | null,
   snapshot: PipelineSnapshot,
   stageId: string,
-  currency: string
+  currency: string,
+  /** Profile row id (`profiles.id`) of the signed-in member, or '' if unknown. */
+  currentMemberId: string
 ): DealInput {
   return {
     id: deal?.id,
@@ -60,7 +62,13 @@ function draftFrom(
     stageId: deal?.stageId ?? stageId,
     contactId: deal?.contactId ?? null,
     catalogItemId: deal?.catalogItemId ?? null,
-    assignedTo: deal?.assignedTo ?? null,
+    // A brand-new deal is owned by whoever is creating it, matching how the
+    // contact sheet seeds its owner. Previously this was a flat `?? null`, so
+    // every new deal was saved "Unassigned" and had to be re-assigned by hand.
+    // Only the create path is seeded: an existing deal keeps its stored owner
+    // (including a deliberately empty one) so merely opening the editor can
+    // never silently reassign someone else's deal to the current viewer.
+    assignedTo: deal ? deal.assignedTo : (currentMemberId || null),
     title: deal?.title ?? '',
     value: deal?.value ?? 0,
     // Deals always carry the workspace currency (Settings → Deals);
@@ -102,9 +110,16 @@ export function PipelineDealEditor({
     subPipelineId?: string
   ) => Promise<ActionResult<PipelineDeal>>;
 }) {
-  const { defaultCurrency: workspaceCurrency } = useAuth();
+  const { defaultCurrency: workspaceCurrency, user } = useAuth();
+  // `deals.assigned_to` FKs to `profiles(id)` (the profile row PK), but the
+  // session only exposes the *auth* user id — `profile.id` is set from
+  // `profile.user_id`, so it is the auth id too, not the PK. `snapshot.members`
+  // is the only place carrying both, so resolve through it. Using an auth id
+  // here would violate `deals_assigned_to_fkey` on save.
+  const currentMemberId =
+    snapshot.members.find((member) => member.userId === user?.id)?.id ?? '';
   const [draft, setDraft] = useState(() =>
-    draftFrom(deal, snapshot, defaultStageId, workspaceCurrency)
+    draftFrom(deal, snapshot, defaultStageId, workspaceCurrency, currentMemberId)
   );
   const [subPipelineId, setSubPipelineId] = useState(
     () =>
@@ -191,6 +206,9 @@ export function PipelineDealEditor({
       snapshot.members.map((member) => ({
         userId: member.id,
         name: member.name,
+        // Already fetched and mapped — the picker renders the real photo now
+        // instead of falling back to initials for everyone.
+        avatarUrl: member.avatarUrl,
       })),
     [snapshot.members]
   );
@@ -291,6 +309,9 @@ export function PipelineDealEditor({
             <RecordOwnerPicker
               owners={owners}
               value={draft.assignedTo ?? ''}
+              // Without this the picker's "(You)" marker never rendered here,
+              // so the list gave no clue which member you are.
+              currentUserId={currentMemberId}
               disabled={false}
               onChange={(userId) => update('assignedTo', userId || null)}
             />

@@ -232,7 +232,9 @@ export function AppointmentWorkspace() {
   }
 
   return (
-    <main className="bg-background flex min-h-full flex-col">
+    // Plain <div>: the dashboard shell (SidebarInset) already renders the
+    // page's <main> landmark, so a second one here duplicated it.
+    <div className="bg-background flex min-h-full flex-col">
       <header className="border-border border-b px-4 py-4 md:px-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
@@ -517,6 +519,6 @@ export function AppointmentWorkspace() {
         onOpenChange={setCreateOpen}
         onCreated={() => void mutate()}
       />
-    </main>
+    </div>
   );
 }

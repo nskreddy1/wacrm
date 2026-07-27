@@ -40,11 +40,12 @@ async function PipelineWorkspaceLoader({
 
   if (!snapshot) {
     return (
-      <main className="bg-background flex min-h-full items-center justify-center p-6">
+      // Plain <div>: the dashboard shell already provides <main>.
+      <div className="bg-background flex min-h-full items-center justify-center p-6">
         <p className="text-muted-foreground text-sm">
           No pipeline is available for this account.
         </p>
-      </main>
+      </div>
     );
   }
 
@@ -62,7 +63,8 @@ async function PipelineWorkspaceLoader({
 
 function PipelineLoadingState() {
   return (
-    <main
+    // Plain <div>: the dashboard shell already provides <main>.
+    <div
       aria-busy="true"
       className="bg-background flex min-h-full flex-1 flex-col gap-4 p-6"
     >
@@ -77,6 +79,6 @@ function PipelineLoadingState() {
           </div>
         ))}
       </div>
-    </main>
+    </div>
   );
 }

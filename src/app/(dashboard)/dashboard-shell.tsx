@@ -30,11 +30,14 @@ function DashboardShellInner({
             rail is hidden, so this bar carries the only trigger that can
             open navigation. Lives here (not per page) so every route —
             including full-bleed ones like Inbox — gets it. shrink-0 keeps
-            it fixed while <main> absorbs the remaining height. */}
+            it fixed while the content region absorbs the remaining height. */}
         <MobileTopBar />
-        <main className="flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
+        {/* A plain <div>, not <main>: SidebarInset already renders the
+            page's <main> landmark, so wrapping children in another one
+            gave every dashboard route two "main" landmarks (WCAG 1.3.1). */}
+        <div className="flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
           {children}
-        </main>
+        </div>
       </SidebarInset>
       {/* Workspace-wide team chat (floating launcher, bottom-right). */}
       <TeamChatWidget />

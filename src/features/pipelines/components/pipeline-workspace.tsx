@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import {
@@ -19,7 +26,6 @@ import {
   CalendarClock,
   ChevronDown,
   CircleDollarSign,
-  Crown,
   Download,
   Ellipsis,
   Filter,
@@ -37,6 +43,7 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { RecordOwnerAvatar } from '@/components/shared/record-sheet';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -123,6 +130,8 @@ export function PipelineWorkspace({
   initialSavedViewId?: string;
 }) {
   const router = useRouter();
+  // Stable across server and client render — see the DndContext below.
+  const dndContextId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
   // Client-side cache only: all updates flow through explicit `mutate`
   // calls with { revalidate: false }. Revalidation must stay fully off —
@@ -233,14 +242,23 @@ export function PipelineWorkspace({
   });
 
   const deals = useMemo(() => {
-    const allowed = new Set(
-      activeSubPipeline?.dealIds ?? snapshot.deals.map((deal) => deal.id)
-    );
+    // The root tab shows EVERY deal in the pipeline. When an account has no
+    // real sub-pipelines the repository synthesises one whose id *is* the
+    // pipeline id and whose dealIds is a snapshot of all deals — treating
+    // that list as a filter meant a newly created deal (which has no
+    // membership row, so it is never added to dealIds) stayed invisible
+    // until a full reload, making a successful save look like data loss.
+    // Membership lists only ever narrow real sub-pipelines.
+    const isRootTab =
+      !activeSubPipeline || activeSubPipeline.id === snapshot.pipeline.id;
+    const allowed = isRootTab
+      ? null
+      : new Set(activeSubPipeline.dealIds);
     const term = query.trim().toLowerCase();
     return snapshot.deals
       .filter(
         (deal) =>
-          allowed.has(deal.id) &&
+          (allowed === null || allowed.has(deal.id)) &&
           (stage === 'all' || deal.stageId === stage) &&
           (owner === 'all' || deal.assignedTo === owner) &&
           (!term ||
@@ -257,7 +275,16 @@ export function PipelineWorkspace({
           }) * (ascending ? 1 : -1)
         );
       });
-  }, [activeSubPipeline, ascending, owner, query, snapshot.deals, sort, stage]);
+  }, [
+    activeSubPipeline,
+    ascending,
+    owner,
+    query,
+    snapshot.deals,
+    snapshot.pipeline.id,
+    sort,
+    stage,
+  ]);
 
   const insights = useMemo(
     () => ({
@@ -437,12 +464,20 @@ export function PipelineWorkspace({
         deal.due ?? '',
       ]),
     ]);
-    if (ok) toast.success(`${deals.length} deals exported`);
+    if (ok)
+      toast.success(
+        `${deals.length} ${deals.length === 1 ? 'deal' : 'deals'} exported`
+      );
     else toast.error('No deals to export');
   }
 
   return (
     <div className="bg-background flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* The board's own headings start at the stage columns (h2), so the
+          route shipped no h1 and screen reader users got no document
+          outline to orient by (WCAG 1.3.1). Visually hidden because the
+          toolbar already names the pipeline on screen. */}
+      <h1 className="sr-only">{snapshot.pipeline.name}</h1>
       <header className="bg-card flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2 lg:px-4">
         <Popover>
           <PopoverTrigger
@@ -780,7 +815,13 @@ export function PipelineWorkspace({
           }}
         />
       ) : initialMode === 'board' ? (
+        // Without an explicit id, dnd-kit derives its internal ids from a
+        // module-level counter, so the server and client disagree on
+        // `aria-describedby` ("DndDescribedBy-0" vs "-1") and React logs a
+        // hydration mismatch that discards the SSR-ed board. A stable
+        // useId() makes the generated ids deterministic across both passes.
         <DndContext
+          id={dndContextId}
           sensors={sensors}
           onDragEnd={(event: DragEndEvent) => {
             if (event.over)
@@ -916,7 +957,8 @@ function Insight({
 }
 
 function dealCountLabel(count: number) {
-  return `${count} Deal${count > 1 ? 's' : ''}`;
+    // Only 1 is singular — `count > 1` rendered an empty stage as "0 Deal".
+    return `${count} Deal${count === 1 ? '' : 's'}`;
 }
 
 function StageColumn({
@@ -1148,9 +1190,14 @@ function DealCard({
       </p>
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-sm">
-          <Crown
-            className="size-3.5 shrink-0 text-amber-500"
-            aria-hidden="true"
+          {/* Was a Crown icon, which reads as rank/royalty rather than
+              ownership of this record. This row shows the deal's assignee, so
+              the member's own photo (initials as fallback) is the honest
+              signal and matches the owner picker. */}
+          <RecordOwnerAvatar
+            name={deal.owner?.name ?? '?'}
+            avatarUrl={deal.owner?.avatarUrl}
+            className="size-5 shrink-0"
           />
           <span className="truncate">{deal.owner?.name ?? 'Unassigned'}</span>
         </span>

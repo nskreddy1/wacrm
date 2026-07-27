@@ -47,10 +47,14 @@ export function LoginSplit({ inviteToken }: LoginSplitProps) {
       >
         {/* Order mirrors the reference design: primary sign-in first,
               Google directly under it, forgot-password link last. */}
+        {/* "Continue with Google" rather than "Sign in with Google": both
+            buttons previously began with "Sign in", so an accessible-name
+            match on "Sign in" could resolve to the Google button and start
+            an OAuth redirect instead of submitting the password form. */}
         <LoginForm inviteToken={inviteToken} submitLabel="Sign in now" />
         <GoogleAuthButton
           inviteToken={inviteToken}
-          label="Sign in with Google"
+          label="Continue with Google"
         />
         <p className="text-muted-foreground pt-2 text-center text-sm">
           Forgot password?{' '}

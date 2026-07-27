@@ -379,6 +379,11 @@ export function ContactWorkspace({
 
   return (
     <div className="bg-background flex min-h-0 flex-1 flex-col">
+      {/* This dense workspace is all toolbar + table, so it previously
+          shipped zero headings — leaving screen reader users with no
+          document outline to orient by (WCAG 1.3.1). Visually hidden
+          because the surrounding chrome already names the page. */}
+      <h1 className="sr-only">Contacts</h1>
       <div className="bg-card flex flex-wrap items-center gap-2 border-b px-3 py-2">
         <div className="relative min-w-56 flex-1 sm:max-w-sm">
           <Search
@@ -612,7 +617,9 @@ export function ContactWorkspace({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      {/* fab-safe-area keeps the last row scrollable clear of the shell's
+          floating launchers, which paint above page content. */}
+      <div className="fab-safe-area min-h-0 flex-1 overflow-auto">
         {(view === 'list' || view === 'sheet') && (
           <table className={sheetTable.table}>
             <thead className={sheetTable.thead}>

@@ -11,6 +11,7 @@ import {
   Search,
 } from 'lucide-react';
 
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,
@@ -270,6 +271,35 @@ export function RecordCollapsible({
   );
 }
 
+/**
+ * Owner avatar: real profile photo when the member has one, initials otherwise.
+ *
+ * `profiles.avatar_url` is already stored, queried, and threaded through to
+ * this picker, but the picker used to render initials unconditionally and drop
+ * the photo — so members with an avatar still showed as a bare letter here
+ * while appearing correctly in team chat and the members tab. Kept local (not
+ * imported from the team-chat feature) so `components/shared` doesn't depend on
+ * a feature folder.
+ */
+export function RecordOwnerAvatar({
+  name,
+  avatarUrl,
+  className,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  className?: string;
+}) {
+  return (
+    <Avatar className={cn('size-6', className)}>
+      {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+      <AvatarFallback className="bg-primary/15 text-primary text-[0.625rem] font-semibold">
+        {recordOwnerInitials(name)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
 // ---------------------------------------------------------- RecordOwnerPicker
 export function RecordOwnerPicker({
   owners,
@@ -278,7 +308,7 @@ export function RecordOwnerPicker({
   disabled = false,
   onChange,
 }: {
-  owners: { userId: string; name: string }[];
+  owners: { userId: string; name: string; avatarUrl?: string | null }[];
   value: string;
   currentUserId?: string;
   disabled?: boolean;
@@ -299,9 +329,10 @@ export function RecordOwnerPicker({
             />
           }
         >
-          <span className="bg-primary/15 text-primary flex size-6 items-center justify-center rounded-full text-xs font-semibold">
-            {recordOwnerInitials(selected?.name ?? '?')}
-          </span>
+          <RecordOwnerAvatar
+            name={selected?.name ?? '?'}
+            avatarUrl={selected?.avatarUrl}
+          />
           {selected?.name ?? 'Unassigned'}
           <ChevronDown className="text-muted-foreground size-3.5" />
         </DropdownMenuTrigger>
@@ -309,23 +340,38 @@ export function RecordOwnerPicker({
           {owners.length === 0 ? (
             <DropdownMenuItem disabled>No team members found</DropdownMenuItem>
           ) : (
-            owners.map((owner) => (
-              <DropdownMenuItem
-                key={owner.userId}
-                onClick={() => onChange(owner.userId)}
-              >
-                <span className="bg-primary/15 text-primary flex size-6 items-center justify-center rounded-full text-xs font-semibold">
-                  {recordOwnerInitials(owner.name)}
+            <>
+              {/* The trigger can render "Unassigned", but the menu used to
+                  list members only — so an owner could never be cleared once
+                  set. This makes that displayable state selectable again. */}
+              <DropdownMenuItem onClick={() => onChange('')}>
+                <span className="bg-muted text-muted-foreground flex size-6 items-center justify-center rounded-full text-xs font-semibold">
+                  ?
                 </span>
-                <span className="flex-1 truncate">
-                  {owner.name}
-                  {owner.userId === currentUserId ? ' (You)' : ''}
-                </span>
-                {owner.userId === value ? (
+                <span className="flex-1 truncate">Unassigned</span>
+                {value === '' ? (
                   <Check className="text-primary size-4" />
                 ) : null}
               </DropdownMenuItem>
-            ))
+              {owners.map((owner) => (
+                <DropdownMenuItem
+                  key={owner.userId}
+                  onClick={() => onChange(owner.userId)}
+                >
+                  <RecordOwnerAvatar
+                    name={owner.name}
+                    avatarUrl={owner.avatarUrl}
+                  />
+                  <span className="flex-1 truncate">
+                    {owner.name}
+                    {owner.userId === currentUserId ? ' (You)' : ''}
+                  </span>
+                  {owner.userId === value ? (
+                    <Check className="text-primary size-4" />
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

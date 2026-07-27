@@ -7,7 +7,6 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { SettingsRail } from '@/features/settings/components/settings-rail';
-import { SettingsOverview } from '@/features/settings/components/settings-overview';
 import { ProfileForm } from '@/features/settings/components/profile-form';
 import { SecurityPanel } from '@/features/settings/components/security-panel';
 import { AppearancePanel } from '@/features/settings/components/appearance-panel';
@@ -36,7 +35,7 @@ export default function SettingsPage() {
   // The URL (`?tab=`) is the single source of truth for the active
   // section — deep-linkable, and it keeps the existing links in the
   // app sidebar/header working. Legacy tab values (tags, custom-fields)
-  // resolve onto their new home; unknown/empty → the Overview landing.
+  // resolve onto their new home; unknown/empty → DEFAULT_SECTION.
   const section = resolveSection(searchParams.get('tab'));
 
   const go = (next: SettingsSection) => {
@@ -45,9 +44,8 @@ export default function SettingsPage() {
     router.replace(`/settings?${params.toString()}`, { scroll: false });
   };
 
-  // Cheap, fetch-free rail hints. The Overview landing carries the
-  // full live status/counts; the rail just surfaces the two that are
-  // already in context.
+  // Cheap, fetch-free rail hints — only values already in context, so
+  // the rail never triggers a request of its own.
   const hints: Partial<Record<SettingsSection, ReactNode>> = useMemo(
     () => ({
       appearance: mode.charAt(0).toUpperCase() + mode.slice(1),
@@ -57,7 +55,6 @@ export default function SettingsPage() {
   );
 
   const panel: Record<SettingsSection, ReactNode> = {
-    overview: <SettingsOverview onSelect={go} />,
     profile: <ProfileForm />,
     security: <SecurityPanel />,
     appearance: <AppearancePanel />,

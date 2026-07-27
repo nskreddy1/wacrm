@@ -251,7 +251,8 @@ export default function NewBroadcastPage() {
   ];
 
   return (
-    <main className="bg-muted/20 min-h-full">
+    // Plain <div>: the dashboard shell already provides <main>.
+    <div className="bg-muted/20 min-h-full">
       <header className="border-border bg-background border-b">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
@@ -391,6 +392,6 @@ export default function NewBroadcastPage() {
           </div>
         </section>
       </div>
-    </main>
+    </div>
   );
 }

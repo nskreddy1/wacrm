@@ -174,7 +174,8 @@ export function DashboardWorkspace() {
   return (
     // The dashboard shell's <main> is overflow-hidden, so this page owns
     // its own scroll region — with the themed .app-scrollbar UI.
-    <div className="app-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain">
+    // fab-safe-area keeps the last row clear of the floating launchers.
+    <div className="app-scrollbar fab-safe-area h-full min-h-0 overflow-y-auto overscroll-contain">
       <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <Section

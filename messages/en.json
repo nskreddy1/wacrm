@@ -1328,7 +1328,6 @@
       "workspace": "Workspace"
     },
     "sections": {
-      "overview": "Overview",
       "profile": "Your profile",
       "security": "Login & security",
       "appearance": "Appearance",
@@ -1346,23 +1345,6 @@
       "api": "API keys",
       "external-sources": "External sources",
       "support": "Support"
-    },
-    "overview": {
-      "notSetup": "Not set up yet",
-      "connected": "Connected",
-      "needsReconnecting": "Needs reconnecting",
-      "viewTeamMembers": "View team members",
-      "membersCount": "{count} {count, plural, =1 {member} other {members}}",
-      "pendingInvites": "{count} pending {count, plural, =1 {invite} other {invites}}",
-      "manageTemplates": "Manage message templates",
-      "templatesCount": "{count} {count, plural, =1 {template} other {templates}}",
-      "pendingReview": "{count} pending review",
-      "tagsAndFields": "Tags and custom fields",
-      "tagsCount": "{count} {count, plural, =1 {tag} other {tags}}",
-      "fieldsCount": "{count} custom {count, plural, =1 {field} other {fields}}",
-      "appearance": "{mode} mode · {theme} accent",
-      "yourAccount": "Your account",
-      "loading": "Loading…"
     },
     "members": {
       "title": "Users and Controls",

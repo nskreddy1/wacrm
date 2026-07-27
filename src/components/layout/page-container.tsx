@@ -30,7 +30,7 @@ const widthClass: Record<PageWidth, string> = {
  * — keep both in sync with PageContainer's "default" width.
  */
 export const pageContainerClassName =
-  'app-scrollbar mx-auto h-0 min-h-0 w-full max-w-[1500px] flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8';
+  'app-scrollbar fab-safe-area mx-auto h-0 min-h-0 w-full max-w-[1500px] flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8';
 
 export function PageContainer({
   children,
@@ -44,7 +44,9 @@ export function PageContainer({
   return (
     <div
       className={cn(
-        'app-scrollbar mx-auto flex h-0 min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8',
+        // fab-safe-area reserves bottom padding for the shell's floating
+        // launchers, which would otherwise cover the last row of content.
+        'app-scrollbar fab-safe-area mx-auto flex h-0 min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8',
         widthClass[width],
         className
       )}
