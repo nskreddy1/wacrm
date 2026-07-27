@@ -6,6 +6,7 @@ import { TeamChatWidget } from '@/features/team-chat/components/team-chat-widget
 import { AssistantWidget } from '@/features/assistant/components/assistant-widget';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { AuthProvider } from '@/features/auth/hooks/use-auth';
+import { WelcomeGate } from '@/features/onboarding/components/welcome-gate';
 import type { NavAccess } from '@/lib/navigation/config';
 import type { SessionPayload } from '@/features/auth/lib/session-payload';
 
@@ -33,6 +34,9 @@ function DashboardShellInner({
       {/* Platform helper agent (floating launcher, bottom-left):
           read-only tools by default, write actions approved in-chat. */}
       <AssistantWidget />
+      {/* Full-screen 3D welcome overlay — only when ?welcome=1 (set
+          after login and after finishing the onboarding wizard). */}
+      <WelcomeGate />
     </SidebarProvider>
   );
 }

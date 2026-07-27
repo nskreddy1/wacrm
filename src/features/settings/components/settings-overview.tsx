@@ -171,12 +171,12 @@ export function SettingsOverview({
   const initial = (profile?.full_name || profile?.email || 'U')
     .charAt(0)
     .toUpperCase();
-  // Identity chip reflects the permission model: the workspace owner
-  // is "Super Admin" (crown); everyone else shows their assigned
-  // workspace profile (Administrator, Standard, custom, …).
-  const profileChipLabel = isOwner
-    ? 'Super Admin'
-    : (workspaceProfile?.name ?? null);
+  // Identity chip is synced with the assigned workspace profile for
+  // everyone — the owner is auto-assigned the "Administrator" system
+  // profile at signup, so their chip shows that same default profile
+  // (with the crown styling) instead of a hardcoded "Super Admin".
+  const profileChipLabel =
+    workspaceProfile?.name ?? (isOwner ? 'Administrator' : null);
   const roleMeta = profileChipLabel
     ? isOwner
       ? ROLE_META.owner
