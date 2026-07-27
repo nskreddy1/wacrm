@@ -7,6 +7,13 @@ import { buildCrmContext } from './crm-context';
 import { generateReply } from './generate';
 import { buildPromptParts } from './defaults';
 import { buildHandoffSummary } from './handoff';
+import {
+  resolveHandoffPosture,
+  waitingMinutes,
+  caretakerPromptOverlay,
+  fallbackCaretakerMessage,
+  CARETAKER_LIMITS,
+} from './caretaker';
 import { logAiUsage } from './usage';
 import { latestUserMessage } from './query';
 import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule';
@@ -34,10 +41,14 @@ interface DispatchArgs {
  *
  * Eligibility gates (any → silent no-op):
  *   - AI off / auto-reply disabled for the account
- *   - a human agent is assigned (they own the thread)
- *   - auto-reply was disabled for this conversation (prior handoff)
- *   - the per-conversation reply cap is reached
+ *   - a human has actually replied on this thread, or an operator used
+ *     the Resume AI kill-switch (see `resolveHandoffPosture`)
+ *   - the per-conversation reply cap is reached (caretaker turns exempt)
  *   - there's nothing to reply to
+ *
+ * Note that mere *assignment* is no longer a gate: an escalated thread
+ * nobody has answered yet keeps the assistant on in caretaker mode, so
+ * the customer is never left talking to no one.
  *
  * The 24h WhatsApp session window is inherently open here — we're
  * reacting to a customer message that just landed — so no separate
@@ -80,12 +91,28 @@ export async function dispatchInboundToAiReply(
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
-      .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
+      .select(
+        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_handoff_state, ai_caretaker_count, ai_last_caretaker_at, ai_escalated_at, ai_escalation_reason'
+      )
       .eq('id', conversationId)
       .maybeSingle();
     if (convErr || !conv) return;
-    if (conv.assigned_agent_id) return; // a human owns this thread
-    if (conv.ai_autoreply_disabled) return; // handed off / turned off here
+
+    /*
+     * Who owns this thread right now?
+     *
+     * This replaces two gates that short-circuited on `assigned_agent_id`
+     * and on `ai_autoreply_disabled`. Escalation sets both itself, so the
+     * assistant muted itself the instant it announced the handoff and the
+     * customer's next message got nothing — indefinitely, even when no
+     * human had opened the thread.
+     *
+     * `resolveHandoffPosture` separates "a name is attached" from "a
+     * person actually spoke", and only the latter silences us.
+     */
+    const posture = resolveHandoffPosture(conv);
+    if (posture === 'silent') return;
+    const isCaretaker = posture === 'caretaker';
 
     const messages = await buildConversationContext(db, conversationId);
     if (messages.length === 0) return;
@@ -143,13 +170,20 @@ export async function dispatchInboundToAiReply(
     //                      authoritative check is the atomic claim below.
     //  - per_day:          cap resets at midnight in the agent's
     //                      timezone; counted from today's bot messages.
+    //
+    // Caretaker turns are exempt from both caps: they have their own,
+    // tighter budget (CARETAKER_LIMITS, enforced atomically below).
+    // Applying the normal cap here would recreate the original bug — a
+    // thread that escalated *at* its reply limit would fall straight back
+    // into silence while still waiting on a human.
     if (
+      !isCaretaker &&
       activeConfig.autoReplyLimitMode === 'per_conversation' &&
       conv.ai_reply_count >= activeConfig.autoReplyMaxPerConversation
     ) {
       return;
     }
-    if (activeConfig.autoReplyLimitMode === 'per_day') {
+    if (!isCaretaker && activeConfig.autoReplyLimitMode === 'per_day') {
       const dayStart = startOfTodayUtc(activeConfig.autoReplyTimezone);
       const { count, error: cntErr } = await db
         .from('messages')
