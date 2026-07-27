@@ -18,6 +18,8 @@ const VIEWBOX_CENTER_Y = 119.5;
 const ASSEMBLE_STAGGER_SECONDS = 0.18;
 const ASSEMBLE_JITTER_SECONDS = 0.12;
 const MINIMUM_STROKE_WIDTH = 0.6;
+/** Ceiling on artwork width relative to the canvas — see halftoneSize. */
+const MAX_WIDTH_OVERSCALE = 1.7;
 
 export type WelcomeHalftoneParticle = {
   targetX: number;
@@ -57,7 +59,18 @@ export const buildWelcomeHalftoneParticles = (
 ): WelcomeHalftoneParticleLayout => {
   // Overscale the artwork past the viewport so the dense dot clusters
   // bleed off both edges and leave the centre clear for the title.
-  const halftoneSize = Math.max(canvasWidth * 1.05, canvasHeight * 1.3);
+  //
+  // The upstream formula is `max(width * 1.05, height * 1.3)`, which
+  // cover-fits landscape nicely but on a tall phone viewport blows the
+  // artwork up to ~2.8x the screen width — pushing the dense clusters
+  // (which sit at the left/right extremes of the viewBox) completely
+  // off-screen and leaving the overlay looking empty. Capping the
+  // overscale relative to width keeps the clusters framed in portrait
+  // while leaving landscape/desktop scaling untouched.
+  const halftoneSize = Math.min(
+    Math.max(canvasWidth * 1.05, canvasHeight * 1.3),
+    canvasWidth * MAX_WIDTH_OVERSCALE
+  );
   const viewboxToCanvasScale = halftoneSize / VIEWBOX_WIDTH;
   const canvasCenterX = canvasWidth / 2;
   const canvasCenterY = canvasHeight / 2;

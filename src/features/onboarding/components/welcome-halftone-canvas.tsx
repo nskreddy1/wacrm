@@ -55,14 +55,27 @@ export function WelcomeHalftoneCanvas({ isLeaving }: { isLeaving: boolean }) {
     });
     rendererRef.current = renderer;
 
+    // ResizeObserver over window.resize: it also catches orientation
+    // changes and mobile browser-chrome collapse, which resize the
+    // element without always firing a window resize event.
     const handleResize = () => {
       const next = syncCanvasBackingStore();
+      if (next.width === 0 || next.height === 0) return;
       renderer.resize(next.width, next.height, next.ratio);
     };
-    window.addEventListener('resize', handleResize);
+
+    const observer = new ResizeObserver(handleResize);
+    observer.observe(canvas);
+    // DPR can change when a window moves between displays; ResizeObserver
+    // won't see that because the CSS size is unchanged.
+    const dprQuery = window.matchMedia(
+      `(resolution: ${readDevicePixelRatio()}dppx)`
+    );
+    dprQuery.addEventListener?.('change', handleResize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      observer.disconnect();
+      dprQuery.removeEventListener?.('change', handleResize);
       renderer.destroy();
       rendererRef.current = null;
     };

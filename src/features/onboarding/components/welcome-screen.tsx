@@ -117,15 +117,19 @@ export function WelcomeScreen({ onDismiss }: { onDismiss: () => void }) {
         <WelcomeHalftoneCanvas isLeaving={leaving} />
       </div>
 
+      {/* Mobile wraps the title across lines at a smaller size; from
+          `sm` up it locks to a single line like the desktop design.
+          Each word keeps `whitespace-nowrap` so wrapping only ever
+          happens between words, never mid-word. */}
       <div
-        className={`relative z-10 flex max-w-[90vw] flex-wrap items-center justify-center gap-2 px-8 py-4 text-2xl font-semibold whitespace-nowrap text-white sm:flex-nowrap md:text-[26px] ${
+        className={`relative z-10 flex max-w-[90vw] flex-wrap items-center justify-center gap-x-2 gap-y-1 px-6 py-4 text-center text-lg font-semibold text-white sm:max-w-none sm:flex-nowrap sm:gap-2 sm:px-8 sm:text-2xl md:text-[26px] ${
           leaving ? 'animate-welcome-title-out' : 'animate-welcome-title-in'
         }`}
       >
         {TITLE_WORDS.map((word, index) => (
           <span
             key={word}
-            className="animate-welcome-word-in inline-flex"
+            className="animate-welcome-word-in inline-flex whitespace-nowrap"
             style={{ animationDelay: `${1.1 + index * 0.07}s` }}
           >
             {word}
@@ -133,17 +137,21 @@ export function WelcomeScreen({ onDismiss }: { onDismiss: () => void }) {
         ))}
         {/* Person chip — the identity payoff of the whole screen. */}
         <span
-          className="animate-welcome-word-in inline-flex"
+          className="animate-welcome-word-in inline-flex min-w-0"
           style={{ animationDelay: `${1.1 + TITLE_WORDS.length * 0.07}s` }}
         >
-          <span className="inline-flex items-center gap-2 rounded-md bg-white/10 px-2 py-1">
+          <span className="inline-flex min-w-0 items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 sm:gap-2">
             <span
               aria-hidden
-              className="bg-primary text-primary-foreground grid size-6 shrink-0 place-items-center rounded text-xs font-semibold"
+              className="bg-primary text-primary-foreground grid size-5 shrink-0 place-items-center rounded text-[11px] font-semibold sm:size-6 sm:text-xs"
             >
               {initial}
             </span>
-            <span className="max-w-[min(40vw,360px)] truncate">{name}</span>
+            {/* Matches Twenty's chip cap so a long name truncates
+                instead of stretching the title off-screen. */}
+            <span className="min-w-0 max-w-[min(40vw,360px)] truncate">
+              {name}
+            </span>
           </span>
         </span>
       </div>
