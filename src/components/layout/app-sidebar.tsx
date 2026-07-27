@@ -146,6 +146,11 @@ function CollapseToggle() {
   const collapsed = state === 'collapsed' && !isMobile;
   const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 
+  // On mobile the sidebar is a sheet, so there is no icon-rail state to
+  // collapse into — the control would just close the sheet, duplicating
+  // the overlay tap and the top bar's toggle. Hide it there.
+  if (isMobile) return null;
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>

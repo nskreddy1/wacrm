@@ -7,6 +7,7 @@ import {
 } from '@/features/whatsapp/lib/encryption';
 import { getMediaUrl } from '@/features/whatsapp/lib/meta-api';
 import { normalizePhone } from '@/features/whatsapp/lib/phone-utils';
+import { toE164 } from '@/lib/phone/e164';
 import {
   findExistingContact,
   isUniqueViolation,
@@ -596,7 +597,11 @@ async function processMessage(
   configOwnerUserId: string,
   accessToken: string
 ) {
-  const senderPhone = normalizePhone(message.from);
+  // Meta sends digits with no `+`. Store the canonical E.164 form so the
+  // contact carries its country code — `findExistingContact` matches on a
+  // digit suffix, so this stays compatible with rows written earlier in
+  // the digits-only format.
+  const senderPhone = toE164(message.from)?.e164 ?? normalizePhone(message.from);
   const contactName = contact.profile.name;
 
   // Find or create contact

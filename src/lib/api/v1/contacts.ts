@@ -14,10 +14,7 @@ import {
   isUniqueViolation,
 } from '@/features/contacts/lib/dedupe';
 import { resolveImportTagIds } from '@/features/contacts/lib/resolve-import-tags';
-import {
-  sanitizePhoneForMeta,
-  isValidE164,
-} from '@/features/whatsapp/lib/phone-utils';
+import { toE164 } from '@/lib/phone/e164';
 
 /** Row select that embeds the contact's tags for serialization. */
 export const CONTACT_SELECT = '*, contact_tags(tags(*))';
@@ -118,15 +115,21 @@ export async function findOrCreateContact(
   auditUserId: string,
   input: ContactInput
 ): Promise<{ id: string; created: boolean }> {
-  const sanitized = sanitizePhoneForMeta(input.phone);
-  if (!isValidE164(sanitized)) {
+  // Normalize to E.164 so the stored number always carries its country
+  // code. Callers may send `+1 415 555 0123`, `14155550123`, or a bare
+  // national number; anything unrecoverable is rejected below.
+  const normalized = toE164(input.phone);
+  if (!normalized) {
     throw new ContactError(
-      "'phone' must be a valid phone number in E.164 format (e.g. +14155550123)",
+      "'phone' must be a valid phone number with a country code in E.164 format (e.g. +14155550123)",
       400
     );
   }
+  const phone = normalized.e164;
 
-  const existing = await findExistingContact(db, accountId, sanitized);
+  // Dedupe matches on a digit suffix, so passing E.164 still finds
+  // contacts stored in the older digits-only format.
+  const existing = await findExistingContact(db, accountId, phone);
   if (existing) return { id: existing.id, created: false };
 
   const { data: created, error } = await db
@@ -134,8 +137,8 @@ export async function findOrCreateContact(
     .insert({
       account_id: accountId,
       user_id: auditUserId,
-      phone: sanitized,
-      name: input.name ?? sanitized,
+      phone,
+      name: input.name ?? phone,
       email: input.email ?? null,
       company: input.company ?? null,
       // First-touch attribution: created by an external system via
@@ -149,7 +152,7 @@ export async function findOrCreateContact(
     // Lost a race against a concurrent create — the unique index
     // rejected the duplicate. Re-resolve to the winner.
     if (isUniqueViolation(error)) {
-      const raced = await findExistingContact(db, accountId, sanitized);
+      const raced = await findExistingContact(db, accountId, phone);
       if (raced) return { id: raced.id, created: false };
     }
     console.error('[api/v1/contacts] create error:', error);

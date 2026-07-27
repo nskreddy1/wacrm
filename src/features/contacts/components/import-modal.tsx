@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
   ArrowLeft,
@@ -25,7 +25,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -35,7 +34,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ContactField, ContactValue } from '@/lib/data/contacts/types';
-import { validInternationalPhone } from '@/features/contacts/components/international-phone-input';
+import {
+  toE164,
+  isNormalizablePhone,
+  DEFAULT_PHONE_COUNTRY,
+  type CountryCode,
+} from '@/lib/phone/e164';
+import { getCountries, getCountryCallingCode } from 'react-phone-number-input';
+import en from 'react-phone-number-input/locale/en.json';
 
 const IGNORE = '__ignore__';
 const CREATE_PREFIX = '__create__:';
@@ -62,6 +68,19 @@ const aliases: Record<string, string[]> = {
   ],
   tags: ['tags', 'tag', 'labels', 'groups', 'segments'],
 };
+/** Country options for the default-country picker, sorted by name. */
+const PHONE_COUNTRIES = getCountries()
+  .map((code) => ({
+    code: code as CountryCode,
+    label: `${en[code] ?? code} (+${getCountryCallingCode(code)})`,
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+/** `value -> label` map so the Select trigger shows the country name. */
+const PHONE_COUNTRY_LABELS = Object.fromEntries(
+  PHONE_COUNTRIES.map(({ code, label }) => [code, label])
+);
+
 type Store = { data: { fields: ContactField[] } };
 type CsvData = { headers: string[]; rows: string[][] };
 type ImportError = { row: number; message: string; source: string[] };
@@ -132,6 +151,39 @@ export function ImportModal({
   const [fileName, setFileName] = useState('');
   const [csv, setCsv] = useState<CsvData>({ headers: [], rows: [] });
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  /**
+   * Country assumed for rows whose phone has no country code. Only used
+   * as a fallback — a cell that already carries `+…`, or bare digits that
+   * parse as a full international number, keeps its own country.
+   */
+  const [defaultCountry, setDefaultCountry] = useState<CountryCode>(
+    DEFAULT_PHONE_COUNTRY
+  );
+  /**
+   * Re-run auto-mapping when the field list arrives after the file was
+   * parsed. `fields` is loaded over SWR, so a quick upload can land while
+   * it is still empty — `autoMap` then matches nothing and every column
+   * falls back to "Ignore column". Keyed on `fieldsKey` so this only fires
+   * when the available fields actually change, never on user edits.
+   */
+  const fieldsKey = fields.map((field) => field.id).join(',');
+  const autoMappedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!csv.headers.length || !fields.length) return;
+    if (autoMappedFor.current === fieldsKey) return;
+    autoMappedFor.current = fieldsKey;
+    setMapping((current) => {
+      // Preserve any choice the user already made; only fill in columns
+      // still sitting at the unmatched default.
+      const auto = autoMap(csv.headers, fields);
+      const next = { ...auto };
+      for (const [header, target] of Object.entries(current)) {
+        if (target !== IGNORE) next[header] = target;
+      }
+      return next;
+    });
+  }, [csv.headers, fields, fieldsKey]);
+
   const [importing, setImporting] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -160,9 +212,18 @@ export function ImportModal({
         const target = mapping[header];
         if (target && target !== IGNORE) values[target] = row[index] ?? '';
       });
+      // Spreadsheets rarely hold clean E.164 — `+` gets eaten by cell
+      // formatting, or the column is bare national digits. Canonicalize
+      // here so the same value is what we validate AND what we POST,
+      // rather than sending the raw cell and failing server-side.
+      const raw = String(values.phone ?? '').trim();
+      if (raw) {
+        const normalized = toE164(raw, defaultCountry);
+        if (normalized) values.phone = normalized.e164;
+      }
       return values;
     },
-    [csv.headers, mapping]
+    [csv.headers, mapping, defaultCountry]
   );
 
   const errors = useMemo(
@@ -176,15 +237,23 @@ export function ImportModal({
           !String(values.email ?? '').trim()
         )
           issues.push('phone or email is required');
-        if (values.phone && !validInternationalPhone(String(values.phone)))
-          issues.push('phone must include a valid country code');
+        // `valuesForRow` already replaced the cell with E.164 when it could
+        // be resolved, so anything still un-normalizable is a real problem
+        // — and the message now says how to fix it.
+        if (
+          values.phone &&
+          !isNormalizablePhone(String(values.phone), defaultCountry)
+        )
+          issues.push(
+            `phone is not a valid ${en[defaultCountry] ?? defaultCountry} number — add a country code (e.g. +14155550123) or change the default country`
+          );
         if (values.email && !/^\S+@\S+\.\S+$/.test(String(values.email)))
           issues.push('email is invalid');
         return issues.length
           ? [{ row: index + 2, message: issues.join('; '), source: row }]
           : [];
       }),
-    [csv.rows, valuesForRow]
+    [csv.rows, valuesForRow, defaultCountry]
   );
 
   async function chooseFile(file?: File) {
@@ -201,6 +270,9 @@ export function ImportModal({
     setFileName(file.name);
     setCsv(parsed);
     setMapping(autoMap(parsed.headers, fields));
+    // Let the effect above re-map against a newly uploaded file's headers,
+    // including when the previous file already consumed this field list.
+    autoMappedFor.current = null;
     setStep(1);
     setResult(null);
   }
@@ -311,14 +383,18 @@ export function ImportModal({
       setCsv({ headers: [], rows: [] });
       setResult(null);
       setFileName('');
+      setDefaultCountry(DEFAULT_PHONE_COUNTRY);
     }
     onOpenChange(next);
   }
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-        <DialogHeader className="border-b px-6 py-5">
+      <DialogContent className="flex max-h-[92dvh] w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+        {/* Header and footer stay `shrink-0` while the scroll area takes
+            `min-h-0 flex-1`, so only the middle section scrolls and the
+            footer keeps its place at the bottom of the panel. */}
+        <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex items-center gap-3">
             <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-lg border">
               <FileSpreadsheet className="size-5" />
@@ -351,8 +427,14 @@ export function ImportModal({
             )}
           </div>
         </DialogHeader>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="p-6">
+        {/* Plain overflow container rather than <ScrollArea>: the Base UI
+            viewport is `size-full`, so its `height:100%` can't resolve
+            against a `flex-1` parent that has no explicit height. It grew
+            to full content height (992px in a 437px slot) instead of
+            scrolling, which pushed the footer over the last card and made
+            the rows below it unreachable. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="p-4 sm:p-6">
             {step === 0 && (
               <button
                 type="button"
@@ -387,7 +469,9 @@ export function ImportModal({
                   </p>
                 </div>
                 <div className="grid gap-3">
-                  <div className="text-muted-foreground grid grid-cols-[1fr_auto_1fr] gap-3 text-xs font-medium tracking-wide uppercase">
+                  {/* The paired column headers only make sense once the rows
+                      sit side by side, so they're hidden while stacked. */}
+                  <div className="text-muted-foreground hidden grid-cols-[1fr_auto_1fr] gap-3 text-xs font-medium tracking-wide uppercase sm:grid">
                     <span>CSV column</span>
                     <span />
                     <span>Contact field</span>
@@ -395,12 +479,12 @@ export function ImportModal({
                   {csv.headers.map((header) => (
                     <div
                       key={header}
-                      className="grid grid-cols-[1fr_auto_1fr] items-center gap-3"
+                      className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_auto_1fr] sm:gap-3"
                     >
                       <div className="bg-card truncate rounded-md border px-3 py-2 text-sm font-medium">
                         {header}
                       </div>
-                      <ArrowRight className="text-muted-foreground size-4" />
+                      <ArrowRight className="text-muted-foreground size-4 rotate-90 justify-self-center sm:rotate-0" />
                       <Select
                         value={mapping[header] ?? IGNORE}
                         onValueChange={(value) =>
@@ -451,6 +535,49 @@ export function ImportModal({
                     </div>
                   ))}
                 </div>
+                {/* Only meaningful once a phone column is mapped. */}
+                {mappedTargets.includes('phone') && (
+                  <div className="bg-muted/20 flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <label
+                        htmlFor="import-default-country"
+                        className="text-sm font-medium"
+                      >
+                        Default country for phone numbers
+                      </label>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        Applied only to numbers with no country code. Numbers
+                        that already start with “+” keep their own country.
+                      </p>
+                    </div>
+                    <Select
+                      // Base UI renders the raw value in the trigger unless
+                      // it is given a value -> label map, which is why this
+                      // showed a bare "IN" instead of the country name.
+                      items={PHONE_COUNTRY_LABELS}
+                      value={defaultCountry}
+                      onValueChange={(value) =>
+                        value && setDefaultCountry(value as CountryCode)
+                      }
+                    >
+                      <SelectTrigger
+                        id="import-default-country"
+                        className="w-full sm:w-72"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {PHONE_COUNTRIES.map(({ code, label }) => (
+                            <SelectItem key={code} value={code}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <Sparkles className="text-primary size-4" />
@@ -485,18 +612,31 @@ export function ImportModal({
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.map((row, rowIndex) => (
-                          <tr key={rowIndex} className="border-t">
-                            {csv.headers.map((header, columnIndex) => (
-                              <td
-                                key={header}
-                                className="max-w-64 truncate border-r p-3 last:border-r-0"
-                              >
-                                {row[columnIndex] || '—'}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
+                        {preview.map((row, rowIndex) => {
+                          // Show mapped values so the phone column reflects
+                          // the country code that will actually be stored,
+                          // rather than the raw spreadsheet text.
+                          const rowValues = valuesForRow(row);
+                          return (
+                            <tr key={rowIndex} className="border-t">
+                              {csv.headers.map((header, columnIndex) => {
+                                const target = mapping[header];
+                                const value =
+                                  target && target !== IGNORE
+                                    ? rowValues[target]
+                                    : row[columnIndex];
+                                return (
+                                  <td
+                                    key={header}
+                                    className="max-w-64 truncate border-r p-3 last:border-r-0"
+                                  >
+                                    {String(value ?? '') || '—'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -548,6 +688,10 @@ export function ImportModal({
                         const issue = errors.find(
                           (error) => error.row === index + 2
                         );
+                        // Render the mapped/normalized values, not the raw
+                        // cells, so the phone column shows the exact E.164
+                        // string that will be written.
+                        const rowValues = valuesForRow(row);
                         return (
                           <tr key={index} className="border-t">
                             <td className="p-3">{index + 2}</td>
@@ -558,7 +702,11 @@ export function ImportModal({
                                   key={header}
                                   className="max-w-48 truncate p-3"
                                 >
-                                  {row[csv.headers.indexOf(header)] || '—'}
+                                  {String(
+                                    rowValues[mapping[header]] ??
+                                      row[csv.headers.indexOf(header)] ??
+                                      ''
+                                  ) || '—'}
                                 </td>
                               ))}
                             <td className="p-3">
@@ -621,8 +769,12 @@ export function ImportModal({
               </div>
             )}
           </div>
-        </ScrollArea>
-        <DialogFooter className="border-t px-6 py-4">
+        </div>
+        {/* DialogFooter ships `-mx-4 -mb-4` to bleed into the default
+            padded dialog. This dialog is `p-0`, so those negative margins
+            pulled the footer outside the panel and it overlapped the last
+            rows of content — `m-0` puts it back in flow. */}
+        <DialogFooter className="bg-muted/50 m-0 shrink-0 border-t px-4 py-3 sm:px-6 sm:py-4">
           <Button
             variant="outline"
             onClick={() =>

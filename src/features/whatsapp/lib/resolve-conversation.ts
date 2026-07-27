@@ -24,10 +24,7 @@ import {
   findExistingContact,
   isUniqueViolation,
 } from '@/features/contacts/lib/dedupe';
-import {
-  sanitizePhoneForMeta,
-  isValidE164,
-} from '@/features/whatsapp/lib/phone-utils';
+import { toE164 } from '@/lib/phone/e164';
 import { SendMessageError } from '@/features/whatsapp/lib/send-message';
 import { resolveAuditUserId, ContactError } from '@/lib/api/v1/contacts';
 
@@ -50,14 +47,18 @@ export async function resolveConversationByPhone(
   phone: string,
   name?: string | null
 ): Promise<ResolvedConversation> {
-  const sanitized = sanitizePhoneForMeta(phone);
-  if (!isValidE164(sanitized)) {
+  // Normalize to E.164 so a contact created here carries its country
+  // code. Only used for matching and storage in this function — the Meta
+  // send path does its own digits-only sanitization.
+  const normalized = toE164(phone);
+  if (!normalized) {
     throw new SendMessageError(
       'bad_request',
-      "'to' must be a valid phone number in E.164 format (e.g. +14155550123)",
+      "'to' must be a valid phone number with a country code in E.164 format (e.g. +14155550123)",
       400
     );
   }
+  const sanitized = normalized.e164;
 
   // Fail fast (and create nothing) when the account has no WhatsApp
   // connected — the same error the send would raise anyway.

@@ -22,7 +22,20 @@ async function fetchInboxSummary(url: string): Promise<InboxSummaryPayload> {
  * 5-minute poll remains as a fallback for missed events (e.g. dropped
  * socket), and reconnects self-heal via `revalidateOnReconnect`.
  */
-export function useTotalUnread(): number {
+export function useTotalUnread({
+  /**
+   * Whether this consumer owns the Realtime subscription.
+   *
+   * The channel name is a fixed string, so two mounted consumers would
+   * both call `.on()` on the same Supabase channel — which throws
+   * ("cannot add postgres_changes callbacks after subscribe()"). Exactly
+   * one consumer may subscribe; pass `false` from any additional one.
+   *
+   * Non-subscribing consumers still stay in sync: they share the SWR
+   * key, so the owner's `mutate()` updates the cache they read from.
+   */
+  subscribe = true,
+}: { subscribe?: boolean } = {}): number {
   const { data, mutate } = useSWR<InboxSummaryPayload>(
     '/api/v1/workspace/inbox/summary',
     fetchInboxSummary,
@@ -31,6 +44,7 @@ export function useTotalUnread(): number {
 
   useRealtime({
     channelName: 'unread-badge',
+    enabled: subscribe,
     onMessageEvent: () => void mutate(),
     onConversationEvent: () => void mutate(),
   });

@@ -104,9 +104,11 @@ export function RecordSheet({
         className="bg-background w-full gap-0 overflow-hidden p-0 data-[side=right]:sm:w-[min(720px,50vw)] data-[side=right]:sm:max-w-none"
       >
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          <SheetHeader className="flex-row items-center border-b px-8 py-4 text-left">
+          {/* 32px of side padding costs ~20% of a 325px viewport, so the
+              chrome tightens to 16px on mobile and only opens up at `sm`. */}
+          <SheetHeader className="flex-row items-center gap-2 border-b px-4 py-3 text-left sm:px-8 sm:py-4">
             <div className="min-w-0 flex-1">
-              <SheetTitle className="truncate text-xl font-semibold tracking-tight">
+              <SheetTitle className="truncate text-lg font-semibold tracking-tight sm:text-xl">
                 {title}
               </SheetTitle>
               <SheetDescription className="sr-only">
@@ -127,7 +129,9 @@ export function RecordSheet({
           </SheetHeader>
 
           <ScrollArea className="min-h-0 flex-1">
-            <div className="flex flex-col gap-8 px-8 py-6">{children}</div>
+            <div className="flex flex-col gap-6 px-4 py-5 sm:gap-8 sm:px-8 sm:py-6">
+              {children}
+            </div>
           </ScrollArea>
 
           <SheetFooter className="bg-background flex-row items-center justify-between border-t px-8 py-3">

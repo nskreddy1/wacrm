@@ -76,6 +76,10 @@ function createDb(state: MockState): SupabaseClient {
         return chain;
       },
       eq: () => chain,
+      // The contact lookup now matches a set of phone formats, so the mock
+      // needs the same filter/limit surface as the real query builder.
+      in: () => chain,
+      limit: () => chain,
       single: () => Promise.resolve(resolve(ops)),
       maybeSingle: () => Promise.resolve(resolve(ops)),
       then: (

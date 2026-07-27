@@ -1,6 +1,7 @@
 'use client';
 
 import { AppSidebar } from '@/components/layout/app-sidebar';
+import { MobileTopBar } from '@/components/layout/mobile-top-bar';
 import { DashboardCacheProvider } from '@/components/providers/dashboard-cache-provider';
 import { TeamChatWidget } from '@/features/team-chat/components/team-chat-widget';
 import { AssistantWidget } from '@/features/assistant/components/assistant-widget';
@@ -25,6 +26,12 @@ function DashboardShellInner({
     <SidebarProvider className="h-dvh overflow-hidden overscroll-none">
       <AppSidebar initialAccess={initialAccess} />
       <SidebarInset className="flex min-w-0 flex-col overflow-hidden">
+        {/* Below md the sidebar becomes an off-canvas sheet and the drag
+            rail is hidden, so this bar carries the only trigger that can
+            open navigation. Lives here (not per page) so every route —
+            including full-bleed ones like Inbox — gets it. shrink-0 keeps
+            it fixed while <main> absorbs the remaining height. */}
+        <MobileTopBar />
         <main className="flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
           {children}
         </main>

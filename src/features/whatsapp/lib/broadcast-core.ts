@@ -21,11 +21,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendTemplateMessage } from '@/features/whatsapp/lib/meta-api';
 import { decrypt } from '@/features/whatsapp/lib/encryption';
 import {
-  sanitizePhoneForMeta,
-  isValidE164,
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/features/whatsapp/lib/phone-utils';
+import { toE164 } from '@/lib/phone/e164';
 import { isMessageTemplate } from '@/features/whatsapp/lib/template-row-guard';
 import type { MessageTemplate } from '@/types';
 import { findOrCreateContact } from '@/lib/api/v1/contacts';
@@ -148,19 +147,19 @@ export async function createBroadcast(
   const resolved: { contactId: string; phone: string; params: string[] }[] = [];
   let rejected = 0;
   for (const r of recipients) {
-    const sanitized = sanitizePhoneForMeta(
-      typeof r.to === 'string' ? r.to : ''
-    );
-    if (!isValidE164(sanitized)) {
+    // Two different shapes are needed: the contact record stores E.164
+    // (with country code) while Meta's API requires digits only.
+    const normalized = toE164(typeof r.to === 'string' ? r.to : '');
+    if (!normalized) {
       rejected++;
       continue;
     }
     const { id } = await findOrCreateContact(db, accountId, auditUserId, {
-      phone: sanitized,
+      phone: normalized.e164,
     });
     resolved.push({
       contactId: id,
-      phone: sanitized,
+      phone: normalized.digits,
       params: Array.isArray(r.params)
         ? r.params.filter((p): p is string => typeof p === 'string')
         : [],
