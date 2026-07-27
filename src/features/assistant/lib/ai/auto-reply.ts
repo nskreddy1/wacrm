@@ -385,6 +385,9 @@ export async function dispatchInboundToAiReply(
         ai_last_caretaker_at: null,
         ai_sla_reminder_count: 0,
         ai_sla_last_reminder_at: null,
+        // Only when classified this turn — never null out a previously
+        // detected language just because the model omitted the tag once.
+        ...(language ? { ai_language: language } : {}),
       };
       // Never stomp an existing human assignment.
       let assignee: string | null = null;
@@ -452,11 +455,15 @@ export async function dispatchInboundToAiReply(
       return;
     }
 
-    // Non-escalated turn: keep the latest classified sentiment on the
-    // conversation (cheap single UPDATE; best-effort).
+    // Non-escalated turn: keep the latest classified sentiment (and
+    // language, when given) on the conversation (cheap single UPDATE;
+    // best-effort).
     void db
       .from('conversations')
-      .update({ ai_sentiment: sentiment })
+      .update({
+        ai_sentiment: sentiment,
+        ...(language ? { ai_language: language } : {}),
+      })
       .eq('id', conversationId)
       .then(({ error }) => {
         if (error) {

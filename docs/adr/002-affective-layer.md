@@ -416,6 +416,32 @@ Why not an Edge Function for inference: 256 MB / 2 s CPU, and the built-in
 unusable for Hinglish). Edge Functions remain the right home for
 *orchestration* (the watchdog schedule target), not models.
 
+### Sidecar deployment target: Render (decided)
+
+The team already deploys Python on Render, so the sidecar goes there. What
+keeps the architecture generic is the **HTTP contract, not the host**: the
+agent core sends `{audio_url | text}` and receives `{transcript, language,
+affect}`, and never knows whether that came from Render, a GPU box, or a
+managed API (e.g. Sarvam). Swapping the host later is a config change.
+
+Render constraints that shape the service (verified):
+
+- **Free tier cannot run the model** — 512 MB RAM / 0.1 CPU with 15-minute
+  spin-down; SenseVoiceSmall wants ~1 GB+ resident. Budget a paid instance
+  (~2 GB) when this ships.
+- **Cold starts (30–60 s) are fine for voice notes, fatal for live
+  calls.** Voice notes are async — a customer who sent one tolerates a
+  slow first response. This is another reason live calls stay deferred.
+- **Degrade, never block**: if the sidecar is down or cold, the agent
+  replies to the text thread normally and the voice note is queued for
+  transcription. The auto-reply path must never await Render
+  synchronously.
+
+"Generic" here means *channel-blind core with thin adapters* — it does
+NOT mean abstracting every component behind speculative interfaces.
+Normalise at the boundary, keep policy per-channel, and hardcode the rest
+until a second consumer actually exists.
+
 ### What live calls would add — and only then
 
 Cascaded STT→LLM→TTS via LiveKit or Pipecat, ~500–800 ms end-to-end,
@@ -430,7 +456,9 @@ this touches the agent core.
 15. [ ] Normalise `InboundEvent` / `OutboundIntent` at the dispatch
         boundary; assert the core stays channel-blind.
 16. [ ] Move caretaker/SLA timings into per-channel policy objects.
-17. [ ] Voice notes: SenseVoiceSmall sidecar → transcript + prosodic
-        affect into the same `conversation_affective_events` table.
+17. [ ] Voice notes: SenseVoiceSmall sidecar on Render (paid ~2 GB
+        instance; free tier cannot hold the model) → transcript +
+        prosodic affect into `conversation_affective_events`. Async
+        queue, never a synchronous dependency of auto-reply.
 18. [ ] Only once clients exist: live-call adapter (LiveKit/Pipecat), with
         per-tenant spend caps enforced before the first minute.

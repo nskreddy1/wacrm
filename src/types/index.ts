@@ -206,6 +206,12 @@ export interface Conversation {
   ai_reply_count?: number;
   ai_handoff_summary?: string | null;
   ai_handoff_state?: 'none' | 'awaiting_human' | 'human_active' | null;
+  /**
+   * Customer's detected language as a lowercase tag (`hi`, `ta`,
+   * `hi-latn` for romanized Hinglish, ...). Open string by design —
+   * see `GenerateResult.language`. Null until first classified.
+   */
+  ai_language?: string | null;
 }
 
 // ============================================================

@@ -65,6 +65,7 @@ describe('parseGeneration', () => {
       usage: null,
       sentiment: 'neutral',
       escalationReason: null,
+      language: null,
     });
   });
 
@@ -94,6 +95,7 @@ describe('parseGeneration', () => {
       usage: null,
       sentiment: 'angry',
       escalationReason: 'angry_customer',
+      language: null,
     });
   });
 
@@ -105,7 +107,37 @@ describe('parseGeneration', () => {
       usage: null,
       sentiment: 'neutral',
       escalationReason: null,
+      language: null,
     });
+  });
+
+  // Language tags are validated by shape (open set), not a whitelist —
+  // India alone has 22 scheduled languages, and script matters:
+  // romanized Hinglish (`hi-latn`) is not Devanagari Hindi (`hi`).
+  it('extracts a valid language tag, including script subtags', () => {
+    for (const tag of ['hi', 'ta', 'kn', 'ml', 'hi-latn', 'ta-latn']) {
+      const res = parseGeneration(
+        `Theek hai!\n[[META]]{"sentiment":"happy","escalate":false,"reason":"none","language":"${tag.toUpperCase()}"}`
+      );
+      // Normalised to lowercase on the way in.
+      expect(res.language).toBe(tag);
+    }
+  });
+
+  it('rejects language tags that fail the shape check', () => {
+    for (const bad of ['', 'x', 'notalanguagetag', 'hi latn', '<script>']) {
+      const res = parseGeneration(
+        `Hi\n[[META]]{"sentiment":"neutral","escalate":false,"reason":"none","language":"${bad}"}`
+      );
+      expect(res.language).toBeNull();
+    }
+  });
+
+  it('returns null language when the model omits the field', () => {
+    const res = parseGeneration(
+      'Hi\n[[META]]{"sentiment":"neutral","escalate":false,"reason":"none"}'
+    );
+    expect(res.language).toBeNull();
   });
 });
 
