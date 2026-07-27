@@ -462,3 +462,52 @@ this touches the agent core.
         queue, never a synchronous dependency of auto-reply.
 18. [ ] Only once clients exist: live-call adapter (LiveKit/Pipecat), with
         per-tenant spend caps enforced before the first minute.
+
+---
+
+## 12. Addendum: multilingual RAG posture
+
+### What already held up (verified in schema, not assumed)
+
+- **FTS uses the language-neutral `simple` config** (migration 030) — it
+  tokenizes Devanagari/Tamil/Kannada/Malayalam scripts correctly, with no
+  English stemmer garbling. Deliberate choice in the original design.
+- **`text-embedding-3-small` is multilingual** — it carries cross-lingual
+  retrieval (Tamil question → English KB doc), which lexical search can
+  never see. Acceptable managed baseline; not the ceiling.
+
+### Implemented now: RRF hybrid fusion
+
+Replaced the sequential "semantic first, top up with lexical" merge with
+**parallel retrieval + Reciprocal Rank Fusion (k=60)**. The old merge let
+semantic monopolise results the moment it filled `k` — exactly when exact
+identifiers (order numbers, SKUs) got lost, since embeddings blur them
+while FTS nails them. RRF also boosts chunks both retrievers agree on,
+the strongest relevance signal available without a reranker. Rank-based
+on purpose: cosine and `ts_rank` live on incomparable scales.
+
+### Deferred, with triggers (per 2026 production guidance)
+
+- **Cross-encoder reranking** — conditional, top 50–100 fused candidates,
+  only when a golden-set eval shows fused-order errors. Not before.
+- **RAGAS golden set (~200 labelled queries)** — becomes possible once
+  real tenant traffic exists; prerequisite for every further RAG change.
+- **BGE-M3 embeddings** — the self-hosted upgrade path for Indic
+  cross-lingual accuracy; can share the Render sidecar with
+  SenseVoiceSmall. Requires re-embedding every chunk (different
+  dimensionality than `vector(1536)`) — do it only when the golden set
+  can prove the gain.
+- **Voice-note text enters RAG for free**: the sidecar returns a
+  transcript, and `retrieveKnowledge` takes text — no RAG change needed
+  for audio support.
+
+### Added action items
+
+19. [x] RRF hybrid fusion in `retrieveKnowledge` (parallel semantic +
+        lexical, k=60, agreement-boosted, tested).
+20. [ ] Golden-set eval harness (RAGAS-style) once tenant traffic exists;
+        gate all further retrieval changes on it.
+21. [ ] Conditional cross-encoder reranker, only on measured fused-order
+        failures.
+22. [ ] Evaluate BGE-M3 vs `text-embedding-3-small` on the golden set;
+        migrate embeddings only on a demonstrated Indic-language gain.

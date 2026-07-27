@@ -73,13 +73,57 @@ export async function ingestDocument(
 }
 
 /**
+ * Reciprocal Rank Fusion smoothing constant. k=60 is the standard from
+ * the original RRF paper and what production hybrid-search systems use;
+ * it dampens the gap between rank 1 and rank 2 so one retriever's
+ * over-confidence can't drown out agreement from the other.
+ */
+const RRF_K = 60;
+
+/**
+ * Fuse several ranked lists with Reciprocal Rank Fusion:
+ * score(doc) = Σ over lists of 1 / (RRF_K + rank).
+ *
+ * Rank-based rather than score-based on purpose — cosine similarity and
+ * ts_rank live on incomparable scales, and normalising them is exactly
+ * the trap RRF exists to avoid. A chunk surfaced by BOTH retrievers
+ * accumulates from each list and rises: retriever agreement is the
+ * strongest relevance signal available without a reranker.
+ */
+function fuseRrf(lists: MatchRow[][]): MatchRow[] {
+  const scores = new Map<string, { row: MatchRow; score: number }>();
+  for (const list of lists) {
+    list.forEach((row, i) => {
+      const entry = scores.get(row.id);
+      const add = 1 / (RRF_K + i + 1);
+      if (entry) entry.score += add;
+      else scores.set(row.id, { row, score: add });
+    });
+  }
+  return Array.from(scores.values())
+    .sort((a, b) => b.score - a.score)
+    .map((e) => e.row);
+}
+
+/**
  * Retrieve up to `k` knowledge excerpts relevant to `queryText`.
  *
- * Semantic-primary when an embeddings key is configured (embed the
- * query → cosine-nearest chunks), then topped up with lexical full-text
- * matches to fill `k`. Lexical-only when there's no key. Best-effort:
- * any failure (no KB, embedding error, RPC error) degrades to fewer or
- * zero results and never throws into the draft / auto-reply path.
+ * Hybrid when an embeddings key is configured: semantic (cosine) and
+ * lexical (FTS) retrieval run in PARALLEL and are fused with RRF.
+ * The old sequential "semantic first, top up with lexical" merge let
+ * semantic monopolise the result the moment it returned k rows — which
+ * is precisely when exact identifiers (order numbers, SKUs, error
+ * codes) got lost, because embeddings blur them while FTS nails them.
+ *
+ * This split also carries the multilingual load (see ADR-002): the FTS
+ * side uses the language-neutral `simple` config, so native-script
+ * queries (Devanagari, Tamil, ...) tokenize correctly, while the
+ * embedding side handles cross-lingual hits (Tamil question → English
+ * KB doc) that lexical search can never see.
+ *
+ * Lexical-only when there's no key. Best-effort: any failure (no KB,
+ * embedding error, RPC error) degrades to fewer or zero results and
+ * never throws into the draft / auto-reply path.
  */
 export async function retrieveKnowledge(
   db: SupabaseClient,
@@ -105,50 +149,52 @@ export async function retrieveKnowledge(
     return [];
   }
 
-  const picked = new Map<string, string>(); // id → content, preserves order
+  // Give the fuser more candidates than we return — fusion over k+k
+  // candidates from each side is where RRF earns its keep.
+  const fetchCount = Math.max(k * 2, 10);
 
-  // Semantic path.
-  if (config.embeddingsApiKey) {
-    try {
-      const [queryEmbedding] = await embedTexts(config.embeddingsApiKey, [
-        query,
-      ]);
-      if (queryEmbedding) {
-        const { data, error } = await db.rpc('match_ai_knowledge_semantic', {
-          p_account_id: accountId,
-          p_query_embedding: toVectorLiteral(queryEmbedding),
-          p_match_count: k,
-        });
-        if (!error && Array.isArray(data)) {
-          for (const row of data as MatchRow[]) picked.set(row.id, row.content);
-        }
-      }
-    } catch (err) {
-      console.error(
-        '[ai knowledge] semantic retrieval failed, falling back to FTS:',
-        err
-      );
-    }
-  }
-
-  // Lexical top-up (also the sole path when there's no embeddings key).
-  if (picked.size < k) {
+  const lexicalPromise: Promise<MatchRow[]> = (async () => {
     try {
       const { data, error } = await db.rpc('match_ai_knowledge_fts', {
         p_account_id: accountId,
         p_query: query,
-        p_match_count: k,
+        p_match_count: fetchCount,
       });
-      if (!error && Array.isArray(data)) {
-        for (const row of data as MatchRow[]) {
-          if (picked.size >= k) break;
-          if (!picked.has(row.id)) picked.set(row.id, row.content);
-        }
-      }
+      return !error && Array.isArray(data) ? (data as MatchRow[]) : [];
     } catch (err) {
       console.error('[ai knowledge] lexical retrieval failed:', err);
+      return [];
     }
-  }
+  })();
 
-  return Array.from(picked.values()).slice(0, k);
+  const semanticPromise: Promise<MatchRow[]> = (async () => {
+    if (!config.embeddingsApiKey) return [];
+    try {
+      const [queryEmbedding] = await embedTexts(config.embeddingsApiKey, [
+        query,
+      ]);
+      if (!queryEmbedding) return [];
+      const { data, error } = await db.rpc('match_ai_knowledge_semantic', {
+        p_account_id: accountId,
+        p_query_embedding: toVectorLiteral(queryEmbedding),
+        p_match_count: fetchCount,
+      });
+      return !error && Array.isArray(data) ? (data as MatchRow[]) : [];
+    } catch (err) {
+      console.error(
+        '[ai knowledge] semantic retrieval failed, lexical still stands:',
+        err
+      );
+      return [];
+    }
+  })();
+
+  const [semantic, lexical] = await Promise.all([
+    semanticPromise,
+    lexicalPromise,
+  ]);
+
+  return fuseRrf([semantic, lexical])
+    .slice(0, k)
+    .map((row) => row.content);
 }

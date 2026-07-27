@@ -100,7 +100,12 @@ describe('retrieveKnowledge', () => {
     expect(h.embedTexts).not.toHaveBeenCalled();
   });
 
-  it('uses semantic search when an embeddings key is present', async () => {
+  // Hybrid is parallel + RRF-fused, not sequential top-up. Both RPCs
+  // must fire even when semantic alone could fill k: exact identifiers
+  // (order numbers, SKUs) surface via FTS while embeddings blur them,
+  // and under the old top-up merge they were silently dropped whenever
+  // semantic returned k plausible-looking rows.
+  it('runs semantic AND lexical in parallel when a key is present', async () => {
     const { db, state } = makeDb();
     state.semantic = [
       { id: 's1', content: 'S1' },
@@ -116,18 +121,20 @@ describe('retrieveKnowledge', () => {
     );
     expect(out).toEqual(['S1', 'S2', 'S3']);
     expect(h.embedTexts).toHaveBeenCalledTimes(1);
-    // Enough semantic hits → no FTS top-up.
-    expect(state.rpcCalls).toEqual(['match_ai_knowledge_semantic']);
+    expect(state.rpcCalls.sort()).toEqual([
+      'match_ai_knowledge_fts',
+      'match_ai_knowledge_semantic',
+    ]);
   });
 
-  it('tops up with FTS and dedupes when semantic is short', async () => {
+  it('boosts chunks both retrievers agree on (RRF), deduped by id', async () => {
     const { db, state } = makeDb();
     state.semantic = [
       { id: 's1', content: 'S1' },
       { id: 's2', content: 'S2' },
     ];
     state.fts = [
-      { id: 's2', content: 'S2-dup' }, // dedup by id
+      { id: 's2', content: 'S2-dup' }, // same chunk, found lexically too
       { id: 'f1', content: 'F1' },
     ];
     const out = await retrieveKnowledge(
@@ -137,11 +144,9 @@ describe('retrieveKnowledge', () => {
       'q',
       3
     );
-    expect(out).toEqual(['S1', 'S2', 'F1']);
-    expect(state.rpcCalls).toEqual([
-      'match_ai_knowledge_semantic',
-      'match_ai_knowledge_fts',
-    ]);
+    // s2 accumulates score from BOTH lists → outranks s1, which only
+    // semantic saw. Retriever agreement is the relevance signal here.
+    expect(out).toEqual(['S2', 'S1', 'F1']);
   });
 });
 
