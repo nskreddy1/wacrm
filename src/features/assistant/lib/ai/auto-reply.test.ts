@@ -198,14 +198,33 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.sendChannelMessage).not.toHaveBeenCalled();
   });
 
-  it('skips when a human agent is assigned', async () => {
+  it('stays silent once a human has actually replied', async () => {
     h.state.conv = {
       assigned_agent_id: 'agent-9',
       ai_autoreply_disabled: false,
       ai_reply_count: 0,
+      // Set by the close_handoff_on_agent_message trigger.
+      ai_handoff_state: 'human_active',
     };
     await dispatchInboundToAiReply(ARGS);
     expect(h.sendChannelMessage).not.toHaveBeenCalled();
+  });
+
+  // Assignment alone must NOT silence the bot. Treating "a name is
+  // attached" as "a person replied" is what left escalated customers
+  // talking to nobody.
+  it('still replies when assigned but no human has spoken yet', async () => {
+    h.state.conv = {
+      assigned_agent_id: 'agent-9',
+      ai_autoreply_disabled: false,
+      ai_reply_count: 0,
+      ai_handoff_state: 'awaiting_human',
+      ai_caretaker_count: 0,
+      ai_last_caretaker_at: null,
+      ai_escalated_at: new Date().toISOString(),
+    };
+    await dispatchInboundToAiReply(ARGS);
+    expect(h.sendChannelMessage).toHaveBeenCalledTimes(1);
   });
 
   it('skips when auto-reply was disabled on this conversation', async () => {
@@ -255,9 +274,13 @@ describe('dispatchInboundToAiReply — handoff', () => {
     // No handoff target configured → one round-robin RPC attempt.
     expect(h.state.rpcCalls).toHaveLength(1);
     expect(h.state.rpcCalls[0]?.name).toBe('claim_round_robin_agent');
+    // Escalation enters the caretaker phase. It must NOT set the
+    // operator kill-switch: that flag is reserved for "Resume AI", and
+    // setting it here is what muted the assistant permanently.
     expect(h.state.updatePayload).toMatchObject({
-      ai_autoreply_disabled: true,
+      ai_handoff_state: 'awaiting_human',
     });
+    expect(h.state.updatePayload).not.toHaveProperty('ai_autoreply_disabled');
     expect(h.state.updatePayload?.ai_handoff_summary).toContain(
       'AI agent handed off'
     );
@@ -270,8 +293,79 @@ describe('dispatchInboundToAiReply — handoff', () => {
     h.generateReply.mockResolvedValue({ text: '', handoff: true });
     await dispatchInboundToAiReply(ARGS);
     expect(h.state.updatePayload).toMatchObject({
-      ai_autoreply_disabled: true,
+      ai_handoff_state: 'awaiting_human',
       assigned_agent_id: 'agent-7',
     });
+  });
+});
+
+/*
+ * Caretaker phase.
+ *
+ * These are the tests that would have caught the original defect. The
+ * previous suite only ever asserted what escalation *wrote to the row*,
+ * which passed happily while the customer-visible outcome — silence on
+ * the very next message — was broken.
+ */
+describe('dispatchInboundToAiReply — caretaker', () => {
+  const escalatedConv = {
+    assigned_agent_id: 'agent-9',
+    ai_autoreply_disabled: false,
+    ai_reply_count: 0,
+    ai_handoff_state: 'awaiting_human',
+    ai_caretaker_count: 0,
+    ai_last_caretaker_at: null,
+    ai_escalated_at: new Date().toISOString(),
+    ai_escalation_reason: 'needs_account_data',
+  };
+
+  it('replies to the customer after a handoff instead of going silent', async () => {
+    h.state.conv = { ...escalatedConv };
+    h.generateReply.mockResolvedValue({
+      text: 'Thanks for waiting — I have added that to the thread.',
+      handoff: false,
+    });
+    await dispatchInboundToAiReply(ARGS);
+    expect(h.sendChannelMessage).toHaveBeenCalledTimes(1);
+    const arg = h.sendChannelMessage.mock.calls[0]?.[0] as {
+      payload: { text: string };
+      senderType: string;
+    };
+    expect(arg.senderType).toBe('bot');
+    expect(arg.payload.text).toContain('Thanks for waiting');
+  });
+
+  it('claims a caretaker slot before spending a provider call', async () => {
+    h.state.conv = { ...escalatedConv };
+    await dispatchInboundToAiReply(ARGS);
+    expect(h.state.rpcCalls[0]?.name).toBe('claim_ai_caretaker_slot');
+  });
+
+  it('stays silent when the caretaker budget is spent', async () => {
+    h.state.conv = { ...escalatedConv };
+    h.state.claim = false; // RPC denies the slot
+    await dispatchInboundToAiReply(ARGS);
+    expect(h.generateReply).not.toHaveBeenCalled();
+    expect(h.sendChannelMessage).not.toHaveBeenCalled();
+  });
+
+  it('sends the static fallback when generation fails', async () => {
+    h.state.conv = { ...escalatedConv };
+    h.generateReply.mockRejectedValue(new Error('provider down'));
+    await dispatchInboundToAiReply(ARGS);
+    // A caretaker turn must never end in silence.
+    expect(h.sendChannelMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores the per-conversation cap while waiting on a human', async () => {
+    h.state.conv = { ...escalatedConv, ai_reply_count: 99 };
+    await dispatchInboundToAiReply(ARGS);
+    expect(h.sendChannelMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('obeys the operator kill-switch even while awaiting a human', async () => {
+    h.state.conv = { ...escalatedConv, ai_autoreply_disabled: true };
+    await dispatchInboundToAiReply(ARGS);
+    expect(h.sendChannelMessage).not.toHaveBeenCalled();
   });
 });

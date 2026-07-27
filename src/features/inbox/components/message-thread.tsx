@@ -1238,8 +1238,9 @@ export function MessageThread({
       <AiThreadBanner
         conversationId={conversation.id}
         disabled={conversation.ai_autoreply_disabled ?? false}
-        handoffSummary={conversation.ai_handoff_summary}
-        assignedAgentId={assignedAgentId}
+                handoffSummary={conversation.ai_handoff_summary}
+                handoffState={conversation.ai_handoff_state}
+                assignedAgentId={assignedAgentId}
         currentUserId={user?.id}
         onChange={(patch) => {
           if ('assigned_agent_id' in patch) {

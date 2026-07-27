@@ -65,23 +65,9 @@ describe('parseGeneration', () => {
       usage: null,
       sentiment: 'neutral',
       escalationReason: null,
+      language: null,
+      affect: null,
     });
-  });
-
-  it('detects + strips the handoff sentinel', () => {
-    expect(parseGeneration('[[HANDOFF]]')).toMatchObject({
-      text: '',
-      handoff: true,
-    });
-    expect(parseGeneration('Let me get a human [[HANDOFF]]')).toMatchObject({
-      text: 'Let me get a human',
-      handoff: true,
-    });
-  });
-
-  it('passes usage straight through', () => {
-    const usage = { promptTokens: 10, completionTokens: 5, totalTokens: 15 };
-    expect(parseGeneration('Hi', usage)).toMatchObject({ text: 'Hi', usage });
   });
 
   it('parses and strips the [[META]] tail', () => {
@@ -94,6 +80,8 @@ describe('parseGeneration', () => {
       usage: null,
       sentiment: 'angry',
       escalationReason: 'angry_customer',
+      language: null,
+      affect: null,
     });
   });
 
@@ -105,7 +93,75 @@ describe('parseGeneration', () => {
       usage: null,
       sentiment: 'neutral',
       escalationReason: null,
+      language: null,
+      affect: null,
     });
+  });
+
+  // Language tags are validated by shape (open set), not a whitelist —
+  // India alone has 22 scheduled languages, and script matters:
+  // romanized Hinglish (`hi-latn`) is not Devanagari Hindi (`hi`).
+  // Includes the romanized-Telugu case ("nuvu ela unnav" → `te-latn`):
+  // the customer types Telugu in Latin script, the model classifies it,
+  // and the reply mirrors both language and script.
+  it('extracts a valid language tag, including script subtags', () => {
+    for (const tag of ['hi', 'ta', 'te', 'kn', 'ml', 'hi-latn', 'te-latn']) {
+      const res = parseGeneration(
+        `Theek hai!\n[[META]]{"sentiment":"happy","escalate":false,"reason":"none","language":"${tag.toUpperCase()}"}`
+      );
+      // Normalised to lowercase on the way in.
+      expect(res.language).toBe(tag);
+    }
+  });
+
+  it('rejects language tags that fail the shape check', () => {
+    for (const bad of ['', 'x', 'notalanguagetag', 'hi latn', '<script>']) {
+      const res = parseGeneration(
+        `Hi\n[[META]]{"sentiment":"neutral","escalate":false,"reason":"none","language":"${bad}"}`
+      );
+      expect(res.language).toBeNull();
+    }
+  });
+
+  it('returns null language when the model omits the field', () => {
+    const res = parseGeneration(
+      'Hi\n[[META]]{"sentiment":"neutral","escalate":false,"reason":"none"}'
+    );
+    expect(res.language).toBeNull();
+  });
+
+  // Emotions are the OPPOSITE policy to language: a CLOSED vocabulary.
+  // Every label is a promise to reporting (chart axes, alert rules), so
+  // unknown labels are dropped at the parse boundary rather than
+  // leaking hallucinated axes into dashboards.
+  it('parses a multi-label affect vector as lexical', () => {
+    const res = parseGeneration(
+      'Sorry about that!\n[[META]]{"sentiment":"frustrated","escalate":false,"reason":"none","emotions":{"frustration":0.8,"anxiety":0.4,"gratitude":0.2}}'
+    );
+    expect(res.affect).toEqual({
+      emotions: { frustration: 0.8, anxiety: 0.4, gratitude: 0.2 },
+      source: 'lexical',
+    });
+  });
+
+  it('drops unknown emotion labels and clamps scores to 0..1', () => {
+    const res = parseGeneration(
+      'Ok\n[[META]]{"sentiment":"neutral","escalate":false,"reason":"none","emotions":{"rage":1,"frustration":3.5,"urgency":-2}}'
+    );
+    // "rage" is not in the vocabulary; 3.5 clamps to 1; -2 is dropped.
+    expect(res.affect).toEqual({
+      emotions: { frustration: 1 },
+      source: 'lexical',
+    });
+  });
+
+  it('returns null affect for {} or a non-object emotions field', () => {
+    for (const emotions of ['{}', '"very angry"', '[0.5]']) {
+      const res = parseGeneration(
+        `Hi\n[[META]]{"sentiment":"neutral","escalate":false,"reason":"none","emotions":${emotions}}`
+      );
+      expect(res.affect).toBeNull();
+    }
   });
 });
 

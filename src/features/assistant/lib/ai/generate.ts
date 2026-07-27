@@ -1,5 +1,8 @@
 import {
+  AFFECT_EMOTIONS,
   AiError,
+  type AffectEmotion,
+  type AffectiveState,
   type AiEscalationReason,
   type AiSentiment,
   type AiUsage,
@@ -179,12 +182,49 @@ const ESCALATION_REASONS: readonly AiEscalationReason[] = [
  * `usage` is passed straight through (null when the provider didn't
  * report it).
  */
+/**
+ * Language tags are validated by SHAPE, not against a whitelist: two or
+ * three lowercase letters plus an optional subtag (`hi`, `ta`, `hi-latn`,
+ * `pa-guru`). A whitelist of India's 22 scheduled languages would make
+ * every newly-encountered language a code change; the shape check is
+ * enough to reject hallucinated junk while staying open.
+ */
+const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/;
+
+/**
+ * Validate the model's `emotions` object into an AffectiveState.
+ *
+ * Opposite policy to language tags, deliberately: the emotion set is
+ * CLOSED (each label is a promise to reporting), so unknown labels are
+ * dropped rather than stored, and scores are clamped to 0..1. Returns
+ * null when nothing valid survives — callers treat that as "not
+ * classified this turn", never as "customer is fine".
+ */
+function parseAffect(value: unknown): AffectiveState | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const emotions: AffectiveState['emotions'] = {};
+  for (const [label, score] of Object.entries(value)) {
+    if (!AFFECT_EMOTIONS.includes(label as AffectEmotion)) continue;
+    const n = typeof score === 'number' ? score : Number(score);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    emotions[label as AffectEmotion] = Math.min(1, n);
+  }
+  if (Object.keys(emotions).length === 0) return null;
+  // Text-only turn → lexical by definition. Voice notes later add
+  // 'prosodic' from the sidecar; nothing here needs to change.
+  return { emotions, source: 'lexical' };
+}
+
 export function parseGeneration(
   raw: string,
   usage: AiUsage | null = null
 ): GenerateResult {
   let sentiment: AiSentiment = 'neutral';
   let escalationReason: AiEscalationReason | null = null;
+  let language: string | null = null;
+  let affect: AffectiveState | null = null;
   let metaEscalate = false;
 
   let body = raw;
@@ -209,6 +249,11 @@ export function parseGeneration(
       ) {
         escalationReason = meta.reason as AiEscalationReason;
       }
+      if (typeof meta.language === 'string') {
+        const tag = meta.language.trim().toLowerCase();
+        if (LANGUAGE_TAG.test(tag)) language = tag;
+      }
+      affect = parseAffect(meta.emotions);
     } catch {
       // Malformed meta → keep the defaults; the reply itself still goes out.
     }
@@ -216,7 +261,7 @@ export function parseGeneration(
 
   const handoff = body.includes(HANDOFF_SENTINEL) || metaEscalate;
   const text = body.split(HANDOFF_SENTINEL).join('').trim();
-  return { text, handoff, usage, sentiment, escalationReason };
+  return { text, handoff, usage, sentiment, escalationReason, language, affect };
 }
 
 /** Best-effort first `{...}` block from the meta tail — providers

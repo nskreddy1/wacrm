@@ -192,10 +192,26 @@ export interface Conversation {
    *    checked against the account's per-conversation cap.
    *  - `ai_handoff_summary` — short internal note the bot wrote when it
    *    handed off, shown to whoever takes the thread over.
+   *  - `ai_handoff_state` — handoff lifecycle (supervised handoff
+   *    migration). `none` → bot owns the thread; `awaiting_human` →
+   *    escalated but nobody has replied yet, so the bot keeps the
+   *    customer company on a small budget; `human_active` → a person
+   *    spoke (set by a DB trigger) and the bot goes quiet.
+   *
+   * Note `ai_autoreply_disabled` is now ONLY the manual operator
+   * kill-switch. Escalation deliberately does not set it — doing so is
+   * what previously muted the assistant the moment it handed off.
    */
   ai_autoreply_disabled?: boolean;
   ai_reply_count?: number;
   ai_handoff_summary?: string | null;
+  ai_handoff_state?: 'none' | 'awaiting_human' | 'human_active' | null;
+  /**
+   * Customer's detected language as a lowercase tag (`hi`, `ta`,
+   * `hi-latn` for romanized Hinglish, ...). Open string by design —
+   * see `GenerateResult.language`. Null until first classified.
+   */
+  ai_language?: string | null;
 }
 
 // ============================================================

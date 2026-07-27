@@ -144,6 +144,44 @@ export interface AiUsage {
 /** Customer sentiment classified by the model in the [[META]] tail. */
 export type AiSentiment = 'angry' | 'frustrated' | 'neutral' | 'happy';
 
+/**
+ * Multi-label emotion vocabulary (ADR-002 §3).
+ *
+ * CLOSED set, unlike language tags: every label here is a promise to
+ * reporting (chart axes, alert thresholds), so additions are deliberate
+ * schema-ish changes, and unknown labels from the model are dropped at
+ * parse time rather than leaking hallucinated axes into dashboards.
+ *
+ * Multi-label because customers are rarely one thing: "angry AND still
+ * hopeful" and "confused AND grateful" are different service situations
+ * that a single winner-take-all sentiment collapses into noise.
+ */
+export const AFFECT_EMOTIONS = [
+  'anger',
+  'frustration',
+  'disappointment',
+  'confusion',
+  'anxiety',
+  'urgency',
+  'satisfaction',
+  'gratitude',
+] as const;
+export type AffectEmotion = (typeof AFFECT_EMOTIONS)[number];
+
+/**
+ * A point-in-time emotional read of the customer.
+ *
+ * `source` is the modality invariant that keeps this layer voice-ready
+ * (ADR-002 §11): text turns emit `lexical`; a future voice-note sidecar
+ * emits `prosodic` from the same audio's tone; `fused` combines them.
+ * Consumers read the vector and must never branch on the origin.
+ */
+export interface AffectiveState {
+  /** Present emotions only, each scored 0..1 (independent, not softmax). */
+  emotions: Partial<Record<AffectEmotion, number>>;
+  source: 'lexical' | 'prosodic' | 'fused';
+}
+
 /** Why the model asked for a human, from the [[META]] tail. */
 export type AiEscalationReason =
   | 'human_requested'
@@ -165,6 +203,24 @@ export interface GenerateResult {
   /** Escalation reason when handing off; null when not escalating (or
    *  when only the legacy bare [[HANDOFF]] sentinel was emitted). */
   escalationReason: AiEscalationReason | null;
+  /**
+   * Customer language classified in the same [[META]] tail, as a
+   * lowercase BCP-47-ish tag. Deliberately an open string, not a union:
+   * India alone has 22 scheduled languages, and an enum here would turn
+   * every new one into a code change. Script is significant — `hi-latn`
+   * (romanized Hinglish) is not `hi` (Devanagari), and replying in the
+   * wrong script is as jarring as the wrong language. Null when the
+   * model omitted it or the tag failed the sanity check.
+   */
+  language: string | null;
+  /**
+   * Multi-label emotional read from the same [[META]] tail, or null
+   * when omitted/unparseable. Coexists with the single-label
+   * `sentiment` during migration: sentiment keeps existing consumers
+   * (escalation rules, banner) working; `affect` feeds the append-only
+   * history that reports and trend detection are built on.
+   */
+  affect: AffectiveState | null;
 }
 
 /**

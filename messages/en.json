@@ -269,6 +269,7 @@
     },
     "aiBanner": {
       "pausedTitle": "AI assistant is paused here",
+      "awaitingHumanTitle": "Waiting for a teammate — AI is holding the chat",
       "activeText": "AI assistant is replying automatically",
       "takeOver": "Take over",
       "resume": "Resume AI",

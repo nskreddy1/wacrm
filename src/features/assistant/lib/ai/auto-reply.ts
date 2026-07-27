@@ -7,6 +7,13 @@ import { buildCrmContext } from './crm-context';
 import { generateReply } from './generate';
 import { buildPromptParts } from './defaults';
 import { buildHandoffSummary } from './handoff';
+import {
+  resolveHandoffPosture,
+  waitingMinutes,
+  caretakerPromptOverlay,
+  fallbackCaretakerMessage,
+  caretakerPolicyFor,
+} from './caretaker';
 import { logAiUsage } from './usage';
 import { latestUserMessage } from './query';
 import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule';
@@ -34,10 +41,14 @@ interface DispatchArgs {
  *
  * Eligibility gates (any → silent no-op):
  *   - AI off / auto-reply disabled for the account
- *   - a human agent is assigned (they own the thread)
- *   - auto-reply was disabled for this conversation (prior handoff)
- *   - the per-conversation reply cap is reached
+ *   - a human has actually replied on this thread, or an operator used
+ *     the Resume AI kill-switch (see `resolveHandoffPosture`)
+ *   - the per-conversation reply cap is reached (caretaker turns exempt)
  *   - there's nothing to reply to
+ *
+ * Note that mere *assignment* is no longer a gate: an escalated thread
+ * nobody has answered yet keeps the assistant on in caretaker mode, so
+ * the customer is never left talking to no one.
  *
  * The 24h WhatsApp session window is inherently open here — we're
  * reacting to a customer message that just landed — so no separate
@@ -80,12 +91,28 @@ export async function dispatchInboundToAiReply(
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
-      .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
+      .select(
+        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_handoff_state, ai_caretaker_count, ai_last_caretaker_at, ai_escalated_at, ai_escalation_reason, channel'
+      )
       .eq('id', conversationId)
       .maybeSingle();
     if (convErr || !conv) return;
-    if (conv.assigned_agent_id) return; // a human owns this thread
-    if (conv.ai_autoreply_disabled) return; // handed off / turned off here
+
+    /*
+     * Who owns this thread right now?
+     *
+     * This replaces two gates that short-circuited on `assigned_agent_id`
+     * and on `ai_autoreply_disabled`. Escalation sets both itself, so the
+     * assistant muted itself the instant it announced the handoff and the
+     * customer's next message got nothing — indefinitely, even when no
+     * human had opened the thread.
+     *
+     * `resolveHandoffPosture` separates "a name is attached" from "a
+     * person actually spoke", and only the latter silences us.
+     */
+    const posture = resolveHandoffPosture(conv);
+    if (posture === 'silent') return;
+    const isCaretaker = posture === 'caretaker';
 
     const messages = await buildConversationContext(db, conversationId);
     if (messages.length === 0) return;
@@ -143,13 +170,20 @@ export async function dispatchInboundToAiReply(
     //                      authoritative check is the atomic claim below.
     //  - per_day:          cap resets at midnight in the agent's
     //                      timezone; counted from today's bot messages.
+    //
+    // Caretaker turns are exempt from both caps: they have their own,
+    // tighter per-channel budget (CARETAKER_POLICY, claimed atomically
+    // below). Applying the normal cap here would recreate the original bug — a
+    // thread that escalated *at* its reply limit would fall straight back
+    // into silence while still waiting on a human.
     if (
+      !isCaretaker &&
       activeConfig.autoReplyLimitMode === 'per_conversation' &&
       conv.ai_reply_count >= activeConfig.autoReplyMaxPerConversation
     ) {
       return;
     }
-    if (activeConfig.autoReplyLimitMode === 'per_day') {
+    if (!isCaretaker && activeConfig.autoReplyLimitMode === 'per_day') {
       const dayStart = startOfTodayUtc(activeConfig.autoReplyTimezone);
       const { count, error: cntErr } = await db
         .from('messages')
@@ -167,6 +201,109 @@ export async function dispatchInboundToAiReply(
       if ((count ?? 0) >= activeConfig.autoReplyMaxPerConversation) return;
     }
 
+    /*
+     * CARETAKER TURN.
+     *
+     * The thread is escalated and no human has spoken yet. We keep the
+     * customer company on a tight budget instead of leaving them talking
+     * to nobody, then hand off cleanly to the SLA watchdog.
+     *
+     * The slot is claimed BEFORE the provider call, for two reasons:
+     * it's the concurrency guard (two "hello?" messages landing together
+     * can't both win), and it means a burst can't run up provider spend
+     * producing holding messages we'd throw away.
+     */
+    if (isCaretaker) {
+      // Budget is per-channel: an SMS hold costs the tenant per segment,
+      // and a (future) live call needs a far tighter cadence than chat.
+      const policy = caretakerPolicyFor(conv.channel);
+      const { data: claimed, error: claimErr } = await db.rpc(
+        'claim_ai_caretaker_slot',
+        {
+          p_conversation_id: conversationId,
+          p_max_messages: policy.maxMessages,
+          p_cooloff_seconds: policy.cooloffSeconds,
+        }
+      );
+      if (claimErr) {
+        // Migration not applied, or a transient DB error. Fail safe:
+        // stay quiet rather than risk an unbounded holding-message loop.
+        console.error(
+          '[ai auto-reply] claim_ai_caretaker_slot failed (staying quiet):',
+          claimErr
+        );
+        return;
+      }
+      if (claimed !== true) return; // budget spent or inside cool-off
+
+      const waited = waitingMinutes(conv);
+      const [knowledge, crmContext] = await Promise.all([
+        retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
+        buildCrmContext(db, contactId),
+      ]);
+
+      let holdingText: string | null = null;
+      try {
+        const caretakerReply = await generateReply({
+          config: activeConfig,
+          messages,
+          promptParts: buildPromptParts({
+            userPrompt: activeConfig.systemPrompt,
+            mode: 'auto_reply',
+            knowledge,
+            crmContext,
+            // Constrains the model to acknowledge and gather detail
+            // without re-promising resolution or inventing specifics.
+            extraInstructions: caretakerPromptOverlay({
+              waitedMinutes: waited,
+              escalationReason: conv.ai_escalation_reason,
+            }),
+          }),
+          cacheKey: conversationId,
+        });
+
+        void logAiUsage(db, {
+          accountId,
+          conversationId,
+          mode: 'auto_reply',
+          agentId: specialist?.id ?? config.agentId,
+          provider: activeConfig.provider,
+          model: activeConfig.model,
+          usage: caretakerReply.usage,
+          keySource: config.keySource,
+        });
+
+        // A second handoff signal here is meaningless — we're already
+        // waiting on a human — so only the prose is used.
+        holdingText = caretakerReply.text || null;
+      } catch (genErr) {
+        console.error(
+          '[ai auto-reply] caretaker generation failed, using fallback:',
+          genErr
+        );
+      }
+
+      // A caretaker turn must never end in silence: that is the whole
+      // point. If generation failed or returned nothing, send the static
+      // line, which escalates in honesty as the wait grows.
+      try {
+        await sendChannelMessage({
+          accountId,
+          conversationId,
+          contactId,
+          payload: {
+            kind: 'text',
+            text: holdingText ?? fallbackCaretakerMessage(waited),
+          },
+          senderType: 'bot',
+          aiGenerated: true,
+        });
+      } catch (sendErr) {
+        console.error('[ai auto-reply] caretaker send failed:', sendErr);
+      }
+      return;
+    }
+
     // Ground the reply in the account's knowledge base and the
     // contact's live CRM record (both best-effort, fetched in parallel).
     const [knowledge, crmContext] = await Promise.all([
@@ -179,7 +316,7 @@ export async function dispatchInboundToAiReply(
     // stable blocks become the system prefix and the retrieved
     // knowledge rides as the final user turn, so providers reuse the
     // cached prefix across replies.
-    const { text, handoff, usage, sentiment, escalationReason } =
+    const { text, handoff, usage, sentiment, escalationReason, language, affect } =
       await generateReply({
         config: activeConfig,
         messages,
@@ -193,6 +330,29 @@ export async function dispatchInboundToAiReply(
         }),
         cacheKey: conversationId,
       });
+
+    // Append to the affective history (ADR-002 §3). APPEND, never
+    // update: the single overwritten ai_sentiment column is what made
+    // "is this customer getting angrier?" unanswerable. Fire-and-forget
+    // — a lost event costs one data point, never a customer reply. Runs
+    // on BOTH branches below (escalation and normal reply): the
+    // escalation turn is the most emotionally informative one of all.
+    if (affect) {
+      void db
+        .from('conversation_affective_events')
+        .insert({
+          account_id: accountId,
+          conversation_id: conversationId,
+          emotions: affect.emotions,
+          source: affect.source,
+          language,
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.error('[ai auto-reply] affect event insert failed:', error);
+          }
+        });
+    }
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
     // never adds latency to the customer-facing send: `logAiUsage`
@@ -232,11 +392,25 @@ export async function dispatchInboundToAiReply(
         escalationReason: reason,
       });
       const update: Record<string, unknown> = {
-        ai_autoreply_disabled: true,
+        // Enter the caretaker phase. Crucially this does NOT set
+        // `ai_autoreply_disabled` — that flag is now purely the operator
+        // kill-switch ("Resume AI"). Setting it here is what made the
+        // assistant mute itself the instant it announced a handoff and
+        // left the customer talking to nobody.
+        ai_handoff_state: 'awaiting_human',
         ai_handoff_summary: summary,
         ai_sentiment: sentiment,
         ai_escalation_reason: reason,
         ai_escalated_at: new Date().toISOString(),
+        // Fresh budget for this escalation, so a thread escalated twice
+        // isn't silenced by holding messages spent the first time.
+        ai_caretaker_count: 0,
+        ai_last_caretaker_at: null,
+        ai_sla_reminder_count: 0,
+        ai_sla_last_reminder_at: null,
+        // Only when classified this turn — never null out a previously
+        // detected language just because the model omitted the tag once.
+        ...(language ? { ai_language: language } : {}),
       };
       // Never stomp an existing human assignment.
       let assignee: string | null = null;
@@ -304,11 +478,15 @@ export async function dispatchInboundToAiReply(
       return;
     }
 
-    // Non-escalated turn: keep the latest classified sentiment on the
-    // conversation (cheap single UPDATE; best-effort).
+    // Non-escalated turn: keep the latest classified sentiment (and
+    // language, when given) on the conversation (cheap single UPDATE;
+    // best-effort).
     void db
       .from('conversations')
-      .update({ ai_sentiment: sentiment })
+      .update({
+        ai_sentiment: sentiment,
+        ...(language ? { ai_language: language } : {}),
+      })
       .eq('id', conversationId)
       .then(({ error }) => {
         if (error) {
