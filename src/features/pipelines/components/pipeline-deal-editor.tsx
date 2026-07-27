@@ -52,7 +52,8 @@ function draftFrom(
   deal: PipelineDeal | null,
   snapshot: PipelineSnapshot,
   stageId: string,
-  currency: string
+  currency: string,
+  currentUserId: string
 ): DealInput {
   return {
     id: deal?.id,
@@ -60,7 +61,13 @@ function draftFrom(
     stageId: deal?.stageId ?? stageId,
     contactId: deal?.contactId ?? null,
     catalogItemId: deal?.catalogItemId ?? null,
-    assignedTo: deal?.assignedTo ?? null,
+    // A brand-new deal is owned by whoever is creating it, matching how the
+    // contact sheet seeds its owner. Previously this was a flat `?? null`, so
+    // every new deal was saved "Unassigned" and had to be re-assigned by hand.
+    // Only the create path is seeded: an existing deal keeps its stored owner
+    // (including a deliberately empty one) so merely opening the editor can
+    // never silently reassign someone else's deal to the current viewer.
+    assignedTo: deal ? deal.assignedTo : (currentUserId || null),
     title: deal?.title ?? '',
     value: deal?.value ?? 0,
     // Deals always carry the workspace currency (Settings → Deals);
@@ -102,9 +109,10 @@ export function PipelineDealEditor({
     subPipelineId?: string
   ) => Promise<ActionResult<PipelineDeal>>;
 }) {
-  const { defaultCurrency: workspaceCurrency } = useAuth();
+  const { defaultCurrency: workspaceCurrency, user } = useAuth();
+  const currentUserId = user?.id ?? '';
   const [draft, setDraft] = useState(() =>
-    draftFrom(deal, snapshot, defaultStageId, workspaceCurrency)
+    draftFrom(deal, snapshot, defaultStageId, workspaceCurrency, currentUserId)
   );
   const [subPipelineId, setSubPipelineId] = useState(
     () =>
@@ -291,6 +299,9 @@ export function PipelineDealEditor({
             <RecordOwnerPicker
               owners={owners}
               value={draft.assignedTo ?? ''}
+              // Without this the picker's "(You)" marker never rendered here,
+              // so the list gave no clue which member you are.
+              currentUserId={currentUserId}
               disabled={false}
               onChange={(userId) => update('assignedTo', userId || null)}
             />
