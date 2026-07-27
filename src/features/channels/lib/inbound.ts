@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizePhone } from '@/features/whatsapp/lib/phone-utils';
+import { toE164 } from '@/lib/phone/e164';
 import { resolveAuditUserId } from '@/lib/api/v1/contacts';
 
 export interface InboundChannelMessage {
@@ -47,7 +48,17 @@ export async function persistInboundChannelMessage(
   // Phone-based channels share identity + threading logic; the
   // channel tag keeps SMS and WhatsApp conversations separate.
   const channel = connection.channel === 'sms' ? 'sms' : 'whatsapp';
+  // `normalizedFrom` stays digits-only: it is the identity/threading key
+  // that existing `contact_identities` and `conversations` rows are
+  // matched on, so its shape must not change.
   const normalizedFrom = normalizePhone(message.from.replace(/^whatsapp:/, ''));
+  // Providers send digits without a `+`, so a contact created here used to
+  // be stored country-code-less (an Indian number landed as
+  // `918328510888`) and then failed phone validation everywhere else.
+  // Meta/Twilio always send full international digits, so `toE164` can
+  // recover the country without guessing; if it somehow can't, fall back
+  // to the digits rather than dropping the message.
+  const displayFrom = toE164(message.from)?.e164 ?? normalizedFrom;
   const eventId = `${connection.id}:${message.externalMessageId}`;
   const { data: event, error: eventError } = await db
     .from('channel_webhook_events')
@@ -86,11 +97,16 @@ export async function persistInboundChannelMessage(
     if (identity) {
       contactId = identity.contact_id;
     } else {
+      // Match both shapes: contacts created before this normalization
+      // landed are stored digits-only, new ones are stored as E.164.
+      // Checking both keeps a returning sender from being duplicated.
+      const phoneCandidates = [...new Set([displayFrom, normalizedFrom])];
       const { data: existing } = await db
         .from('contacts')
         .select('id')
         .eq('account_id', connection.account_id)
-        .eq('phone', normalizedFrom)
+        .in('phone', phoneCandidates)
+        .limit(1)
         .maybeSingle();
       if (existing) {
         contactId = existing.id;
@@ -100,8 +116,8 @@ export async function persistInboundChannelMessage(
           .insert({
             account_id: connection.account_id,
             user_id: ownerId,
-            phone: normalizedFrom,
-            name: message.name || normalizedFrom,
+            phone: displayFrom,
+            name: message.name || displayFrom,
             // First-touch attribution: this lead reached out to us on
             // this channel. Set once at creation, never overwritten.
             source: `${channel}_inbound`,
