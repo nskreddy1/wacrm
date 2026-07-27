@@ -281,17 +281,19 @@ export function RecordCollapsible({
  * imported from the team-chat feature) so `components/shared` doesn't depend on
  * a feature folder.
  */
-function OwnerAvatar({
+export function RecordOwnerAvatar({
   name,
   avatarUrl,
+  className,
 }: {
   name: string;
   avatarUrl?: string | null;
+  className?: string;
 }) {
   return (
-    <Avatar className="size-6">
+    <Avatar className={cn('size-6', className)}>
       {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
-      <AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
+      <AvatarFallback className="bg-primary/15 text-primary text-[0.625rem] font-semibold">
         {recordOwnerInitials(name)}
       </AvatarFallback>
     </Avatar>
@@ -327,7 +329,7 @@ export function RecordOwnerPicker({
             />
           }
         >
-          <OwnerAvatar
+          <RecordOwnerAvatar
             name={selected?.name ?? '?'}
             avatarUrl={selected?.avatarUrl}
           />
@@ -356,7 +358,10 @@ export function RecordOwnerPicker({
                   key={owner.userId}
                   onClick={() => onChange(owner.userId)}
                 >
-                  <OwnerAvatar name={owner.name} avatarUrl={owner.avatarUrl} />
+                  <RecordOwnerAvatar
+                    name={owner.name}
+                    avatarUrl={owner.avatarUrl}
+                  />
                   <span className="flex-1 truncate">
                     {owner.name}
                     {owner.userId === currentUserId ? ' (You)' : ''}
