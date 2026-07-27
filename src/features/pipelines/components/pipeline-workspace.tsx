@@ -1190,10 +1190,10 @@ function DealCard({
       </p>
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-sm">
-          {/* Was a Crown icon, which reads as rank/royalty — it means the
-              account *owner role* in role-meta.ts. This row shows the deal's
-              assignee, so the member's own photo (initials as fallback) is the
-              honest signal and matches the owner picker. */}
+          {/* Was a Crown icon, which reads as rank/royalty rather than
+              ownership of this record. This row shows the deal's assignee, so
+              the member's own photo (initials as fallback) is the honest
+              signal and matches the owner picker. */}
           <RecordOwnerAvatar
             name={deal.owner?.name ?? '?'}
             avatarUrl={deal.owner?.avatarUrl}

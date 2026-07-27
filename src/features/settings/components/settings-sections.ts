@@ -4,7 +4,6 @@ import {
   Database,
   Gauge,
   KeyRound,
-  LayoutGrid,
   LifeBuoy,
   Mail,
   MessageCircle,
@@ -21,13 +20,12 @@ import {
 /**
  * Settings information architecture for the redesigned page.
  *
- * The flat tab strip became a grouped left rail with a new Overview
- * landing. The URL query param stays `?tab=` (deep-linkable, and it
- * keeps the existing links in sidebar.tsx / header.tsx working) — we
- * just map the old values onto the new sections.
+ * The flat tab strip became a grouped left rail. The URL query param
+ * stays `?tab=` (deep-linkable, and it keeps the existing links in
+ * sidebar.tsx / header.tsx working) — we just map the old values onto
+ * the new sections.
  */
 export const SETTINGS_SECTIONS = [
-  'overview',
   'profile',
   'security',
   'appearance',
@@ -47,7 +45,14 @@ export const SETTINGS_SECTIONS = [
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-export const DEFAULT_SECTION: SettingsSection = 'overview';
+/**
+ * Landing section for `/settings` with no (or an unknown) `?tab=`.
+ *
+ * Was the `overview` dashboard, which mostly re-listed sections already
+ * present in the rail. With it gone, "Your profile" is the natural first
+ * stop — it is the top rail entry and always available to every member.
+ */
+export const DEFAULT_SECTION: SettingsSection = 'profile';
 
 /**
  * Rail grouping — enterprise IA modelled on Bigin/Zoho and HubSpot:
@@ -61,7 +66,6 @@ export interface SectionMeta {
   label: string;
   icon: LucideIcon;
   group:
-    | 'top'
     | 'account'
     | 'general'
     | 'customization'
@@ -71,12 +75,6 @@ export interface SectionMeta {
 }
 
 export const SECTION_META: Record<SettingsSection, SectionMeta> = {
-  overview: {
-    id: 'overview',
-    label: 'Overview',
-    icon: LayoutGrid,
-    group: 'top',
-  },
   profile: {
     id: 'profile',
     label: 'Your profile',
@@ -148,7 +146,6 @@ export const RAIL_GROUPS: {
   label: string | null;
   group: SectionMeta['group'];
 }[] = [
-  { label: null, group: 'top' },
   { label: 'Account', group: 'account' },
   { label: 'General', group: 'general' },
   { label: 'Customization', group: 'customization' },
@@ -164,16 +161,16 @@ function isSection(value: string | null): value is SettingsSection {
 /**
  * Resolve a raw `?tab=` value to a section. Legacy tabs from the old
  * flat layout collapse onto their new home (Tags + Custom fields → the
- * merged "Fields & tags" section). Anything unknown falls back to the
- * Overview landing.
+ * merged "Fields & tags" section). Anything unknown falls back to
+ * DEFAULT_SECTION.
  */
 export function resolveSection(raw: string | null): SettingsSection {
   // Old merged "Channels" section → default to the WhatsApp panel
   // (the primary channel for this CRM).
   if (raw === 'channels') return 'whatsapp';
   if (raw === 'tags' || raw === 'custom-fields') return 'fields';
-  // Template management moved to the dedicated /templates studio;
-  // legacy deep links land on the Overview which points there.
+  // Template management moved to the dedicated /templates studio, so
+  // legacy deep links have no settings home — fall back to the default.
   if (raw === 'templates') return DEFAULT_SECTION;
   if (isSection(raw)) return raw;
   return DEFAULT_SECTION;
