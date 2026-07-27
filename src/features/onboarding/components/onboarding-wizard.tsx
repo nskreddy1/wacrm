@@ -147,7 +147,8 @@ export function OnboardingWizard({ initialWorkspaceName, planSummary }: Props) {
       return;
     }
     // replace(): the wizard is a one-way door — Back must not resurrect it.
-    router.replace('/dashboard');
+    // `welcome=1` triggers the full-screen 3D welcome overlay on landing.
+    router.replace('/dashboard?welcome=1');
     router.refresh();
   }, [router]);
 

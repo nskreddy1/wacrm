@@ -310,10 +310,11 @@ function FooterMenu() {
   const displayName = personDisplayName(profile?.full_name, profile?.email);
   const displayEmail = profile?.email ?? '';
   const initials = initialsOf(profile?.full_name, profile?.email);
-  // Identity line shows the workspace-profile assignment: the owner
-  // is the account "Super Admin"; everyone else shows their assigned
-  // permission profile (Administrator, Standard, custom, …).
-  const roleLabel = isOwner ? 'Super Admin' : (workspaceProfile?.name ?? '');
+  // Identity line is synced with the assigned workspace profile for
+  // everyone — the owner is auto-assigned the "Administrator" system
+  // profile at signup, so this reflects the same default profile
+  // shown in Settings instead of a hardcoded "Super Admin" label.
+  const roleLabel = workspaceProfile?.name ?? (isOwner ? 'Administrator' : '');
 
   const handleSignOut = async () => {
     await signOut();

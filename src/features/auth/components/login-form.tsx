@@ -82,9 +82,12 @@ export function LoginForm({
         }
       }
 
+      // `welcome=1` triggers the full-screen 3D welcome overlay on
+      // the dashboard (WelcomeGate). Invite joins skip it — they land
+      // on the join flow, not the dashboard.
       const destination = inviteToken
         ? `/join/${encodeURIComponent(inviteToken)}`
-        : '/dashboard';
+        : '/dashboard?welcome=1';
 
       // Authentication is a server boundary: use a document navigation so
       // Next.js proxy receives the freshly-written Supabase session cookie on
