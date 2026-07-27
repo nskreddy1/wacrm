@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
   ArrowLeft,
@@ -25,7 +25,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -160,6 +159,31 @@ export function ImportModal({
   const [defaultCountry, setDefaultCountry] = useState<CountryCode>(
     DEFAULT_PHONE_COUNTRY
   );
+  /**
+   * Re-run auto-mapping when the field list arrives after the file was
+   * parsed. `fields` is loaded over SWR, so a quick upload can land while
+   * it is still empty — `autoMap` then matches nothing and every column
+   * falls back to "Ignore column". Keyed on `fieldsKey` so this only fires
+   * when the available fields actually change, never on user edits.
+   */
+  const fieldsKey = fields.map((field) => field.id).join(',');
+  const autoMappedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!csv.headers.length || !fields.length) return;
+    if (autoMappedFor.current === fieldsKey) return;
+    autoMappedFor.current = fieldsKey;
+    setMapping((current) => {
+      // Preserve any choice the user already made; only fill in columns
+      // still sitting at the unmatched default.
+      const auto = autoMap(csv.headers, fields);
+      const next = { ...auto };
+      for (const [header, target] of Object.entries(current)) {
+        if (target !== IGNORE) next[header] = target;
+      }
+      return next;
+    });
+  }, [csv.headers, fields, fieldsKey]);
+
   const [importing, setImporting] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -246,6 +270,9 @@ export function ImportModal({
     setFileName(file.name);
     setCsv(parsed);
     setMapping(autoMap(parsed.headers, fields));
+    // Let the effect above re-map against a newly uploaded file's headers,
+    // including when the previous file already consumed this field list.
+    autoMappedFor.current = null;
     setStep(1);
     setResult(null);
   }
@@ -400,7 +427,13 @@ export function ImportModal({
             )}
           </div>
         </DialogHeader>
-        <ScrollArea className="min-h-0 flex-1">
+        {/* Plain overflow container rather than <ScrollArea>: the Base UI
+            viewport is `size-full`, so its `height:100%` can't resolve
+            against a `flex-1` parent that has no explicit height. It grew
+            to full content height (992px in a 437px slot) instead of
+            scrolling, which pushed the footer over the last card and made
+            the rows below it unreachable. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className="p-4 sm:p-6">
             {step === 0 && (
               <button
@@ -736,7 +769,7 @@ export function ImportModal({
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
         {/* DialogFooter ships `-mx-4 -mb-4` to bleed into the default
             padded dialog. This dialog is `p-0`, so those negative margins
             pulled the footer outside the panel and it overlapped the last
