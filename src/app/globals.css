@@ -531,3 +531,79 @@ html[data-theme='rose'] {
 .scrollbar-invisible::-webkit-scrollbar {
   display: none;
 }
+
+/* ============================================================
+ * WELCOME OVERLAY
+ *
+ * Design ported from Twenty (twentyhq/twenty, AGPL-3.0). The
+ * halftone dot field is canvas-driven (see the onboarding feature's
+ * welcome-halftone-renderer); these keyframes only handle the
+ * backdrop fade and the title's word-by-word rise. Same motion
+ * rules as the rest of the app: transform + opacity only.
+ * ============================================================ */
+
+@keyframes welcome-backdrop-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes welcome-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes welcome-title-out {
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes welcome-word-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-welcome-backdrop-out {
+  animation: welcome-backdrop-out 700ms cubic-bezier(0.5, 0, 0.1, 1) 80ms
+    forwards;
+  will-change: opacity;
+}
+
+.animate-welcome-title-in {
+  animation: welcome-fade-in 300ms var(--ease-out-strong) 800ms both;
+  will-change: transform, opacity;
+}
+
+.animate-welcome-title-out {
+  animation: welcome-title-out 340ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-welcome-word-in {
+  animation: welcome-word-in 600ms var(--ease-out-strong) both;
+}
+
+/* Reduced motion: keep the reveal, drop the travel and the stagger. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-welcome-backdrop-out {
+    animation-duration: 400ms;
+    animation-delay: 0ms;
+  }
+
+  .animate-welcome-word-in {
+    animation: welcome-fade-in 300ms ease-out both;
+    animation-delay: 0ms !important;
+  }
+}

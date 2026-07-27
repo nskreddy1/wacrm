@@ -1,35 +1,31 @@
 'use client';
 
 /**
- * Post-signup / post-login 3D welcome screen.
+ * Post-signup / post-login welcome overlay.
  *
- * Rendered as a full-screen overlay above the dashboard when the URL
- * carries `?welcome=1` (appended by the login form and the onboarding
- * wizard's finish step). Greets the member by name over an animated
- * Three.js background and plays a short synthesized chime when the
- * member clicks through (browsers only allow audio after a gesture).
+ * Visual design ported from Twenty (twentyhq/twenty, AGPL-3.0): a dark
+ * backdrop behind an animated indigo halftone dot field that assembles
+ * inward, drifts, then bursts outward on exit. The title reads
+ * "Welcome to your workspace <person chip>" with a word-by-word rise.
  *
- * Dismissal strips the query param via history.replaceState so a
- * refresh or back-navigation never replays the welcome.
+ * Rendered above the dashboard when the URL carries `?welcome=1`
+ * (appended by the login form and the onboarding wizard's finish step).
+ * Auto-leaves after a hold, or immediately on click / Escape — the
+ * click path also plays a short synthesized chime, since browsers only
+ * allow audio after a user gesture.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
-import { ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { personDisplayName } from '@/lib/display-name';
+import { WelcomeHalftoneCanvas } from './welcome-halftone-canvas';
 
-// Three.js is heavy (~1MB) and only needed for this one overlay —
-// load it lazily so the dashboard bundle stays lean and the overlay
-// still appears instantly (the HTML greeting renders while the 3D
-// canvas streams in behind it).
-const WelcomeCanvas = dynamic(
-  () => import('./welcome-canvas').then((m) => m.WelcomeCanvas),
-  { ssr: false }
-);
+/** Matches Twenty's WELCOME_HOLD_MIN_DURATION_MS. */
+const AUTO_LEAVE_AFTER_MS = 3600;
+/** Backdrop + burst run ~0.75s; unmount just after. */
+const LEAVE_ANIMATION_MS = 820;
 
-/** Two-bar ascending chime via Web Audio — no asset file needed. */
+/** Ascending C-major arpeggio via Web Audio — no asset file needed. */
 function playChime() {
   try {
     const AudioCtx =
@@ -41,103 +37,115 @@ function playChime() {
     const master = ctx.createGain();
     master.gain.value = 0.12;
     master.connect(ctx.destination);
-    // C5 → E5 → G5 → C6 arpeggio with a soft triangle timbre.
     const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'triangle';
       osc.frequency.value = freq;
-      const start = ctx.currentTime + i * 0.12;
+      const start = ctx.currentTime + i * 0.1;
       gain.gain.setValueAtTime(0, start);
       gain.gain.linearRampToValueAtTime(1, start + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.9);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.8);
       osc.connect(gain);
       gain.connect(master);
       osc.start(start);
-      osc.stop(start + 1);
+      osc.stop(start + 0.9);
     });
-    // Close the context once the chime finishes to free the device.
     window.setTimeout(() => void ctx.close().catch(() => {}), 2000);
   } catch {
     // Audio is a nicety — never let it break the flow.
   }
 }
 
+const TITLE_WORDS = ['Welcome', 'to', 'your', 'workspace'];
+
 export function WelcomeScreen({ onDismiss }: { onDismiss: () => void }) {
-  const { profile, loading } = useAuth();
+  const { profile } = useAuth();
   const [leaving, setLeaving] = useState(false);
-  const dismissTimer = useRef<number | null>(null);
+  const timers = useRef<number[]>([]);
 
   const name = useMemo(
     () => personDisplayName(profile?.full_name, profile?.email),
     [profile?.full_name, profile?.email]
   );
+  const initial = name.charAt(0).toUpperCase();
 
-  const handleEnter = useCallback(() => {
-    if (leaving) return;
-    playChime();
-    setLeaving(true);
-    // Let the fade-out play before unmounting the overlay.
-    dismissTimer.current = window.setTimeout(onDismiss, 700);
-  }, [leaving, onDismiss]);
-
-  // Escape dismisses too — an overlay the keyboard can't leave is a trap.
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') handleEnter();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [handleEnter]);
-
-  useEffect(
-    () => () => {
-      if (dismissTimer.current !== null)
-        window.clearTimeout(dismissTimer.current);
+  const leave = useCallback(
+    (withSound: boolean) => {
+      setLeaving((alreadyLeaving) => {
+        if (alreadyLeaving) return true;
+        if (withSound) playChime();
+        timers.current.push(window.setTimeout(onDismiss, LEAVE_ANIMATION_MS));
+        return true;
+      });
     },
-    []
+    [onDismiss]
   );
+
+  // Auto-leave so the overlay is never a dead end, plus click/Escape
+  // for anyone who wants past it immediately.
+  useEffect(() => {
+    timers.current.push(window.setTimeout(() => leave(false), AUTO_LEAVE_AFTER_MS));
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' || event.key === 'Enter') leave(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      timers.current.forEach(window.clearTimeout);
+      timers.current = [];
+    };
+  }, [leave]);
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Welcome, ${name}`}
-      className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0a14] transition-opacity duration-700 ${
-        leaving ? 'pointer-events-none opacity-0' : 'opacity-100'
-      }`}
+      aria-label={`Welcome to your workspace, ${name}`}
+      onClick={() => leave(true)}
+      className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden"
     >
-      {/* Animated 3D background */}
-      <div className="absolute inset-0" aria-hidden>
-        <Suspense fallback={null}>
-          <WelcomeCanvas />
-        </Suspense>
+      {/* Backdrop fades out first so the bursting dots read against
+          the dashboard already showing through. */}
+      <div
+        className={`absolute inset-0 bg-[#141414] ${
+          leaving ? 'animate-welcome-backdrop-out' : ''
+        }`}
+      />
+      <div className="absolute inset-0">
+        <WelcomeHalftoneCanvas isLeaving={leaving} />
       </div>
 
-      {/* Greeting overlay */}
-      <div className="animate-in fade-in zoom-in-95 relative z-10 flex max-w-2xl flex-col items-center gap-6 px-6 text-center duration-1000">
-        <p className="text-sm font-medium tracking-[0.3em] text-white/60 uppercase">
-          Your workspace is ready
-        </p>
-        <h1 className="text-balance font-sans text-5xl font-bold text-white md:text-7xl">
-          Welcome,{' '}
-          <span className="text-primary">
-            {loading && !profile ? '…' : name}
+      <div
+        className={`relative z-10 flex max-w-[90vw] flex-wrap items-center justify-center gap-2 px-8 py-4 text-2xl font-semibold whitespace-nowrap text-white sm:flex-nowrap md:text-[26px] ${
+          leaving ? 'animate-welcome-title-out' : 'animate-welcome-title-in'
+        }`}
+      >
+        {TITLE_WORDS.map((word, index) => (
+          <span
+            key={word}
+            className="animate-welcome-word-in inline-flex"
+            style={{ animationDelay: `${1.1 + index * 0.07}s` }}
+          >
+            {word}
           </span>
-        </h1>
-        <p className="text-pretty max-w-md leading-relaxed text-white/70">
-          Every conversation — WhatsApp, SMS and email — lands in one shared
-          inbox your whole team works from. Let&apos;s get you in.
-        </p>
-        <Button size="xl" onClick={handleEnter} className="mt-2 gap-2">
-          Enter your dashboard
-          <ArrowRight className="size-4" aria-hidden />
-        </Button>
-        <p className="text-xs text-white/40">
-          Press <kbd className="rounded border border-white/20 px-1">Esc</kbd>{' '}
-          to skip
-        </p>
+        ))}
+        {/* Person chip — the identity payoff of the whole screen. */}
+        <span
+          className="animate-welcome-word-in inline-flex"
+          style={{ animationDelay: `${1.1 + TITLE_WORDS.length * 0.07}s` }}
+        >
+          <span className="inline-flex items-center gap-2 rounded-md bg-white/10 px-2 py-1">
+            <span
+              aria-hidden
+              className="bg-primary text-primary-foreground grid size-6 shrink-0 place-items-center rounded text-xs font-semibold"
+            >
+              {initial}
+            </span>
+            <span className="max-w-[min(40vw,360px)] truncate">{name}</span>
+          </span>
+        </span>
       </div>
     </div>
   );
