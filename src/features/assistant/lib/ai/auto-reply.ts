@@ -12,7 +12,7 @@ import {
   waitingMinutes,
   caretakerPromptOverlay,
   fallbackCaretakerMessage,
-  CARETAKER_LIMITS,
+  caretakerPolicyFor,
 } from './caretaker';
 import { logAiUsage } from './usage';
 import { latestUserMessage } from './query';
@@ -92,7 +92,7 @@ export async function dispatchInboundToAiReply(
     const { data: conv, error: convErr } = await db
       .from('conversations')
       .select(
-        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_handoff_state, ai_caretaker_count, ai_last_caretaker_at, ai_escalated_at, ai_escalation_reason'
+        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_handoff_state, ai_caretaker_count, ai_last_caretaker_at, ai_escalated_at, ai_escalation_reason, channel'
       )
       .eq('id', conversationId)
       .maybeSingle();
@@ -172,8 +172,8 @@ export async function dispatchInboundToAiReply(
     //                      timezone; counted from today's bot messages.
     //
     // Caretaker turns are exempt from both caps: they have their own,
-    // tighter budget (CARETAKER_LIMITS, enforced atomically below).
-    // Applying the normal cap here would recreate the original bug — a
+    // tighter per-channel budget (CARETAKER_POLICY, claimed atomically
+    // below). Applying the normal cap here would recreate the original bug — a
     // thread that escalated *at* its reply limit would fall straight back
     // into silence while still waiting on a human.
     if (
@@ -214,12 +214,15 @@ export async function dispatchInboundToAiReply(
      * producing holding messages we'd throw away.
      */
     if (isCaretaker) {
+      // Budget is per-channel: an SMS hold costs the tenant per segment,
+      // and a (future) live call needs a far tighter cadence than chat.
+      const policy = caretakerPolicyFor(conv.channel);
       const { data: claimed, error: claimErr } = await db.rpc(
         'claim_ai_caretaker_slot',
         {
           p_conversation_id: conversationId,
-          p_max_messages: CARETAKER_LIMITS.maxMessages,
-          p_cooloff_seconds: CARETAKER_LIMITS.cooloffSeconds,
+          p_max_messages: policy.maxMessages,
+          p_cooloff_seconds: policy.cooloffSeconds,
         }
       );
       if (claimErr) {

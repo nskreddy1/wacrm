@@ -352,3 +352,85 @@ the corpus from Stage 1 + edit pairs is the training set.
 
 **Deliberately deferred:** fine-tuning, prosody, multimodal fusion, RL/DPO
 alignment. All are unlocked by items 1–14 and blocked without the corpus.
+
+---
+
+## 11. Addendum: channel extensibility (SMS/WhatsApp now, voice later)
+
+### Status of items 5, 6, 8 — implemented
+
+Three-posture handoff, caretaker budget with atomic slot claim, a DB
+trigger that closes the handoff on a real agent message, the SLA watchdog
+sweep + route, and a `pg_cron` minute schedule. 116 tests pass, including
+six caretaker regression tests that fail against the previous code.
+
+### The constraint that shapes the design
+
+Voice is not a feature to bolt on — it is a **cost class**. Text replies
+cost fractions of a cent; research puts production voice at **$0.03–0.22
+per minute**. A design that treats voice as "just another channel" either
+bankrupts a tenant or forces a rewrite. The goal is therefore *not* to
+build voice now (no clients, real money). It is to make adding it later
+**additive rather than surgical**.
+
+### Decision: transport-agnostic core, thin channel adapters
+
+The research is unanimous: production omnichannel systems put agent logic
+in a service accepting **standardised input regardless of transport**,
+with state held outside the channel. Our code already half-does this —
+`dispatchInboundToAiReply` takes `{accountId, conversationId, contactId}`
+and never inspects the channel.
+
+The rule to hold: **`auto-reply.ts` must never learn what a channel is.**
+
+```
+SMS      ──┐
+WhatsApp ──┼──▶ InboundEvent ──▶ [ agent core ] ──▶ OutboundIntent ──▶ adapter
+(voice)  ──┘    (normalised)       unchanged         (text + affect)
+```
+
+Voice then adds an adapter and a *rendering* concern (TTS warmth/pace),
+not a second brain. Two invariants make that possible, both free today:
+
+1. **`AffectiveState.source`** (already in §3) — text populates
+   `lexical`, voice later adds `prosody` and fuses. Consumers read the
+   vector, never the origin.
+2. **Caretaker/SLA timings become per-channel policy, not constants.**
+   `CARETAKER_LIMITS` is right for async chat and *wrong* for a live
+   call, where 10 minutes of silence is not an SLA nudge — it is an
+   abandoned call. Same state machine, different numbers.
+
+### Voice notes: the cheap near-term step
+
+This is the bridge, and worth doing before live calls. A WhatsApp voice
+note is **async audio**: no barge-in, no turn detection, no latency
+budget. It needs transcription + emotion, both offline.
+
+The find is **SenseVoiceSmall** (FunASR): transcription *and* emotion in a
+single pass, CPU-capable, faster than Whisper, Docker-deployable.
+`emotion2vec+ large` is the dedicated SER upgrade if accuracy demands it.
+This answers "can Python do it": yes — as a **containerised sidecar**.
+
+Why not an Edge Function for inference: 256 MB / 2 s CPU, and the built-in
+`Supabase.ai.Session` exposes only `gte-small` (embeddings, English-only —
+unusable for Hinglish). Edge Functions remain the right home for
+*orchestration* (the watchdog schedule target), not models.
+
+### What live calls would add — and only then
+
+Cascaded STT→LLM→TTS via LiveKit or Pipecat, ~500–800 ms end-to-end,
+Silero VAD plus semantic turn detection, and a barge-in state machine that
+cancels in-flight LLM/TTS. Cascaded beats speech-to-speech for us because
+our value is **tool-heavy CRM lookups**, which need an inspectable text
+step for auditing and for the Stage-B "no new facts" invariant. None of
+this touches the agent core.
+
+### Added action items
+
+15. [ ] Normalise `InboundEvent` / `OutboundIntent` at the dispatch
+        boundary; assert the core stays channel-blind.
+16. [ ] Move caretaker/SLA timings into per-channel policy objects.
+17. [ ] Voice notes: SenseVoiceSmall sidecar → transcript + prosodic
+        affect into the same `conversation_affective_events` table.
+18. [ ] Only once clients exist: live-call adapter (LiveKit/Pipecat), with
+        per-tenant spend caps enforced before the first minute.

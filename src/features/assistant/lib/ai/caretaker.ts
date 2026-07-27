@@ -38,15 +38,64 @@ export interface HandoffPostureRow {
  * promise. We cover the realistic window for a human to arrive, then
  * stop talking and let the SLA watchdog escalate internally instead.
  */
-export const CARETAKER_LIMITS = {
+export interface CaretakerPolicy {
   /** Max holding messages per escalated thread. */
-  maxMessages: 3,
+  maxMessages: number;
   /**
    * Minimum gap between them. Absorbs the common
    * "hello?" / "are you there?" / "??" burst into a single reply.
    */
-  cooloffSeconds: 90,
-} as const;
+  cooloffSeconds: number;
+}
+
+/**
+ * Channels we can hold a customer on.
+ *
+ * `voice` is declared but intentionally not wired to any transport yet.
+ * It exists so the *shape* of the decision is per-channel from the start:
+ * a live call has no useful notion of a 90-second holding cadence, and
+ * discovering that after voice ships would mean reworking this module
+ * rather than adding a row to a table.
+ */
+export type ChannelKind = 'whatsapp' | 'sms' | 'email' | 'voice';
+
+/**
+ * Per-channel caretaker policy.
+ *
+ * Mirrors the `channel_kind` Postgres enum (`whatsapp`, `email`, `sms`),
+ * plus `voice` which is declared ahead of any transport.
+ *
+ * Async chat tolerates a slow, sparse cadence — the customer is not
+ * staring at the screen. Live audio is the opposite: dead air *is* the
+ * failure, so a voice caretaker must speak sooner and more often, and
+ * "3 messages then stop" would read as an abandoned call rather than a
+ * bounded hold. Same state machine, different numbers.
+ */
+export const CARETAKER_POLICY: Record<ChannelKind, CaretakerPolicy> = {
+  whatsapp: { maxMessages: 3, cooloffSeconds: 90 },
+  // Metered per segment, so hold the line more sparingly.
+  sms: { maxMessages: 2, cooloffSeconds: 120 },
+  // Threaded and slow by nature; a second holding email is usually noise.
+  email: { maxMessages: 1, cooloffSeconds: 900 },
+  // Placeholder until a live-call adapter exists (see ADR-002 §11).
+  voice: { maxMessages: 8, cooloffSeconds: 15 },
+};
+
+/** Resolve policy for a channel, defaulting to the async-chat shape. */
+export function caretakerPolicyFor(channel?: string | null): CaretakerPolicy {
+  if (channel && channel in CARETAKER_POLICY) {
+    return CARETAKER_POLICY[channel as ChannelKind];
+  }
+  return CARETAKER_POLICY.whatsapp;
+}
+
+/**
+ * Default budget.
+ *
+ * Retained as the async-chat baseline so callers that have no channel in
+ * hand keep working unchanged; prefer `caretakerPolicyFor(channel)`.
+ */
+export const CARETAKER_LIMITS = CARETAKER_POLICY.whatsapp;
 
 /**
  * Decide who owns the thread.
