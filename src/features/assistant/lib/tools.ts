@@ -2,6 +2,8 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { validateFlowForActivation } from '@/features/flows/lib/validate';
+import { findExistingContact } from '@/features/contacts/lib/dedupe';
+import { toE164 } from '@/lib/phone/e164';
 
 // ============================================================
 // Platform assistant tools — full application coverage.
@@ -565,21 +567,50 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
 
     create_contact: tool({
       description:
-        'Create a new contact in the CRM. WRITE action — requires user approval.',
+        'Create a new contact in the CRM. WRITE action — requires user approval. ' +
+        'The phone number MUST include the international country code.',
       inputSchema: z.object({
         name: z.string().min(1).max(120),
-        phone: z.string().min(5).max(30),
+        phone: z
+          .string()
+          .min(5)
+          .max(30)
+          .describe(
+            'Phone number in full international E.164 format, including the ' +
+              'country code and a leading "+" — e.g. "+14155550123" (US) or ' +
+              '"+918328510888" (India). Never pass a bare national number ' +
+              'like "8328510888": without a country code it is ambiguous and ' +
+              'will be rejected. If the user did not state a country, ask ' +
+              'them which country the number belongs to before calling this.'
+          ),
         email: z.string().email().optional(),
       }),
       execute: async ({ name, phone, email }) => {
-        const { data: existing } = await db
-          .from('contacts')
-          .select('id')
-          .eq('account_id', ctx.accountId)
-          .eq('phone', phone)
-          .maybeSingle();
+        // Normalize before writing so agent-created contacts match the
+        // format used by manual create, CSV import, and inbound.
+        const normalized = toE164(phone);
+        if (!normalized) {
+          return {
+            error:
+              `"${phone}" is not a valid phone number. Provide it in ` +
+              'international E.164 format including the country code, ' +
+              'e.g. "+14155550123". Ask the user which country the number ' +
+              'belongs to if it was not specified.',
+          };
+        }
+
+        // Suffix match, so an existing contact is found regardless of the
+        // format it was stored in. An exact `.eq()` missed duplicates.
+        const existing = await findExistingContact(
+          db,
+          ctx.accountId,
+          normalized.e164
+        );
         if (existing) {
-          return { error: 'A contact with this phone number already exists.' };
+          return {
+            error: 'A contact with this phone number already exists.',
+            contact_id: existing.id,
+          };
         }
         const { data, error } = await db
           .from('contacts')
@@ -587,13 +618,18 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
             account_id: ctx.accountId,
             user_id: ctx.userId,
             name,
-            phone,
+            phone: normalized.e164,
             email: email ?? null,
           })
           .select('id')
           .single();
         if (error || !data) return { error: 'Could not create the contact.' };
-        return { created: true, contact_id: data.id, name };
+        return {
+          created: true,
+          contact_id: data.id,
+          name,
+          phone: normalized.e164,
+        };
       },
     }),
 

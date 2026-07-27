@@ -5,7 +5,6 @@ import PhoneNumberInput, { type Value } from 'react-phone-number-input/input';
 import {
   getCountries,
   getCountryCallingCode,
-  isValidPhoneNumber,
   parsePhoneNumber,
   type Country,
 } from 'react-phone-number-input';
@@ -21,6 +20,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { isNormalizablePhone } from '@/lib/phone/e164';
 
 const COUNTRIES: Country[] = getCountries();
 
@@ -168,6 +168,16 @@ export function InternationalPhoneInput({
   );
 }
 
+/**
+ * Delegates to the shared normalizer so the manual form, CSV import, the
+ * agent, and the public API all agree on what a valid number is.
+ *
+ * This used to call `isValidPhoneNumber`, which rejects reserved test
+ * ranges like `+1 555 500 0001` and any range libphonenumber's metadata
+ * doesn't know yet — too strict for a CRM. `isNormalizablePhone` gates on
+ * "possible" instead. Empty stays valid; required-ness is enforced
+ * separately by the form.
+ */
 export function validInternationalPhone(value: string) {
-  return !value || isValidPhoneNumber(value);
+  return isNormalizablePhone(value);
 }
