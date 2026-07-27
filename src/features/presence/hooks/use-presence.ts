@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { createClient } from '@/lib/supabase/client';
@@ -44,6 +44,18 @@ interface UsePresenceResult {
  */
 export function usePresence(enabled = true): UsePresenceResult {
   const { accountId } = useAuth();
+
+  // Realtime channel topics are GLOBAL to the Supabase client:
+  // `RealtimeClient.channel(topic)` returns an ALREADY EXISTING channel when
+  // one with the same topic is registered, it does not create a fresh one.
+  // Two components calling this hook at once (e.g. the inbox message thread
+  // plus the team chat widget) therefore received the same channel, and the
+  // second `.on('postgres_changes', ...)` threw "cannot add postgres_changes
+  // callbacks ... after subscribe()", which escalated to the page-level error
+  // boundary. Scoping the topic per hook instance gives every consumer its
+  // own channel, and also keeps one consumer unmounting (removeChannel) from
+  // tearing down another consumer's still-active subscription.
+  const instanceId = useId();
 
   // Presence rows keyed by user_id, held in immutable state — each
   // update replaces the Map so React renders and the derived getters
