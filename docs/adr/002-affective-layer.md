@@ -433,20 +433,46 @@ Verified options (2026 pricing):
 
 | Provider | Cost | Code-mixed (Hinglish/Tanglish/Teglish) |
 |---|---|---|
+| **Groq `whisper-large-v3-turbo`** | **$0.04/hr** | Cheapest by far; distilled → weakest on low-resource Indic |
 | ElevenLabs Scribe v2 | $0.22/hr (~$0.004/min) | Yes — keeps English terms in Latin script |
 | OpenAI Whisper API | ~$0.006/min | Multilingual, weaker on noisy code-mixed telephony |
 | Sarvam Saaras | ₹1.5/min (~$0.018/min) | Best-in-class; 1M+ hrs Indian audio, built for code-mixing |
 | SenseVoiceSmall (Render) | ~$25/mo flat | Self-hosted; emotion included; ops burden ours |
 
-**Decision: start with a managed API behind the same HTTP contract**
-(`{audio_url} → {transcript, language, affect?}`). Voice-note volume at
-zero clients rounds to zero, so a flat-monthly sidecar is the wrong cost
-shape and per-use pricing is right. Scribe v2 is the cost/quality
-default; Sarvam Saaras is the upgrade if code-mixed accuracy on real
-traffic disappoints; the Render sidecar becomes worthwhile only when
-monthly ASR spend approaches its flat cost, or when prosodic emotion
-(which no managed transcription API returns) is actually needed. The
-contract makes each swap a config change, not a rewrite.
+**Decision: Groq `whisper-large-v3-turbo` as the default**, behind the
+same HTTP contract (`{audio_url} → {transcript, language, affect?}`).
+At $0.04/hr it is 5.5x cheaper than Scribe v2 and ~9x cheaper than
+OpenAI's Whisper API — a 30 s voice note costs ~$0.0003. Voice-note
+volume at zero clients rounds to zero, so per-use pricing is the right
+cost shape and a flat-monthly sidecar is not.
+
+Two constraints on that choice, both deliberate:
+
+- **Free tier is NOT production.** Limits: 2,000 req/day, 20 req/min,
+  7,200 s audio/hr, 8 hr/day, 25 MB/file. Commercial use is permitted
+  within them, but there is **no SLA and requests are deprioritized at
+  peak** — unacceptable for customer-facing support. Use free tier for
+  development and pilot; move to the paid Developer tier for production.
+  The cost argument survives either way, so this is not a tradeoff.
+- **`turbo` is a distillation (4 decoder layers vs 32), and distillation
+  costs most on low-resource languages** — exactly Tamil/Telugu/
+  Kannada/Malayalam. Specific known failure for us: Whisper tends to
+  **transliterate into native script** instead of preserving romanized
+  code-mixing, so "nuvu ela unnav" can return as Telugu script, which
+  would then make the reply mirror the WRONG script and defeat the
+  script-mirroring rule in §multilingual. The `language` tag already in
+  `[[META]]` is the detector for this drift.
+
+**Sarvam Saaras is the documented upgrade** the moment real code-mixed
+audio shows transcription or script errors. The Render sidecar becomes
+worthwhile only when monthly ASR spend approaches its flat cost, or when
+prosodic emotion (which no managed transcription API returns) is
+actually needed. The contract makes each swap a config change.
+
+Implementation note: transcription is a different endpoint from chat
+completions, so this likely needs a direct provider call rather than the
+AI Gateway path used for text models — confirm when building the
+endpoint, do not assume.
 
 Transcript text then flows through the EXISTING pipeline unchanged —
 language mirroring, emotion META, and RAG all operate on text and never
@@ -492,10 +518,17 @@ this touches the agent core.
 15. [ ] Normalise `InboundEvent` / `OutboundIntent` at the dispatch
         boundary; assert the core stays channel-blind.
 16. [ ] Move caretaker/SLA timings into per-channel policy objects.
-17. [ ] Voice notes: SenseVoiceSmall sidecar on Render (paid ~2 GB
-        instance; free tier cannot hold the model) → transcript +
-        prosodic affect into `conversation_affective_events`. Async
-        queue, never a synchronous dependency of auto-reply.
+17. [ ] Voice notes: transcribe via Groq `whisper-large-v3-turbo`
+        ($0.04/hr, paid Developer tier for production — free tier has no
+        SLA), then feed the transcript through the existing text
+        pipeline. Async queue, never a synchronous dependency of
+        auto-reply. Escalation path: Sarvam Saaras on code-mixed/script
+        errors; Render sidecar only if prosodic emotion is needed.
+17a.[ ] Guard against Whisper script drift: compare the `[[META]]`
+        `language` tag on transcribed turns against the customer's
+        established tag; a native-script tag appearing on a previously
+        `-latn` conversation signals transliteration, not a real
+        language switch.
 18. [ ] Only once clients exist: live-call adapter (LiveKit/Pipecat), with
         per-tenant spend caps enforced before the first minute.
 
