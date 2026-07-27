@@ -300,7 +300,7 @@ export function DashboardRoot() {
         {isOverview ? (
           <DashboardWorkspace />
         ) : (
-          <div className="app-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain">
+          <div className="app-scrollbar fab-safe-area h-full min-h-0 overflow-y-auto overscroll-contain">
             <div className="mx-auto flex max-w-[1500px] flex-col p-4 sm:p-6 lg:p-8">
               {isLoading || !overview ? (
                 <div className="grid grid-cols-12 gap-4">

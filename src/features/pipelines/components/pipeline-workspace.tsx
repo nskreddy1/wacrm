@@ -233,14 +233,23 @@ export function PipelineWorkspace({
   });
 
   const deals = useMemo(() => {
-    const allowed = new Set(
-      activeSubPipeline?.dealIds ?? snapshot.deals.map((deal) => deal.id)
-    );
+    // The root tab shows EVERY deal in the pipeline. When an account has no
+    // real sub-pipelines the repository synthesises one whose id *is* the
+    // pipeline id and whose dealIds is a snapshot of all deals — treating
+    // that list as a filter meant a newly created deal (which has no
+    // membership row, so it is never added to dealIds) stayed invisible
+    // until a full reload, making a successful save look like data loss.
+    // Membership lists only ever narrow real sub-pipelines.
+    const isRootTab =
+      !activeSubPipeline || activeSubPipeline.id === snapshot.pipeline.id;
+    const allowed = isRootTab
+      ? null
+      : new Set(activeSubPipeline.dealIds);
     const term = query.trim().toLowerCase();
     return snapshot.deals
       .filter(
         (deal) =>
-          allowed.has(deal.id) &&
+          (allowed === null || allowed.has(deal.id)) &&
           (stage === 'all' || deal.stageId === stage) &&
           (owner === 'all' || deal.assignedTo === owner) &&
           (!term ||
@@ -437,7 +446,10 @@ export function PipelineWorkspace({
         deal.due ?? '',
       ]),
     ]);
-    if (ok) toast.success(`${deals.length} deals exported`);
+    if (ok)
+      toast.success(
+        `${deals.length} ${deals.length === 1 ? 'deal' : 'deals'} exported`
+      );
     else toast.error('No deals to export');
   }
 

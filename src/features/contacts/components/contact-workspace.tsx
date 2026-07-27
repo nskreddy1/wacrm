@@ -612,7 +612,9 @@ export function ContactWorkspace({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      {/* fab-safe-area keeps the last row scrollable clear of the shell's
+          floating launchers, which paint above page content. */}
+      <div className="fab-safe-area min-h-0 flex-1 overflow-auto">
         {(view === 'list' || view === 'sheet') && (
           <table className={sheetTable.table}>
             <thead className={sheetTable.thead}>

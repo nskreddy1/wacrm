@@ -169,7 +169,11 @@ export function CatalogWorkspace() {
   ];
 
   return (
-    <main className="flex min-h-full flex-col gap-6 p-4 md:p-6">
+    // The dashboard shell already renders the page-level <main>, so this is
+    // a plain section — nesting a second <main> gave screen readers two
+    // "main" landmarks on the route.
+    // fab-safe-area keeps the last table row clear of the floating launchers.
+    <div className="app-scrollbar fab-safe-area flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 md:p-6">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div className="flex flex-col gap-1">
           <p className="text-primary text-sm font-medium">Operations</p>
@@ -388,6 +392,6 @@ export function CatalogWorkspace() {
         item={editing}
         onSaved={() => void mutate()}
       />
-    </main>
+    </div>
   );
 }

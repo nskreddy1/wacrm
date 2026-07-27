@@ -522,6 +522,31 @@ html[data-theme='rose'] {
   background-color: color-mix(in oklch, var(--foreground) 38%, transparent);
 }
 
+/* ---- FAB safe area ----
+ *
+ * The dashboard shell renders two FIXED floating launchers in the
+ * bottom-right corner (team chat at right-4, assistant at right-20 —
+ * each size-12 at bottom-4). Being fixed, they paint above page
+ * content, so any control that comes to rest under that corner
+ * becomes unclickable: the launcher swallows the pointer event.
+ *
+ * QA found this on three unrelated surfaces (a session "Revoke"
+ * button, a catalog row action, a dashboard "Add" button), so the
+ * gutter is centralised here rather than re-patched per page.
+ *
+ * --fab-safe-area covers the launcher (3rem) + its bottom offset
+ * (1rem) + breathing room. Scroll containers apply it as bottom
+ * padding so their last row can always clear the launchers. Keep in
+ * sync with the launcher classes in team-chat-widget.tsx and
+ * assistant-widget.tsx. */
+:root {
+  --fab-safe-area: 5.5rem;
+}
+
+.fab-safe-area {
+  padding-bottom: calc(var(--fab-safe-area) + env(safe-area-inset-bottom, 0px));
+}
+
 /* Keep wheel, touch and keyboard scrolling while hiding scrollbar chrome. */
 .scrollbar-invisible {
   scrollbar-width: none;
