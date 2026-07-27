@@ -605,6 +605,12 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {/* This three-pane workspace shipped no h1, leaving screen reader
+          users without a document outline (WCAG 1.3.1). Visually hidden
+          because the surrounding chrome already names the channel. */}
+      <h1 className="sr-only">
+        {channel === 'sms' ? 'SMS inbox' : 'WhatsApp inbox'}
+      </h1>
       {/* Channel connection banner — in the flex column, not absolute,
           so it pushes the panels down instead of overlapping them. */}
       {channelConnected === false && (

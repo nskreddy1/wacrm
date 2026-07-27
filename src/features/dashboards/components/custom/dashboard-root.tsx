@@ -290,6 +290,12 @@ export function DashboardRoot() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/* The switcher renders the dashboard name in a button, not a heading,
+          so this route shipped no h1 and screen reader users had no document
+          outline (WCAG 1.3.1). Visually hidden to avoid duplicating it. */}
+      <h1 className="sr-only">
+        {isOverview ? 'Overview dashboard' : selected.name}
+      </h1>
       {/* Switcher bar */}
       <div className="border-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2 sm:px-6 lg:px-8">
         {switcher}
