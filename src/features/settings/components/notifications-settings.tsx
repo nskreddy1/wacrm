@@ -29,7 +29,6 @@ import {
   Loader2,
   MessagesSquare,
   Plug,
-  Slack,
   Trash2,
 } from 'lucide-react';
 
@@ -79,7 +78,7 @@ const PROVIDER_META: Record<
   slack: {
     label: 'Slack',
     blurb: 'Posts into a channel of your connected Slack workspace.',
-    icon: Slack,
+    icon: Hash,
   },
   whatsapp: {
     label: 'WhatsApp',
@@ -164,8 +163,7 @@ export function NotificationsSettings() {
     async (dest: Destination, enabled: boolean) => {
       // Optimistic: flip locally, roll back on failure.
       void mutate(
-        (prev) =>
-          prev?.map((d) => (d.id === dest.id ? { ...d, enabled } : d)),
+        (prev) => prev?.map((d) => (d.id === dest.id ? { ...d, enabled } : d)),
         { revalidate: false }
       );
       try {
@@ -296,7 +294,10 @@ function TeamChatCard({
           </p>
         </div>
         {destination ? (
-          <RequireRole min="admin" fallback={<StatusDot on={destination.enabled} />}>
+          <RequireRole
+            min="admin"
+            fallback={<StatusDot on={destination.enabled} />}
+          >
             <Switch
               checked={destination.enabled}
               onCheckedChange={(checked) => onToggle(destination, checked)}
@@ -356,7 +357,10 @@ function ConnectorCard({
               {meta.blurb}
             </p>
           </div>
-          <RequireRole min="admin" fallback={<StatusDot on={destination.enabled} />}>
+          <RequireRole
+            min="admin"
+            fallback={<StatusDot on={destination.enabled} />}
+          >
             <div className="flex items-center gap-2">
               <Switch
                 checked={destination.enabled}

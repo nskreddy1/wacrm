@@ -67,7 +67,7 @@ export async function PATCH(request: Request) {
     `alerts-dest-write:${ctx.userId}`,
     RATE_LIMITS.adminAction
   );
-  if (!rate.allowed) return rateLimitResponse(rate);
+  if (!rate.success) return rateLimitResponse(rate);
 
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -119,7 +119,7 @@ export async function DELETE(request: Request) {
     `alerts-dest-write:${ctx.userId}`,
     RATE_LIMITS.adminAction
   );
-  if (!rate.allowed) return rateLimitResponse(rate);
+  if (!rate.success) return rateLimitResponse(rate);
 
   const parsed = deleteSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

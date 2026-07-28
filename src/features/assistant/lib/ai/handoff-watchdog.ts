@@ -112,9 +112,7 @@ export async function sweepOverdueHandoffs(
           .from('profiles')
           .select('user_id')
           .eq('account_id', row.account_id);
-        recipients = (members ?? []).map(
-          (m: { user_id: string }) => m.user_id
-        );
+        recipients = (members ?? []).map((m: { user_id: string }) => m.user_id);
         if (critical) escalated += 1;
       }
       if (recipients.length === 0) continue;
@@ -177,11 +175,7 @@ export async function sweepOverdueHandoffs(
       }
       notified += 1;
     } catch (err) {
-      console.error(
-        '[handoff-watchdog] row failed:',
-        row.conversation_id,
-        err
-      );
+      console.error('[handoff-watchdog] row failed:', row.conversation_id, err);
     }
   }
 

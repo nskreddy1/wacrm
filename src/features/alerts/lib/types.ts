@@ -8,11 +8,7 @@
  */
 
 export type AlertProvider =
-  | 'team_chat'
-  | 'slack'
-  | 'whatsapp'
-  | 'telegram'
-  | 'email';
+  'team_chat' | 'slack' | 'whatsapp' | 'telegram' | 'email';
 
 export type AlertDeliveryStatus = 'pending' | 'sent' | 'failed' | 'dead';
 

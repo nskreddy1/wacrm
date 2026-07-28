@@ -48,9 +48,7 @@ interface SlackPostMessageResponse {
 function isSlackConfig(
   config: Record<string, unknown>
 ): config is SlackDestinationConfig & Record<string, unknown> {
-  return (
-    typeof config.channel_id === 'string' && config.channel_id.length > 0
-  );
+  return typeof config.channel_id === 'string' && config.channel_id.length > 0;
 }
 
 export const slackAlertAdapter: AlertAdapter = {

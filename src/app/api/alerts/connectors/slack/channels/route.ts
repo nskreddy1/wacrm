@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     `alerts-slack-channels:${ctx.userId}`,
     RATE_LIMITS.adminAction
   );
-  if (!rate.allowed) return rateLimitResponse(rate);
+  if (!rate.success) return rateLimitResponse(rate);
 
   const destinationId = new URL(request.url).searchParams.get('destination');
   if (!destinationId) {
@@ -54,7 +54,10 @@ export async function GET(request: Request) {
     token = decrypt(destination.credentials_encrypted);
   } catch {
     return NextResponse.json(
-      { error: 'Stored Slack credentials are unreadable — reconnect the workspace' },
+      {
+        error:
+          'Stored Slack credentials are unreadable — reconnect the workspace',
+      },
       { status: 409 }
     );
   }

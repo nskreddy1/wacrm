@@ -65,10 +65,7 @@ export async function GET(request: Request) {
   }
 
   const code = url.searchParams.get('code') ?? '';
-  const state = verifyOAuthState(
-    url.searchParams.get('state') ?? '',
-    'slack'
-  );
+  const state = verifyOAuthState(url.searchParams.get('state') ?? '', 'slack');
   if (!code || !state) {
     return popupHtml(
       origin,
@@ -99,11 +96,7 @@ export async function GET(request: Request) {
     });
     data = (await res.json()) as SlackOAuthResponse;
   } catch {
-    return popupHtml(
-      origin,
-      false,
-      'Could not reach Slack. Please try again.'
-    );
+    return popupHtml(origin, false, 'Could not reach Slack. Please try again.');
   }
 
   if (!data.ok || !data.access_token || !data.team?.id) {
@@ -159,7 +152,10 @@ export async function GET(request: Request) {
       created_by: state.userId,
     });
     if (insErr) {
-      console.error('[slack connect] destination insert failed:', insErr.message);
+      console.error(
+        '[slack connect] destination insert failed:',
+        insErr.message
+      );
       return popupHtml(origin, false, 'Could not save the connection.');
     }
   }

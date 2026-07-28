@@ -160,9 +160,7 @@ export async function dispatchPendingAlerts(
         await markDead(
           db,
           row.id,
-          exhausted
-            ? `${outcome.error} (max attempts reached)`
-            : outcome.error
+          exhausted ? `${outcome.error} (max attempts reached)` : outcome.error
         );
         result.dead += 1;
         console.error(

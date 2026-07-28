@@ -67,13 +67,7 @@ export interface SectionMeta {
   id: SettingsSection;
   label: string;
   icon: LucideIcon;
-  group:
-    | 'account'
-    | 'general'
-    | 'customization'
-    | 'channels'
-    | 'data'
-    | 'help';
+  group: 'account' | 'general' | 'customization' | 'channels' | 'data' | 'help';
 }
 
 export const SECTION_META: Record<SettingsSection, SectionMeta> = {
