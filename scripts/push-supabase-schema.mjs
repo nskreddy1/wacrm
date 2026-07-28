@@ -3,21 +3,26 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import pg from 'pg';
+import {
+  MISSING_URL_MESSAGE,
+  describeTarget,
+  resolveDbUrl,
+} from './lib/resolve-db-url.mjs';
 
 const { Client } = pg;
 const projectRoot = process.cwd();
 const migrationsDirectory = path.join(projectRoot, 'supabase', 'migrations');
-const connectionString =
-  process.env.SUPABASE_DB_URL ??
-  process.env.POSTGRES_URL ??
-  process.env.DATABASE_URL;
+// Same resolver as db:doctor / db:reconcile so all three ALWAYS agree on
+// the target. They previously each read process.env independently, which
+// let the doctor check one database while push wrote to another.
+const resolved = await resolveDbUrl();
 
-if (!connectionString) {
-  console.error(
-    'Missing SUPABASE_DB_URL, POSTGRES_URL, or DATABASE_URL. Set one to the Supabase Postgres connection string.'
-  );
+if (!resolved) {
+  console.error(MISSING_URL_MESSAGE);
   process.exit(1);
 }
+
+const connectionString = resolved.connectionString;
 
 const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => /^\d+.*\.sql$/.test(file))
@@ -42,6 +47,14 @@ const client = new Client({
 
 try {
   await client.connect();
+  // Always state the target before writing. This is the guard against the
+  // "I fixed it, but on the wrong database" failure that hid an outage.
+  console.log(
+    `target ${describeTarget({
+      host: normalizedConnectionString.host,
+      origin: resolved.origin,
+    })}`
+  );
   await client.query(`
     CREATE SCHEMA IF NOT EXISTS wacrm_internal;
     CREATE TABLE IF NOT EXISTS wacrm_internal.schema_migrations (
@@ -74,8 +87,21 @@ try {
     }
 
     if (previousChecksum) {
+      // Deliberately still a hard stop — but tell the operator BOTH exits,
+      // because they are not interchangeable and picking wrong is costly.
       throw new Error(
-        `${filename} changed after it was applied. Add a new migration instead of editing migration history.`
+        `${filename} changed after it was applied.\n\n` +
+          `  Target: ${describeTarget({ host: normalizedConnectionString.host, origin: resolved.origin })}\n\n` +
+          `Two valid resolutions — choose by what the edit actually did:\n\n` +
+          `  1. The edit CHANGED the intended schema (added/altered a column,\n` +
+          `     policy, index): write a NEW migration. Never rewrite history\n` +
+          `     that has already shipped.\n\n` +
+          `  2. The edit was cosmetic or idempotency-only (e.g. adding\n` +
+          `     DROP POLICY IF EXISTS) and the live schema is ALREADY correct:\n` +
+          `     verify, then re-record the checksum without running DDL:\n` +
+          `       pnpm db:doctor        # must show no [BLOCKER] lines\n` +
+          `       pnpm db:reconcile     # dry run, shows what would change\n` +
+          `       pnpm db:reconcile --write\n`
       );
     }
 

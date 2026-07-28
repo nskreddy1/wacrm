@@ -28,30 +28,33 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { Client } from 'pg';
+import {
+  MISSING_URL_MESSAGE,
+  describeTarget,
+  normalizeDbUrl,
+  resolveDbUrl,
+} from './lib/resolve-db-url.mjs';
 
-// Report which variable won — this script WRITES to the ledger, so
-// silently resolving to the wrong database is the worst case here.
-const SOURCES = ['SUPABASE_DB_URL', 'POSTGRES_URL', 'DATABASE_URL'];
-const source = SOURCES.find((name) => process.env[name]);
-const connectionString = source ? process.env[source] : undefined;
+// Shared resolver: prefers --url, then the project's declared target in
+// .env.development.local, then ambient vars — and reports which one won.
+// This script WRITES to the ledger, so resolving to the wrong database
+// silently is the worst possible outcome here.
+const resolved = await resolveDbUrl();
 
-if (!connectionString) {
-  console.error(
-    'Set SUPABASE_DB_URL to the target database (production runs elsewhere,\n' +
-      'so pass its URL explicitly — this never guesses which database it is on).'
-  );
+if (!resolved) {
+  console.error(MISSING_URL_MESSAGE);
   process.exit(1);
 }
 
 const write = process.argv.includes('--write');
-
-// Supabase's pooler rejects the sslmode in the URL; strip it and set SSL
-// on the client instead (same handling as the other db scripts).
-const normalized = new URL(connectionString);
-normalized.searchParams.delete('sslmode');
+const normalized = normalizeDbUrl(resolved.connectionString);
+const target = describeTarget({
+  host: normalized.host,
+  origin: resolved.origin,
+});
 
 const client = new Client({
-  connectionString: normalized.toString(),
+  connectionString: normalized.connectionString,
   ssl: { rejectUnauthorized: false },
 });
 
@@ -81,15 +84,16 @@ try {
 
   if (stale.length === 0) {
     console.log(
-      `Nothing to reconcile on ${normalized.host} (via ${source}) — every ` +
-        `applied migration matches its file.\n` +
-        `If you expected a mismatch here, you are probably pointed at a ` +
-        `DIFFERENT database than the one you checked.`
+      `Nothing to reconcile — every applied migration matches its file.\n` +
+        `  target: ${target}\n\n` +
+        `If you EXPECTED a mismatch, you are pointed at a different database\n` +
+        `than the one that reported it. Target it explicitly:\n` +
+        `  pnpm db:reconcile --url='postgresql://...'`
     );
     process.exit(0);
   }
 
-  console.log(`\nChecksum mismatches on ${normalized.host} (via ${source}):\n`);
+  console.log(`\nChecksum mismatches found.\n  target: ${target}\n`);
   for (const { file, recorded, checksum } of stale) {
     console.log(`  ${file}`);
     console.log(`    recorded: ${recorded.slice(0, 16)}…`);
@@ -99,14 +103,15 @@ try {
   if (!write) {
     console.log(
       `\nDry run — nothing changed.\n\n` +
-        `Before re-recording, confirm the LIVE SCHEMA is actually correct:\n` +
-        `  SUPABASE_DB_URL='<same url>' pnpm db:doctor\n` +
+        `Before re-recording, confirm the LIVE SCHEMA is actually correct\n` +
+        `on THIS SAME host (${normalized.host}):\n` +
+        `  pnpm db:doctor\n` +
         `It must report no [BLOCKER] lines (the checksum WARN is expected).\n\n` +
         `If the edit changed the intended schema, do NOT reconcile — write a\n` +
         `NEW migration instead; that is the only safe way to change schema\n` +
         `that has already shipped.\n\n` +
         `Otherwise re-record with:\n` +
-        `  SUPABASE_DB_URL='<same url>' pnpm db:reconcile --write\n`
+        `  pnpm db:reconcile --write\n`
     );
     process.exit(0);
   }

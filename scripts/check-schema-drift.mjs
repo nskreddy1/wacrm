@@ -21,27 +21,28 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import pg from 'pg';
+import {
+  MISSING_URL_MESSAGE,
+  describeTarget,
+  resolveDbUrl,
+} from './lib/resolve-db-url.mjs';
 
 const { Client } = pg;
 const projectRoot = process.cwd();
 const migrationsDirectory = path.join(projectRoot, 'supabase', 'migrations');
 
-// Report WHICH variable won, not just the host. Falling back silently
-// through this list is how you end up confidently checking the wrong
-// database: `.env.development.local` and the shell can point at
-// different projects (e.g. ap-south-1 vs us-east-1), and a green result
-// on the wrong database is worse than no result at all.
-const SOURCES = ['SUPABASE_DB_URL', 'POSTGRES_URL', 'DATABASE_URL'];
-const source = SOURCES.find((name) => process.env[name]);
-const connectionString = source ? process.env[source] : undefined;
+// Shared resolver — reports WHICH source won, not just the host. Falling
+// back silently is how you confidently check the wrong database: this
+// exact script reported ap-south-1 for the developer and us-east-1 in
+// the VM, and a green result on the wrong database is worse than none.
+const resolved = await resolveDbUrl();
 
-if (!connectionString) {
-  console.error(
-    'Missing SUPABASE_DB_URL, POSTGRES_URL, or DATABASE_URL.\n' +
-      'Point it at the database you want to CHECK (safe: read-only).'
-  );
+if (!resolved) {
+  console.error(MISSING_URL_MESSAGE);
   process.exit(1);
 }
+
+const connectionString = resolved.connectionString;
 
 /**
  * The runtime contract: every table/column the AI pipeline reads or
@@ -163,17 +164,21 @@ try {
   }
 
   // 4. Report ------------------------------------------------------------
-  const target = normalized.host;
+  const target = describeTarget({
+    host: normalized.host,
+    origin: resolved.origin,
+  });
   if (problems.length === 0 && warnings.length === 0) {
     console.log(
-      `Schema OK (${target}, via ${source}) — runtime contract satisfied.\n` +
+      `Schema OK — runtime contract satisfied.\n` +
+        `  target: ${target}\n` +
         `Confirm that host is the database your PRODUCTION app talks to; a\n` +
         `pass on the wrong database proves nothing.`
     );
     process.exit(0);
   }
 
-  console.error(`\nSchema problems on ${target} (via ${source}):\n`);
+  console.error(`\nSchema problems on ${target}:\n`);
   for (const p of problems) console.error(`  [BLOCKER] ${p}`);
   for (const w of warnings) console.error(`  [WARN]    ${w}`);
 
