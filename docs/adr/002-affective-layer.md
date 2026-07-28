@@ -539,6 +539,41 @@ NOT mean abstracting every component behind speculative interfaces.
 Normalise at the boundary, keep policy per-channel, and hardcode the rest
 until a second consumer actually exists.
 
+#### Keeping the sidecar warm with Supabase cron (verified, viable)
+
+The cold-start problem has a real fix, and Supabase already has the
+scheduler for it. Verified behaviour:
+
+- Render free tier spins down after **15 minutes idle** → 30–60 s cold
+  start. An **external** HTTP request every 5–10 minutes prevents it;
+  **internal** cron/background work inside the app does NOT.
+- Free tier gives **750 compute-hours/month shared across the account**.
+  A month is ~730 hours, so **exactly one service can stay warm 24/7**
+  and still fit. Two warm services do not fit — budget accordingly, or
+  keep warm only during business hours (e.g. 08:00–18:00) to halve it.
+- Supabase `pg_cron` + `pg_net` can issue that external ping, which
+  makes the pinger part of the same platform as everything else:
+
+  ```sql
+  select cron.schedule('sidecar-keepwarm', '*/10 * * * *', $$
+    select net.http_get(url := 'https://<sidecar>.onrender.com/health');
+  $$);
+  ```
+
+  `pg_net` is async, so a hung sidecar cannot block the database. Store
+  any auth token in Vault rather than inlining it in the schedule.
+
+Caveats that keep this honest: free-tier RAM (512 MB) still **cannot hold
+SenseVoiceSmall** — keep-warm solves latency, not capacity, so a paid
+~2 GB instance is still required for the model. And Railway is not an
+alternative for zero-cost warmth: it has no free tier, only a $5/month
+credit (idle services simply cost less, they do not become free).
+
+**Therefore keep-warm is the right pattern but the wrong priority right
+now.** With managed ASR (Groq, $0.04/hr) there is no sidecar to keep
+warm — the pattern is filed for when prosodic emotion forces a
+self-hosted service, and the same recipe is what will keep it usable.
+
 ### What live calls would add — and only then
 
 Cascaded STT→LLM→TTS via LiveKit or Pipecat, ~500–800 ms end-to-end,
@@ -547,6 +582,53 @@ cancels in-flight LLM/TTS. Cascaded beats speech-to-speech for us because
 our value is **tool-heavy CRM lookups**, which need an inspectable text
 step for auditing and for the Stage-B "no new facts" invariant. None of
 this touches the agent core.
+
+### Operational: migrations vs. a separate production database
+
+**The outage that prompted this section:** auto-reply worked until the
+sentiment / supervised-handoff work landed, then stopped entirely. The
+cause was not the AI logic — it was **schema drift**. That work added
+columns (`ai_handoff_state`, `ai_caretaker_count`,
+`ai_sla_reminder_count`, `ai_language`) which the conversation-load
+SELECT reads. Postgres fails the **entire** statement when one column is
+missing (42703), and that error landed on a bare
+`if (convErr || !conv) return;` — a silent abort. Every inbound message
+died there, looking exactly like "the AI decided not to reply."
+
+Three properties made it invisible, all now fixed:
+
+1. **Tests mock the database**, so they validate code against the schema
+   we *believe* exists. 776 passing tests could not see this.
+2. **The query error was not logged.** Now logged loudly, naming
+   migrations as the likely cause.
+3. **Production is a different database from the dev sandbox.** Applying
+   migrations in one does nothing for the other.
+
+**Required deploy sequence** (production runs elsewhere, so this is
+manual discipline the sandbox cannot do for you):
+
+```bash
+# 1. PREFLIGHT — read-only, safe against production.
+SUPABASE_DB_URL='<production url>' pnpm db:doctor
+
+# 2. If it reports BLOCKERs, apply them (idempotent, checksum-keyed).
+SUPABASE_DB_URL='<production url>' pnpm db:push
+
+# 3. Re-run the preflight; it must print "Schema OK".
+SUPABASE_DB_URL='<production url>' pnpm db:doctor
+```
+
+`db:doctor` (`scripts/check-schema-drift.mjs`) checks three things and
+exits non-zero so it can gate a deploy: pending migrations, checksum
+mismatches (a migration edited *after* being applied — worse than a
+pending one, because both sides look "done"), and the **runtime
+contract**: the explicit list of tables, columns, and RPC functions the
+AI pipeline touches. Extend `REQUIRED` in that script whenever a
+migration adds a column the pipeline reads — that list is the executable
+version of "what production must have."
+
+Rule: **schema first, code second.** A deploy that ships code ahead of
+its migration is an outage with a delay on it.
 
 ### Added action items
 
@@ -603,7 +685,7 @@ on purpose: cosine and `ts_rank` live on incomparable scales.
   only when a golden-set eval shows fused-order errors. Not before.
 - **RAGAS golden set (~200 labelled queries)** — becomes possible once
   real tenant traffic exists; prerequisite for every further RAG change.
-- **BGE-M3 embeddings** — the self-hosted upgrade path for Indic
+- **BGE-M3 embeddings** �� the self-hosted upgrade path for Indic
   cross-lingual accuracy; can share the Render sidecar with
   SenseVoiceSmall. Requires re-embedding every chunk (different
   dimensionality than `vector(1536)`) — do it only when the golden set
