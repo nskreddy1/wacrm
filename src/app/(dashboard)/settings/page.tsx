@@ -12,6 +12,7 @@ import { SecurityPanel } from '@/features/settings/components/security-panel';
 import { AppearancePanel } from '@/features/settings/components/appearance-panel';
 import { ChannelConnections } from '@/features/settings/components/channel-connections';
 import { QuickRepliesManager } from '@/features/settings/components/quick-replies-manager';
+import { NotificationsSettings } from '@/features/settings/components/notifications-settings';
 import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-tags-panel';
 import { DealsSettings } from '@/features/settings/components/deals-settings';
 import { MembersTab } from '@/features/settings/components/members-tab';
@@ -66,6 +67,7 @@ export default function SettingsPage() {
     // defaults and bypassed connection testing.
     email: <ChannelConnections fixedChannel="email" />,
     'quick-replies': <QuickRepliesManager />,
+    notifications: <NotificationsSettings />,
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,
     members: <MembersTab />,

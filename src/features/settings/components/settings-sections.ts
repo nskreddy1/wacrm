@@ -1,5 +1,6 @@
 import {
   Activity,
+  BellRing,
   Coins,
   Database,
   Gauge,
@@ -33,6 +34,7 @@ export const SETTINGS_SECTIONS = [
   'sms',
   'email',
   'quick-replies',
+  'notifications',
   'fields',
   'deals',
   'members',
@@ -130,6 +132,12 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
     id: 'quick-replies',
     label: 'Quick replies',
     icon: Zap,
+    group: 'channels',
+  },
+  notifications: {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: BellRing,
     group: 'channels',
   },
   'external-sources': {
