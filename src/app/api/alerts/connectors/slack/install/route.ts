@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
 import { createOAuthState } from '@/features/alerts/lib/oauth-state';
+import { canonicalOrigin } from '@/lib/url/canonical-origin';
 
 /**
  * Starts the Slack OAuth v2 install flow.
@@ -31,7 +32,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const origin = new URL(request.url).origin;
+  // MUST be the public origin, and MUST match the value used in the
+  // callback's token exchange or Slack fails with redirect_uri_mismatch.
+  const origin = canonicalOrigin(request);
   const state = createOAuthState({
     accountId: ctx.accountId,
     userId: ctx.userId,

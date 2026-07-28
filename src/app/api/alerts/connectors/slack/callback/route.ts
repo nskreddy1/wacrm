@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/features/flows/lib/admin-client';
 import { encrypt } from '@/features/whatsapp/lib/encryption';
 import { verifyOAuthState } from '@/features/alerts/lib/oauth-state';
+import { canonicalOrigin } from '@/lib/url/canonical-origin';
 
 /**
  * Slack OAuth v2 callback (popup).
@@ -53,7 +54,10 @@ interface SlackOAuthResponse {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const origin = url.origin;
+  // Public origin, not the internal one: used both as the postMessage
+  // target (a wrong target is silently dropped, hanging the popup) and to
+  // rebuild the exact redirect_uri the authorize step sent to Slack.
+  const origin = canonicalOrigin(request);
 
   if (url.searchParams.get('error')) {
     // User clicked "Cancel" on Slack's consent screen — a normal outcome.
