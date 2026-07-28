@@ -54,10 +54,85 @@ interface DispatchArgs {
  * reacting to a customer message that just landed — so no separate
  * window check is needed.
  */
+/**
+ * Why a dispatch did not produce a reply. Every early return below maps to
+ * exactly one of these, so "the bot said nothing" is always explainable
+ * from the logs instead of being indistinguishable from a crash.
+ *
+ * Ordered roughly by how often each is the real answer in practice.
+ */
+type SkipReason =
+  /** No agent row, or its `autoreply` capability is switched off. */
+  | 'agent_not_configured'
+  /** An active keyword / new_message flow owns this inbound; flows win. */
+  | 'flow_autoresponder_active'
+  /** A human actually replied, or an operator hit "Resume AI". */
+  | 'human_took_over'
+  /** Outside the routed agent's on-duty hours. */
+  | 'outside_schedule'
+  /** Lifetime per-conversation reply cap reached. */
+  | 'reply_cap_per_conversation'
+  /** Today's per-day reply cap reached. */
+  | 'reply_cap_per_day'
+  /** Caretaker budget spent, or inside its cool-off window. */
+  | 'caretaker_budget_spent'
+  /** Per-account burst throttle on the shared BYO key. */
+  | 'account_rate_limited'
+  /** Plan's monthly AI-reply budget exhausted. */
+  | 'monthly_quota_exhausted'
+  /** Nothing to reply to. */
+  | 'no_messages'
+  /** Conversation row vanished (deleted mid-flight). */
+  | 'conversation_missing'
+  /** Lost the concurrent race for the last reply slot. */
+  | 'reply_slot_lost'
+  /** Query/RPC error — a real fault, not a policy decision. */
+  | 'conversation_load_failed'
+  | 'per_day_count_failed'
+  | 'caretaker_claim_failed'
+  | 'reply_slot_claim_failed'
+  /** The provider call itself threw (bad key, quota, network). */
+  | 'generation_failed';
+
+/** Reasons that indicate a FAULT rather than a deliberate policy skip. */
+const FAULT_REASONS = new Set<SkipReason>([
+  'conversation_load_failed',
+  'per_day_count_failed',
+  'caretaker_claim_failed',
+  'reply_slot_claim_failed',
+  'generation_failed',
+]);
+
 export async function dispatchInboundToAiReply(
   args: DispatchArgs
 ): Promise<void> {
   const { accountId, conversationId, contactId } = args;
+
+  /*
+   * Exactly ONE structured line per dispatch, always.
+   *
+   * This function has a dozen legitimate reasons to stay quiet, and every
+   * one of them used to be a bare `return`. In production that is
+   * indistinguishable from a crash — which is precisely why an outage went
+   * undiagnosed: "auto-reply stopped working" could equally have meant a
+   * failed query, a flow taking precedence, or a reply cap doing its job.
+   *
+   * Grep `[ai auto-reply]` in production logs and the answer is the first
+   * thing you read. Faults are console.error so they surface in alerting;
+   * policy skips are console.log so they stay cheap and non-noisy.
+   */
+  const decide = (
+    outcome: SkipReason | 'replied' | 'escalated',
+    detail?: Record<string, unknown>
+  ) => {
+    const isFault = FAULT_REASONS.has(outcome as SkipReason);
+    const line =
+      `[ai auto-reply] ${isFault ? 'FAULT' : 'outcome'}=${outcome} ` +
+      `conversation=${conversationId} account=${accountId}` +
+      (detail ? ` ${JSON.stringify(detail)}` : '');
+    if (isFault) console.error(line);
+    else console.log(line);
+  };
 
   try {
     const db = supabaseAdmin();
@@ -66,7 +141,13 @@ export async function dispatchInboundToAiReply(
     // agent's autoreply_enabled column is on. Unconfigured or switched
     // off → silent no-op (suggestions_enabled is irrelevant here).
     const config = await loadAgentConfig(db, accountId, 'autoreply');
-    if (!config) return;
+    if (!config) {
+      // By far the most common cause of "auto-reply isn't working": the
+      // account has an agent but its auto-reply capability is off, or no
+      // API key is set, so loadAgentConfig returns null.
+      decide('agent_not_configured');
+      return;
+    }
 
     // NOTE: the schedule gate runs AFTER routing (below) — each custom
     // agent can have its own on-duty hours, so a night-shift agent can
@@ -87,7 +168,12 @@ export async function dispatchInboundToAiReply(
       .eq('status', 'active')
       .in('trigger_type', ['new_message_received', 'keyword'])
       .limit(1);
-    if (autoResponders && autoResponders.length > 0) return;
+    if (autoResponders && autoResponders.length > 0) {
+      // Second most common surprise: activating ONE keyword flow silences
+      // the LLM for the entire account, by design (no double-texting).
+      decide('flow_autoresponder_active', { flowId: autoResponders[0].id });
+      return;
+    }
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
@@ -103,14 +189,21 @@ export async function dispatchInboundToAiReply(
     // from "the AI chose not to reply". Never fail quietly on a query
     // error again; a missing row is normal, a query error is not.
     if (convErr) {
-      console.error(
-        '[ai auto-reply] conversation load failed — aborting this turn.',
-        'If this mentions a missing column, migrations are behind:',
-        convErr
-      );
+      decide('conversation_load_failed', {
+        code: convErr.code,
+        message: convErr.message,
+        // 42703 = undefined_column: migrations are behind on THIS database.
+        hint:
+          convErr.code === '42703'
+            ? 'undefined_column — run: pnpm db:doctor --url=<this app\u2019s database>'
+            : undefined,
+      });
       return;
     }
-    if (!conv) return;
+    if (!conv) {
+      decide('conversation_missing');
+      return;
+    }
 
     /*
      * Who owns this thread right now?
@@ -125,11 +218,21 @@ export async function dispatchInboundToAiReply(
      * person actually spoke", and only the latter silences us.
      */
     const posture = resolveHandoffPosture(conv);
-    if (posture === 'silent') return;
+    if (posture === 'silent') {
+      decide('human_took_over', {
+        handoffState: conv.ai_handoff_state,
+        killSwitch: conv.ai_autoreply_disabled,
+        assigned: Boolean(conv.assigned_agent_id),
+      });
+      return;
+    }
     const isCaretaker = posture === 'caretaker';
 
     const messages = await buildConversationContext(db, conversationId);
-    if (messages.length === 0) return;
+    if (messages.length === 0) {
+      decide('no_messages');
+      return;
+    }
 
     // Account-wide throttle on the shared BYO key. The per-conversation
     // cap bounds one thread; this bounds a burst across many threads (a
@@ -141,9 +244,10 @@ export async function dispatchInboundToAiReply(
       RATE_LIMITS.aiAutoReplyAccount
     );
     if (!acctLimit.success) {
-      console.warn(
-        `[ai auto-reply] account ${accountId} hit the per-account rate limit — skipping this inbound.`
-      );
+      decide('account_rate_limited', {
+        limit: RATE_LIMITS.aiAutoReplyAccount.limit,
+        windowMs: RATE_LIMITS.aiAutoReplyAccount.windowMs,
+      });
       return;
     }
 
@@ -153,9 +257,7 @@ export async function dispatchInboundToAiReply(
     // exactly like the schedule and reply-cap gates below.
     const aiQuota = await checkMonthlyQuota(accountId, 'ai_replies');
     if (!aiQuota.allowed) {
-      console.warn(
-        `[ai auto-reply] account ${accountId} exhausted its monthly AI reply quota (${aiQuota.limit}) — skipping this inbound.`
-      );
+      decide('monthly_quota_exhausted', { limit: aiQuota.limit });
       return;
     }
 
@@ -176,7 +278,15 @@ export async function dispatchInboundToAiReply(
     // Reply-hours window of WHOEVER is answering: outside the routed
     // agent's schedule the bot stands down and the inbound waits in
     // the inbox for a human.
-    if (!isWithinAutoReplySchedule(activeConfig)) return;
+    if (!isWithinAutoReplySchedule(activeConfig)) {
+      decide('outside_schedule', {
+        agent: specialist?.id ?? config.agentId,
+        start: activeConfig.autoReplyScheduleStart,
+        end: activeConfig.autoReplyScheduleEnd,
+        timezone: activeConfig.autoReplyTimezone,
+      });
+      return;
+    }
 
     // Reply-cap gate, by the routed agent's limit mode:
     //  - never:            no cap — the bot always replies.
@@ -195,6 +305,10 @@ export async function dispatchInboundToAiReply(
       activeConfig.autoReplyLimitMode === 'per_conversation' &&
       conv.ai_reply_count >= activeConfig.autoReplyMaxPerConversation
     ) {
+      decide('reply_cap_per_conversation', {
+        replyCount: conv.ai_reply_count,
+        cap: activeConfig.autoReplyMaxPerConversation,
+      });
       return;
     }
     if (!isCaretaker && activeConfig.autoReplyLimitMode === 'per_day') {
@@ -209,10 +323,20 @@ export async function dispatchInboundToAiReply(
       if (cntErr) {
         // Can't establish today's count — fail safe (don't reply) so a
         // transient DB error can never blow past the cap.
-        console.error('[ai auto-reply] per-day count failed:', cntErr);
+        decide('per_day_count_failed', {
+          code: cntErr.code,
+          message: cntErr.message,
+        });
         return;
       }
-      if ((count ?? 0) >= activeConfig.autoReplyMaxPerConversation) return;
+      if ((count ?? 0) >= activeConfig.autoReplyMaxPerConversation) {
+        decide('reply_cap_per_day', {
+          today: count ?? 0,
+          cap: activeConfig.autoReplyMaxPerConversation,
+          timezone: activeConfig.autoReplyTimezone,
+        });
+        return;
+      }
     }
 
     /*
@@ -242,13 +366,26 @@ export async function dispatchInboundToAiReply(
       if (claimErr) {
         // Migration not applied, or a transient DB error. Fail safe:
         // stay quiet rather than risk an unbounded holding-message loop.
-        console.error(
-          '[ai auto-reply] claim_ai_caretaker_slot failed (staying quiet):',
-          claimErr
-        );
+        decide('caretaker_claim_failed', {
+          code: claimErr.code,
+          message: claimErr.message,
+          hint:
+            claimErr.code === '42883'
+              ? 'undefined_function claim_ai_caretaker_slot — migrations are behind'
+              : undefined,
+        });
         return;
       }
-      if (claimed !== true) return; // budget spent or inside cool-off
+      if (claimed !== true) {
+        // Budget spent or inside cool-off. Expected and healthy — the SLA
+        // watchdog owns the thread from here.
+        decide('caretaker_budget_spent', {
+          used: conv.ai_caretaker_count,
+          maxMessages: policy.maxMessages,
+          cooloffSeconds: policy.cooloffSeconds,
+        });
+        return;
+      }
 
       const waited = waitingMinutes(conv);
       const [knowledge, crmContext] = await Promise.all([
@@ -315,6 +452,7 @@ export async function dispatchInboundToAiReply(
       } catch (sendErr) {
         console.error('[ai auto-reply] caretaker send failed:', sendErr);
       }
+      decide('replied', { mode: 'caretaker', usedFallback: !holdingText });
       return;
     }
 
@@ -330,20 +468,27 @@ export async function dispatchInboundToAiReply(
     // stable blocks become the system prefix and the retrieved
     // knowledge rides as the final user turn, so providers reuse the
     // cached prefix across replies.
-    const { text, handoff, usage, sentiment, escalationReason, language, affect } =
-      await generateReply({
-        config: activeConfig,
-        messages,
-        promptParts: buildPromptParts({
-          // The routed persona — the specialist's when matched, else
-          // the default agent's.
-          userPrompt: activeConfig.systemPrompt,
-          mode: 'auto_reply',
-          knowledge,
-          crmContext,
-        }),
-        cacheKey: conversationId,
-      });
+    const {
+      text,
+      handoff,
+      usage,
+      sentiment,
+      escalationReason,
+      language,
+      affect,
+    } = await generateReply({
+      config: activeConfig,
+      messages,
+      promptParts: buildPromptParts({
+        // The routed persona — the specialist's when matched, else
+        // the default agent's.
+        userPrompt: activeConfig.systemPrompt,
+        mode: 'auto_reply',
+        knowledge,
+        crmContext,
+      }),
+      cacheKey: conversationId,
+    });
 
     // Append to the affective history (ADR-002 §3). APPEND, never
     // update: the single overwritten ai_sentiment column is what made
@@ -509,6 +654,11 @@ export async function dispatchInboundToAiReply(
           reason,
         });
       }
+      decide('escalated', {
+        reason,
+        assignee: assignee ?? conv.assigned_agent_id ?? null,
+        statePersisted: !escalateErr,
+      });
       return;
     }
 
@@ -552,10 +702,20 @@ export async function dispatchInboundToAiReply(
       // deploy issue — e.g. `claim_ai_reply_slot` not EXECUTE-able by the
       // service role, or the migration not applied. Log it loudly: a
       // silent return makes "auto-reply never fires" undiagnosable.
-      console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr);
+      decide('reply_slot_claim_failed', {
+        code: claimErr.code,
+        message: claimErr.message,
+        hint:
+          claimErr.code === '42883'
+            ? 'undefined_function claim_ai_reply_slot — migrations are behind'
+            : undefined,
+      });
       return;
     }
-    if (claimed !== true) return; // lost the per-conversation cap race
+    if (claimed !== true) {
+      decide('reply_slot_lost', { cap: lifetimeCap });
+      return;
+    }
 
     // Channel-agnostic send: the orchestrator resolves the conversation's
     // channel connection (Meta / Twilio / legacy config) and persists the
@@ -577,6 +737,11 @@ export async function dispatchInboundToAiReply(
       // Meter the plan's monthly AI-reply budget only after the send
       // landed (fire-and-forget — metering loss never fails a reply).
       void consumeMonthlyQuota(accountId, 'ai_replies');
+      decide('replied', {
+        mode: 'normal',
+        agent: specialist?.id ?? config.agentId,
+        chars: text.length,
+      });
     } catch (sendErr) {
       const { error: releaseErr } = await db.rpc('release_ai_reply_slot', {
         conversation_id: conversationId,
@@ -590,6 +755,13 @@ export async function dispatchInboundToAiReply(
       throw sendErr; // handled by the outer catch (logged, never thrown)
     }
   } catch (err) {
+    // Contract with the webhook: this NEVER throws, so the 200 to Meta is
+    // never at risk. But it must never be silent either — emit the same
+    // structured line as every other exit so a grep for `[ai auto-reply]`
+    // returns one row per inbound with no gaps.
+    decide('generation_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     console.error('[ai auto-reply] dispatch failed:', err);
   }
 }
