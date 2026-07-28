@@ -276,7 +276,10 @@ describe('dispatchPendingAlerts', () => {
   it('defers instead of failing when no adapter exists for the provider', async () => {
     const { db, updatesTo } = makeDb({
       due: [dueRow()],
-      destinations: [destination({ provider: 'telegram' })],
+      // A provider this build has no adapter for. This is the rolling-deploy
+      // case: an older instance drains a queue containing rows enqueued by a
+      // newer one. Must park, never dead-letter — the alert is still valid.
+      destinations: [destination({ provider: 'msteams' })],
     });
 
     const res = await dispatchPendingAlerts(db);
