@@ -168,12 +168,20 @@ try {
     host: normalized.host,
     origin: resolved.origin,
   });
+  // Reads are safe on the transaction pooler, WRITES are not — say so here so
+  // a green doctor result is never mistaken for "db:push will work too".
+  const poolerNote =
+    normalized.host.includes(':6543') || normalized.url.port === '6543'
+      ? `\nNote: :6543 is the transaction pooler — fine for this read-only\n` +
+        `check, but db:push needs :5432 (session) or a direct connection.`
+      : '';
+
   if (problems.length === 0 && warnings.length === 0) {
     console.log(
       `Schema OK — runtime contract satisfied.\n` +
         `  target: ${target}\n` +
         `Confirm that host is the database your PRODUCTION app talks to; a\n` +
-        `pass on the wrong database proves nothing.`
+        `pass on the wrong database proves nothing.${poolerNote}`
     );
     process.exit(0);
   }
@@ -183,8 +191,17 @@ try {
   for (const w of warnings) console.error(`  [WARN]    ${w}`);
 
   if (problems.length > 0) {
+    // NOTE: show the --url= form, never `VAR='<url>' pnpm ...`. The env-var
+    // form was copied verbatim into this project's environment variables
+    // once, creating a SUPABASE_DB_URL that literally contained
+    // "'<same url>' pnpm db:doctor" and hijacking every later run.
     console.error(
-      `\nFix: run  SUPABASE_DB_URL='<same url>' pnpm db:push\n` +
+      `\nFix: apply the pending migrations, then re-check:\n` +
+        `  pnpm db:push --dry-run          # review the plan first\n` +
+        `  pnpm db:push --yes\n` +
+        `  pnpm db:doctor\n\n` +
+        `Add --url='postgresql://...' to every command above if this host is\n` +
+        `not the one those commands resolve to by default.\n` +
         `Until then, auto-reply will silently abort on every inbound message.\n`
     );
     process.exit(1);

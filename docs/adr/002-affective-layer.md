@@ -607,25 +607,51 @@ Three properties made it invisible, all now fixed:
 **Required deploy sequence** (production runs elsewhere, so this is
 manual discipline the sandbox cannot do for you):
 
+Always pass the target with `--url=`. **Never** use the
+`VAR='<url>' pnpm ...` form: that exact documented example was once
+copied into the project's environment variables, creating a
+`SUPABASE_DB_URL` whose value was literally `'<same url>' pnpm db:doctor`
+— which then hijacked every subsequent run.
+
 ```bash
-# 1. PREFLIGHT — read-only, safe against production.
-SUPABASE_DB_URL='<production url>' pnpm db:doctor
+PROD='postgresql://...@<host>:5432/postgres'   # 5432, not 6543 (see below)
 
-# 2. If it reports BLOCKERs, apply them (idempotent, checksum-keyed).
-SUPABASE_DB_URL='<production url>' pnpm db:push
+# 1. PREFLIGHT — read-only, safe on any port.
+pnpm db:doctor --url="$PROD"
 
-# 3. Re-run the preflight; it must print "Schema OK".
-SUPABASE_DB_URL='<production url>' pnpm db:doctor
+# 2. REVIEW the plan before changing production.
+pnpm db:push --dry-run --url="$PROD"
+
+# 3. APPLY. --yes is mandatory for any non-local database.
+pnpm db:push --yes --url="$PROD"
+
+# 4. VERIFY. Must print "Schema OK".
+pnpm db:doctor --url="$PROD"
 ```
 
-`db:doctor` (`scripts/check-schema-drift.mjs`) checks three things and
-exits non-zero so it can gate a deploy: pending migrations, checksum
-mismatches (a migration edited *after* being applied — worse than a
-pending one, because both sides look "done"), and the **runtime
-contract**: the explicit list of tables, columns, and RPC functions the
-AI pipeline touches. Extend `REQUIRED` in that script whenever a
-migration adds a column the pipeline reads — that list is the executable
-version of "what production must have."
+**Use port 5432 (session) or a direct connection for `db:push`.** Supabase's
+transaction pooler (`:6543`) hands the connection back after every
+transaction, so **advisory locks and `SET LOCAL` do not persist** — the two
+mechanisms that serialise concurrent deploys and bound DDL lock waits. Push
+therefore refuses `:6543` outright when work is pending (override with
+`--allow-pooler` only if you accept those risks). `db:doctor` is read-only
+and stays safe on `:6543`.
+
+`db:doctor` (`scripts/check-schema-drift.mjs`) exits non-zero so it can gate
+a deploy, and checks: pending migrations, checksum mismatches (a migration
+edited *after* being applied — worse than a pending one, because both sides
+look "done"), and the **runtime contract**: the explicit tables, columns,
+and RPC functions the AI pipeline touches. Extend `REQUIRED` in that script
+whenever a migration adds a column the pipeline reads — that list is the
+executable version of "what production must have."
+
+`db:push` (`scripts/push-supabase-schema.mjs`) is production-safe by
+construction: it prints its resolved target and origin, plans before acting
+(`--dry-run`), refuses remote writes without `--yes`, takes a **`pg` advisory
+lock** so two pipelines cannot migrate at once, sets **`lock_timeout = 10s`**
+so DDL fails fast instead of queueing behind a long query and freezing all
+traffic on the table, sets `statement_timeout = 5min`, wraps each migration
+in its own transaction, and records `applied_by` for audit.
 
 Rule: **schema first, code second.** A deploy that ships code ahead of
 its migration is an outage with a delay on it.
