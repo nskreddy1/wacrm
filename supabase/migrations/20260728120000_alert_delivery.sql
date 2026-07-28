@@ -193,3 +193,69 @@ GRANT SELECT ON alert_deliveries TO authenticated;
 
 GRANT ALL ON alert_destinations TO service_role;
 GRANT ALL ON alert_deliveries TO service_role;
+
+-- ----------------------------------------------------------------------------
+-- 5. Dispatcher schedule (pg_cron + pg_net), mirroring the watchdog job.
+--    Reads the same Vault secrets ('app_base_url', 'automation_cron_secret'),
+--    so an un-provisioned environment skips quietly instead of erroring.
+-- ----------------------------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+CREATE SCHEMA IF NOT EXISTS ai;
+
+CREATE OR REPLACE FUNCTION ai.tick_alert_dispatch()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+-- Pin the search path: SECURITY DEFINER, so an attacker-controlled
+-- search_path could otherwise shadow the functions we call.
+SET search_path = pg_catalog, public, vault
+AS $$
+DECLARE
+  v_base_url TEXT;
+  v_secret   TEXT;
+BEGIN
+  SELECT decrypted_secret INTO v_base_url
+    FROM vault.decrypted_secrets WHERE name = 'app_base_url';
+  SELECT decrypted_secret INTO v_secret
+    FROM vault.decrypted_secrets WHERE name = 'automation_cron_secret';
+
+  IF v_base_url IS NULL OR v_secret IS NULL THEN
+    RAISE NOTICE 'alert dispatcher not configured (missing vault secrets); skipping';
+    RETURN;
+  END IF;
+
+  -- Fire-and-forget: pg_net queues the request and returns immediately,
+  -- so a slow endpoint can never hold a cron worker open.
+  PERFORM net.http_post(
+    url     := v_base_url || '/api/alerts/dispatch',
+    headers := jsonb_build_object(
+      'Content-Type',  'application/json',
+      'x-cron-secret', v_secret
+    ),
+    body          := '{}'::jsonb,
+    timeout_milliseconds := 20000
+  );
+END;
+$$;
+
+-- Not callable by tenants: infrastructure + SECURITY DEFINER. Postgres
+-- grants EXECUTE to PUBLIC by default, so the revoke is required.
+REVOKE ALL ON FUNCTION ai.tick_alert_dispatch() FROM PUBLIC;
+
+-- Re-running this migration must not stack duplicate schedules.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'alerts-dispatch') THEN
+    PERFORM cron.unschedule('alerts-dispatch');
+  END IF;
+END $$;
+
+-- Every minute. The endpoint claims each row with a CAS on `attempts`,
+-- so overlapping ticks cost a skipped row rather than a duplicate send.
+SELECT cron.schedule(
+  'alerts-dispatch',
+  '* * * * *',
+  $$SELECT ai.tick_alert_dispatch();$$
+);

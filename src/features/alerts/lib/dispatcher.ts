@@ -65,6 +65,29 @@ export async function dispatchPendingAlerts(
   }
   if (!due || due.length === 0) return result;
 
+  // Batch-load all destinations for this tick in ONE query (avoids an N+1:
+  // 50 rows would otherwise mean 50 extra round-trips per tick).
+  const destinationIds = [
+    ...new Set((due as AlertDeliveryRow[]).map((r) => r.destination_id)),
+  ];
+  const { data: destRows, error: destBatchErr } = await db
+    .from('alert_destinations')
+    .select(
+      'id, account_id, provider, display_name, config, credentials_encrypted, event_types, enabled'
+    )
+    .in('id', destinationIds);
+
+  if (destBatchErr) {
+    console.error(
+      '[alerts dispatch] destination batch read failed:',
+      destBatchErr.message
+    );
+    return result;
+  }
+  const destinationById = new Map<string, AlertDestination>(
+    ((destRows ?? []) as AlertDestination[]).map((d) => [d.id, d])
+  );
+
   for (const row of due as AlertDeliveryRow[]) {
     try {
       // --- Optimistic claim (CAS on attempts) --------------------------
@@ -83,16 +106,10 @@ export async function dispatchPendingAlerts(
       }
       result.claimed += 1;
 
-      // --- Load destination WITH credentials (service role only) -------
-      const { data: destination, error: destErr } = await db
-        .from('alert_destinations')
-        .select(
-          'id, account_id, provider, display_name, config, credentials_encrypted, event_types, enabled'
-        )
-        .eq('id', row.destination_id)
-        .single();
+      // --- Destination from the batch map (credentials: service role only)
+      const destination = destinationById.get(row.destination_id);
 
-      if (destErr || !destination) {
+      if (!destination) {
         await markDead(db, row.id, 'Destination no longer exists');
         result.dead += 1;
         continue;
@@ -120,10 +137,7 @@ export async function dispatchPendingAlerts(
       }
 
       // --- Send ---------------------------------------------------------
-      const outcome = await adapter.send(
-        destination as AlertDestination,
-        row.payload
-      );
+      const outcome = await adapter.send(destination, row.payload);
 
       if (outcome.ok) {
         await db
@@ -184,7 +198,7 @@ export async function dispatchPendingAlerts(
 }
 
 async function markDead(
-  db: typeof supabaseAdmin,
+  db: SupabaseClient,
   deliveryId: string,
   reason: string
 ): Promise<void> {
