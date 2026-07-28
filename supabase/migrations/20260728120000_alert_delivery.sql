@@ -37,7 +37,11 @@ CREATE TABLE IF NOT EXISTS alert_destinations (
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
 
   -- One connector per provider, deliberately NOT a generic abstraction.
-  provider TEXT NOT NULL CHECK (provider IN ('slack', 'whatsapp', 'telegram', 'email')),
+  -- 'team_chat' is the tier-1 built-in: it posts into the app's own team
+  -- messaging (#Alerts channel), needs no external connection, and is
+  -- auto-created per account so alerts are NEVER silently dropped when no
+  -- Slack/WhatsApp/... has been connected yet.
+  provider TEXT NOT NULL CHECK (provider IN ('team_chat', 'slack', 'whatsapp', 'telegram', 'email')),
 
   -- Human label shown in settings ("#support-alerts", "Ops WhatsApp group").
   display_name TEXT NOT NULL DEFAULT '',
