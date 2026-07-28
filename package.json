@@ -41,7 +41,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:push": "node --env-file-if-exists=.env.development.local scripts/push-supabase-schema.mjs",
-    "db:doctor": "node --env-file-if-exists=.env.development.local scripts/check-schema-drift.mjs"
+    "db:doctor": "node --env-file-if-exists=.env.development.local scripts/check-schema-drift.mjs",
+    "db:reconcile": "node --env-file-if-exists=.env.development.local scripts/reconcile-migration-checksums.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.18",

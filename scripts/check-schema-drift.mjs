@@ -26,10 +26,14 @@ const { Client } = pg;
 const projectRoot = process.cwd();
 const migrationsDirectory = path.join(projectRoot, 'supabase', 'migrations');
 
-const connectionString =
-  process.env.SUPABASE_DB_URL ??
-  process.env.POSTGRES_URL ??
-  process.env.DATABASE_URL;
+// Report WHICH variable won, not just the host. Falling back silently
+// through this list is how you end up confidently checking the wrong
+// database: `.env.development.local` and the shell can point at
+// different projects (e.g. ap-south-1 vs us-east-1), and a green result
+// on the wrong database is worse than no result at all.
+const SOURCES = ['SUPABASE_DB_URL', 'POSTGRES_URL', 'DATABASE_URL'];
+const source = SOURCES.find((name) => process.env[name]);
+const connectionString = source ? process.env[source] : undefined;
 
 if (!connectionString) {
   console.error(
@@ -112,11 +116,18 @@ try {
       if (!seen) {
         problems.push(`PENDING migration never applied: ${file}`);
       } else if (seen !== checksum) {
-        // Editing an applied migration means the database and the repo
-        // disagree while both look "done" — worse than a pending one.
+        // Editing an applied migration leaves the ledger and the repo
+        // disagreeing while both look "done". Deliberately a WARN, not a
+        // BLOCKER: the checksum proves the FILE changed, it cannot tell
+        // us whether the SCHEMA is wrong. An edit that only added
+        // `DROP POLICY IF EXISTS` changes the bytes while leaving the
+        // resulting schema identical. Section 2 below is what actually
+        // verifies the schema; treat this as "go confirm", not "broken".
         warnings.push(
           `CHECKSUM MISMATCH: ${file} was edited after being applied. ` +
-            `The database does not match the file.`
+            `The file no longer matches what was recorded. This may be ` +
+            `harmless (e.g. an idempotency tweak) — verify the schema, ` +
+            `then run  pnpm db:reconcile  to re-record the checksum.`
         );
       }
     }
@@ -154,11 +165,15 @@ try {
   // 4. Report ------------------------------------------------------------
   const target = normalized.host;
   if (problems.length === 0 && warnings.length === 0) {
-    console.log(`Schema OK (${target}) — runtime contract satisfied.`);
+    console.log(
+      `Schema OK (${target}, via ${source}) — runtime contract satisfied.\n` +
+        `Confirm that host is the database your PRODUCTION app talks to; a\n` +
+        `pass on the wrong database proves nothing.`
+    );
     process.exit(0);
   }
 
-  console.error(`\nSchema problems on ${target}:\n`);
+  console.error(`\nSchema problems on ${target} (via ${source}):\n`);
   for (const p of problems) console.error(`  [BLOCKER] ${p}`);
   for (const w of warnings) console.error(`  [WARN]    ${w}`);
 
