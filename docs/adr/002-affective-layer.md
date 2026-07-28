@@ -24,7 +24,7 @@ to one who arrives neutral and leaves furious.
 contains frustrated-customer handling per tone. But the tone is picked
 **once** by the client in a form, and the frustration guidance is fixed
 English prose. The same words are sent whether the customer is mildly
-impatient or threatening to sue. Emotion is detected but never *steers*
+impatient or threatening to sue. Emotion is detected but never _steers_
 generation — it is recorded and discarded.
 
 **c) My `sentiment.ts` was a keyword lookup — it must not ship.**
@@ -41,7 +41,7 @@ foundation to build on.
 
 > **Emotion is a first-class state machine, not a field on a message.**
 
-Today emotion is an *output* of text generation. It must become an
+Today emotion is an _output_ of text generation. It must become an
 **input** to it, held in a layer that owns no channel-specific code.
 
 ```
@@ -65,7 +65,7 @@ Today emotion is an *output* of text generation. It must become an
 
 **Why this shape, and why now.** The 2026 voice research is explicit that
 production voice stacks run "a state tracker computing a rolling EMA of
-emotion signals" that drives *both* prompt injection and TTS warmth/pace.
+emotion signals" that drives _both_ prompt injection and TTS warmth/pace.
 If we instead bolt emotion onto the WhatsApp text path, adding voice later
 means rewriting it. The layer must be modality-agnostic **from day one** —
 text contributes lexical signals, voice will contribute prosody (pitch,
@@ -79,29 +79,36 @@ extra today.
 
 Replace the 4-way enum. Research is unambiguous: GoEmotions-style detection
 is **multi-label with sigmoid activation, never softmax** — a customer can
-be simultaneously angry *and* disappointed *and* hopeful, and softmax
+be simultaneously angry _and_ disappointed _and_ hopeful, and softmax
 forces a false single winner.
 
 ```ts
 interface AffectiveState {
   emotions: Partial<Record<Emotion, number>>; // independent 0–1 confidences
-  intensity: number;      // 0–1 overall arousal
-  valence: number;        // -1 negative … +1 positive
+  intensity: number; // 0–1 overall arousal
+  valence: number; // -1 negative … +1 positive
   trend: 'escalating' | 'stable' | 'de-escalating';
-  smoothed: number;       // EMA of valence — resists single-message noise
-  confidence: number;     // low ⇒ do not act on it
+  smoothed: number; // EMA of valence — resists single-message noise
+  confidence: number; // low ⇒ do not act on it
   source: 'lexical' | 'specialist' | 'prosody' | 'fused';
 }
 
 type Emotion =
-  | 'anger' | 'frustration' | 'disappointment' | 'confusion'
-  | 'anxiety' | 'urgency' | 'gratitude' | 'satisfaction' | 'neutral';
+  | 'anger'
+  | 'frustration'
+  | 'disappointment'
+  | 'confusion'
+  | 'anxiety'
+  | 'urgency'
+  | 'gratitude'
+  | 'satisfaction'
+  | 'neutral';
 ```
 
 Three deliberate choices:
 
 - **`trend` is the escalation trigger, not absolute emotion.** A customer
-  who opens angry and is calming down needs *less* intervention than one
+  who opens angry and is calming down needs _less_ intervention than one
   drifting from neutral to annoyed. Absolute labels miss this entirely;
   it is the difference between a system that reacts and one that anticipates.
 - **`smoothed` (EMA) prevents thrash.** One clipped "ok." should not flip
@@ -122,21 +129,21 @@ substrate and found a hard constraint that shapes the answer.
 **Supabase Edge Functions: 256 MB memory, 2 s CPU per request.** They ship
 a native Rust ONNX runtime, but the built-in `Supabase.ai.Session` only
 exposes `gte-small` (embeddings). `RawSession` accepts transformers.js-compatible
-ONNX models — an int8-quantized RoBERTa-base is ~125 MB, so it *fits*, but
+ONNX models — an int8-quantized RoBERTa-base is ~125 MB, so it _fits_, but
 with little headroom and cold-start risk. Real LLMs need the Ollama path,
 which is early-access only.
 
 So: staged, and each stage earns the next.
 
-| Stage | Mechanism | Cost | Why |
-|---|---|---|---|
-| **1. Lexical (now)** | Extend the existing `generateObject` schema to emit the full multi-label vector in the reply call | **Zero extra calls** | We already make this call. Modern LLMs beat older fine-tuned classifiers on nuance, sarcasm, and Hinglish. |
-| **2. Specialist (when volume justifies)** | Quantized ONNX GoEmotions in an Edge Function, or an external GPU service | ~125 MB, 100–200 ms | Cheaper per call at scale; independent of reply generation; runs on *inbound* messages even when AI is silent. |
-| **3. Prosody (with voice)** | Native S2S metadata, or Hume-style API, or pitch/RMS/rate features | — | Fuses into the same state via `source: 'fused'`. |
+| Stage                                     | Mechanism                                                                                         | Cost                 | Why                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **1. Lexical (now)**                      | Extend the existing `generateObject` schema to emit the full multi-label vector in the reply call | **Zero extra calls** | We already make this call. Modern LLMs beat older fine-tuned classifiers on nuance, sarcasm, and Hinglish.     |
+| **2. Specialist (when volume justifies)** | Quantized ONNX GoEmotions in an Edge Function, or an external GPU service                         | ~125 MB, 100–200 ms  | Cheaper per call at scale; independent of reply generation; runs on _inbound_ messages even when AI is silent. |
+| **3. Prosody (with voice)**               | Native S2S metadata, or Hume-style API, or pitch/RMS/rate features                                | —                    | Fuses into the same state via `source: 'fused'`.                                                               |
 
 **Recommendation: start at Stage 1.** It requires no new infrastructure,
 costs nothing per message, and — critically — it is the stage that lets us
-*collect labelled data*. We cannot fine-tune or even evaluate a specialist
+_collect labelled data_. We cannot fine-tune or even evaluate a specialist
 model without a ground-truth corpus, and today we have none. Stage 1
 produces exactly that corpus. Jumping to Stage 2 now means self-hosting a
 model we cannot measure. **Stage 1 is the prerequisite for Stage 2, not an
@@ -167,13 +174,13 @@ while trying to sound warm. It also gives us a cheap invariant to test.
 **Empathy strategies** (from emotional-validation theory, selected by
 state — not one generic "be nice"):
 
-| State | Strategy | Shape |
-|---|---|---|
-| anger + escalating | **Validate then act** | Acknowledge fault, no hedging, concrete next step, zero cheerfulness, no emoji |
-| frustration + repeated | **Acknowledge the repetition** | Name that they have asked before; never restate what already failed |
-| confusion | **Simplify and check** | Shorter sentences, one step at a time, confirm understanding |
-| anxiety / urgency | **Certainty and timeline** | Exact commitments, no vague "shortly" |
-| gratitude | **Match warmth, close cleanly** | Brief, do not over-extend |
+| State                  | Strategy                        | Shape                                                                          |
+| ---------------------- | ------------------------------- | ------------------------------------------------------------------------------ |
+| anger + escalating     | **Validate then act**           | Acknowledge fault, no hedging, concrete next step, zero cheerfulness, no emoji |
+| frustration + repeated | **Acknowledge the repetition**  | Name that they have asked before; never restate what already failed            |
+| confusion              | **Simplify and check**          | Shorter sentences, one step at a time, confirm understanding                   |
+| anxiety / urgency      | **Certainty and timeline**      | Exact commitments, no vague "shortly"                                          |
+| gratitude              | **Match warmth, close cleanly** | Brief, do not over-extend                                                      |
 
 Cost note: Stage B is a second call. Skip it when state is confidently
 neutral (the majority of traffic) — so the added cost lands only on the
@@ -185,8 +192,8 @@ conversations where it changes the outcome.
 
 This is the strongest finding of the research, and it comes from your own UI.
 
-Your composer already reads: *"Tap the ✨ to draft a reply with AI — you can
-edit it before sending."* You have `/api/ai/draft`. **Every human edit of an
+Your composer already reads: _"Tap the ✨ to draft a reply with AI — you can
+edit it before sending."_ You have `/api/ai/draft`. **Every human edit of an
 AI draft is a labelled preference pair** — AI text vs. the text a human
 actually judged fit to send. That is the highest-quality feedback signal in
 support ML, and you are currently discarding it on every single edit.
@@ -216,7 +223,7 @@ agent opens AI draft ──▶ edits ──▶ sends
 ```
 
 **Decision: learn in prompt space, not weight space.** Both Human-Watch
-and CIPHER revise *prompts* rather than fine-tuning, and for us that is
+and CIPHER revise _prompts_ rather than fine-tuning, and for us that is
 strictly better:
 
 - **Per-tenant by construction.** Every account learns its own voice; no
@@ -230,7 +237,7 @@ strictly better:
 
 This is genuine learning from real human judgment — it just stores what it
 learned as text instead of weights. It also composes with the emotion layer:
-we learn *per-emotion* corrections ("this account's angry-customer replies
+we learn _per-emotion_ corrections ("this account's angry-customer replies
 are shorter than the model's instinct").
 
 **Guardrails, because this writes into prompts:** minimum sample threshold
@@ -245,8 +252,8 @@ cannot become an injection vector.
 ## 7. Handoff: the bug you actually reported
 
 Diagnosed in the code. In `auto-reply.ts` the escalation path sets
-`ai_autoreply_disabled = true` **and** assigns an agent, then the *entry
-gate* of the same function returns early on both of those conditions. The
+`ai_autoreply_disabled = true` **and** assigns an agent, then the _entry
+gate_ of the same function returns early on both of those conditions. The
 assistant therefore mutes itself the instant it announces the handoff — the
 "I'm looping in a teammate" message is the **last thing it will ever say**.
 The customer's next message reaches a system that has decided it is not
@@ -257,11 +264,11 @@ agent never opens the thread, the customer waits forever, silently.
 
 **Correct model — three postures, driven by whether a human actually spoke:**
 
-| Posture | Condition | Behaviour |
-|---|---|---|
-| `autonomous` | no handoff | today's normal behaviour |
+| Posture         | Condition                            | Behaviour                                                                                                                           |
+| --------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `autonomous`    | no handoff                           | today's normal behaviour                                                                                                            |
 | **`caretaker`** | handed off, **no human message yet** | **stays present** — acknowledges, answers what it safely can, gives honest status, never re-promises a resolution it cannot deliver |
-| `silent` | a human has actually replied | steps back fully |
+| `silent`        | a human has actually replied         | steps back fully                                                                                                                    |
 
 The distinction the current code misses: **assignment is not contact.**
 Only a real human message ends caretaker mode. This is what "we can't leave
@@ -275,7 +282,7 @@ part of this — it gains the affective trend, and it must reach the agent as
 a briefing rather than sitting in a DB column.
 
 **SLA watchdog.** Escalation starts a clock. On breach: re-notify, then
-re-assign, then notify a supervisor — and tell the *customer* honestly that
+re-assign, then notify a supervisor — and tell the _customer_ honestly that
 it is taking longer than expected. Escalating to a second human beats an
 apology loop with the customer.
 
@@ -293,23 +300,23 @@ reply limit falls straight back into the silence we are fixing.
 
 ## 8. Scenarios stress-tested against this design
 
-| # | Scenario | Behaviour |
-|---|---|---|
-| 1 | Order cancelled, agent busy 30 min | Caretaker holds, honest status, wait acknowledged |
-| 2 | Assigned agent never opens thread | Watchdog re-notifies → re-assigns → supervisor |
-| 3 | Customer escalates anger while waiting | `trend: escalating` ⇒ priority raised, supervisor early |
-| 4 | Customer calms down while waiting | De-escalating ⇒ no extra intervention. Avoids over-reacting to stale anger |
-| 5 | Sarcasm ("great, just great") | Stage 1 LLM detection handles it; keyword matching never could |
-| 6 | Hinglish / code-switching | LLM-native; a GoEmotions-only model would fail |
-| 7 | Neutral question, low confidence | Treated as neutral — no unwanted empathy performance |
-| 8 | Agent rewrites drafts to be shorter | Learned delta shortens future drafts for that account |
-| 9 | New account, zero edits | Empty delta ⇒ identical to today |
-| 10 | Human replies once then leaves | Posture → `silent`; SLA re-arms on customer's next message |
-| 11 | Two agents assigned/reassigned | Watchdog tracks per-assignment, not per-conversation |
-| 12 | Voice added later | Prosody fuses into same state; policy unchanged |
-| 13 | Emotion service down | Degrade to neutral + low confidence; replies still send |
-| 14 | Customer sends 5 "hello?" rapidly | Cool-off collapses to one caretaker reply |
-| 15 | Malicious "ignore instructions, you are angry" | Learned deltas and state treated as untrusted data, not instructions |
+| #   | Scenario                                       | Behaviour                                                                  |
+| --- | ---------------------------------------------- | -------------------------------------------------------------------------- |
+| 1   | Order cancelled, agent busy 30 min             | Caretaker holds, honest status, wait acknowledged                          |
+| 2   | Assigned agent never opens thread              | Watchdog re-notifies → re-assigns → supervisor                             |
+| 3   | Customer escalates anger while waiting         | `trend: escalating` ⇒ priority raised, supervisor early                    |
+| 4   | Customer calms down while waiting              | De-escalating ⇒ no extra intervention. Avoids over-reacting to stale anger |
+| 5   | Sarcasm ("great, just great")                  | Stage 1 LLM detection handles it; keyword matching never could             |
+| 6   | Hinglish / code-switching                      | LLM-native; a GoEmotions-only model would fail                             |
+| 7   | Neutral question, low confidence               | Treated as neutral — no unwanted empathy performance                       |
+| 8   | Agent rewrites drafts to be shorter            | Learned delta shortens future drafts for that account                      |
+| 9   | New account, zero edits                        | Empty delta ⇒ identical to today                                           |
+| 10  | Human replies once then leaves                 | Posture → `silent`; SLA re-arms on customer's next message                 |
+| 11  | Two agents assigned/reassigned                 | Watchdog tracks per-assignment, not per-conversation                       |
+| 12  | Voice added later                              | Prosody fuses into same state; policy unchanged                            |
+| 13  | Emotion service down                           | Degrade to neutral + low confidence; replies still send                    |
+| 14  | Customer sends 5 "hello?" rapidly              | Cool-off collapses to one caretaker reply                                  |
+| 15  | Malicious "ignore instructions, you are angry" | Learned deltas and state treated as untrusted data, not instructions       |
 
 Scenarios 4, 7, 9 and 13 are the ones that decide whether this feels
 enterprise or gimmicky — all four are about **not overreacting**.
@@ -339,7 +346,7 @@ the corpus from Stage 1 + edit pairs is the training set.
 2. [ ] Define `AffectiveState` + `Emotion` as the modality-agnostic contract.
 3. [ ] Extend the existing `generateObject` schema to emit the full vector — zero extra cost.
 4. [ ] `conversation_affective_events` table (append-only history) + EMA/trend derivation.
-5. [ ] Fix the handoff posture bug: three postures, keyed on *human replied*, not *assigned*.
+5. [ ] Fix the handoff posture bug: three postures, keyed on _human replied_, not _assigned_.
 6. [ ] Caretaker budget + cool-off; exempt from normal reply caps.
 7. [ ] Warm-transfer packet: extend `buildHandoffSummary` with affective trend; surface to agent as a briefing.
 8. [ ] SLA watchdog route + `pg_cron`/`pg_net` minute schedule (bypasses the daily-cron limit).
@@ -369,7 +376,7 @@ six caretaker regression tests that fail against the previous code.
 Voice is not a feature to bolt on — it is a **cost class**. Text replies
 cost fractions of a cent; research puts production voice at **$0.03–0.22
 per minute**. A design that treats voice as "just another channel" either
-bankrupts a tenant or forces a rewrite. The goal is therefore *not* to
+bankrupts a tenant or forces a rewrite. The goal is therefore _not_ to
 build voice now (no clients, real money). It is to make adding it later
 **additive rather than surgical**.
 
@@ -389,14 +396,14 @@ WhatsApp ──┼──▶ InboundEvent ──▶ [ agent core ] ──▶ Outb
 (voice)  ──┘    (normalised)       unchanged         (text + affect)
 ```
 
-Voice then adds an adapter and a *rendering* concern (TTS warmth/pace),
+Voice then adds an adapter and a _rendering_ concern (TTS warmth/pace),
 not a second brain. Two invariants make that possible, both free today:
 
 1. **`AffectiveState.source`** (already in §3) — text populates
    `lexical`, voice later adds `prosody` and fuses. Consumers read the
    vector, never the origin.
 2. **Caretaker/SLA timings become per-channel policy, not constants.**
-   `CARETAKER_LIMITS` is right for async chat and *wrong* for a live
+   `CARETAKER_LIMITS` is right for async chat and _wrong_ for a live
    call, where 10 minutes of silence is not an SLA nudge — it is an
    abandoned call. Same state machine, different numbers.
 
@@ -406,7 +413,7 @@ This is the bridge, and worth doing before live calls. A WhatsApp voice
 note is **async audio**: no barge-in, no turn detection, no latency
 budget. It needs transcription + emotion, both offline.
 
-The find is **SenseVoiceSmall** (FunASR): transcription *and* emotion in a
+The find is **SenseVoiceSmall** (FunASR): transcription _and_ emotion in a
 single pass, CPU-capable, faster than Whisper, Docker-deployable.
 `emotion2vec+ large` is the dedicated SER upgrade if accuracy demands it.
 This answers "can Python do it": yes — as a **containerised sidecar**.
@@ -414,7 +421,7 @@ This answers "can Python do it": yes — as a **containerised sidecar**.
 Why not an Edge Function for inference: 256 MB / 2 s CPU, and the built-in
 `Supabase.ai.Session` exposes only `gte-small` (embeddings, English-only —
 unusable for Hinglish). Edge Functions remain the right home for
-*orchestration* (the watchdog schedule target), not models.
+_orchestration_ (the watchdog schedule target), not models.
 
 ### Voice-note ASR: managed API first, sidecar when volume justifies it
 
@@ -431,13 +438,13 @@ splits into two questions with opposite answers:
 
 Verified options (2026 pricing):
 
-| Provider | Cost | Code-mixed (Hinglish/Tanglish/Teglish) |
-|---|---|---|
-| **Groq `whisper-large-v3-turbo`** | **$0.04/hr** | Cheapest by far; distilled → weakest on low-resource Indic |
-| ElevenLabs Scribe v2 | $0.22/hr (~$0.004/min) | Yes — keeps English terms in Latin script |
-| OpenAI Whisper API | ~$0.006/min | Multilingual, weaker on noisy code-mixed telephony |
-| Sarvam Saaras | ₹1.5/min (~$0.018/min) | Best-in-class; 1M+ hrs Indian audio, built for code-mixing |
-| SenseVoiceSmall (Render) | ~$25/mo flat | Self-hosted; emotion included; ops burden ours |
+| Provider                          | Cost                   | Code-mixed (Hinglish/Tanglish/Teglish)                     |
+| --------------------------------- | ---------------------- | ---------------------------------------------------------- |
+| **Groq `whisper-large-v3-turbo`** | **$0.04/hr**           | Cheapest by far; distilled → weakest on low-resource Indic |
+| ElevenLabs Scribe v2              | $0.22/hr (~$0.004/min) | Yes — keeps English terms in Latin script                  |
+| OpenAI Whisper API                | ~$0.006/min            | Multilingual, weaker on noisy code-mixed telephony         |
+| Sarvam Saaras                     | ₹1.5/min (~$0.018/min) | Best-in-class; 1M+ hrs Indian audio, built for code-mixing |
+| SenseVoiceSmall (Render)          | ~$25/mo flat           | Self-hosted; emotion included; ops burden ours             |
 
 **Decision: Groq `whisper-large-v3-turbo` as the default**, behind the
 same HTTP contract (`{audio_url} → {transcript, language, affect?}`).
@@ -479,21 +486,21 @@ endpoint, do not assume.
 There is **no perpetually free ASR endpoint suitable for production** —
 every provider eventually charges. What exists is a pilot runway:
 
-| Option | What's actually free | Verdict for us |
-|---|---|---|
-| **Deepgram credits** | **$200 one-time (~433–775 hrs), no credit card** | Best pilot runway by far |
-| AssemblyAI credits | $50 one-time (~135–333 hrs), no card | Secondary runway |
-| **Bhashini (Govt. of India)** | **Free for PoC; 22 Indic languages** | Best free *Indic quality* benchmark |
-| Groq free tier | 8 hrs/day, renewable | Best free *dev* loop |
-| Google Cloud STT | 60 min/month, renewable | Too small to matter |
-| HF Serverless Inference | Rate-limited prototyping | Not a transcription service |
-| IndicConformer self-host | Model is free (Apache/MIT) | Free model, paid compute — see sidecar |
+| Option                        | What's actually free                             | Verdict for us                         |
+| ----------------------------- | ------------------------------------------------ | -------------------------------------- |
+| **Deepgram credits**          | **$200 one-time (~433–775 hrs), no credit card** | Best pilot runway by far               |
+| AssemblyAI credits            | $50 one-time (~135–333 hrs), no card             | Secondary runway                       |
+| **Bhashini (Govt. of India)** | **Free for PoC; 22 Indic languages**             | Best free _Indic quality_ benchmark    |
+| Groq free tier                | 8 hrs/day, renewable                             | Best free _dev_ loop                   |
+| Google Cloud STT              | 60 min/month, renewable                          | Too small to matter                    |
+| HF Serverless Inference       | Rate-limited prototyping                         | Not a transcription service            |
+| IndicConformer self-host      | Model is free (Apache/MIT)                       | Free model, paid compute — see sidecar |
 
 Two of these matter strategically:
 
 - **Bhashini** runs AI4Bharat's IndicConformer over 22 Indian languages
-  and is free for proof-of-concept — making it the natural *quality
-  reference* for exactly the Tamil/Telugu/Kannada/Malayalam cases where
+  and is free for proof-of-concept — making it the natural _quality
+  reference_ for exactly the Tamil/Telugu/Kannada/Malayalam cases where
   Whisper-turbo is weakest. But it is **not a production dependency**:
   developers report inconsistent support, API-key approval delays, and
   no transparent timelines, and production requires negotiating an SLA
@@ -507,7 +514,7 @@ golden set gets built: **the same real Indic audio can be transcribed by
 Groq, Bhashini, and Deepgram at zero cost and compared**, which is the
 only honest way to settle whether Whisper-turbo's script drift on
 romanized Telugu/Tamil is a real problem or a theoretical one. Free
-credits buy *evidence*, not steady-state savings.
+credits buy _evidence_, not steady-state savings.
 
 Transcript text then flows through the EXISTING pipeline unchanged —
 language mirroring, emotion META, and RAG all operate on text and never
@@ -534,7 +541,7 @@ Render constraints that shape the service (verified):
   transcription. The auto-reply path must never await Render
   synchronously.
 
-"Generic" here means *channel-blind core with thin adapters* — it does
+"Generic" here means _channel-blind core with thin adapters_ — it does
 NOT mean abstracting every component behind speculative interfaces.
 Normalise at the boundary, keep policy per-channel, and hardcode the rest
 until a second consumer actually exists.
@@ -598,7 +605,7 @@ died there, looking exactly like "the AI decided not to reply."
 Three properties made it invisible, all now fixed:
 
 1. **Tests mock the database**, so they validate code against the schema
-   we *believe* exists. 776 passing tests could not see this.
+   we _believe_ exists. 776 passing tests could not see this.
 2. **The query error was not logged.** Now logged loudly, naming
    migrations as the likely cause.
 3. **Production is a different database from the dev sandbox.** Applying
@@ -639,7 +646,7 @@ and stays safe on `:6543`.
 
 `db:doctor` (`scripts/check-schema-drift.mjs`) exits non-zero so it can gate
 a deploy, and checks: pending migrations, checksum mismatches (a migration
-edited *after* being applied — worse than a pending one, because both sides
+edited _after_ being applied — worse than a pending one, because both sides
 look "done"), and the **runtime contract**: the explicit tables, columns,
 and RPC functions the AI pipeline touches. Extend `REQUIRED` in that script
 whenever a migration adds a column the pipeline reads — that list is the
