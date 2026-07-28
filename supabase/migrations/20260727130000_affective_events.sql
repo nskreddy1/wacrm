@@ -46,6 +46,9 @@ ALTER TABLE conversation_affective_events ENABLE ROW LEVEL SECURITY;
 -- only from the service role (auto-reply pipeline), which bypasses
 -- RLS, so no INSERT/UPDATE/DELETE policies exist — the table is
 -- append-only for every authenticated user by construction.
+-- Idempotent: CREATE POLICY has no IF NOT EXISTS, so a re-run after a
+-- partially applied migration would otherwise abort.
+DROP POLICY IF EXISTS "affective_events_select" ON conversation_affective_events;
 CREATE POLICY "affective_events_select" ON conversation_affective_events
   FOR SELECT TO authenticated
   USING (is_account_member(account_id));
