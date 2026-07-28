@@ -34,7 +34,10 @@ export async function POST(request: Request, { params }: Params) {
 
     // Reuse the send bucket: this is a cheap per-user inbox action and
     // toggling it in a tight loop has no legitimate use.
-    const limit = await checkRateLimit(`ai-takeover:${userId}`, RATE_LIMITS.send);
+    const limit = await checkRateLimit(
+      `ai-takeover:${userId}`,
+      RATE_LIMITS.send
+    );
     if (!limit.success) return rateLimitResponse(limit);
 
     const { conversationId } = await params;
@@ -88,6 +91,26 @@ export async function POST(request: Request, { params }: Params) {
       // a human choosing to re-engage the assistant.
       update.ai_reply_count = 0;
       update.ai_handoff_summary = null;
+      // Reopen the handoff lifecycle. Without this, "Resume AI" was a
+      // silent no-op on exactly the threads that need it most: once a
+      // human replied (the `close_handoff_on_agent_message` trigger sets
+      // `human_active`) — or once the supervised-handoff backfill marked
+      // every already-escalated thread `human_active` — nothing in the
+      // codebase ever wrote this column back. `resolveHandoffPosture`
+      // maps `human_active` to `silent`, so the bot stayed muted forever
+      // while the pause flag it *does* clear read as "not paused".
+      // That combination (killSwitch=false, assigned=false, yet silent)
+      // is precisely what the production logs showed.
+      //
+      // Clearing it is the whole point of the action: the operator is
+      // explicitly handing the thread back to the assistant. The next
+      // human reply re-arms the trigger, so takeover still works.
+      update.ai_handoff_state = 'none';
+      // Escalation bookkeeping belongs to the closed handoff, not to the
+      // fresh one; leaving it set would keep the thread in the SLA
+      // watchdog's "unattended" reporting after a human resolved it.
+      update.ai_escalated_at = null;
+      update.ai_escalation_reason = null;
     }
 
     const { error: upErr } = await supabase
