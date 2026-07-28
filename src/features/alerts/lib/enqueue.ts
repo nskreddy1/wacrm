@@ -1,4 +1,4 @@
-import type { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AlertPayload } from './types';
 
 /**
@@ -16,7 +16,7 @@ import type { AlertPayload } from './types';
  * alert pipe must not break the in-app notification path that already works.
  */
 export async function enqueueAlertDeliveries(
-  db: typeof supabaseAdmin,
+  db: SupabaseClient,
   input: {
     accountId: string;
     notificationId: string;
@@ -24,6 +24,33 @@ export async function enqueueAlertDeliveries(
     payload: AlertPayload;
   }
 ): Promise<{ enqueued: number }> {
+  // Tier-1 guarantee: every account always has the built-in team_chat
+  // destination, auto-created on first alert. External connectors (Slack,
+  // WhatsApp, ...) are optional extras on top — if none is connected, the
+  // team STILL hears about the handoff inside the app's own team messaging.
+  //
+  // Check-then-insert rather than upsert: the dedupe index on
+  // (account_id, provider, config::text) is an EXPRESSION index, which
+  // PostgREST's on_conflict cannot target. A concurrent-tick race simply
+  // makes the second insert bounce off that index — benign, so its error is
+  // deliberately swallowed. Self-healing if the row was ever deleted.
+  const { data: existingTeamChat } = await db
+    .from('alert_destinations')
+    .select('id')
+    .eq('account_id', input.accountId)
+    .eq('provider', 'team_chat')
+    .limit(1)
+    .maybeSingle();
+
+  if (!existingTeamChat) {
+    await db.from('alert_destinations').insert({
+      account_id: input.accountId,
+      provider: 'team_chat',
+      display_name: 'Team chat (built-in)',
+      config: {},
+    });
+  }
+
   const { data: destinations, error: destErr } = await db
     .from('alert_destinations')
     .select('id')

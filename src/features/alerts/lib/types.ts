@@ -7,7 +7,12 @@
  * provider-specific.
  */
 
-export type AlertProvider = 'slack' | 'whatsapp' | 'telegram' | 'email';
+export type AlertProvider =
+  | 'team_chat'
+  | 'slack'
+  | 'whatsapp'
+  | 'telegram'
+  | 'email';
 
 export type AlertDeliveryStatus = 'pending' | 'sent' | 'failed' | 'dead';
 

@@ -1,5 +1,6 @@
-import type { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { slackAlertAdapter } from './adapters/slack';
+import { teamChatAlertAdapter } from './adapters/team-chat';
 import {
   MAX_ATTEMPTS,
   nextBackoffMs,
@@ -29,6 +30,7 @@ import {
  */
 
 const adapters: Record<string, AlertAdapter> = {
+  [teamChatAlertAdapter.provider]: teamChatAlertAdapter,
   [slackAlertAdapter.provider]: slackAlertAdapter,
 };
 
@@ -43,7 +45,7 @@ export interface DispatchResult {
 }
 
 export async function dispatchPendingAlerts(
-  db: typeof supabaseAdmin
+  db: SupabaseClient
 ): Promise<DispatchResult> {
   const result: DispatchResult = { claimed: 0, sent: 0, failed: 0, dead: 0 };
 
