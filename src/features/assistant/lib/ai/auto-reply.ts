@@ -96,7 +96,21 @@ export async function dispatchInboundToAiReply(
       )
       .eq('id', conversationId)
       .maybeSingle();
-    if (convErr || !conv) return;
+    // This gate was a SILENT return, and it cost us a full outage: the
+    // column list above spans several migrations, so a single unapplied
+    // one makes Postgres fail the whole SELECT (42703) and every inbound
+    // message aborted here with zero diagnostics — indistinguishable
+    // from "the AI chose not to reply". Never fail quietly on a query
+    // error again; a missing row is normal, a query error is not.
+    if (convErr) {
+      console.error(
+        '[ai auto-reply] conversation load failed — aborting this turn.',
+        'If this mentions a missing column, migrations are behind:',
+        convErr
+      );
+      return;
+    }
+    if (!conv) return;
 
     /*
      * Who owns this thread right now?
@@ -437,7 +451,25 @@ export async function dispatchInboundToAiReply(
         }
       }
       if (assignee) update.assigned_agent_id = assignee;
-      await db.from('conversations').update(update).eq('id', conversationId);
+      // Errors here MUST be inspected. This single UPDATE carries the
+      // whole escalation (handoff state, assignee, caretaker + SLA
+      // budgets). Postgres aborts the entire statement on one bad
+      // column (42703), so an unapplied migration silently left threads
+      // in 'none' while the bridge message below still promised the
+      // customer a human — a promise with no follow-through, and the
+      // exact failure that made auto-reply look broken.
+      const { error: escalateErr } = await db
+        .from('conversations')
+        .update(update)
+        .eq('id', conversationId);
+      if (escalateErr) {
+        console.error(
+          '[ai auto-reply] CRITICAL: escalation state failed to persist —',
+          'thread is NOT marked awaiting_human; falling back to notifying',
+          'every member so the customer is not left waiting:',
+          escalateErr
+        );
+      }
 
       // WARM HANDOFF — the customer must never face silence or a cold
       // refusal. The model was instructed to write a bridge message
@@ -466,7 +498,9 @@ export async function dispatchInboundToAiReply(
 
       // Unassigned escalation → notify every member of the account so
       // someone sees it (the assignment trigger only fires on assign).
-      if (!assignee && !conv.assigned_agent_id) {
+      // Also when the UPDATE failed: no assignment was written, so no
+      // trigger fired and nobody would otherwise learn about this.
+      if (escalateErr || (!assignee && !conv.assigned_agent_id)) {
         await notifyAllMembersOfEscalation(db, {
           accountId,
           conversationId,
