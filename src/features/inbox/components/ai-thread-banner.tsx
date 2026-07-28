@@ -110,6 +110,14 @@ export function AiThreadBanner({
     pausedOverride?.conversationId === conversationId
       ? pausedOverride.paused
       : disabled;
+  // Resuming clears the handoff lifecycle server-side, so mirror that
+  // locally too. Without this the banner would keep offering [Resume AI]
+  // on a thread that was just resumed, until the realtime UPDATE landed.
+  // Same per-conversation guard as `pausedOverride`: switching threads
+  // falls back to the server value rather than leaking the override.
+  const [resumedOverride, setResumedOverride] = useState<string | null>(null);
+  const effectiveHandoffState =
+    resumedOverride === conversationId ? 'none' : handoffState;
 
   // SWR dedupes across threads on top of the module-level cache; the key
   // is null until auth resolves, which pauses fetching.
@@ -135,6 +143,9 @@ export function AiThreadBanner({
           return;
         }
         setPausedOverride({ conversationId, paused });
+        // Resume reopens the handoff lifecycle; taking over re-arms it via
+        // the DB trigger on the agent's first message.
+        setResumedOverride(paused ? null : conversationId);
         onChange?.({
           ai_autoreply_disabled: paused,
           // Take over assigns to the acting agent; resume releases only
@@ -189,7 +200,7 @@ export function AiThreadBanner({
    * would hide the fact that the customer is being held. Agents need to
    * see this state to know the thread is genuinely unattended.
    */
-  if (handoffState === 'awaiting_human') {
+  if (effectiveHandoffState === 'awaiting_human') {
     return (
       <Banner tone="muted">
         <div className="min-w-0 flex-1">
@@ -212,8 +223,31 @@ export function AiThreadBanner({
     );
   }
 
-  // A human has replied → the bot is silent; nothing to act on.
-  if (handoffState === 'human_active') return null;
+  /*
+   * A human has replied, so the bot is silent on this thread.
+   *
+   * This used to `return null`, which made the state unrecoverable from
+   * the UI: `human_active` mutes the assistant permanently (see
+   * `resolveHandoffPosture`), but with the pause flag clear there was no
+   * banner and therefore no [Resume AI] button — the operator could see
+   * neither *that* the bot was off nor *why*. Threads reached this state
+   * through an ordinary human reply, or wholesale via the
+   * supervised-handoff backfill, and then stayed mute forever.
+   *
+   * Surfacing it with an explicit action is the recovery path.
+   */
+  if (effectiveHandoffState === 'human_active') {
+    return (
+      <Banner tone="muted">
+        <div className="min-w-0 flex-1">
+          <p className="text-foreground font-medium">{t('humanActiveTitle')}</p>
+        </div>
+        <BannerButton onClick={() => toggle(false)} busy={busy} icon={Undo2}>
+          {t('resume')}
+        </BannerButton>
+      </Banner>
+    );
+  }
 
   // Active, but a human already owns it → the bot won't fire; no banner.
   if (assignedAgentId) return null;
