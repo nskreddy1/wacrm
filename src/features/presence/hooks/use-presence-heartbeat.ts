@@ -63,7 +63,11 @@ export function usePresenceHeartbeat(): StoredPresence {
   // Held in refs: the heartbeat loop must see current values without
   // re-subscribing (a re-subscribe would reset the interval and, at scale,
   // turn every render into an extra write).
-  const lastActivityRef = useRef(Date.now());
+  //
+  // Seeded with 0 rather than Date.now(): reading the clock during render
+  // is impure (and flagged by react-hooks/purity). The effect stamps it
+  // before the first tick, so `idleFor` is never evaluated against 0.
+  const lastActivityRef = useRef(0);
   const lastSentStatusRef = useRef<StoredPresence | null>(null);
 
   useEffect(() => {
@@ -117,6 +121,10 @@ export function usePresenceHeartbeat(): StoredPresence {
       if (status) void send(status);
       timer = setTimeout(tick, HEARTBEAT_MS);
     };
+
+    // Seed the activity stamp before the first resolveStatus() call —
+    // mounting the shell is itself evidence the user is present.
+    markActive();
 
     // Report immediately so the dot turns green on load rather than after
     // a full interval.
