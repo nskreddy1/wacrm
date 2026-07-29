@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -46,10 +46,19 @@ const ACTIVITY_EVENTS = [
  *                closed tab or crashed browser resolves correctly without
  *                depending on an unload write (which browsers routinely
  *                drop, especially on mobile).
+ *
+ * Returns the status this tab is currently publishing, so the UI can show
+ * the user their own state without a second data path. Deliberately NOT
+ * sourced from `usePresence`: that hook opens a channel, fetches the whole
+ * roster and runs its own timer per consumer — a heavy price for one dot,
+ * and it could disagree with what we are actually publishing.
  */
-export function usePresenceHeartbeat(): void {
+export function usePresenceHeartbeat(): StoredPresence {
   const { user, accountId } = useAuth();
   const enabled = !!user?.id && !!accountId;
+
+  // Mirrors the last value handed to the DB. Drives the self indicator.
+  const [selfStatus, setSelfStatus] = useState<StoredPresence>('online');
 
   // Held in refs: the heartbeat loop must see current values without
   // re-subscribing (a re-subscribe would reset the interval and, at scale,
@@ -92,6 +101,9 @@ export function usePresenceHeartbeat(): void {
         return;
       }
       lastSentStatusRef.current = status;
+      // Cheap when unchanged: React bails out on an identical value, so
+      // the steady-state heartbeat causes no re-render.
+      setSelfStatus(status);
     };
 
     /**
@@ -137,4 +149,6 @@ export function usePresenceHeartbeat(): void {
     };
     // `user.id` (not `user`) so a profile refresh doesn't restart the loop.
   }, [enabled, user?.id, accountId]);
+
+  return selfStatus;
 }

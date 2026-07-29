@@ -29,7 +29,14 @@ export function TeamChatWidget() {
   const [channelDialogOpen, setChannelDialogOpen] = useState(false);
 
   const { user, profile } = useAuth();
-  const chat = useTeamChat(open);
+  // Always enabled — NOT gated on `open`. The launcher shows an unread
+  // badge and we raise toasts while the panel is closed, so both need the
+  // conversation snapshot and the realtime subscription live at all times.
+  // (Gating this on `open` meant totalUnread was pinned at 0 whenever the
+  // panel was shut, so the closed-state badge could never appear.)
+  const chat = useTeamChat(true);
+  // Presence stays gated: the roster is only rendered inside the open
+  // panel, and each consumer costs its own channel + full roster fetch.
   const { getPresence, getRow, now } = usePresence(open);
 
   const filteredConversations = useMemo(() => {
