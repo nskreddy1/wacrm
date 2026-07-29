@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { emailAlertAdapter } from './adapters/email';
 import { slackAlertAdapter } from './adapters/slack';
 import { teamChatAlertAdapter } from './adapters/team-chat';
+import { telegramAlertAdapter } from './adapters/telegram';
+import { whatsappAlertAdapter } from './adapters/whatsapp';
 import {
   MAX_ATTEMPTS,
   nextBackoffMs,
@@ -32,6 +35,9 @@ import {
 const adapters: Record<string, AlertAdapter> = {
   [teamChatAlertAdapter.provider]: teamChatAlertAdapter,
   [slackAlertAdapter.provider]: slackAlertAdapter,
+  [whatsappAlertAdapter.provider]: whatsappAlertAdapter,
+  [telegramAlertAdapter.provider]: telegramAlertAdapter,
+  [emailAlertAdapter.provider]: emailAlertAdapter,
 };
 
 /** Max deliveries per tick, so one backlog cannot melt a run. */
