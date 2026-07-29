@@ -27,6 +27,8 @@ import {
 
 import { AxonMark } from '@/features/brand/components/axon-logo';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { PresenceDot } from '@/features/presence/components/presence-dot';
+import { useSelfPresence } from '@/features/presence/components/presence-provider';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -303,6 +305,9 @@ function FooterMenu() {
   const { signOut, profile, isOwner, canEditSettings, workspaceProfile } =
     useAuth();
   const { isMobile, setOpenMobile, state } = useSidebar();
+  // Reads the status the app is already publishing — no extra realtime
+  // channel or roster fetch just to render one dot.
+  const selfStatus = useSelfPresence();
 
   // In icon-collapsed mode the rail shows only the avatar, so the
   // dropdown must carry the full identity (name + role + email).
@@ -339,11 +344,24 @@ function FooterMenu() {
               />
             }
           >
-            <Avatar size="sm">
-              <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            {/* relative wrapper, not the Avatar itself: the dot is
+                absolutely positioned against it and must not be clipped
+                by the avatar's own rounded overflow. */}
+            <span className="relative shrink-0">
+              <Avatar size="sm">
+                <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              {/* ring matches the sidebar surface so the dot reads as a
+                  cutout rather than a sticker. aria-hidden: the menu
+                  states the status in words, so announcing it twice
+                  would just be noise. */}
+              <PresenceDot
+                status={selfStatus}
+                className="ring-sidebar absolute -end-0.5 -bottom-0.5 size-2.5 ring-2"
+              />
+            </span>
             <span className="grid flex-1 text-left leading-tight">
               <span className="truncate text-xs font-semibold">
                 {displayName}
@@ -381,6 +399,19 @@ function FooterMenu() {
                 <DropdownMenuSeparator />
               </>
             )}
+            {/* Read-only by design: status is derived from real activity,
+                so there is no control here to contradict it. Plain markup
+                rather than a DropdownMenuItem — it is not actionable and
+                must not be focusable or clickable. */}
+            <DropdownMenuGroup>
+              <div className="flex items-center gap-2 px-2 py-1.5">
+                <PresenceDot status={selfStatus} />
+                <span className="text-muted-foreground text-xs">
+                  {selfStatus === 'online' ? 'Active now' : 'Away'}
+                </span>
+              </div>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={() => {

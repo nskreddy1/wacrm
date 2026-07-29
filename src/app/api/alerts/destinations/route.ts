@@ -39,7 +39,15 @@ export async function GET() {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ destinations: data ?? [] });
+  return NextResponse.json({
+    destinations: data ?? [],
+    /**
+     * Which optional connectors this deployment can actually offer, so the
+     * UI can omit a Connect button that could only ever fail. Booleans
+     * only — never the credential values themselves.
+     */
+    available: { slack: Boolean(process.env.SLACK_CLIENT_ID) },
+  });
 }
 
 const patchSchema = z.object({

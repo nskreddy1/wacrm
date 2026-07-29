@@ -3,49 +3,40 @@
 // ============================================================
 // NotificationsSettings — Settings → Notifications
 //
-// Where a workspace controls HOW the team hears about handoff
-// escalations (and, later, other alert types):
+// Two delivery tiers:
+//   Team chat  — built-in, always available, cannot be deleted. The
+//                floor that guarantees a waiting customer is never
+//                silently dropped.
+//   Slack      — optional connector. OAuth, so the client never
+//                handles a token. Hidden entirely when this
+//                deployment has no Slack app configured, rather than
+//                showing a button that could only fail.
 //
-//   Tier 1 (built-in, zero setup): the app's own team chat.
-//     Auto-provisioned on the first alert; can be paused but never
-//     deleted — the delivery floor that guarantees an unattended
-//     customer is never silently dropped.
-//
-//   Tier 2 (optional connectors): Slack today; WhatsApp / Telegram /
-//     Email ship next. Each is a SEPARATE connector by design — the
-//     client clicks Connect, signs into their own workspace in a
-//     popup (OAuth), and never touches an API token.
-//
-// Any member can view; connect/pause/delete are admin-gated both
-// here (<RequireRole>) and server-side (requireRole + RLS).
+// Any member can view; mutations are admin-gated here and again
+// server-side (requireRole + RLS).
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import useSWR from 'swr';
-import {
-  Bell,
-  Hash,
-  Loader2,
-  MessagesSquare,
-  Plug,
-  Trash2,
-} from 'lucide-react';
+import { Hash, Loader2, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Skeleton } from '@/components/ui/skeleton';
 import { RequireRole } from '@/features/auth/components/require-role';
 import type { AlertProvider } from '@/features/alerts/lib/types';
 import { SettingsPanelHead } from './settings-panel-head';
+import { SettingsGroup, SettingsRow } from './settings-row';
 
 interface Destination {
   id: string;
@@ -56,56 +47,35 @@ interface Destination {
   enabled: boolean;
 }
 
-async function fetchDestinations(url: string): Promise<Destination[]> {
+interface DestinationsPayload {
+  destinations: Destination[];
+  available: { slack: boolean };
+}
+
+async function fetchDestinations(url: string): Promise<DestinationsPayload> {
   const res = await fetch(url);
-  const body = (await res.json()) as {
-    destinations?: Destination[];
+  const body = (await res.json()) as Partial<DestinationsPayload> & {
     error?: string;
   };
   if (!res.ok) throw new Error(body.error || 'Failed to load destinations');
-  return body.destinations ?? [];
+  return {
+    destinations: body.destinations ?? [],
+    available: body.available ?? { slack: false },
+  };
 }
 
-const PROVIDER_META: Record<
-  AlertProvider,
-  { label: string; blurb: string; icon: typeof Bell }
-> = {
-  team_chat: {
-    label: 'Team chat',
-    blurb: 'Built-in. Posts into the #Alerts channel inside this app.',
-    icon: MessagesSquare,
-  },
-  slack: {
-    label: 'Slack',
-    blurb: 'Posts into a channel of your connected Slack workspace.',
-    icon: Hash,
-  },
-  whatsapp: {
-    label: 'WhatsApp',
-    blurb: 'Sends a template message to your ops number.',
-    icon: Bell,
-  },
-  telegram: {
-    label: 'Telegram',
-    blurb: 'Posts into a Telegram group via bot.',
-    icon: Bell,
-  },
-  email: {
-    label: 'Email',
-    blurb: 'Sends an email digest to your team inbox.',
-    icon: Bell,
-  },
-};
-
 export function NotificationsSettings() {
-  const {
-    data: destinations,
-    isLoading,
-    mutate,
-  } = useSWR('/api/alerts/destinations', fetchDestinations, {
-    onError: (err) =>
-      toast.error(err instanceof Error ? err.message : 'Network error'),
-  });
+  const { data, isLoading, mutate } = useSWR(
+    '/api/alerts/destinations',
+    fetchDestinations,
+    {
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : 'Network error'),
+    }
+  );
+
+  const destinations = data?.destinations;
+  const slackAvailable = data?.available.slack ?? false;
 
   // ---- Slack connect popup ------------------------------------------
   const popupRef = useRef<Window | null>(null);
@@ -114,14 +84,14 @@ export function NotificationsSettings() {
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
-      const data = event.data as { source?: string; ok?: boolean };
-      if (data?.source !== 'slack-connect') return;
+      const payload = event.data as { source?: string; ok?: boolean };
+      if (payload?.source !== 'slack-connect') return;
       setConnecting(false);
-      if (data.ok) {
-        toast.success('Slack workspace connected');
+      if (payload.ok) {
+        toast.success('Slack connected');
         void mutate();
       } else {
-        toast.error('Slack connection failed — please try again');
+        toast.error('Slack connection failed');
       }
     }
     window.addEventListener('message', onMessage);
@@ -130,8 +100,8 @@ export function NotificationsSettings() {
 
   const connectSlack = useCallback(() => {
     setConnecting(true);
-    // Named window: a double-click focuses the existing popup instead of
-    // opening two OAuth flows that would race each other.
+    // Named window: a double-click focuses the existing popup rather than
+    // racing two OAuth flows against each other.
     popupRef.current = window.open(
       '/api/alerts/connectors/slack/install',
       'slack-connect',
@@ -139,7 +109,7 @@ export function NotificationsSettings() {
     );
     if (!popupRef.current) {
       setConnecting(false);
-      toast.error('Popup blocked — please allow popups and retry');
+      toast.error('Popup blocked — allow popups and retry');
     }
   }, []);
 
@@ -161,9 +131,15 @@ export function NotificationsSettings() {
 
   const toggle = useCallback(
     async (dest: Destination, enabled: boolean) => {
-      // Optimistic: flip locally, roll back on failure.
+      // Optimistic: flip locally, roll back by revalidating on failure.
       void mutate(
-        (prev) => prev?.map((d) => (d.id === dest.id ? { ...d, enabled } : d)),
+        (prev) =>
+          prev && {
+            ...prev,
+            destinations: prev.destinations.map((d) =>
+              d.id === dest.id ? { ...d, enabled } : d
+            ),
+          },
         { revalidate: false }
       );
       try {
@@ -188,133 +164,145 @@ export function NotificationsSettings() {
         toast.error(payload.error || 'Delete failed');
         return;
       }
-      toast.success(`Removed "${dest.display_name}"`);
+      toast.success(`Removed ${dest.display_name}`);
       void mutate();
     },
     [mutate]
   );
 
-  const hasSlack = destinations?.some((d) => d.provider === 'slack') ?? false;
+  const teamChat =
+    destinations?.find((d) => d.provider === 'team_chat') ?? null;
+  const slackDests = (destinations ?? []).filter((d) => d.provider === 'slack');
 
   return (
-    <div>
+    <div className="flex flex-col gap-6">
       <SettingsPanelHead
         title="Notifications"
-        description="How your team gets alerted when a customer is waiting for a human and nobody has picked up the conversation."
-        action={
-          <RequireRole min="admin">
-            <Button onClick={connectSlack} disabled={connecting}>
-              {connecting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Plug className="size-4" />
-              )}
-              {hasSlack ? 'Connect another Slack' : 'Connect Slack'}
-            </Button>
-          </RequireRole>
-        }
+        description="Where alerts go when a customer is waiting and nobody has picked up."
       />
 
       {isLoading ? (
-        <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
-          <Loader2 className="size-4 animate-spin" />
-          Loading destinations…
-        </div>
+        <SettingsGroup>
+          <SettingsRow label={<Skeleton className="h-5 w-24" />}>
+            <Skeleton className="h-9 w-full max-w-sm" />
+          </SettingsRow>
+          <SettingsRow label={<Skeleton className="h-5 w-16" />}>
+            <Skeleton className="h-9 w-full max-w-sm" />
+          </SettingsRow>
+        </SettingsGroup>
       ) : (
-        <div className="flex flex-col gap-3">
-          <TeamChatCard
-            destination={
-              destinations?.find((d) => d.provider === 'team_chat') ?? null
-            }
-            onToggle={toggle}
-          />
-
-          {(destinations ?? [])
-            .filter((d) => d.provider !== 'team_chat')
-            .map((dest) => (
-              <ConnectorCard
-                key={dest.id}
-                destination={dest}
-                onToggle={toggle}
-                onRemove={remove}
-                onPickChannel={async (channelId, channelName) => {
-                  try {
-                    await patch(dest.id, {
-                      config: {
-                        channel_id: channelId,
-                        channel_name: channelName,
-                      },
-                    });
-                    toast.success(`Alerts will post to #${channelName}`);
-                    void mutate();
-                  } catch (err) {
-                    toast.error(
-                      err instanceof Error ? err.message : 'Update failed'
-                    );
+        <SettingsGroup>
+          <SettingsRow
+            label="Team chat"
+            hint="Posts to the #Alerts channel in this workspace. Available without setup."
+          >
+            <div className="flex items-center gap-3">
+              {teamChat ? (
+                <RequireRole
+                  min="admin"
+                  fallback={
+                    <Badge variant={teamChat.enabled ? 'secondary' : 'outline'}>
+                      {teamChat.enabled ? 'On' : 'Paused'}
+                    </Badge>
                   }
-                }}
-              />
-            ))}
+                >
+                  <Switch
+                    id="team-chat-alerts"
+                    checked={teamChat.enabled}
+                    onCheckedChange={(checked) => toggle(teamChat, checked)}
+                    aria-label="Team chat alerts"
+                  />
+                  <span className="text-muted-foreground text-sm">
+                    {teamChat.enabled ? 'On' : 'Paused'}
+                  </span>
+                </RequireRole>
+              ) : (
+                <Badge variant="secondary">
+                  Activates with the first alert
+                </Badge>
+              )}
+            </div>
+          </SettingsRow>
 
-          <ComingSoonRow />
-        </div>
+          {slackAvailable ? (
+            <SettingsRow
+              label="Slack"
+              hint="Sign in to your workspace and choose one channel. The bot posts nowhere else."
+            >
+              {slackDests.length === 0 ? (
+                <RequireRole
+                  min="admin"
+                  fallback={
+                    <span className="text-muted-foreground text-sm">
+                      Not connected
+                    </span>
+                  }
+                >
+                  <Button
+                    variant="outline"
+                    onClick={connectSlack}
+                    disabled={connecting}
+                    className="w-fit"
+                  >
+                    {connecting ? (
+                      <Loader2
+                        data-icon="inline-start"
+                        className="animate-spin"
+                      />
+                    ) : (
+                      <Hash data-icon="inline-start" />
+                    )}
+                    Connect Slack
+                  </Button>
+                </RequireRole>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {slackDests.map((dest) => (
+                    <SlackConnection
+                      key={dest.id}
+                      destination={dest}
+                      onToggle={toggle}
+                      onRemove={remove}
+                      onPickChannel={async (channelId, channelName) => {
+                        try {
+                          await patch(dest.id, {
+                            config: {
+                              channel_id: channelId,
+                              channel_name: channelName,
+                            },
+                          });
+                          toast.success(`Posting to #${channelName}`);
+                          void mutate();
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error ? err.message : 'Update failed'
+                          );
+                        }
+                      }}
+                    />
+                  ))}
+                  <RequireRole min="admin">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={connectSlack}
+                      disabled={connecting}
+                      className="w-fit"
+                    >
+                      Add another workspace
+                    </Button>
+                  </RequireRole>
+                </div>
+              )}
+            </SettingsRow>
+          ) : null}
+        </SettingsGroup>
       )}
     </div>
   );
 }
 
-// ---- Tier 1: built-in team chat --------------------------------------
-
-function TeamChatCard({
-  destination,
-  onToggle,
-}: {
-  destination: Destination | null;
-  onToggle: (dest: Destination, enabled: boolean) => void;
-}) {
-  const meta = PROVIDER_META.team_chat;
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-4 py-4">
-        <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-md">
-          <meta.icon className="text-foreground size-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-foreground text-sm font-medium">
-              {meta.label}
-            </span>
-            <Badge variant="secondary">Built-in</Badge>
-            <Badge variant="outline">Always available</Badge>
-          </div>
-          <p className="text-muted-foreground mt-0.5 truncate text-sm">
-            {destination
-              ? meta.blurb
-              : 'Activates automatically with the first alert — nothing to set up.'}
-          </p>
-        </div>
-        {destination ? (
-          <RequireRole
-            min="admin"
-            fallback={<StatusDot on={destination.enabled} />}
-          >
-            <Switch
-              checked={destination.enabled}
-              onCheckedChange={(checked) => onToggle(destination, checked)}
-              aria-label="Toggle team chat alerts"
-            />
-          </RequireRole>
-        ) : (
-          <Badge variant="secondary">Auto</Badge>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---- Tier 2: external connectors --------------------------------------
-
-function ConnectorCard({
+function SlackConnection({
   destination,
   onToggle,
   onRemove,
@@ -325,75 +313,53 @@ function ConnectorCard({
   onRemove: (dest: Destination) => void;
   onPickChannel: (channelId: string, channelName: string) => Promise<void>;
 }) {
-  const meta = PROVIDER_META[destination.provider] ?? PROVIDER_META.slack;
-  const needsChannel =
-    destination.provider === 'slack' && !destination.config.channel_id;
+  const needsChannel = !destination.config.channel_id;
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 py-4">
-        <div className="flex items-center gap-4">
-          <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-md">
-            <meta.icon className="text-foreground size-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-foreground text-sm font-medium">
-                {destination.display_name}
-              </span>
-              {destination.config.team_name ? (
-                <Badge variant="outline">{destination.config.team_name}</Badge>
-              ) : null}
-              {needsChannel ? (
-                <Badge variant="destructive">Pick a channel</Badge>
-              ) : destination.config.channel_name ? (
-                <Badge variant="secondary">
-                  <Hash className="size-3" />
-                  {destination.config.channel_name}
-                </Badge>
-              ) : null}
-            </div>
-            <p className="text-muted-foreground mt-0.5 truncate text-sm">
-              {meta.blurb}
-            </p>
-          </div>
-          <RequireRole
-            min="admin"
-            fallback={<StatusDot on={destination.enabled} />}
-          >
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={destination.enabled}
-                onCheckedChange={(checked) => onToggle(destination, checked)}
-                aria-label={`Toggle ${destination.display_name}`}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onRemove(destination)}
-                aria-label={`Remove ${destination.display_name}`}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-          </RequireRole>
-        </div>
-
-        {destination.provider === 'slack' ? (
-          <RequireRole min="admin">
-            <SlackChannelPicker
-              destinationId={destination.id}
-              currentChannelId={destination.config.channel_id}
-              onPick={onPickChannel}
-            />
-          </RequireRole>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-foreground text-sm">
+          {destination.config.team_name || destination.display_name}
+        </span>
+        {needsChannel ? (
+          <Badge variant="destructive">Choose a channel</Badge>
         ) : null}
-      </CardContent>
-    </Card>
+        <RequireRole
+          min="admin"
+          fallback={
+            <Badge variant={destination.enabled ? 'secondary' : 'outline'}>
+              {destination.enabled ? 'On' : 'Paused'}
+            </Badge>
+          }
+        >
+          <Switch
+            checked={destination.enabled}
+            onCheckedChange={(checked) => onToggle(destination, checked)}
+            aria-label={`${destination.display_name} alerts`}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onRemove(destination)}
+            aria-label={`Disconnect ${destination.display_name}`}
+          >
+            <Trash2 />
+          </Button>
+        </RequireRole>
+      </div>
+
+      <RequireRole min="admin">
+        <ChannelPicker
+          destinationId={destination.id}
+          currentChannelId={destination.config.channel_id}
+          onPick={onPickChannel}
+        />
+      </RequireRole>
+    </div>
   );
 }
 
-function SlackChannelPicker({
+function ChannelPicker({
   destinationId,
   currentChannelId,
   onPick,
@@ -402,8 +368,8 @@ function SlackChannelPicker({
   currentChannelId?: string;
   onPick: (channelId: string, channelName: string) => Promise<void>;
 }) {
-  // Lazy fetch: channels load only when the picker is opened, so the
-  // settings page itself never pays for a Slack API round-trip.
+  // Lazy: channels are fetched only once the picker opens, so loading
+  // Settings never costs a Slack API round-trip.
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useSWR(
     open
@@ -425,23 +391,23 @@ function SlackChannelPicker({
   );
 
   return (
-    <div className="flex items-center gap-2">
-      <Select
-        value={currentChannelId}
-        onOpenChange={setOpen}
-        onValueChange={(channelId) => {
-          const channel = data?.find((c) => c.id === channelId);
-          if (channel) void onPick(channel.id, channel.name);
-        }}
-      >
-        <SelectTrigger className="w-64" aria-label="Alert channel">
-          <SelectValue placeholder="Choose a channel for alerts…" />
-        </SelectTrigger>
-        <SelectContent>
+    <Select
+      value={currentChannelId}
+      onOpenChange={setOpen}
+      onValueChange={(channelId) => {
+        const channel = data?.find((c) => c.id === channelId);
+        if (channel) void onPick(channel.id, channel.name);
+      }}
+    >
+      <SelectTrigger className="w-full max-w-xs" aria-label="Alert channel">
+        <SelectValue placeholder="Choose a channel" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
           {isLoading ? (
             <div className="text-muted-foreground flex items-center gap-2 px-3 py-2 text-sm">
               <Loader2 className="size-4 animate-spin" />
-              Loading channels…
+              Loading
             </div>
           ) : (
             (data ?? []).map((channel) => (
@@ -450,29 +416,8 @@ function SlackChannelPicker({
               </SelectItem>
             ))
           )}
-        </SelectContent>
-      </Select>
-      <p className="text-muted-foreground text-xs">
-        The bot posts only to the channel you pick here.
-      </p>
-    </div>
-  );
-}
-
-function StatusDot({ on }: { on: boolean }) {
-  return (
-    <span
-      className={`inline-block size-2 rounded-full ${on ? 'bg-primary' : 'bg-muted-foreground/40'}`}
-      aria-label={on ? 'Enabled' : 'Paused'}
-    />
-  );
-}
-
-function ComingSoonRow() {
-  return (
-    <p className="text-muted-foreground px-1 pt-1 text-xs">
-      WhatsApp, Telegram and Email destinations are next — each connects
-      separately, the same one-click way.
-    </p>
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }
