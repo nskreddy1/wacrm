@@ -399,19 +399,6 @@ function FooterMenu() {
                 <DropdownMenuSeparator />
               </>
             )}
-            {/* Read-only by design: status is derived from real activity,
-                so there is no control here to contradict it. Plain markup
-                rather than a DropdownMenuItem — it is not actionable and
-                must not be focusable or clickable. */}
-            <DropdownMenuGroup>
-              <div className="flex items-center gap-2 px-2 py-1.5">
-                <PresenceDot status={selfStatus} />
-                <span className="text-muted-foreground text-xs">
-                  {selfStatus === 'online' ? 'Active now' : 'Away'}
-                </span>
-              </div>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={() => {
