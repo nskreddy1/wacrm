@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { slackAlertAdapter } from './adapters/slack';
 import { teamChatAlertAdapter } from './adapters/team-chat';
 import {
   MAX_ATTEMPTS,
@@ -31,15 +30,14 @@ import {
 
 /**
  * Registered providers. Deliberately minimal: `team_chat` is the always-on
- * in-app path, and Slack is the only external connector.
+ * in-app path. External connectors register themselves here as they ship.
  *
  * A destination row whose provider is absent here does NOT fail — it parks
- * as `pending` (see `dispatch`), so re-adding an adapter later drains the
+ * as `pending` (see `dispatch`), so adding an adapter later drains the
  * backlog automatically instead of having dead-lettered it in the meantime.
  */
 const adapters: Record<string, AlertAdapter> = {
   [teamChatAlertAdapter.provider]: teamChatAlertAdapter,
-  [slackAlertAdapter.provider]: slackAlertAdapter,
 };
 
 /** Max deliveries per tick, so one backlog cannot melt a run. */

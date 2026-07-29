@@ -10,16 +10,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 // --- Adapter stubs (hoisted: vi.mock is lifted above imports) --------------
-const { teamChatSend, slackSend } = vi.hoisted(() => ({
+const { teamChatSend } = vi.hoisted(() => ({
   teamChatSend: vi.fn(),
-  slackSend: vi.fn(),
 }));
 
 vi.mock('./adapters/team-chat', () => ({
   teamChatAlertAdapter: { provider: 'team_chat', send: teamChatSend },
-}));
-vi.mock('./adapters/slack', () => ({
-  slackAlertAdapter: { provider: 'slack', send: slackSend },
 }));
 
 import { dispatchPendingAlerts } from './dispatcher';

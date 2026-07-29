@@ -7,18 +7,9 @@
  * provider-specific.
  */
 
-export type AlertProvider =
-  'team_chat' | 'slack' | 'whatsapp' | 'telegram' | 'email';
+export type AlertProvider = 'team_chat' | 'whatsapp' | 'telegram' | 'email';
 
 export type AlertDeliveryStatus = 'pending' | 'sent' | 'failed' | 'dead';
-
-/** Non-secret routing config stored in alert_destinations.config. */
-export interface SlackDestinationConfig {
-  team_id: string;
-  team_name: string;
-  channel_id: string;
-  channel_name: string;
-}
 
 export interface AlertDestination {
   id: string;

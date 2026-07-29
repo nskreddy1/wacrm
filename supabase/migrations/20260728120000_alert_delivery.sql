@@ -5,8 +5,8 @@
 -- handoffs and inserts in-app `notifications` rows. Those alerts are only
 -- visible when someone has the app open — the exact situation an unattended
 -- handoff implies they don't. This migration adds the delivery layer that
--- pushes those alerts out to external channels (Slack first; WhatsApp,
--- Telegram, email later).
+-- pushes those alerts out. `team_chat` (in-app) ships here; external
+-- connectors (Slack, WhatsApp, Telegram, email) land as separate features.
 --
 -- Design notes (enterprise checklist applied):
 --   * Transactional outbox: `alert_deliveries` rows are enqueued in the same
@@ -40,7 +40,11 @@ CREATE TABLE IF NOT EXISTS alert_destinations (
   -- 'team_chat' is the tier-1 built-in: it posts into the app's own team
   -- messaging (#Alerts channel), needs no external connection, and is
   -- auto-created per account so alerts are NEVER silently dropped when no
-  -- Slack/WhatsApp/... has been connected yet.
+  -- external connector has been connected yet.
+  --
+  -- The CHECK lists every provider the roadmap allows, so shipping a new
+  -- connector needs no constraint migration. A row cannot use a provider
+  -- until its adapter exists — the dispatcher parks such rows as pending.
   provider TEXT NOT NULL CHECK (provider IN ('team_chat', 'slack', 'whatsapp', 'telegram', 'email')),
 
   -- Human label shown in settings ("#support-alerts", "Ops WhatsApp group").
