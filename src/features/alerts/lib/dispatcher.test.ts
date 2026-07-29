@@ -22,20 +22,6 @@ vi.mock('./adapters/slack', () => ({
   slackAlertAdapter: { provider: 'slack', send: slackSend },
 }));
 
-// Every adapter the dispatcher imports must be stubbed, not only the ones
-// these tests drive: the real modules pull in `server-only` and live
-// provider clients, which makes this suite non-hermetic (and unloadable
-// under Vitest). Each provider has its own adapters/*.test.ts.
-vi.mock('./adapters/whatsapp', () => ({
-  whatsappAlertAdapter: { provider: 'whatsapp', send: vi.fn() },
-}));
-vi.mock('./adapters/telegram', () => ({
-  telegramAlertAdapter: { provider: 'telegram', send: vi.fn() },
-}));
-vi.mock('./adapters/email', () => ({
-  emailAlertAdapter: { provider: 'email', send: vi.fn() },
-}));
-
 import { dispatchPendingAlerts } from './dispatcher';
 import { MAX_ATTEMPTS } from './types';
 

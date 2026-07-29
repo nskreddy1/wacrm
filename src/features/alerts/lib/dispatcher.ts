@@ -1,9 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { emailAlertAdapter } from './adapters/email';
 import { slackAlertAdapter } from './adapters/slack';
 import { teamChatAlertAdapter } from './adapters/team-chat';
-import { telegramAlertAdapter } from './adapters/telegram';
-import { whatsappAlertAdapter } from './adapters/whatsapp';
 import {
   MAX_ATTEMPTS,
   nextBackoffMs,
@@ -32,12 +29,17 @@ import {
  * delivery. No row can be sent twice.
  */
 
+/**
+ * Registered providers. Deliberately minimal: `team_chat` is the always-on
+ * in-app path, and Slack is the only external connector.
+ *
+ * A destination row whose provider is absent here does NOT fail — it parks
+ * as `pending` (see `dispatch`), so re-adding an adapter later drains the
+ * backlog automatically instead of having dead-lettered it in the meantime.
+ */
 const adapters: Record<string, AlertAdapter> = {
   [teamChatAlertAdapter.provider]: teamChatAlertAdapter,
   [slackAlertAdapter.provider]: slackAlertAdapter,
-  [whatsappAlertAdapter.provider]: whatsappAlertAdapter,
-  [telegramAlertAdapter.provider]: telegramAlertAdapter,
-  [emailAlertAdapter.provider]: emailAlertAdapter,
 };
 
 /** Max deliveries per tick, so one backlog cannot melt a run. */
