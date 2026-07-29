@@ -7,8 +7,17 @@
  * provider-specific.
  */
 
-export type AlertProvider =
-  'team_chat' | 'slack' | 'whatsapp' | 'telegram' | 'email';
+/**
+ * Providers this build can deliver to.
+ *
+ * Narrower than the `alert_destinations.provider` CHECK constraint, which
+ * still permits 'whatsapp' | 'telegram' | 'email'. That is intentional: the
+ * constraint is already applied in production and widening a CHECK later is
+ * additive, whereas tightening it now would be a destructive migration for
+ * no gain. The dispatcher parks (never dead-letters) rows for providers it
+ * has no adapter for, so an unknown value in the column is safe.
+ */
+export type AlertProvider = 'team_chat' | 'slack';
 
 export type AlertDeliveryStatus = 'pending' | 'sent' | 'failed' | 'dead';
 
