@@ -92,9 +92,9 @@ function initialsOf(
 }
 
 function isActive(pathname: string, href: string) {
-  // Exact-match-only routes: prefix matching would light them up for
-  // sibling workspaces nested under the same segment (e.g. /inbox
-  // must not appear active while the user is in /inbox/sms).
+  // Exact-match-only routes. These are leaf workspaces that navigate via
+  // query params (?c=, ?pipeline=) rather than nested segments, so prefix
+  // matching would only ever mis-highlight a future sibling route.
   if (href === '/dashboard' || href === '/inbox') return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
