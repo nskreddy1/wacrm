@@ -77,13 +77,6 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         icon: 'inbox',
         counter: 'inbox-unread',
       },
-      {
-        key: 'sms-inbox',
-        href: '/inbox/sms',
-        label: 'SMS Inbox',
-        shortLabel: 'SMS',
-        icon: 'message-square',
-      },
       { key: 'contacts', href: '/contacts', label: 'Contacts', icon: 'users' },
       {
         key: 'appointments',

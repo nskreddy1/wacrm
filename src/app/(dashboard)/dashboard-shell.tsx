@@ -3,6 +3,7 @@
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { MobileTopBar } from '@/components/layout/mobile-top-bar';
 import { DashboardCacheProvider } from '@/components/providers/dashboard-cache-provider';
+import { PresenceProvider } from '@/features/presence/components/presence-provider';
 import { TeamChatWidget } from '@/features/team-chat/components/team-chat-widget';
 import { AssistantWidget } from '@/features/assistant/components/assistant-widget';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
@@ -72,9 +73,14 @@ export function DashboardShell({
   return (
     <DashboardCacheProvider>
       <AuthProvider initialSession={initialSession}>
-        <DashboardShellInner initialAccess={initialAccess}>
-          {children}
-        </DashboardShellInner>
+        {/* Inside AuthProvider (needs the session to know who to report as)
+            and outside the shell, so the app's one presence writer lives
+            above every consumer of useSelfPresence(). */}
+        <PresenceProvider>
+          <DashboardShellInner initialAccess={initialAccess}>
+            {children}
+          </DashboardShellInner>
+        </PresenceProvider>
       </AuthProvider>
     </DashboardCacheProvider>
   );

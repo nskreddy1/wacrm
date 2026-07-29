@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { usePresence } from '@/features/presence/hooks/use-presence';
 import { useTeamChat } from '@/features/team-chat/hooks/use-team-chat';
+import { useSelfPresence } from '@/features/presence/components/presence-provider';
 import { presenceLabel } from '@/features/presence/lib/presence';
 import { PresenceDot } from '@/features/presence/components/presence-dot';
 import { cn } from '@/lib/utils';
@@ -29,7 +30,14 @@ export function TeamChatWidget() {
   const [channelDialogOpen, setChannelDialogOpen] = useState(false);
 
   const { user, profile } = useAuth();
-  const chat = useTeamChat(open);
+  // Always enabled — NOT gated on `open`. The launcher shows an unread
+  // badge and we raise toasts while the panel is closed, so both need the
+  // conversation snapshot and the realtime subscription live at all times.
+  // (Gating this on `open` meant totalUnread was pinned at 0 whenever the
+  // panel was shut, so the closed-state badge could never appear.)
+  const chat = useTeamChat(true);
+  // Presence stays gated: the roster is only rendered inside the open
+  // panel, and each consumer costs its own channel + full roster fetch.
   const { getPresence, getRow, now } = usePresence(open);
 
   const filteredConversations = useMemo(() => {
@@ -54,7 +62,11 @@ export function TeamChatWidget() {
     ? (chat.conversations.find((c) => c.id === chat.activeId) ?? null)
     : null;
 
-  const myPresence = user ? getPresence(user.id) : 'offline';
+  // Self status comes from the writer, NOT from getPresence(user.id).
+  // The roster is a round-trip behind (and is only fetched while the panel
+  // is open), so reading my own row there let the widget claim "Online"
+  // while the avatar menu already said "Away". One source of truth.
+  const myPresence = useSelfPresence();
 
   return (
     <>

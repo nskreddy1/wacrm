@@ -1,4 +1,5 @@
 import type { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { enqueueAlertDeliveries } from '@/features/alerts/lib/enqueue';
 
 /**
  * Unattended-handoff watchdog.
@@ -111,30 +112,58 @@ export async function sweepOverdueHandoffs(
           .from('profiles')
           .select('user_id')
           .eq('account_id', row.account_id);
-        recipients = (members ?? []).map(
-          (m: { user_id: string }) => m.user_id
-        );
+        recipients = (members ?? []).map((m: { user_id: string }) => m.user_id);
         if (critical) escalated += 1;
       }
       if (recipients.length === 0) continue;
 
-      const { error: insErr } = await db.from('notifications').insert(
-        recipients.map((userId) => ({
-          account_id: row.account_id,
-          user_id: userId,
-          type: 'ai_escalation',
-          conversation_id: row.conversation_id,
-          contact_id: row.contact_id,
-          actor_user_id: null,
-          title,
-          body,
-        }))
-      );
+      const { data: inserted, error: insErr } = await db
+        .from('notifications')
+        .insert(
+          recipients.map((userId) => ({
+            account_id: row.account_id,
+            user_id: userId,
+            type: 'ai_escalation',
+            conversation_id: row.conversation_id,
+            contact_id: row.contact_id,
+            actor_user_id: null,
+            title,
+            body,
+          }))
+        )
+        .select('id');
       if (insErr) {
         console.error('[handoff-watchdog] notification insert failed:', insErr);
         // Do NOT mark as notified — let the next tick retry, otherwise a
         // transient insert failure would permanently swallow the nudge.
         continue;
+      }
+
+      // Fan out to external alert destinations (team chat, Slack, ...).
+      // Anchored on the FIRST inserted notification so each external
+      // channel hears about the event exactly once, no matter how many
+      // recipients got in-app rows. Failure-isolated: a broken alert pipe
+      // must never break the in-app path that already works.
+      const anchorId = inserted?.[0]?.id;
+      if (anchorId) {
+        try {
+          await enqueueAlertDeliveries(db, {
+            accountId: row.account_id,
+            notificationId: anchorId,
+            notificationType: 'ai_escalation',
+            payload: {
+              title,
+              body,
+              conversation_id: row.conversation_id,
+              notification_type: 'ai_escalation',
+            },
+          });
+        } catch (alertErr) {
+          console.error(
+            '[handoff-watchdog] alert enqueue failed (non-fatal):',
+            alertErr instanceof Error ? alertErr.message : alertErr
+          );
+        }
       }
 
       // Record the pass so the cool-off applies from here.
@@ -146,11 +175,7 @@ export async function sweepOverdueHandoffs(
       }
       notified += 1;
     } catch (err) {
-      console.error(
-        '[handoff-watchdog] row failed:',
-        row.conversation_id,
-        err
-      );
+      console.error('[handoff-watchdog] row failed:', row.conversation_id, err);
     }
   }
 
