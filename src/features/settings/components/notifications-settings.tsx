@@ -3,6 +3,11 @@
 // ============================================================
 // NotificationsSettings — Settings → Notifications
 //
+// Row one is personal (chat popups, per-user). The rest is workspace
+// alert delivery, admin-gated. Copy is deliberately terse: hints state
+// a consequence ("Unread counts keep working either way") rather than
+// re-explaining the control, which the label already does.
+//
 // Two delivery tiers:
 //   Team chat  — built-in, always available, cannot be deleted. The
 //                floor that guarantees a waiting customer is never
@@ -35,6 +40,7 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RequireRole } from '@/features/auth/components/require-role';
 import type { AlertProvider } from '@/features/alerts/lib/types';
+import { useChatNotificationPrefs } from '@/features/team-chat/hooks/use-chat-notification-prefs';
 import { SettingsPanelHead } from './settings-panel-head';
 import { SettingsGroup, SettingsRow } from './settings-row';
 
@@ -65,6 +71,8 @@ async function fetchDestinations(url: string): Promise<DestinationsPayload> {
 }
 
 export function NotificationsSettings() {
+  const { popupsEnabled, setPopupsEnabled } = useChatNotificationPrefs();
+
   const { data, isLoading, mutate } = useSWR(
     '/api/alerts/destinations',
     fetchDestinations,
@@ -178,7 +186,7 @@ export function NotificationsSettings() {
     <div className="flex flex-col gap-6">
       <SettingsPanelHead
         title="Notifications"
-        description="Where alerts go when a customer is waiting and nobody has picked up."
+        description="Where alerts go when nobody picks up."
       />
 
       {isLoading ? (
@@ -192,10 +200,27 @@ export function NotificationsSettings() {
         </SettingsGroup>
       ) : (
         <SettingsGroup>
+          {/* Personal, not workspace-wide — and the only row here that
+              every member can change for themselves. Listed first
+              because it is the one people actually come looking for. */}
           <SettingsRow
-            label="Team chat"
-            hint="Posts to the #Alerts channel in this workspace. Available without setup."
+            label="Chat popups"
+            htmlFor="chat-popups"
+            hint="Unread counts keep working either way."
           >
+            <div className="flex items-center gap-3">
+              <Switch
+                id="chat-popups"
+                checked={popupsEnabled}
+                onCheckedChange={(checked) => void setPopupsEnabled(checked)}
+              />
+              <span className="text-muted-foreground text-sm">
+                {popupsEnabled ? 'On' : 'Off'}
+              </span>
+            </div>
+          </SettingsRow>
+
+          <SettingsRow label="Team chat" hint="Posts to #Alerts.">
             <div className="flex items-center gap-3">
               {teamChat ? (
                 <RequireRole
@@ -217,18 +242,13 @@ export function NotificationsSettings() {
                   </span>
                 </RequireRole>
               ) : (
-                <Badge variant="secondary">
-                  Activates with the first alert
-                </Badge>
+                <Badge variant="secondary">On first alert</Badge>
               )}
             </div>
           </SettingsRow>
 
           {slackAvailable ? (
-            <SettingsRow
-              label="Slack"
-              hint="Sign in to your workspace and choose one channel. The bot posts nowhere else."
-            >
+            <SettingsRow label="Slack" hint="One channel per workspace.">
               {slackDests.length === 0 ? (
                 <RequireRole
                   min="admin"

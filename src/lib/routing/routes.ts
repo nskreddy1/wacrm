@@ -12,7 +12,6 @@ export const routes = {
   app: {
     dashboard: '/dashboard',
     inbox: '/inbox',
-    smsInbox: '/inbox/sms',
     contacts: '/contacts',
     contact: (contactId: string) => `/contacts?contact=${segment(contactId)}`,
     pipelines: '/pipelines',

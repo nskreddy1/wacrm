@@ -40,15 +40,21 @@ interface InboxWorkspaceProps {
 
 /**
  * The full three-pane Inbox (conversation list / thread / contact
- * sidebar) for a single channel. Mounted by the /inbox (WhatsApp) and
- * /inbox/sms routes. Legacy conversations without a channel value are
- * treated as WhatsApp, the only channel that existed before SMS.
+ * sidebar) for a single channel. Mounted only by /inbox, pinned to
+ * WhatsApp — the separate SMS inbox route was removed in favour of one
+ * inbox. Legacy conversations without a channel value are treated as
+ * WhatsApp, the only channel that existed before SMS.
+ *
+ * The `channel` prop is kept deliberately: it is what keeps the
+ * filtering, connection-banner and send paths channel-aware, so adding
+ * a second channel later is a routing change rather than a rewrite.
  */
 export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
   const t = useTranslations('Inbox.page');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const basePath = channel === 'sms' ? '/inbox/sms' : '/inbox';
+  // Single mount point now, so deep links always resolve against /inbox.
+  const basePath = '/inbox';
 
   /**
    * Whether a conversation row belongs in this workspace. Missing
