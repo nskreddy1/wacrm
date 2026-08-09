@@ -5,6 +5,8 @@ import useSWR from 'swr';
 import {
   AlertCircle,
   CalendarDays,
+  Filter,
+  List,
   Loader2,
   MapPin,
   Plus,
@@ -19,9 +21,17 @@ import type {
   AppointmentStatus,
   CatalogItem,
 } from '@/lib/data/operations/types';
+import { AppointmentCalendar } from '@/features/appointments/components/appointment-calendar';
 import { AppointmentRecordSheet } from '@/features/appointments/components/appointment-record-sheet';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -34,6 +44,7 @@ import { cn } from '@/lib/utils';
 type AppointmentsResponse = { data: Appointment[] };
 type CatalogResponse = { data: CatalogItem[] };
 type ScheduleScope = 'upcoming' | 'today' | 'past' | 'all';
+type AppointmentView = 'agenda' | 'calendar';
 
 const STATUS_STYLE: Record<AppointmentStatus, string> = {
   scheduled: 'bg-primary/10 text-primary',
@@ -55,6 +66,11 @@ const SCOPES: Array<{ value: ScheduleScope; label: string }> = [
   { value: 'past', label: 'Past' },
   { value: 'all', label: 'All' },
 ];
+
+/** Select's `items` prop wants a value->label record for its a11y labelling. */
+const SCOPE_ITEMS = Object.fromEntries(
+  SCOPES.map((scope) => [scope.value, scope.label])
+);
 
 const timeFormatter = new Intl.DateTimeFormat('en', {
   hour: 'numeric',
@@ -143,6 +159,7 @@ export function AppointmentWorkspace() {
     '/api/v1/workspace/catalog'
   );
   const [query, setQuery] = useState('');
+  const [view, setView] = useState<AppointmentView>('agenda');
   const [scope, setScope] = useState<ScheduleScope>('upcoming');
   const [statusFilter, setStatusFilter] = useState('all');
   const [serviceFilter, setServiceFilter] = useState('all');
@@ -206,6 +223,11 @@ export function AppointmentWorkspace() {
   const hasFilters =
     Boolean(query) || statusFilter !== 'all' || serviceFilter !== 'all';
 
+  /* Badge count excludes the search box, which carries its own clear
+     affordance — same split Contacts uses via countRules(). */
+  const activeFilterCount =
+    (statusFilter !== 'all' ? 1 : 0) + (serviceFilter !== 'all' ? 1 : 0);
+
   function clearFilters() {
     setQuery('');
     setStatusFilter('all');
@@ -235,122 +257,166 @@ export function AppointmentWorkspace() {
     // Plain <div>: the dashboard shell (SidebarInset) already renders the
     // page's <main> landmark, so a second one here duplicated it.
     <div className="bg-background flex min-h-full flex-col">
-      <header className="border-border border-b px-4 py-4 md:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-foreground text-xl font-semibold tracking-tight text-balance">
-              Appointments
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              Coordinate sessions and keep the team on schedule.
-            </p>
-          </div>
-          <Button size="lg" onClick={() => setCreateOpen(true)}>
-            <Plus aria-hidden="true" /> New appointment
-          </Button>
-        </div>
-      </header>
+      {/* Visually hidden: the surrounding chrome already names the page,
+          so a rendered title only cost vertical space. Kept for the
+          document outline (WCAG 1.3.1), matching Contacts. */}
+      <h1 className="sr-only">Appointments</h1>
 
       <section
         className="flex min-h-0 flex-1 flex-col"
         aria-label="Appointment schedule"
       >
-        <div className="border-border border-b px-4 md:px-6">
-          <div className="flex flex-col gap-3 py-3 xl:flex-row xl:items-center xl:justify-between">
-            <div
-              className="flex flex-wrap items-center gap-1"
-              aria-label="Schedule range"
-            >
+        {/* One toolbar row, mirroring Contacts and Pipelines. Range sits
+            leftmost as the primary scope — the direct equivalent of the
+            pipeline selector — then search, then a single Filter button
+            carrying a count. This previously stacked three rows of
+            chrome (title, filter row, count row) above the schedule
+            that is the actual content. */}
+        <div className="bg-card flex flex-wrap items-center gap-2 border-b px-3 py-2">
+          <Select
+            items={SCOPE_ITEMS}
+            value={scope}
+            onValueChange={(value) =>
+              setScope((value ?? 'upcoming') as ScheduleScope)
+            }
+          >
+            <SelectTrigger className="w-32" aria-label="Schedule range">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
               {SCOPES.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setScope(item.value)}
-                  aria-pressed={scope === item.value}
-                  className={cn(
-                    'text-muted-foreground hover:text-foreground focus-visible:ring-ring relative min-h-9 px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
-                    scope === item.value &&
-                      'text-foreground after:bg-primary after:absolute after:inset-x-3 after:bottom-0 after:h-0.5'
-                  )}
-                >
+                <SelectItem key={item.value} value={item.value}>
                   {item.label}
-                </button>
+                </SelectItem>
               ))}
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative min-w-0 sm:w-64">
-                <Search
-                  className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
-                  aria-hidden="true"
-                />
-                <Input
-                  aria-label="Search appointments"
-                  className="h-9 pl-9"
-                  placeholder="Search appointments"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              <Select
-                items={{ all: 'All statuses', ...STATUS_LABEL }}
-                value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value ?? 'all')}
+            </SelectContent>
+          </Select>
+
+          <div className="relative min-w-56 flex-1 sm:max-w-sm">
+            <Search
+              className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+              aria-hidden="true"
+            />
+            <Input
+              aria-label="Search appointments"
+              className="pr-8 pl-8"
+              placeholder="Search appointments"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            {query && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="absolute top-1/2 right-1.5 -translate-y-1/2"
+                onClick={() => setQuery('')}
+                aria-label="Clear appointment search"
               >
-                <SelectTrigger
-                  className="h-9 sm:w-36"
-                  aria-label="Filter by status"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  {(Object.keys(STATUS_LABEL) as AppointmentStatus[]).map(
-                    (status) => (
-                      <SelectItem key={status} value={status}>
-                        {STATUS_LABEL[status]}
-                      </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
-              <Select
-                items={{
-                  all: 'All services',
-                  ...Object.fromEntries(
-                    services.map((item) => [item.id, item.name])
-                  ),
-                }}
-                value={serviceFilter}
-                onValueChange={(value) => setServiceFilter(value ?? 'all')}
-              >
-                <SelectTrigger
-                  className="h-9 sm:w-44"
-                  aria-label="Filter by service"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All services</SelectItem>
-                  {services.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="border-border/60 text-muted-foreground flex min-h-9 items-center justify-between border-t text-xs">
-            <span>
-              {filtered.length}{' '}
-              {filtered.length === 1 ? 'appointment' : 'appointments'}
-            </span>
-            {hasFilters && (
-              <Button variant="ghost" size="xs" onClick={clearFilters}>
-                <X aria-hidden="true" /> Clear filters
+                <X />
               </Button>
             )}
           </div>
+
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant={activeFilterCount ? 'secondary' : 'outline'}
+                  size="sm"
+                >
+                  <Filter data-icon="inline-start" /> Filter
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary">{activeFilterCount}</Badge>
+                  )}
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-64">
+              <div className="flex flex-col gap-3">
+                <Select
+                  items={{ all: 'All statuses', ...STATUS_LABEL }}
+                  value={statusFilter}
+                  onValueChange={(value) => setStatusFilter(value ?? 'all')}
+                >
+                  <SelectTrigger aria-label="Filter by status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    {(Object.keys(STATUS_LABEL) as AppointmentStatus[]).map(
+                      (status) => (
+                        <SelectItem key={status} value={status}>
+                          {STATUS_LABEL[status]}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+                <Select
+                  items={{
+                    all: 'All services',
+                    ...Object.fromEntries(
+                      services.map((item) => [item.id, item.name])
+                    ),
+                  }}
+                  value={serviceFilter}
+                  onValueChange={(value) => setServiceFilter(value ?? 'all')}
+                >
+                  <SelectTrigger aria-label="Filter by service">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All services</SelectItem>
+                    {services.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {hasFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    <X data-icon="inline-start" /> Clear filters
+                  </Button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Count lives inline now rather than owning a whole row.
+              aria-live so filtering announces the new total. */}
+          <span
+            className="text-muted-foreground text-xs tabular-nums"
+            aria-live="polite"
+          >
+            {filtered.length}
+          </span>
+
+          <Tabs
+            value={view}
+            onValueChange={(value) => setView(value as AppointmentView)}
+          >
+            <TabsList aria-label="Appointment view">
+              <TabsTrigger
+                value="agenda"
+                aria-label="Agenda view"
+                title="Agenda view"
+              >
+                <List />
+              </TabsTrigger>
+              <TabsTrigger
+                value="calendar"
+                aria-label="Calendar view"
+                title="Calendar view"
+              >
+                <CalendarDays />
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus data-icon="inline-start" /> New
+          </Button>
         </div>
 
         {error ? (
@@ -375,6 +441,11 @@ export function AppointmentWorkspace() {
           </div>
         ) : isLoading ? (
           <ScheduleSkeleton />
+        ) : view === 'calendar' ? (
+          /* Calendar shows the month regardless of matches, so it sits
+             above the empty state — an empty month is a valid, readable
+             result, whereas an empty agenda list is just blank. */
+          <AppointmentCalendar appointments={filtered} />
         ) : filtered.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-20 text-center">
             <CalendarDays

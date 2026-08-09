@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { CalendarClock, Contact, Plus, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 
-import type { CatalogItem } from '@/lib/data/operations/types';
+import type { Appointment, CatalogItem } from '@/lib/data/operations/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -105,29 +105,68 @@ function contactLabel(values: Record<string, unknown>) {
   return phone || 'Unnamed contact';
 }
 
+/** Local `HH:mm` for a stored timestamp, matching the TIME_SLOTS format. */
+function toLocalTimeValue(date: Date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Minutes between start and end, or null when the record has no end. */
+function toDurationValue(appointment: Appointment | null | undefined) {
+  if (!appointment?.endsAt) return null;
+  const minutes = Math.round(
+    (new Date(appointment.endsAt).getTime() -
+      new Date(appointment.startsAt).getTime()) /
+      60_000
+  );
+  return minutes > 0 ? String(minutes) : null;
+}
+
 /**
- * "Create Appointment" sheet — same RecordSheet design as Create Contact and
- * Create Deal, including the Customize Fields editor backed by the shared
+ * Create/edit Appointment sheet — same RecordSheet design as Create Contact
+ * and Create Deal, including the Customize Fields editor backed by the shared
  * module_field_settings layout.
+ *
+ * Pass `appointment` to edit an existing record. Because the sheet stays
+ * mounted while `open` toggles, the parent must give it a `key` tied to the
+ * record id so these state initializers re-run for the next record — that
+ * keeps the reset logic in one place instead of an effect that mirrors props
+ * into state.
  */
 export function AppointmentRecordSheet({
   open,
   onOpenChange,
   onCreated,
+  appointment,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  appointment?: Appointment | null;
 }) {
-  const [title, setTitle] = useState('');
-  const [contactId, setContactId] = useState<string | null>(null);
-  const [catalogItemId, setCatalogItemId] = useState<string | null>(null);
-  const [date, setDate] = useState(() => toLocalDateValue(new Date()));
-  const [startTime, setStartTime] = useState('10:00');
-  const [duration, setDuration] = useState('30');
-  const [location, setLocation] = useState('');
-  const [notes, setNotes] = useState('');
-  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const isEdit = Boolean(appointment);
+  const [title, setTitle] = useState(appointment?.title ?? '');
+  const [contactId, setContactId] = useState<string | null>(
+    appointment?.contactId ?? null
+  );
+  const [catalogItemId, setCatalogItemId] = useState<string | null>(
+    appointment?.catalogItemId ?? null
+  );
+  const [date, setDate] = useState(() =>
+    toLocalDateValue(
+      appointment ? new Date(appointment.startsAt) : new Date()
+    )
+  );
+  const [startTime, setStartTime] = useState(() =>
+    appointment ? toLocalTimeValue(new Date(appointment.startsAt)) : '10:00'
+  );
+  const [duration, setDuration] = useState(
+    () => toDurationValue(appointment) ?? '30'
+  );
+  const [location, setLocation] = useState(appointment?.location ?? '');
+  const [notes, setNotes] = useState(appointment?.notes ?? '');
+  const [customValues, setCustomValues] = useState<Record<string, string>>(
+    appointment?.customValues ?? {}
+  );
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [quickContactOpen, setQuickContactOpen] = useState(false);
@@ -171,16 +210,64 @@ export function AppointmentRecordSheet({
     [catalogData]
   );
 
+  /* An existing appointment can sit outside the preset pickers — booked
+     at 06:15, or running 20 minutes. Without merging the real value in,
+     the Select would render blank and saving would silently reschedule
+     the record to whatever the user picked next. So the current value is
+     always present as an option. */
+  const timeOptions = useMemo(() => {
+    if (TIME_SLOTS.some((slot) => slot.value === startTime)) return TIME_SLOTS;
+    const [hours, minutes] = startTime.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHour = hours % 12 === 0 ? 12 : hours % 12;
+    return [
+      {
+        value: startTime,
+        label: `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`,
+      },
+      ...TIME_SLOTS,
+    ];
+  }, [startTime]);
+
+  const durationChoices = useMemo(() => {
+    if (DURATION_OPTIONS.some((option) => option.value === duration))
+      return DURATION_OPTIONS;
+    const minutes = Number(duration);
+    return [
+      { value: duration, label: `${minutes} minutes` },
+      ...DURATION_OPTIONS,
+    ];
+  }, [duration]);
+
+  const timeChoiceItems = useMemo(
+    () => Object.fromEntries(timeOptions.map((slot) => [slot.value, slot.label])),
+    [timeOptions]
+  );
+  const durationChoiceItems = useMemo(
+    () =>
+      Object.fromEntries(
+        durationChoices.map((option) => [option.value, option.label])
+      ),
+    [durationChoices]
+  );
+
+  /** Back to the record's saved values when editing, blank when creating. */
   function reset() {
-    setTitle('');
-    setContactId(null);
-    setCatalogItemId(null);
-    setDate(toLocalDateValue(new Date()));
-    setStartTime('10:00');
-    setDuration('30');
-    setLocation('');
-    setNotes('');
-    setCustomValues({});
+    setTitle(appointment?.title ?? '');
+    setContactId(appointment?.contactId ?? null);
+    setCatalogItemId(appointment?.catalogItemId ?? null);
+    setDate(
+      toLocalDateValue(
+        appointment ? new Date(appointment.startsAt) : new Date()
+      )
+    );
+    setStartTime(
+      appointment ? toLocalTimeValue(new Date(appointment.startsAt)) : '10:00'
+    );
+    setDuration(toDurationValue(appointment) ?? '30');
+    setLocation(appointment?.location ?? '');
+    setNotes(appointment?.notes ?? '');
+    setCustomValues(appointment?.customValues ?? {});
     setErrors({});
   }
 
@@ -219,11 +306,14 @@ export function AppointmentRecordSheet({
       starts.setHours(hours, minutes, 0, 0);
       const ends = new Date(starts.getTime() + Number(duration) * 60_000);
       const res = await fetch('/api/v1/workspace/appointments', {
-        method: 'POST',
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // PATCH is keyed by id; contactId is intentionally omitted
+          // because the update schema does not accept reassigning the
+          // contact an appointment belongs to.
+          ...(isEdit ? { id: appointment?.id } : { contactId }),
           title: title.trim(),
-          contactId,
           startsAt: starts.toISOString(),
           endsAt: ends.toISOString(),
           catalogItemId: catalogItemId || null,
@@ -237,18 +327,23 @@ export function AppointmentRecordSheet({
           error?: { message?: string };
         } | null;
         throw new Error(
-          body?.error?.message ?? 'Could not create the appointment'
+          body?.error?.message ??
+            (isEdit
+              ? 'Could not update the appointment'
+              : 'Could not create the appointment')
         );
       }
-      toast.success('Appointment scheduled');
-      reset();
+      toast.success(isEdit ? 'Appointment updated' : 'Appointment scheduled');
+      if (!isEdit) reset();
       onOpenChange(false);
       onCreated();
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : 'Could not create the appointment'
+          : isEdit
+            ? 'Could not update the appointment'
+            : 'Could not create the appointment'
       );
     } finally {
       setSubmitting(false);
