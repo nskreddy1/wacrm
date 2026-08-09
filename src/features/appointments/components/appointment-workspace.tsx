@@ -11,7 +11,6 @@ import {
   MapPin,
   Pencil,
   Plus,
-  Search,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -26,13 +25,18 @@ import { AppointmentCalendar } from '@/features/appointments/components/appointm
 import { AppointmentRecordSheet } from '@/features/appointments/components/appointment-record-sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  WorkspaceToolbar,
+  WorkspaceToolbarActions,
+  WorkspaceToolbarSearch,
+  WorkspaceToolbarSeparator,
+} from '@/components/shared/workspace-toolbar';
 import {
   Select,
   SelectContent,
@@ -268,13 +272,13 @@ export function AppointmentWorkspace() {
         className="flex min-h-0 flex-1 flex-col"
         aria-label="Appointment schedule"
       >
-        {/* One toolbar row, mirroring Contacts and Pipelines. Range sits
-            leftmost as the primary scope — the direct equivalent of the
-            pipeline selector — then search, then a single Filter button
-            carrying a count. This previously stacked three rows of
-            chrome (title, filter row, count row) above the schedule
-            that is the actual content. */}
-        <div className="bg-card flex flex-wrap items-center gap-2 border-b px-3 py-2">
+        {/* Shared WorkspaceToolbar, extracted from Contacts so every module
+            reads identically. Range sits leftmost as the primary scope —
+            the direct equivalent of the pipeline selector — then search,
+            then a single Filter button carrying a count. This previously
+            stacked three rows of chrome (title, filter row, count row)
+            above the schedule that is the actual content. */}
+        <WorkspaceToolbar>
           <Select
             items={SCOPE_ITEMS}
             value={scope}
@@ -294,30 +298,12 @@ export function AppointmentWorkspace() {
             </SelectContent>
           </Select>
 
-          <div className="relative min-w-56 flex-1 sm:max-w-sm">
-            <Search
-              className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
-              aria-hidden="true"
-            />
-            <Input
-              aria-label="Search appointments"
-              className="pr-8 pl-8"
-              placeholder="Search appointments"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            {query && (
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="absolute top-1/2 right-1.5 -translate-y-1/2"
-                onClick={() => setQuery('')}
-                aria-label="Clear appointment search"
-              >
-                <X />
-              </Button>
-            )}
-          </div>
+          <WorkspaceToolbarSearch
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Search appointments"
+            label="Search appointments"
+          />
 
           <Popover>
             <PopoverTrigger
@@ -394,32 +380,42 @@ export function AppointmentWorkspace() {
             {filtered.length}
           </span>
 
-          <Tabs
-            value={view}
-            onValueChange={(value) => setView(value as AppointmentView)}
-          >
-            <TabsList aria-label="Appointment view">
-              <TabsTrigger
-                value="agenda"
-                aria-label="Agenda view"
-                title="Agenda view"
-              >
-                <List />
-              </TabsTrigger>
-              <TabsTrigger
-                value="calendar"
-                aria-label="Calendar view"
-                title="Calendar view"
-              >
-                <CalendarDays />
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {/* Anchored to the trailing edge so the bar is weighted at both
+              ends instead of packing left and stranding a gap. */}
+          <WorkspaceToolbarActions>
+            <Tabs
+              value={view}
+              onValueChange={(value) => setView(value as AppointmentView)}
+            >
+              <TabsList aria-label="Appointment view">
+                <TabsTrigger
+                  value="agenda"
+                  aria-label="Agenda view"
+                  title="Agenda view"
+                >
+                  <List />
+                </TabsTrigger>
+                <TabsTrigger
+                  value="calendar"
+                  aria-label="Calendar view"
+                  title="Calendar view"
+                >
+                  <CalendarDays />
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus data-icon="inline-start" /> New
-          </Button>
-        </div>
+            <WorkspaceToolbarSeparator />
+
+            <Button
+              size="sm"
+              className="shadow-xs"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus data-icon="inline-start" /> New appointment
+            </Button>
+          </WorkspaceToolbarActions>
+        </WorkspaceToolbar>
 
         {error ? (
           <div className="border-destructive/30 bg-destructive/5 m-4 flex items-start justify-between gap-4 border p-4 md:m-6">
