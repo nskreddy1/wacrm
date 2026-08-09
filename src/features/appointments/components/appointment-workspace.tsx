@@ -9,6 +9,7 @@ import {
   List,
   Loader2,
   MapPin,
+  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
@@ -164,6 +165,7 @@ export function AppointmentWorkspace() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [serviceFilter, setServiceFilter] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Appointment | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const appointments = useMemo(() => data?.data ?? [], [data]);
@@ -497,7 +499,7 @@ export function AppointmentWorkspace() {
                       return (
                         <article
                           key={item.id}
-                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1fr)_minmax(8rem,0.35fr)_9rem] md:items-center md:gap-5 md:px-6"
+                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1fr)_minmax(8rem,0.35fr)_9rem_auto] md:items-center md:gap-5 md:px-6"
                         >
                           <div className="flex items-baseline gap-2 md:flex-col md:items-start md:gap-0.5">
                             <time
@@ -575,6 +577,20 @@ export function AppointmentWorkspace() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {/* Always rendered, never hover-only: a
+                              hover-revealed control is unreachable on
+                              touch and invisible to keyboard users. It
+                              only dims until the row is engaged. */}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Edit ${item.title}`}
+                            title="Edit appointment"
+                            className="text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
+                            onClick={() => setEditing(item)}
+                          >
+                            <Pencil />
+                          </Button>
                         </article>
                       );
                     })}
@@ -590,6 +606,18 @@ export function AppointmentWorkspace() {
         onOpenChange={setCreateOpen}
         onCreated={() => void mutate()}
       />
+      {/* Keyed by record id so the sheet's state initializers re-run for
+          each appointment. Without the key it would keep the first
+          record's values when opened on a different row. */}
+      {editing ? (
+        <AppointmentRecordSheet
+          key={editing.id}
+          open
+          appointment={editing}
+          onOpenChange={(next) => !next && setEditing(null)}
+          onCreated={() => void mutate()}
+        />
+      ) : null}
     </div>
   );
 }

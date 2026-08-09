@@ -87,13 +87,6 @@ const DURATION_OPTIONS = [
   { value: '120', label: '2 hours' },
 ];
 
-const timeItems = Object.fromEntries(
-  TIME_SLOTS.map((slot) => [slot.value, slot.label])
-);
-const durationItems = Object.fromEntries(
-  DURATION_OPTIONS.map((option) => [option.value, option.label])
-);
-
 function toLocalDateValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -354,10 +347,14 @@ export function AppointmentRecordSheet({
     <>
       <RecordSheet
         open={open}
-        title="Create Appointment"
-        description="Add an appointment to the team schedule"
+        title={isEdit ? 'Edit Appointment' : 'Create Appointment'}
+        description={
+          isEdit
+            ? 'Update the details or reschedule this appointment'
+            : 'Add an appointment to the team schedule'
+        }
         saving={submitting}
-        isCreate
+        isCreate={!isEdit}
         onOpenChange={handleOpenChange}
         onSubmit={handleSubmit}
         onCustomize={() => setFieldsOpen(true)}
@@ -370,12 +367,21 @@ export function AppointmentRecordSheet({
             label="Contact"
             htmlFor="appointment-contact"
             error={errors.contact}
+            /* The update endpoint has no contactId, so the field is
+               locked rather than left looking editable and silently
+               discarding the change on save. */
+            hint={
+              isEdit
+                ? 'The contact cannot be changed after an appointment is created.'
+                : undefined
+            }
           >
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
                 <RecordLookup
                   id="appointment-contact"
                   value={contactId}
+                  disabled={isEdit}
                   options={contactOptions}
                   placeholder="Choose a contact"
                   icon={
@@ -465,7 +471,7 @@ export function AppointmentRecordSheet({
                 />
               </div>
               <Select
-                items={timeItems}
+                items={timeChoiceItems}
                 value={startTime}
                 onValueChange={(value) => value && setStartTime(value)}
               >
@@ -474,7 +480,7 @@ export function AppointmentRecordSheet({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {TIME_SLOTS.map((slot) => (
+                    {timeOptions.map((slot) => (
                       <SelectItem key={slot.value} value={slot.value}>
                         {slot.label}
                       </SelectItem>
@@ -486,7 +492,7 @@ export function AppointmentRecordSheet({
           </RecordField>
           <RecordField label="Duration" htmlFor="appointment-duration">
             <Select
-              items={durationItems}
+              items={durationChoiceItems}
               value={duration}
               onValueChange={(value) => value && setDuration(value)}
             >
@@ -499,7 +505,7 @@ export function AppointmentRecordSheet({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {DURATION_OPTIONS.map((option) => (
+                  {durationChoices.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
