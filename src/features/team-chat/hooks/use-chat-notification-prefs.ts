@@ -36,6 +36,12 @@ const EMPTY: ChatPrefs = {
 /** Far-future sentinel for "mute indefinitely". */
 const FOREVER = '9999-12-31T00:00:00.000Z';
 
+// Mute presets (1h / 8h / 7 days / indefinite) deliberately are NOT
+// declared here yet. `muteConversation` already takes an optional
+// durationMs, so the backend supports every span; adding a preset list
+// before a menu consumes it would just be another unused export like
+// setPopupsEnabled was. The toast passes its own span inline.
+
 function toMs(value: string | null | undefined): number {
   if (!value) return 0;
   const ms = new Date(value).getTime();
