@@ -4,6 +4,12 @@
 // Catalog workspace — products/services management surface
 // backed by /api/v1/workspace/catalog. Items created here are
 // bookable from the appointments scheduler.
+//
+// Chrome matches Contacts and Appointments: one WorkspaceToolbar
+// above a flat, dense list. The previous page header + four KPI
+// cards spent roughly half the viewport before the first row;
+// the numbers that were worth keeping now live in a single
+// summary line under the bar.
 // ============================================================
 
 import { useMemo, useState } from 'react';
@@ -11,21 +17,33 @@ import useSWR from 'swr';
 import {
   Archive,
   ArchiveRestore,
-  CircleDollarSign,
+  Filter,
+  MoreHorizontal,
   Package,
   Pencil,
   Plus,
-  Search,
-  Tags,
+  SlidersHorizontal,
   Trash2,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { formatCurrencyPrecise } from '@/lib/currency';
 import type { CatalogItem } from '@/lib/data/operations/types';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,8 +51,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { ListRowsSkeleton } from '@/components/ui/loading-skeletons';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -42,6 +64,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  WorkspaceToolbar,
+  WorkspaceToolbarActions,
+  WorkspaceToolbarSearch,
+  WorkspaceToolbarSeparator,
+} from '@/components/shared/workspace-toolbar';
 import { CatalogRecordSheet } from '@/features/catalog/components/catalog-record-sheet';
 import { cn } from '@/lib/utils';
 
@@ -49,7 +77,7 @@ type CatalogResponse = { data: CatalogItem[] };
 
 const CATALOG_ENDPOINT = '/api/v1/workspace/catalog?includeInactive=true';
 
-/** Full catalog workspace: KPI strip, filterable item list, create/edit/archive/delete. */
+/** Full catalog workspace: filterable item list with create/edit/archive/delete. */
 export function CatalogWorkspace() {
   const { data, isLoading, mutate } = useSWR<CatalogResponse>(CATALOG_ENDPOINT);
   // One workspace currency (Settings → Deals) renders every price;
@@ -61,6 +89,8 @@ export function CatalogWorkspace() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CatalogItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const items = useMemo(() => data?.data ?? [], [data]);
 
@@ -100,6 +130,20 @@ export function CatalogWorkspace() {
     });
   }, [items, query, categoryFilter, statusFilter]);
 
+  const hasFilters =
+    Boolean(query) || categoryFilter !== 'all' || statusFilter !== 'all';
+
+  /* Badge count excludes the search box, which carries its own clear
+     affordance — the same split Contacts and Appointments use. */
+  const activeFilterCount =
+    (categoryFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0);
+
+  function clearFilters() {
+    setQuery('');
+    setCategoryFilter('all');
+    setStatusFilter('all');
+  }
+
   function openCreate() {
     setEditing(null);
     setDialogOpen(true);
@@ -124,139 +168,84 @@ export function CatalogWorkspace() {
     void mutate();
   }
 
-  async function deleteItem(item: CatalogItem) {
-    const res = await fetch('/api/v1/workspace/catalog', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [item.id] }),
-    });
-    if (!res.ok) {
+  /* Deletes are confirmed, not immediate: an item may already be booked
+     on appointments, and there is no undo behind this endpoint. */
+  async function confirmDelete() {
+    if (!pendingDelete || deleting) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/v1/workspace/catalog', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [pendingDelete.id] }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`"${pendingDelete.name}" deleted`);
+      setPendingDelete(null);
+      await mutate();
+    } catch {
       toast.error('Could not delete the catalog item');
-      return;
+    } finally {
+      setDeleting(false);
     }
-    toast.success(`"${item.name}" deleted`);
-    void mutate();
   }
 
-  const kpis = [
-    {
-      label: 'Total items',
-      value: String(stats.total),
-      Icon: Package,
-      note: 'Everything in your catalog',
-    },
-    {
-      label: 'Active',
-      value: String(stats.active),
-      Icon: CircleDollarSign,
-      note: 'Bookable right now',
-    },
-    {
-      label: 'Categories',
-      value: String(stats.categories),
-      Icon: Tags,
-      note: 'Distinct groupings',
-    },
-    {
-      label: 'Average price',
-      value:
-        stats.active > 0
-          ? formatCurrencyPrecise(stats.averagePrice, defaultCurrency)
-          : '—',
-      Icon: CircleDollarSign,
-      note: 'Across active items',
-    },
-  ];
-
   return (
-    // The dashboard shell already renders the page-level <main>, so this is
-    // a plain section — nesting a second <main> gave screen readers two
-    // "main" landmarks on the route.
-    // fab-safe-area keeps the last table row clear of the floating launchers.
-    <div className="app-scrollbar fab-safe-area flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 md:p-6">
-      <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div className="flex flex-col gap-1">
-          <p className="text-primary text-sm font-medium">Operations</p>
-          <h1 className="text-foreground text-2xl font-semibold tracking-tight text-balance md:text-3xl">
-            Catalog
-          </h1>
-          <p className="text-muted-foreground text-sm text-pretty">
-            Manage the products and services your team schedules and sells.
-          </p>
-        </div>
-        <Button onClick={openCreate}>
-          <Plus className="size-4" aria-hidden="true" /> New item
-        </Button>
-      </header>
+    /* h-full + overflow-hidden: the dashboard shell's content region is
+       height-bounded and clips, so scrolling belongs to the list below,
+       keeping the toolbar pinned. The shell also owns the page's <main>
+       landmark, so this stays a plain <div>. */
+    <div className="bg-background flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Visually hidden: the app chrome already names the route, so a
+          rendered title only cost vertical space. Kept for the document
+          outline (WCAG 1.3.1), matching Contacts and Appointments. */}
+      <h1 className="sr-only">Catalog</h1>
 
-      <section
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-        aria-label="Catalog overview"
-      >
-        {kpis.map(({ label, value, Icon, note }) => (
-          <Card key={label}>
-            <CardContent className="flex items-start justify-between gap-3 p-5">
-              <div className="flex flex-col gap-1">
-                <p className="text-muted-foreground text-sm">{label}</p>
-                <p className="text-foreground text-3xl font-semibold tracking-tight tabular-nums">
-                  {value}
-                </p>
-                <p className="text-muted-foreground text-xs">{note}</p>
-              </div>
-              <div className="bg-primary/10 text-primary rounded-lg p-2">
-                <Icon className="size-5" aria-hidden="true" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </section>
+      <WorkspaceToolbar>
+        <Select
+          items={{
+            all: 'All categories',
+            ...Object.fromEntries(categories.map((c) => [c, c])),
+          }}
+          value={categoryFilter}
+          onValueChange={(value) => setCategoryFilter(value ?? 'all')}
+        >
+          <SelectTrigger className="w-40" aria-label="Filter by category">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category} value={category}>
+                {category}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-      <Card className="overflow-hidden">
-        <CardHeader className="border-border border-b">
-          <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-            <div>
-              <CardTitle>Items</CardTitle>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Services and products available for scheduling
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative">
-                <Search
-                  className="text-muted-foreground absolute top-2.5 left-3 size-4"
-                  aria-hidden="true"
-                />
-                <Input
-                  aria-label="Search catalog"
-                  className="pl-9 sm:w-64"
-                  placeholder="Search name, category"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              <Select
-                items={{
-                  all: 'All categories',
-                  ...Object.fromEntries(categories.map((c) => [c, c])),
-                }}
-                value={categoryFilter}
-                onValueChange={(value) => setCategoryFilter(value ?? 'all')}
+        <WorkspaceToolbarSearch
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Search name, category"
+          label="Search catalog"
+        />
+
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                variant={activeFilterCount ? 'secondary' : 'outline'}
+                size="sm"
               >
-                <SelectTrigger
-                  className="sm:w-44"
-                  aria-label="Filter by category"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <Filter data-icon="inline-start" /> Filter
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary">{activeFilterCount}</Badge>
+                )}
+              </Button>
+            }
+          />
+          <PopoverContent align="end" className="w-64">
+            <div className="flex flex-col gap-3">
               <Select
                 items={{
                   all: 'All statuses',
@@ -266,10 +255,7 @@ export function CatalogWorkspace() {
                 value={statusFilter}
                 onValueChange={(value) => setStatusFilter(value ?? 'all')}
               >
-                <SelectTrigger
-                  className="sm:w-36"
-                  aria-label="Filter by status"
-                >
+                <SelectTrigger aria-label="Filter by status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -278,113 +264,168 @@ export function CatalogWorkspace() {
                   <SelectItem value="archived">Archived</SelectItem>
                 </SelectContent>
               </Select>
+              {hasFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  <X data-icon="inline-start" /> Clear filters
+                </Button>
+              )}
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            // Row-shaped skeleton mirrors the item list layout so the
-            // card doesn't jump when catalog data lands (CLS ~0).
-            <ListRowsSkeleton count={8} withAvatar={false} className="px-4" />
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 p-16 text-center">
-              <div className="bg-muted text-muted-foreground rounded-xl p-3">
-                <Package className="size-6" aria-hidden="true" />
-              </div>
-              <div>
-                <p className="text-foreground font-medium">
-                  No catalog items found
-                </p>
-                <p className="text-muted-foreground text-sm">
-                  Create your first item or adjust the filters.
-                </p>
-              </div>
-              <Button size="sm" onClick={openCreate}>
-                <Plus className="size-4" aria-hidden="true" /> Add item
+          </PopoverContent>
+        </Popover>
+
+        {/* aria-live so filtering announces the new total. */}
+        <span
+          className="text-muted-foreground text-xs tabular-nums"
+          aria-live="polite"
+        >
+          {filtered.length}
+        </span>
+
+        <WorkspaceToolbarActions>
+          <WorkspaceToolbarSeparator />
+          <Button size="sm" className="shadow-xs" onClick={openCreate}>
+            <Plus data-icon="inline-start" /> New item
+          </Button>
+        </WorkspaceToolbarActions>
+      </WorkspaceToolbar>
+
+      {/* One line of summary instead of a card grid: same four numbers,
+          a fraction of the height, and it never competes with the rows. */}
+      {items.length > 0 && (
+        <p className="text-muted-foreground bg-muted/40 border-b px-4 py-1.5 text-xs">
+          <span className="text-foreground font-medium tabular-nums">
+            {stats.active}
+          </span>{' '}
+          active of <span className="tabular-nums">{stats.total}</span> ·{' '}
+          <span className="tabular-nums">{stats.categories}</span>{' '}
+          {stats.categories === 1 ? 'category' : 'categories'} · avg{' '}
+          <span className="tabular-nums">
+            {stats.active > 0
+              ? formatCurrencyPrecise(stats.averagePrice, defaultCurrency)
+              : '—'}
+          </span>
+        </p>
+      )}
+
+      <section
+        className="app-scrollbar fab-safe-area min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        aria-label="Catalog items"
+      >
+        {isLoading ? (
+          // Row-shaped skeleton mirrors the list layout so nothing jumps
+          // when catalog data lands (CLS ~0).
+          <ListRowsSkeleton count={8} withAvatar={false} className="px-4" />
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-4 px-6 py-20 text-center">
+            <Package
+              className="text-muted-foreground size-8"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="text-foreground font-medium">
+                {items.length === 0
+                  ? 'No catalog items yet'
+                  : 'No matching items'}
+              </p>
+              <p className="text-muted-foreground mt-1 max-w-md text-sm">
+                {items.length === 0
+                  ? 'Add the services and products your team schedules and sells.'
+                  : 'Adjust the filters or clear your search to see more results.'}
+              </p>
+            </div>
+            {items.length === 0 ? (
+              <Button onClick={openCreate}>
+                <Plus aria-hidden="true" /> New item
               </Button>
-            </div>
-          ) : (
-            <div className="divide-border divide-y">
-              {filtered.map((item) => (
-                <article
-                  key={item.id}
-                  className="hover:bg-muted/40 flex flex-col gap-4 p-4 transition-colors md:flex-row md:items-center"
-                >
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <div
-                      className={cn(
-                        'flex size-10 shrink-0 items-center justify-center rounded-lg',
-                        item.isActive
-                          ? 'bg-primary/10 text-primary'
-                          : 'bg-muted text-muted-foreground'
-                      )}
-                    >
-                      <Package className="size-5" aria-hidden="true" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-foreground truncate font-medium">
-                        {item.name}
-                      </p>
-                      <p className="text-muted-foreground truncate text-sm">
-                        {item.category ?? 'Uncategorized'}
-                        {item.description ? ` · ${item.description}` : ''}
-                      </p>
-                    </div>
+            ) : (
+              <Button variant="outline" onClick={clearFilters}>
+                <SlidersHorizontal aria-hidden="true" /> Clear filters
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="divide-border divide-y">
+            {filtered.map((item) => (
+              <article
+                key={item.id}
+                className="group hover:bg-muted/30 flex flex-col gap-3 px-4 py-3 transition-colors md:flex-row md:items-center md:px-6"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div
+                    className={cn(
+                      'flex size-9 shrink-0 items-center justify-center rounded-lg',
+                      item.isActive
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted text-muted-foreground'
+                    )}
+                  >
+                    <Package className="size-4.5" aria-hidden="true" />
                   </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span className="text-foreground w-24 text-right text-sm font-semibold tabular-nums">
-                      {formatCurrencyPrecise(item.price, defaultCurrency)}
-                    </span>
-                    <span
-                      className={cn(
-                        'w-fit rounded-full border px-2.5 py-1 text-xs font-medium',
-                        item.isActive
-                          ? 'border-positive/30 bg-positive/10 text-positive'
-                          : 'border-border bg-muted text-muted-foreground'
-                      )}
-                    >
-                      {item.isActive ? 'Active' : 'Archived'}
-                    </span>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Actions for ${item.name}`}
-                          >
-                            <Pencil className="size-4" aria-hidden="true" />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem onClick={() => openEdit(item)}>
-                          <Pencil />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => void toggleActive(item)}
-                        >
-                          {item.isActive ? <Archive /> : <ArchiveRestore />}
-                          {item.isActive ? 'Archive' : 'Restore'}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => void deleteItem(item)}
-                        >
-                          <Trash2 />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                  <div className="min-w-0">
+                    <h2 className="text-foreground truncate text-sm font-semibold">
+                      {item.name}
+                    </h2>
+                    <p className="text-muted-foreground truncate text-sm">
+                      {item.category ?? 'Uncategorized'}
+                      {item.description ? ` · ${item.description}` : ''}
+                    </p>
                   </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-foreground w-24 text-right text-sm font-semibold tabular-nums">
+                    {formatCurrencyPrecise(item.price, defaultCurrency)}
+                  </span>
+                  <span
+                    className={cn(
+                      'w-fit rounded-full border px-2.5 py-0.5 text-xs font-medium',
+                      item.isActive
+                        ? 'border-positive/30 bg-positive/10 text-positive'
+                        : 'border-border bg-muted text-muted-foreground'
+                    )}
+                  >
+                    {item.isActive ? 'Active' : 'Archived'}
+                  </span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          // Always rendered, never hover-only: a
+                          // hover-revealed control is unreachable on
+                          // touch and invisible to keyboard users.
+                          className="text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
+                          aria-label={`Actions for ${item.name}`}
+                        >
+                          <MoreHorizontal />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem onClick={() => openEdit(item)}>
+                        <Pencil />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => void toggleActive(item)}>
+                        {item.isActive ? <Archive /> : <ArchiveRestore />}
+                        {item.isActive ? 'Archive' : 'Restore'}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setPendingDelete(item)}
+                      >
+                        <Trash2 />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <CatalogRecordSheet
         open={dialogOpen}
@@ -392,6 +433,37 @@ export function CatalogWorkspace() {
         item={editing}
         onSaved={() => void mutate()}
       />
+
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => !next && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Trash2 />
+            </AlertDialogMedia>
+            <AlertDialogTitle>
+              Delete &quot;{pendingDelete?.name}&quot;?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the item from your catalog. Appointments
+              already booked against it keep their history. Archive it instead
+              if you only want to stop new bookings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              {deleting ? 'Deleting…' : 'Delete item'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
