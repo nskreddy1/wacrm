@@ -21,7 +21,10 @@ import type {
   AppointmentStatus,
   CatalogItem,
 } from '@/lib/data/operations/types';
-import { AppointmentCalendar } from '@/features/appointments/components/appointment-calendar';
+import {
+  AppointmentCalendar,
+  type CalendarRange,
+} from '@/features/appointments/components/appointment-calendar';
 import { AppointmentRecordSheet } from '@/features/appointments/components/appointment-record-sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -165,6 +168,9 @@ export function AppointmentWorkspace() {
   );
   const [query, setQuery] = useState('');
   const [view, setView] = useState<AppointmentView>('agenda');
+  /* Held here, not in the calendar, so switching to the agenda and back
+     returns to the range you were last working in. */
+  const [calendarRange, setCalendarRange] = useState<CalendarRange>('week');
   const [scope, setScope] = useState<ScheduleScope>('upcoming');
   const [statusFilter, setStatusFilter] = useState('all');
   const [serviceFilter, setServiceFilter] = useState('all');
@@ -181,23 +187,19 @@ export function AppointmentWorkspace() {
     return { today: dayStart, tomorrow: nextDay };
   }, []);
 
-  const filtered = useMemo(() => {
+  /* Query/status/service apply to both views. The schedule range does
+     not: the calendar navigates time itself, so filtering "upcoming"
+     underneath it would silently blank out any month you paged back to. */
+  const matched = useMemo(() => {
     const q = query.trim().toLowerCase();
     return appointments
       .filter((item) => {
-        const starts = new Date(item.startsAt);
-        const inScope =
-          scope === 'all' ||
-          (scope === 'today' && starts >= today && starts < tomorrow) ||
-          (scope === 'upcoming' && starts >= today) ||
-          (scope === 'past' && starts < today);
         const matchesQuery =
           !q ||
           `${item.title} ${item.contactName ?? ''} ${item.catalogItemName ?? ''} ${item.location ?? ''}`
             .toLowerCase()
             .includes(q);
         return (
-          inScope &&
           matchesQuery &&
           (statusFilter === 'all' || item.status === statusFilter) &&
           (serviceFilter === 'all' || item.catalogItemId === serviceFilter)
@@ -207,15 +209,21 @@ export function AppointmentWorkspace() {
         (a, b) =>
           new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
       );
-  }, [
-    appointments,
-    query,
-    scope,
-    statusFilter,
-    serviceFilter,
-    today,
-    tomorrow,
-  ]);
+  }, [appointments, query, statusFilter, serviceFilter]);
+
+  const filtered = useMemo(
+    () =>
+      matched.filter((item) => {
+        const starts = new Date(item.startsAt);
+        return (
+          scope === 'all' ||
+          (scope === 'today' && starts >= today && starts < tomorrow) ||
+          (scope === 'upcoming' && starts >= today) ||
+          (scope === 'past' && starts < today)
+        );
+      }),
+    [matched, scope, today, tomorrow]
+  );
 
   const grouped = useMemo(() => {
     const groups = new Map<string, Appointment[]>();
@@ -262,7 +270,10 @@ export function AppointmentWorkspace() {
   return (
     // Plain <div>: the dashboard shell (SidebarInset) already renders the
     // page's <main> landmark, so a second one here duplicated it.
-    <div className="bg-background flex min-h-full flex-col">
+    /* h-full + overflow-hidden: the shell's content region is already
+       height-bounded and clips, so the scrolling has to happen inside
+       this module. The calendar's time grid depends on that bound. */
+    <div className="bg-background flex h-full min-h-0 flex-col overflow-hidden">
       {/* Visually hidden: the surrounding chrome already names the page,
           so a rendered title only cost vertical space. Kept for the
           document outline (WCAG 1.3.1), matching Contacts. */}
@@ -279,24 +290,29 @@ export function AppointmentWorkspace() {
             stacked three rows of chrome (title, filter row, count row)
             above the schedule that is the actual content. */}
         <WorkspaceToolbar>
-          <Select
-            items={SCOPE_ITEMS}
-            value={scope}
-            onValueChange={(value) =>
-              setScope((value ?? 'upcoming') as ScheduleScope)
-            }
-          >
-            <SelectTrigger className="w-32" aria-label="Schedule range">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SCOPES.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Range only exists for the agenda. In calendar view the grid's
+              own Day/Week/Month nav is the range control, and two competing
+              ones would contradict each other. */}
+          {view === 'agenda' && (
+            <Select
+              items={SCOPE_ITEMS}
+              value={scope}
+              onValueChange={(value) =>
+                setScope((value ?? 'upcoming') as ScheduleScope)
+              }
+            >
+              <SelectTrigger className="w-32" aria-label="Schedule range">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCOPES.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <WorkspaceToolbarSearch
             value={query}
@@ -373,12 +389,14 @@ export function AppointmentWorkspace() {
 
           {/* Count lives inline now rather than owning a whole row.
               aria-live so filtering announces the new total. */}
-          <span
-            className="text-muted-foreground text-xs tabular-nums"
-            aria-live="polite"
-          >
-            {filtered.length}
-          </span>
+          {view === 'agenda' && (
+            <span
+              className="text-muted-foreground text-xs tabular-nums"
+              aria-live="polite"
+            >
+              {filtered.length}
+            </span>
+          )}
 
           {/* Anchored to the trailing edge so the bar is weighted at both
               ends instead of packing left and stranding a gap. */}
@@ -438,12 +456,19 @@ export function AppointmentWorkspace() {
             </Button>
           </div>
         ) : isLoading ? (
-          <ScheduleSkeleton />
+          <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto">
+            <ScheduleSkeleton />
+          </div>
         ) : view === 'calendar' ? (
-          /* Calendar shows the month regardless of matches, so it sits
-             above the empty state — an empty month is a valid, readable
+          /* Calendar renders its range regardless of matches, so it sits
+             above the empty state — an empty week is a valid, readable
              result, whereas an empty agenda list is just blank. */
-          <AppointmentCalendar appointments={filtered} />
+          <AppointmentCalendar
+            appointments={matched}
+            range={calendarRange}
+            onRangeChange={setCalendarRange}
+            onSelect={setEditing}
+          />
         ) : filtered.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-20 text-center">
             <CalendarDays
@@ -473,7 +498,9 @@ export function AppointmentWorkspace() {
             )}
           </div>
         ) : (
-          <div>
+          /* fab-safe-area keeps the last row clear of the floating
+             launchers pinned to the bottom corners of the shell. */
+          <div className="app-scrollbar fab-safe-area min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {grouped.map((items) => {
               const heading = formatDayHeading(items[0].startsAt);
               return (
