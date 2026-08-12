@@ -129,9 +129,25 @@ async function fetchConversationsSnapshot(
  * directly from the browser — RLS (migration team_chat) scopes every
  * row to conversation participants within the workspace.
  */
-export function useTeamChat(enabled: boolean) {
+/**
+ * @param onIncoming Fired for every message from someone else, with
+ *   `isActiveThread` telling the consumer whether it landed in the currently
+ *   open conversation. Reusing this hook's existing subscription rather than
+ *   opening a second one matters: a parallel channel on the same table would
+ *   deliver every INSERT twice and double every popup. Held in a ref, so
+ *   passing an inline arrow never resubscribes the channel.
+ */
+export function useTeamChat(
+  enabled: boolean,
+  onIncoming?: (msg: TeamMessage, isActiveThread: boolean) => void
+) {
   const { user, accountId } = useAuth();
   const myId = user?.id ?? null;
+
+  const onIncomingRef = useRef(onIncoming);
+  useEffect(() => {
+    onIncomingRef.current = onIncoming;
+  });
 
   // Workspace roster (existing endpoint, shared with Settings > Members).
   const { data: membersData } = useSWR<MembersResponse>(
@@ -247,6 +263,15 @@ export function useTeamChat(enabled: boolean) {
               prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
             );
             if (!mine) void markReadInternal(msg.conversation_id);
+          }
+
+          if (!mine) {
+            // Fire for every message from someone else, passing whether it
+            // landed in the open thread. Suppressing `isActive` here would
+            // be wrong: the panel can be CLOSED with a thread still active,
+            // and then the user sees nothing at all. Only the consumer knows
+            // whether that thread is actually on screen, so it decides.
+            onIncomingRef.current?.(msg, isActive);
           }
         }
       )

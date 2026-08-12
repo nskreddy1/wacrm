@@ -5,10 +5,12 @@ import useSWR from 'swr';
 import {
   AlertCircle,
   CalendarDays,
+  Filter,
+  List,
   Loader2,
   MapPin,
+  Pencil,
   Plus,
-  Search,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -19,9 +21,25 @@ import type {
   AppointmentStatus,
   CatalogItem,
 } from '@/lib/data/operations/types';
+import {
+  AppointmentCalendar,
+  type CalendarRange,
+} from '@/features/appointments/components/appointment-calendar';
 import { AppointmentRecordSheet } from '@/features/appointments/components/appointment-record-sheet';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  WorkspaceToolbar,
+  WorkspaceToolbarActions,
+  WorkspaceToolbarSearch,
+  WorkspaceToolbarSeparator,
+} from '@/components/shared/workspace-toolbar';
 import {
   Select,
   SelectContent,
@@ -34,6 +52,7 @@ import { cn } from '@/lib/utils';
 type AppointmentsResponse = { data: Appointment[] };
 type CatalogResponse = { data: CatalogItem[] };
 type ScheduleScope = 'upcoming' | 'today' | 'past' | 'all';
+type AppointmentView = 'agenda' | 'calendar';
 
 const STATUS_STYLE: Record<AppointmentStatus, string> = {
   scheduled: 'bg-primary/10 text-primary',
@@ -55,6 +74,11 @@ const SCOPES: Array<{ value: ScheduleScope; label: string }> = [
   { value: 'past', label: 'Past' },
   { value: 'all', label: 'All' },
 ];
+
+/** Select's `items` prop wants a value->label record for its a11y labelling. */
+const SCOPE_ITEMS = Object.fromEntries(
+  SCOPES.map((scope) => [scope.value, scope.label])
+);
 
 const timeFormatter = new Intl.DateTimeFormat('en', {
   hour: 'numeric',
@@ -143,10 +167,15 @@ export function AppointmentWorkspace() {
     '/api/v1/workspace/catalog'
   );
   const [query, setQuery] = useState('');
+  const [view, setView] = useState<AppointmentView>('agenda');
+  /* Held here, not in the calendar, so switching to the agenda and back
+     returns to the range you were last working in. */
+  const [calendarRange, setCalendarRange] = useState<CalendarRange>('week');
   const [scope, setScope] = useState<ScheduleScope>('upcoming');
   const [statusFilter, setStatusFilter] = useState('all');
   const [serviceFilter, setServiceFilter] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Appointment | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const appointments = useMemo(() => data?.data ?? [], [data]);
@@ -158,23 +187,19 @@ export function AppointmentWorkspace() {
     return { today: dayStart, tomorrow: nextDay };
   }, []);
 
-  const filtered = useMemo(() => {
+  /* Query/status/service apply to both views. The schedule range does
+     not: the calendar navigates time itself, so filtering "upcoming"
+     underneath it would silently blank out any month you paged back to. */
+  const matched = useMemo(() => {
     const q = query.trim().toLowerCase();
     return appointments
       .filter((item) => {
-        const starts = new Date(item.startsAt);
-        const inScope =
-          scope === 'all' ||
-          (scope === 'today' && starts >= today && starts < tomorrow) ||
-          (scope === 'upcoming' && starts >= today) ||
-          (scope === 'past' && starts < today);
         const matchesQuery =
           !q ||
           `${item.title} ${item.contactName ?? ''} ${item.catalogItemName ?? ''} ${item.location ?? ''}`
             .toLowerCase()
             .includes(q);
         return (
-          inScope &&
           matchesQuery &&
           (statusFilter === 'all' || item.status === statusFilter) &&
           (serviceFilter === 'all' || item.catalogItemId === serviceFilter)
@@ -184,15 +209,21 @@ export function AppointmentWorkspace() {
         (a, b) =>
           new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
       );
-  }, [
-    appointments,
-    query,
-    scope,
-    statusFilter,
-    serviceFilter,
-    today,
-    tomorrow,
-  ]);
+  }, [appointments, query, statusFilter, serviceFilter]);
+
+  const filtered = useMemo(
+    () =>
+      matched.filter((item) => {
+        const starts = new Date(item.startsAt);
+        return (
+          scope === 'all' ||
+          (scope === 'today' && starts >= today && starts < tomorrow) ||
+          (scope === 'upcoming' && starts >= today) ||
+          (scope === 'past' && starts < today)
+        );
+      }),
+    [matched, scope, today, tomorrow]
+  );
 
   const grouped = useMemo(() => {
     const groups = new Map<string, Appointment[]>();
@@ -205,6 +236,11 @@ export function AppointmentWorkspace() {
 
   const hasFilters =
     Boolean(query) || statusFilter !== 'all' || serviceFilter !== 'all';
+
+  /* Badge count excludes the search box, which carries its own clear
+     affordance — same split Contacts uses via countRules(). */
+  const activeFilterCount =
+    (statusFilter !== 'all' ? 1 : 0) + (serviceFilter !== 'all' ? 1 : 0);
 
   function clearFilters() {
     setQuery('');
@@ -234,124 +270,170 @@ export function AppointmentWorkspace() {
   return (
     // Plain <div>: the dashboard shell (SidebarInset) already renders the
     // page's <main> landmark, so a second one here duplicated it.
-    <div className="bg-background flex min-h-full flex-col">
-      <header className="border-border border-b px-4 py-4 md:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-foreground text-xl font-semibold tracking-tight text-balance">
-              Appointments
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              Coordinate sessions and keep the team on schedule.
-            </p>
-          </div>
-          <Button size="lg" onClick={() => setCreateOpen(true)}>
-            <Plus aria-hidden="true" /> New appointment
-          </Button>
-        </div>
-      </header>
+    /* h-full + overflow-hidden: the shell's content region is already
+       height-bounded and clips, so the scrolling has to happen inside
+       this module. The calendar's time grid depends on that bound. */
+    <div className="bg-background flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Visually hidden: the surrounding chrome already names the page,
+          so a rendered title only cost vertical space. Kept for the
+          document outline (WCAG 1.3.1), matching Contacts. */}
+      <h1 className="sr-only">Appointments</h1>
 
       <section
         className="flex min-h-0 flex-1 flex-col"
         aria-label="Appointment schedule"
       >
-        <div className="border-border border-b px-4 md:px-6">
-          <div className="flex flex-col gap-3 py-3 xl:flex-row xl:items-center xl:justify-between">
-            <div
-              className="flex flex-wrap items-center gap-1"
-              aria-label="Schedule range"
+        {/* Shared WorkspaceToolbar, extracted from Contacts so every module
+            reads identically. Range sits leftmost as the primary scope —
+            the direct equivalent of the pipeline selector — then search,
+            then a single Filter button carrying a count. This previously
+            stacked three rows of chrome (title, filter row, count row)
+            above the schedule that is the actual content. */}
+        <WorkspaceToolbar>
+          {/* Range only exists for the agenda. In calendar view the grid's
+              own Day/Week/Month nav is the range control, and two competing
+              ones would contradict each other. */}
+          {view === 'agenda' && (
+            <Select
+              items={SCOPE_ITEMS}
+              value={scope}
+              onValueChange={(value) =>
+                setScope((value ?? 'upcoming') as ScheduleScope)
+              }
             >
-              {SCOPES.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setScope(item.value)}
-                  aria-pressed={scope === item.value}
-                  className={cn(
-                    'text-muted-foreground hover:text-foreground focus-visible:ring-ring relative min-h-9 px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
-                    scope === item.value &&
-                      'text-foreground after:bg-primary after:absolute after:inset-x-3 after:bottom-0 after:h-0.5'
+              <SelectTrigger className="w-32" aria-label="Schedule range">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCOPES.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <WorkspaceToolbarSearch
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Search appointments"
+            label="Search appointments"
+          />
+
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant={activeFilterCount ? 'secondary' : 'outline'}
+                  size="sm"
+                >
+                  <Filter data-icon="inline-start" /> Filter
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary">{activeFilterCount}</Badge>
                   )}
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-64">
+              <div className="flex flex-col gap-3">
+                <Select
+                  items={{ all: 'All statuses', ...STATUS_LABEL }}
+                  value={statusFilter}
+                  onValueChange={(value) => setStatusFilter(value ?? 'all')}
                 >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative min-w-0 sm:w-64">
-                <Search
-                  className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
-                  aria-hidden="true"
-                />
-                <Input
-                  aria-label="Search appointments"
-                  className="h-9 pl-9"
-                  placeholder="Search appointments"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              <Select
-                items={{ all: 'All statuses', ...STATUS_LABEL }}
-                value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value ?? 'all')}
-              >
-                <SelectTrigger
-                  className="h-9 sm:w-36"
-                  aria-label="Filter by status"
+                  <SelectTrigger aria-label="Filter by status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    {(Object.keys(STATUS_LABEL) as AppointmentStatus[]).map(
+                      (status) => (
+                        <SelectItem key={status} value={status}>
+                          {STATUS_LABEL[status]}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+                <Select
+                  items={{
+                    all: 'All services',
+                    ...Object.fromEntries(
+                      services.map((item) => [item.id, item.name])
+                    ),
+                  }}
+                  value={serviceFilter}
+                  onValueChange={(value) => setServiceFilter(value ?? 'all')}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  {(Object.keys(STATUS_LABEL) as AppointmentStatus[]).map(
-                    (status) => (
-                      <SelectItem key={status} value={status}>
-                        {STATUS_LABEL[status]}
+                  <SelectTrigger aria-label="Filter by service">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All services</SelectItem>
+                    {services.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
                       </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
-              <Select
-                items={{
-                  all: 'All services',
-                  ...Object.fromEntries(
-                    services.map((item) => [item.id, item.name])
-                  ),
-                }}
-                value={serviceFilter}
-                onValueChange={(value) => setServiceFilter(value ?? 'all')}
-              >
-                <SelectTrigger
-                  className="h-9 sm:w-44"
-                  aria-label="Filter by service"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All services</SelectItem>
-                  {services.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="border-border/60 text-muted-foreground flex min-h-9 items-center justify-between border-t text-xs">
-            <span>
-              {filtered.length}{' '}
-              {filtered.length === 1 ? 'appointment' : 'appointments'}
+                    ))}
+                  </SelectContent>
+                </Select>
+                {hasFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    <X data-icon="inline-start" /> Clear filters
+                  </Button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Count lives inline now rather than owning a whole row.
+              aria-live so filtering announces the new total. */}
+          {view === 'agenda' && (
+            <span
+              className="text-muted-foreground text-xs tabular-nums"
+              aria-live="polite"
+            >
+              {filtered.length}
             </span>
-            {hasFilters && (
-              <Button variant="ghost" size="xs" onClick={clearFilters}>
-                <X aria-hidden="true" /> Clear filters
-              </Button>
-            )}
-          </div>
-        </div>
+          )}
+
+          {/* Anchored to the trailing edge so the bar is weighted at both
+              ends instead of packing left and stranding a gap. */}
+          <WorkspaceToolbarActions>
+            <Tabs
+              value={view}
+              onValueChange={(value) => setView(value as AppointmentView)}
+            >
+              <TabsList aria-label="Appointment view">
+                <TabsTrigger
+                  value="agenda"
+                  aria-label="Agenda view"
+                  title="Agenda view"
+                >
+                  <List />
+                </TabsTrigger>
+                <TabsTrigger
+                  value="calendar"
+                  aria-label="Calendar view"
+                  title="Calendar view"
+                >
+                  <CalendarDays />
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <WorkspaceToolbarSeparator />
+
+            <Button
+              size="sm"
+              className="shadow-xs"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus data-icon="inline-start" /> New appointment
+            </Button>
+          </WorkspaceToolbarActions>
+        </WorkspaceToolbar>
 
         {error ? (
           <div className="border-destructive/30 bg-destructive/5 m-4 flex items-start justify-between gap-4 border p-4 md:m-6">
@@ -374,7 +456,19 @@ export function AppointmentWorkspace() {
             </Button>
           </div>
         ) : isLoading ? (
-          <ScheduleSkeleton />
+          <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto">
+            <ScheduleSkeleton />
+          </div>
+        ) : view === 'calendar' ? (
+          /* Calendar renders its range regardless of matches, so it sits
+             above the empty state — an empty week is a valid, readable
+             result, whereas an empty agenda list is just blank. */
+          <AppointmentCalendar
+            appointments={matched}
+            range={calendarRange}
+            onRangeChange={setCalendarRange}
+            onSelect={setEditing}
+          />
         ) : filtered.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-20 text-center">
             <CalendarDays
@@ -404,7 +498,9 @@ export function AppointmentWorkspace() {
             )}
           </div>
         ) : (
-          <div>
+          /* fab-safe-area keeps the last row clear of the floating
+             launchers pinned to the bottom corners of the shell. */
+          <div className="app-scrollbar fab-safe-area min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {grouped.map((items) => {
               const heading = formatDayHeading(items[0].startsAt);
               return (
@@ -426,7 +522,7 @@ export function AppointmentWorkspace() {
                       return (
                         <article
                           key={item.id}
-                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1fr)_minmax(8rem,0.35fr)_9rem] md:items-center md:gap-5 md:px-6"
+                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1fr)_minmax(8rem,0.35fr)_9rem_auto] md:items-center md:gap-5 md:px-6"
                         >
                           <div className="flex items-baseline gap-2 md:flex-col md:items-start md:gap-0.5">
                             <time
@@ -504,6 +600,20 @@ export function AppointmentWorkspace() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {/* Always rendered, never hover-only: a
+                              hover-revealed control is unreachable on
+                              touch and invisible to keyboard users. It
+                              only dims until the row is engaged. */}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Edit ${item.title}`}
+                            title="Edit appointment"
+                            className="text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
+                            onClick={() => setEditing(item)}
+                          >
+                            <Pencil />
+                          </Button>
                         </article>
                       );
                     })}
@@ -519,6 +629,18 @@ export function AppointmentWorkspace() {
         onOpenChange={setCreateOpen}
         onCreated={() => void mutate()}
       />
+      {/* Keyed by record id so the sheet's state initializers re-run for
+          each appointment. Without the key it would keep the first
+          record's values when opened on a different row. */}
+      {editing ? (
+        <AppointmentRecordSheet
+          key={editing.id}
+          open
+          appointment={editing}
+          onOpenChange={(next) => !next && setEditing(null)}
+          onCreated={() => void mutate()}
+        />
+      ) : null}
     </div>
   );
 }

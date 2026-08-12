@@ -1,13 +1,25 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Hash, MessageSquare, Plus, Search, Users, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { usePresence } from '@/features/presence/hooks/use-presence';
-import { useTeamChat } from '@/features/team-chat/hooks/use-team-chat';
+import {
+  useTeamChat,
+  type TeamMessage,
+} from '@/features/team-chat/hooks/use-team-chat';
+import { useChatNotificationPrefs } from '@/features/team-chat/hooks/use-chat-notification-prefs';
+import {
+  armNotificationSound,
+  playNotificationSound,
+} from '@/features/team-chat/lib/notification-sound';
+
+/** Toast-level mute span. See the `cancel` handler for why it is 7 days. */
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 import { useSelfPresence } from '@/features/presence/components/presence-provider';
 import { presenceLabel } from '@/features/presence/lib/presence';
 import { PresenceDot } from '@/features/presence/components/presence-dot';
@@ -35,7 +47,76 @@ export function TeamChatWidget() {
   // conversation snapshot and the realtime subscription live at all times.
   // (Gating this on `open` meant totalUnread was pinned at 0 whenever the
   // panel was shut, so the closed-state badge could never appear.)
-  const chat = useTeamChat(true);
+  const { canPopup, muteConversation } = useChatNotificationPrefs();
+
+  // `openRef` mirrors `open` for the async realtime callback below. Reading
+  // `open` directly there would capture the value from the render that
+  // created the handler, so a toast could be suppressed for a panel the
+  // user had since closed.
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  // Bind the gesture listeners that unlock audio. Must happen well before
+  // the first message arrives, so it runs on mount rather than lazily at
+  // play time — by then the gesture requirement can no longer be met.
+  useEffect(() => {
+    armNotificationSound();
+  }, []);
+
+  // Chat is read inside a callback that must be passed *into* useTeamChat,
+  // so a ref breaks the cycle. Safe because the callback only ever runs
+  // later, from a realtime event — never during this render.
+  const chatRef = useRef<ReturnType<typeof useTeamChat> | null>(null);
+
+  const handleIncoming = useCallback(
+    (msg: TeamMessage, isActiveThread: boolean) => {
+      // Already on screen in the open panel — a popup would be noise.
+      if (isActiveThread && openRef.current) return;
+      if (!canPopup(msg.conversation_id)) return;
+
+      const c = chatRef.current;
+      const conv = c?.conversations.find((x) => x.id === msg.conversation_id);
+      const sender = c?.memberById.get(msg.sender_id);
+      // Prefer the real person's name; fall back to the thread title so a
+      // channel message never announces itself as "Someone".
+      const title =
+        sender?.full_name ??
+        (conv ? c?.describeConversation(conv).title : null) ??
+        'New message';
+
+      // Sound rides the same gate as the popup, so muting a thread
+      // silences it too. No-ops until the user has interacted with the
+      // page at least once — see notification-sound.ts.
+      playNotificationSound();
+
+      toast(title, {
+        description: msg.body.slice(0, 120),
+        action: {
+          label: 'Reply',
+          onClick: () => {
+            setOpen(true);
+            void chatRef.current?.openConversation(msg.conversation_id);
+          },
+        },
+        cancel: {
+          // A week, not forever: the toast is a snap decision made while
+          // busy, and an accidental permanent mute is the kind of thing
+          // nobody discovers until they have missed something. Permanent
+          // muting stays available from the conversation itself.
+          label: 'Mute 7 days',
+          onClick: () => void muteConversation(msg.conversation_id, WEEK_MS),
+        },
+      });
+    },
+    [canPopup, muteConversation]
+  );
+
+  const chat = useTeamChat(true, handleIncoming);
+  useEffect(() => {
+    chatRef.current = chat;
+  });
   // Presence stays gated: the roster is only rendered inside the open
   // panel, and each consumer costs its own channel + full roster fetch.
   const { getPresence, getRow, now } = usePresence(open);
