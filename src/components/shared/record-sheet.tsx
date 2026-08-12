@@ -216,12 +216,16 @@ export function RecordField({
   labelSlot,
   htmlFor,
   error,
+  hint,
   children,
 }: {
   label?: string;
   labelSlot?: ReactNode;
   htmlFor?: string;
   error?: string;
+  /** Explains a constraint on the field. Yields to `error` so the two
+   *  never compete for the same slot. */
+  hint?: string;
   children: ReactNode;
 }) {
   return (
@@ -240,6 +244,8 @@ export function RecordField({
           <p className="text-destructive text-sm" role="alert">
             {error}
           </p>
+        ) : hint ? (
+          <p className="text-muted-foreground text-xs">{hint}</p>
         ) : null}
       </div>
     </div>
