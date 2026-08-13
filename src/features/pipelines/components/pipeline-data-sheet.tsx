@@ -29,6 +29,24 @@ const columns = [
 ] as const;
 type Column = (typeof columns)[number];
 
+/**
+ * Header labels and widths, in the same order as `columns` above.
+ *
+ * Widths are deliberate per column rather than a single `min-w-44` for all
+ * six: a currency amount and a date need far less room than a deal name, so
+ * a uniform minimum forced every column to the widest one's size and left
+ * the surplus to be shared out arbitrarily. Sizing each to its own content
+ * is what makes the gaps read as even.
+ */
+const SHEET_COLUMNS: { label: string; width: string }[] = [
+  { label: 'Deal name', width: 'w-64' },
+  { label: 'Amount', width: 'w-36' },
+  { label: 'Stage', width: 'w-44' },
+  { label: 'Owner', width: 'w-52' },
+  { label: 'Closing date', width: 'w-40' },
+  { label: 'Company', width: 'w-48' },
+];
+
 export function nextCell(
   row: number,
   column: number,
@@ -104,21 +122,18 @@ export function PipelineSheet({
       <table className="min-w-full border-separate border-spacing-0 text-sm">
         <thead className="bg-card sticky top-0 z-20">
           <tr>
-            {[
-              'Deal name',
-              'Amount',
-              'Stage',
-              'Owner',
-              'Closing date',
-              'Company',
-            ].map((label, index) => (
+            {SHEET_COLUMNS.map((column, index) => (
               <th
-                key={label}
-                className={`min-w-44 border-r border-b px-3 py-2 text-left font-medium ${index === 0 ? 'bg-card sticky left-0 z-30' : ''}`}
+                key={column.label}
+                className={`border-r border-b px-3 py-2 text-left font-medium whitespace-nowrap ${column.width} ${index === 0 ? 'bg-card sticky left-0 z-30' : ''}`}
               >
-                {label}
+                {column.label}
               </th>
             ))}
+            {/* Slack column. Without it the browser spreads leftover width
+                across the six real columns, which is what made the gaps
+                look arbitrary and pushed Company off the right edge. */}
+            <th className="w-full border-b p-0" aria-hidden="true" />
           </tr>
         </thead>
         <tbody>
@@ -260,6 +275,7 @@ export function PipelineSheet({
                   </td>
                 );
               })}
+              <td className="border-b p-0" aria-hidden="true" />
             </tr>
           ))}
         </tbody>

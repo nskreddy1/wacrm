@@ -1274,18 +1274,21 @@ function DealTable({
                 />
               </span>
             </th>
+            {/* Explicit widths: with only a slack column and no widths, the
+                browser shrinks each column to its content and short values
+                ("New Lead") wrap mid-phrase. */}
             {[
-              'Deal',
-              'Contact',
-              'Company',
-              'Stage',
-              'Amount',
-              'Owner',
-              'Closing date',
-            ].map((label) => (
+              { label: 'Deal', width: 'w-56' },
+              { label: 'Contact', width: 'w-44' },
+              { label: 'Company', width: 'w-44' },
+              { label: 'Stage', width: 'w-36' },
+              { label: 'Amount', width: 'w-28' },
+              { label: 'Owner', width: 'w-52' },
+              { label: 'Closing date', width: 'w-36' },
+            ].map(({ label, width }) => (
               <th
                 key={label}
-                className="text-muted-foreground px-3 py-3 text-left text-xs font-medium whitespace-nowrap"
+                className={`text-muted-foreground px-3 py-3 text-left text-xs font-medium whitespace-nowrap ${width}`}
               >
                 {label}
               </th>
@@ -1327,19 +1330,19 @@ function DealTable({
                   {deal.title}
                 </button>
               </td>
-              <td className="text-muted-foreground px-3 py-3">
+              <td className="text-muted-foreground truncate px-3 py-3">
                 {deal.contact?.name ?? '—'}
               </td>
-              <td className="text-muted-foreground px-3 py-3">
+              <td className="text-muted-foreground truncate px-3 py-3">
                 {deal.company ?? '—'}
               </td>
-              <td className="px-3 py-3">
+              <td className="px-3 py-3 whitespace-nowrap">
                 {stages.find((item) => item.id === deal.stageId)?.name ?? '—'}
               </td>
-              <td className="px-3 py-3 font-medium tabular-nums">
+              <td className="px-3 py-3 font-medium tabular-nums whitespace-nowrap">
                 {money(deal.value, workspaceCurrency)}
               </td>
-              <td className="text-muted-foreground px-3 py-3">
+              <td className="text-muted-foreground truncate px-3 py-3">
                 {deal.owner?.name ?? 'Unassigned'}
               </td>
               <td className="text-muted-foreground px-3 py-3 whitespace-nowrap">
