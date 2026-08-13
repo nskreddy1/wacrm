@@ -72,15 +72,46 @@ as $$
     p.user_id,
     p.account_id,
     -- account_members.role is authoritative (is_account_member reads it);
-    -- profiles.account_role is the denormalised copy kept in sync by
-    -- redeem_invitation / switch_active_account. Prefer the source of
-    -- truth so the BFF cannot grant on a stale copy.
-    coalesce(m.role::text, p.account_role::text) as account_role,
+    -- profiles.account_role is only a denormalised copy kept in sync by
+    -- redeem_invitation / switch_active_account.
+    --
+    -- Least privilege on the same fail-closed reasoning as `status` below:
+    -- when no active membership is visible we must NOT fall back to the
+    -- denormalised copy, because that copy can still hold a role the user
+    -- no longer holds (e.g. 'admin' left behind after deactivation). Such a
+    -- context is already rejected via status='inactive'; reporting 'viewer'
+    -- rather than a stale elevated role means even a caller that ignored the
+    -- status gate cannot read an elevated role out of this RPC.
+    case when m.id is null then 'viewer' else m.role::text end as account_role,
     a.name as account_name,
+    -- FAIL CLOSED. This deliberately requires positive proof of an active
+    -- membership rather than trusting an absent row.
+    --
+    -- The obvious spelling, `coalesce(m.status, p.status, 'active')`, is a
+    -- fail-OPEN trap and was caught by test, not review: the SELECT policy on
+    -- account_members is `is_account_member(account_id,'viewer')`, which only
+    -- matches ACTIVE memberships. So the moment a member is deactivated their
+    -- own row becomes invisible to them, the LEFT JOIN yields NULL, and the
+    -- coalesce falls through to profiles.status — which is still 'active'.
+    -- The revoked member would have been reported active and let straight in.
+    --
+    -- Because RLS only ever exposes an active membership, `m.id IS NOT NULL`
+    -- IS the proof of an active grant. Using RLS as the authority instead of
+    -- fighting it means a hidden row can only ever deny, never permit.
+    -- Verified safe against live data: 0 profiles whose active account lacks
+    -- an active membership, so no existing user is locked out.
+    --
+    -- In the specific case of a pointer left on a workspace the caller no
+    -- longer belongs to, the inner join to `accounts` is itself blocked by
+    -- accounts RLS, so the function returns ZERO ROWS rather than a row
+    -- marked inactive. Both outcomes are denials: getCurrentAccount() throws
+    -- ForbiddenError on an empty result, and on status <> 'active'. Measured
+    -- both paths (deactivated membership, hard-deleted membership).
     case
       when coalesce(p.status, 'active') <> 'active'
         then coalesce(p.status, 'active')
-      else coalesce(m.status, p.status, 'active')
+      when m.id is null then 'inactive'
+      else 'active'
     end as status,
     (a.owner_user_id = p.user_id) as is_owner,
     coalesce(wp.permissions, '{}'::text[]) as permissions,
