@@ -26,12 +26,20 @@ Three audit findings need architectural decisions, not just fixes:
    Its schema lacks SKU, image, duration, tax rate, account currency default;
    `category` is free text.
 
-3. **`/api/v1` holds two auth regimes.** 11 routes funnel through
-   `requireApiKey` (the contract documented in `docs/public-api.md`); the
-   `workspace/*`, `dashboard`, `session`, `notifications`, `security/*` routes
-   use cookie sessions (`getCurrentAccount`) and are documented nowhere.
-   ADR-001's claim that "all 25 `/api/v1` routes funnel through
-   `requireApiKey`" is no longer true.
+3. **`/api/v1` holds three auth regimes** — not two, as first written. 11
+   routes funnel through `requireApiKey` (the contract documented in
+   `docs/public-api.md`); 13 use cookie sessions (`getCurrentAccount`) and were
+   documented nowhere; and `security/login` is pre-auth by design, because it
+   exists to throttle brute force server-side (email-keyed lockout, uniform
+   errors, `auth_login_attempts`). ADR-001's claim that "all 25 `/api/v1`
+   routes funnel through `requireApiKey`" is no longer true.
+
+   **Escalated by the Task 9 audit:** the 13 session routes call neither
+   `requirePermission` nor `requireRole`, so ADR-001's enforcement layers 3 and
+   4 reach *none* of them. Account scoping still holds — `getCurrentAccount()`
+   resolves account + role and fails closed when a profile has no account — but
+   implementing ADR-001 as written would leave the whole session-authenticated
+   BFF surface unmodule-gated. Recorded as checklist item 6a in ADR-001.
 
 Also examined and **explicitly deferred**: a `companies` table. Live DB holds
 1 contact / 1 deal / 1 catalog item; `mappers.ts:75` already inherits

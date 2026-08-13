@@ -62,7 +62,12 @@ actions". That is opt-in enforcement: every forgotten call site is a silent
 hole, and the real surface is far larger than revision 1 assumed —
 
 - 11 module pages + their server actions
-- **25 `/api/v1` routes** (API-key auth) — not mentioned in revision 1
+- **11 `/api/v1` routes** under API-key auth — not mentioned in revision 1
+- **13 further `/api/v1` routes** under *session* auth (`workspace/*`,
+  `dashboard`, `notifications`, `session`, `security/devices`,
+  `security/login-activity`). These share the `/api/v1` prefix but not its auth,
+  and they call neither `requirePermission` nor `requireApiKey` — so no
+  chokepoint below reaches them (see the correction under "Enforcement layers")
 - **`/api/mcp/[transport]`** — AI agent access, not mentioned
 - **`/api/v1/workspace/navigation`** — an external nav consumer, not mentioned
 - **`/api/flows/cron`** — background execution, not mentioned
@@ -254,7 +259,12 @@ identically); mapping entitlement onto billing plans; onboarding presets.
 
 **Phase 2 — enforcement (fail-closed)**
 5. [ ] Module check inside `requirePermission` / `requireRole`
-6. [ ] Module check inside `requireApiKey` (covers v1 + MCP)
+6. [ ] Module check inside `requireApiKey` (covers the 11 API-key v1 routes + MCP)
+   6a. [ ] **Gate the 13 session-authenticated `/api/v1` routes.** Steps 5 and 6
+   do not reach them — they authenticate with `getCurrentAccount()` and call
+   neither helper, so a disabled module stays reachable through
+   `/api/v1/workspace/*`. Either route them through `requirePermission` or add a
+   third chokepoint for session route handlers.
 7. [ ] Filter `flows/cron` by entitled accounts
 8. [ ] `firstAllowedModule()`; replace the 6 hardcoded `/dashboard` redirects
 9. [ ] `module-unavailable` page with the three states
