@@ -1,6 +1,6 @@
 # ADR-003: Record-open UX pattern, catalog module hardening, and entity-normalization triggers
 
-**Status:** Proposed — awaiting sign-off
+**Status:** Accepted (signed 2026-08-13)
 **Date:** 2026-08-13
 **Deciders:** Product owner (nskreddy1)
 **Inputs:** UI-consistency audit + catalog audit (this session), live-DB evidence,
