@@ -317,8 +317,87 @@ END $$;
 
 **CAUTION:** before writing, read the current body in migration 019 for the exact `profiles` column names it updates (`account_role` vs a `workspace_role_id`) and mirror them; the 20260723150000 migration added `workspace_role_id` to invitations — if the current redeem copies it to profiles, preserve that line.
 
-- [ ] **Step 2: Apply; test matrix in SQL** — as user with existing data + matching verified email: succeeds, `account_members` gains a row, user's own account untouched. Mismatched email: `invitation_email_mismatch`. Second redemption: `invitation_invalid`.
-- [ ] **Step 3: Commit** `feat(db): redeem_invitation inserts membership, binds to verified email (ADR-004 D3, F1)`
+- [x] **Step 2: Apply; test matrix in SQL** — done, 24/24 against the applied function.
+- [x] **Step 3: Commit** — done, as two migrations:
+  `20260813130000_redeem_invitation_join_semantics.sql` and
+  `20260813131000_invitation_email_invariant.sql`.
+
+**DONE. The draft SQL above was again materially wrong and was NOT used.**
+
+The `CAUTION` was right to demand the live body. Divergences found by reading it:
+- the draft invented `invited_email`-adjacent columns and a
+  `created_by_user_id` that had to be checked against the real table;
+- the draft used error names (`invitation_email_mismatch`,
+  `invitation_invalid`); the route maps **SQLSTATEs**, not names —
+  `42501`→401, `22023`→400, `23505`→409. Inventing codes would have
+  turned every guard into an opaque 500. The function now raises the
+  SQLSTATEs the existing route already understands, so **no route change
+  was needed** for the error contract.
+
+**The destructive core, now removed:** the old function did
+`DELETE FROM accounts WHERE id = <caller's own account>` — accepting an
+invite destroyed the invitee's own workspace and everything in it. It now
+`INSERT`s an `account_members` row and only re-points the active-workspace
+pointer. Verified: after redeeming, the caller's own account still exists
+and they are **still its owner**, while also holding access to the joined
+workspace.
+
+**A live, exploitable privilege escalation was found and closed.** `is_account_member`
+joins `workspace_profiles` **by id only** — it never checks
+`wp.account_id`. So a `profiles` row pointing at account B while still
+carrying account A's `workspace_profile_id` grants whatever that foreign
+profile allows; two accounts here own an "Administrator" profile holding
+`settings:manage`, which confers **admin**. The test measured
+`admin=true` in exactly that state before redeeming, so this was real,
+not theoretical. Redeem now (a) clears foreign `workspace_role_id` /
+`workspace_profile_id` when moving the pointer and (b) re-validates the
+invitation's own `workspace_profile_id` against the **inviting** account,
+so a directly tampered invitation row cannot attach another account's
+profile. Both are covered by tests.
+**Follow-up recorded, deliberately not smuggled in here:** `is_account_member`
+should also require `wp.account_id = m.account_id` so no other write path
+can resurrect this. That edit touches the seam behind all 201 policies and
+belongs in its own reviewed change.
+
+**Other decisions, all evidence-based:**
+- **Email binding is strict.** Both invite UIs already require a valid
+  email client-side and the table held **0 rows**, so NULL-email
+  "share-link" invites had no producer and no data to migrate. They were
+  unbound bearer tokens: whoever got the link joined, with no audit of
+  who used it. Redeem refuses them, `invited_email` is now `NOT NULL`, and
+  the API route returns a clean 400 instead of letting the constraint
+  surface as a 500.
+- **A real defect was caught by behaviour-testing the applied function**, not by
+  reading it: the binding used `LOWER()` without `TRIM()`, so an invite
+  stored as `'  Person@Ex.com  '` could **never** be redeemed by its own
+  recipient. Fixed at the source (`normalize_invitation_email_trg`
+  canonicalises on write) rather than by patching this one comparison,
+  because the members UI, the peek endpoint and the public API all read
+  the same column. Proven: a messy-cased invite is now redeemable.
+- **Already-a-member is idempotent success** (was `23505`→409, an error for
+  a no-op). Crucially, a replayed invite does **not** rewrite an existing
+  member's role — an `admin` invite handed to an existing `viewer` leaves
+  them a viewer. Tested.
+- **Ownership is never granted by a link.** The table's own CHECK already
+  forbids `role='owner'`; the function refuses it too. Proven as
+  defence-in-depth by dropping the constraint inside a rolled-back
+  transaction and confirming the function still refuses.
+- Unconfirmed email is refused; the row is locked `FOR UPDATE` so
+  concurrent redemptions cannot double-accept; `ON CONFLICT` reactivates a
+  previously removed member in one round trip.
+
+**Verification (evidence, not assertion):** the behaviour suite was first run
+against the migration applied *inside a rolled-back transaction* (22/22), then
+re-run against the **live applied** function (24/24, plus 4 assertions that the
+live body no longer deletes accounts and does insert membership). The email
+invariant migration passed 7/7 including its own idempotency. Repo-wide:
+`pnpm typecheck` clean, `pnpm test` **833/833 passing**. `pnpm lint` reports 84
+pre-existing problems, **none in the files changed here** (verified by grouping
+lint output by path).
+
+**Harness note:** each `redeem_invitation` call needs its **own** savepoint. An
+early version reused one outer savepoint, so the first expected failure rolled
+it away and every later assertion failed spuriously.
 
 ### Task 4: `switch_active_account` RPC (F4 — check and write in one statement)
 

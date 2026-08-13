@@ -241,23 +241,42 @@ export async function POST(request: Request) {
     }
 
     // ------------------------------------------------------------
-    // Optional person fields (the Bigin-style "Invite User" sheet).
-    // When an email is present we address the invite to a specific
-    // person and send them the email; without one this remains the
-    // legacy anonymous share-link flow.
+    // Every invitation must name its recipient (ADR-004 Task 3).
+    //
+    // This used to be optional: omitting the email produced an
+    // "anonymous share-link" invitation. That link was an unbound
+    // bearer token — whoever obtained it joined the workspace with
+    // whatever role it carried, and there was no way to tell who had
+    // used it. `redeem_invitation` now refuses email-less invitations
+    // and `account_invitations.invited_email` is NOT NULL, so an
+    // omitted email is rejected here with a clear 400 rather than
+    // surfacing the constraint violation as a 500.
+    //
+    // Both invite UIs (invite-user-sheet.tsx, onboarding-wizard.tsx)
+    // already require a valid email, so no shipped flow regresses.
     // ------------------------------------------------------------
-    let invitedEmail: string | null = null;
-    if (typeof body?.email === 'string' && body.email.trim() !== '') {
-      const trimmed = body.email.trim().toLowerCase();
-      // Pragmatic RFC-lite check — the definitive validation is the
-      // email actually arriving.
-      if (trimmed.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-        return NextResponse.json(
-          { error: "'email' must be a valid email address" },
-          { status: 400 }
-        );
-      }
-      invitedEmail = trimmed;
+    if (typeof body?.email !== 'string' || body.email.trim() === '') {
+      return NextResponse.json(
+        {
+          error:
+            "'email' is required: an invitation must be addressed to a specific person",
+        },
+        { status: 400 }
+      );
+    }
+    // Normalised here AND by normalize_invitation_email_trg in the
+    // database, so the stored form is canonical no matter the writer.
+    const invitedEmail = body.email.trim().toLowerCase();
+    // Pragmatic RFC-lite check — the definitive validation is the
+    // email actually arriving.
+    if (
+      invitedEmail.length > 320 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invitedEmail)
+    ) {
+      return NextResponse.json(
+        { error: "'email' must be a valid email address" },
+        { status: 400 }
+      );
     }
 
     const nameField = (v: unknown): string | null => {
