@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       `account-switch:${ctx.userId}`,
       RATE_LIMITS.adminAction
     );
-    if (!limit.ok) return rateLimitResponse(limit);
+    if (!limit.success) return rateLimitResponse(limit);
 
     let body: unknown;
     try {

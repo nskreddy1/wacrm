@@ -22,8 +22,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // switch) is verified directly against Postgres; these tests pin the TS
 // boundary: JSON parsing, the gate, and the route's status mapping.
 
+// Real uuids, not 'acct-active' placeholders: the switch route validates
+// uuid shape, so a placeholder id would make every request stop at
+// validation and silently skip the behaviour under test.
+const ACTIVE_ID = '22222222-2222-4222-8222-222222222222';
+const OWN_ID = '33333333-3333-4333-8333-333333333333';
+
 const RPC_ROW = {
-  account_id: 'acct-active',
+  account_id: ACTIVE_ID,
   account_name: 'Active Workspace',
   account_role: 'agent',
   status: 'active',
@@ -32,8 +38,8 @@ const RPC_ROW = {
   workspace_profile_id: null,
   workspace_profile_name: null,
   memberships: [
-    { account_id: 'acct-active', account_name: 'Active Workspace', role: 'agent' },
-    { account_id: 'acct-own', account_name: 'My Workspace', role: 'owner' },
+    { account_id: ACTIVE_ID, account_name: 'Active Workspace', role: 'agent' },
+    { account_id: OWN_ID, account_name: 'My Workspace', role: 'owner' },
   ],
 };
 
@@ -66,9 +72,17 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 // Rate limiter: allow by default, flipped per-test where relevant.
+// The field is `success`, matching the real RateLimitResult — an `ok`
+// stub would be silently falsy and 429 every request, which is how this
+// mock first went wrong.
 let rateOk = true;
 vi.mock('@/lib/rate-limit', () => ({
-  checkRateLimit: async () => ({ ok: rateOk, limit: 30, remaining: 0, resetAt: 0 }),
+  checkRateLimit: async () => ({
+    success: rateOk,
+    limit: 30,
+    remaining: 0,
+    reset: 0,
+  }),
   rateLimitResponse: () =>
     new Response(JSON.stringify({ error: 'Too many requests' }), {
       status: 429,
@@ -102,8 +116,8 @@ describe('AccountContext.memberships', () => {
 
     expect(ctx.memberships).toHaveLength(2);
     expect(ctx.memberships.map((m) => m.accountId)).toEqual([
-      'acct-active',
-      'acct-own',
+      ACTIVE_ID,
+      OWN_ID,
     ]);
     // ADR-001 C3: no extra query for the switcher.
     expect(rpcCalls.filter((c) => c.name === 'get_account_context')).toHaveLength(1);
@@ -115,10 +129,10 @@ describe('AccountContext.memberships', () => {
 
     const active = ctx.memberships.filter((m) => m.isActive);
     expect(active).toHaveLength(1);
-    expect(active[0].accountId).toBe('acct-active');
+    expect(active[0].accountId).toBe(ACTIVE_ID);
     // The role travels per membership: agent here, owner in their own.
-    expect(ctx.memberships.find((m) => m.accountId === 'acct-own')?.role).toBe('owner');
-    expect(ctx.memberships.find((m) => m.accountId === 'acct-active')?.role).toBe('agent');
+    expect(ctx.memberships.find((m) => m.accountId === OWN_ID)?.role).toBe('owner');
+    expect(ctx.memberships.find((m) => m.accountId === ACTIVE_ID)?.role).toBe('agent');
   });
 
   it('drops entries with an unmodelled role instead of coercing them', async () => {
@@ -216,9 +230,49 @@ describe('POST /api/account/switch', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Workspace not found' });
   });
 
+  /**
+   * Authenticate the caller, then let the switch RPC answer `false`.
+   * Needed because the route resolves the session BEFORE it validates the
+   * body (see the ordering test below), so a request with no session never
+   * reaches validation at all.
+   */
+  function authedThenRpc(switchResult: unknown = false) {
+    let call = 0;
+    supabaseStub.rpc = async (name: string, args?: unknown) => {
+      rpcCalls.push({ name, args });
+      return ++call === 1
+        ? { data: [RPC_ROW], error: null }
+        : { data: switchResult, error: null };
+    };
+  }
+
+  it('authenticates BEFORE validating the body', async () => {
+    // Deliberate ordering, asserted so it cannot be "tidied" into
+    // validate-first. With no session, a malformed body must still answer
+    // 403 rather than 400: a 400 would tell an unauthenticated caller that
+    // their payload was well-formed, turning this route into an oracle for
+    // probing the API shape. Validation detail is only for callers who have
+    // already proven they are entitled to an answer.
+    supabaseStub.rpc = async (name: string, args?: unknown) => {
+      rpcCalls.push({ name, args });
+      return { data: [], error: null }; // no context -> denial
+    };
+
+    const res = await POST(req({ accountId: 'not-a-uuid' }));
+
+    expect(res.status).not.toBe(400);
+    expect(rpcCalls.some((c) => c.name === 'switch_active_account')).toBe(false);
+  });
+
   it('rejects a non-uuid accountId before it reaches Postgres', async () => {
+    authedThenRpc();
+
     const res = await POST(req({ accountId: "'; drop table accounts; --" }));
 
+    // 400, and critically the RPC is never called: the injection string
+    // never reaches Postgres. (It would be harmless anyway — the arg is a
+    // bound uuid parameter, not interpolated SQL — but failing on shape
+    // keeps a client mistake from surfacing as a 22P02 cast error 500.)
     expect(res.status).toBe(400);
     expect(rpcCalls.some((c) => c.name === 'switch_active_account')).toBe(false);
   });
@@ -228,21 +282,30 @@ describe('POST /api/account/switch', () => {
     ['null accountId', { accountId: null }],
     ['numeric accountId', { accountId: 42 }],
   ])('rejects %s with 400', async (_label, body) => {
+    authedThenRpc();
     const res = await POST(req(body));
     expect(res.status).toBe(400);
     expect(rpcCalls.some((c) => c.name === 'switch_active_account')).toBe(false);
   });
 
   it('rejects a malformed JSON body with 400, not 500', async () => {
+    authedThenRpc();
     const res = await POST(req(undefined, '{not json'));
     expect(res.status).toBe(400);
   });
 
   it('short-circuits a switch to the already-active workspace', async () => {
+    // RPC_ROW.account_id is uuid-shaped so this reaches the no-op path
+    // instead of stopping at validation.
+    authedThenRpc();
+
     const res = await POST(req({ accountId: RPC_ROW.account_id }));
-    // Not a uuid in this fixture, so validation catches it first; use a
-    // uuid-shaped active account to exercise the no-op path.
-    expect([200, 400]).toContain(res.status);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ switched: false });
+    // No write, and no audit noise from a double-clicked menu item.
+    expect(rpcCalls.some((c) => c.name === 'switch_active_account')).toBe(false);
+    expect(inserted.some((i) => i.table === 'audit_events')).toBe(false);
   });
 
   it('requires an authenticated session', async () => {

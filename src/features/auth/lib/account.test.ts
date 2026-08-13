@@ -101,6 +101,13 @@ describe('getCurrentAccount', () => {
             account_id: 'acct-1',
             account_role: 'owner',
             account_name: 'Acme',
+            // `status` is a declared OUT column of get_account_context, so
+            // a real row always carries it (verified against the live
+            // function). Set explicitly because the status gate now fails
+            // CLOSED: a row without a status is treated as a denial rather
+            // than defaulted to 'active', so a schema-cache miss or a
+            // changed signature cannot admit every caller as active.
+            status: 'active',
           },
         ],
         error: null,
