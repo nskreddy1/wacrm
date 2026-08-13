@@ -64,7 +64,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { BulkActionBar } from '@/components/shared/bulk-action-bar';
 import { RecordTitleButton } from '@/components/shared/record-title-button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useRowSelection } from '@/hooks/use-row-selection';
 import {
   WorkspaceToolbar,
   WorkspaceToolbarActions,
@@ -90,7 +93,12 @@ export function CatalogWorkspace() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<CatalogItem | null>(null);
+  /* One delete path serves both the row menu and the bulk bar: the endpoint
+     already takes an id array, so a separate bulk handler would only
+     duplicate the confirm/toast/revalidate sequence. */
+  const [pendingDelete, setPendingDelete] = useState<CatalogItem[] | null>(
+    null
+  );
   const [deleting, setDeleting] = useState(false);
 
   const items = useMemo(() => data?.data ?? [], [data]);
@@ -130,6 +138,20 @@ export function CatalogWorkspace() {
       return true;
     });
   }, [items, query, categoryFilter, statusFilter]);
+
+  /* Memoised so the hook's toggleAllRows callback is not rebuilt every
+     render; "select all" means all *filtered* rows, never the hidden ones. */
+  const selectableIds = useMemo(
+    () => filtered.map((item) => item.id),
+    [filtered]
+  );
+  const { selected, allSelected, toggle, toggleAllRows, clear } =
+    useRowSelection(selectableIds);
+
+  const selectedItems = useMemo(
+    () => filtered.filter((item) => selected.has(item.id)),
+    [filtered, selected]
+  );
 
   const hasFilters =
     Boolean(query) || categoryFilter !== 'all' || statusFilter !== 'all';
@@ -172,20 +194,32 @@ export function CatalogWorkspace() {
   /* Deletes are confirmed, not immediate: an item may already be booked
      on appointments, and there is no undo behind this endpoint. */
   async function confirmDelete() {
-    if (!pendingDelete || deleting) return;
+    if (!pendingDelete || pendingDelete.length === 0 || deleting) return;
+    const targets = pendingDelete;
     setDeleting(true);
     try {
       const res = await fetch('/api/v1/workspace/catalog', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [pendingDelete.id] }),
+        body: JSON.stringify({ ids: targets.map((item) => item.id) }),
       });
       if (!res.ok) throw new Error();
-      toast.success(`"${pendingDelete.name}" deleted`);
+      toast.success(
+        targets.length === 1
+          ? `"${targets[0].name}" deleted`
+          : `${targets.length} items deleted`
+      );
       setPendingDelete(null);
+      /* Clear selection only on success, so a failed bulk delete leaves the
+         rows selected and the user can retry without re-picking them. */
+      clear();
       await mutate();
     } catch {
-      toast.error('Could not delete the catalog item');
+      toast.error(
+        targets.length === 1
+          ? 'Could not delete the catalog item'
+          : 'Could not delete the selected items'
+      );
     } finally {
       setDeleting(false);
     }
@@ -308,6 +342,37 @@ export function CatalogWorkspace() {
         </p>
       )}
 
+      <BulkActionBar
+        count={selected.size}
+        hint="Bulk actions apply only to selected items."
+        onClear={clear}
+      >
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => setPendingDelete(selectedItems)}
+        >
+          <Trash2 data-icon="inline-start" /> Delete selected
+        </Button>
+      </BulkActionBar>
+
+      {/* Select-all lives on its own row rather than in the toolbar so it
+          stays aligned with the per-row checkboxes below it. */}
+      {filtered.length > 0 && (
+        <div className="text-muted-foreground flex items-center gap-3 border-b px-4 py-1.5 text-xs md:px-6">
+          <Checkbox
+            checked={allSelected}
+            onCheckedChange={toggleAllRows}
+            aria-label={
+              allSelected
+                ? 'Clear selection'
+                : `Select all ${filtered.length} visible items`
+            }
+          />
+          <span>Select all</span>
+        </div>
+      )}
+
       <section
         className="app-scrollbar fab-safe-area min-h-0 flex-1 overflow-y-auto overscroll-contain"
         aria-label="Catalog items"
@@ -352,6 +417,11 @@ export function CatalogWorkspace() {
                 className="group hover:bg-muted/30 flex flex-col gap-3 px-4 py-3 transition-colors md:flex-row md:items-center md:px-6"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <Checkbox
+                    checked={selected.has(item.id)}
+                    onCheckedChange={() => toggle(item.id)}
+                    aria-label={`Select ${item.name}`}
+                  />
                   <div
                     className={cn(
                       'flex size-9 shrink-0 items-center justify-center rounded-lg',
@@ -422,7 +492,7 @@ export function CatalogWorkspace() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
-                        onClick={() => setPendingDelete(item)}
+                        onClick={() => setPendingDelete([item])}
                       >
                         <Trash2 />
                         Delete
@@ -453,12 +523,14 @@ export function CatalogWorkspace() {
               <Trash2 />
             </AlertDialogMedia>
             <AlertDialogTitle>
-              Delete &quot;{pendingDelete?.name}&quot;?
+              {pendingDelete && pendingDelete.length > 1
+                ? `Delete ${pendingDelete.length} catalog items?`
+                : `Delete "${pendingDelete?.[0]?.name ?? ''}"?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the item from your catalog. Appointments
-              already booked against it keep their history. Archive it instead
-              if you only want to stop new bookings.
+              {pendingDelete && pendingDelete.length > 1
+                ? 'This permanently removes these items from your catalog. Appointments already booked against them keep their history. Archive them instead if you only want to stop new bookings.'
+                : 'This permanently removes the item from your catalog. Appointments already booked against it keep their history. Archive it instead if you only want to stop new bookings.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -468,7 +540,11 @@ export function CatalogWorkspace() {
               disabled={deleting}
               onClick={() => void confirmDelete()}
             >
-              {deleting ? 'Deleting…' : 'Delete item'}
+              {deleting
+                ? 'Deleting…'
+                : pendingDelete && pendingDelete.length > 1
+                  ? `Delete ${pendingDelete.length} items`
+                  : 'Delete item'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

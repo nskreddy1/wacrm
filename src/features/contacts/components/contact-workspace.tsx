@@ -68,6 +68,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ContactField, WorkspaceContact } from '@/lib/data/contacts/types';
 import { cn } from '@/lib/utils';
+import { BulkActionBar } from '@/components/shared/bulk-action-bar';
 import { RecordTitleButton } from '@/components/shared/record-title-button';
 import { sheetTable } from '@/components/shared/sheet-table';
 import {
@@ -594,29 +595,19 @@ export function ContactWorkspace({
         </div>
       )}
 
-      {selected.size > 0 && (
-        <div className="bg-muted flex flex-wrap items-center gap-2 border-b px-3 py-2 text-sm">
-          <strong>{selected.size} selected</strong>
-          <span className="text-muted-foreground hidden sm:inline">
-            Bulk actions apply only to selected contacts.
-          </span>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="ml-auto"
-            onClick={() => setConfirmBulkDelete(true)}
-          >
-            <Trash2 data-icon="inline-start" /> Delete selected
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelected(new Set())}
-          >
-            <X data-icon="inline-start" /> Clear selection
-          </Button>
-        </div>
-      )}
+      <BulkActionBar
+        count={selected.size}
+        hint="Bulk actions apply only to selected contacts."
+        onClear={() => setSelected(new Set())}
+      >
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => setConfirmBulkDelete(true)}
+        >
+          <Trash2 data-icon="inline-start" /> Delete selected
+        </Button>
+      </BulkActionBar>
 
       {/* fab-safe-area keeps the last row scrollable clear of the shell's
           floating launchers, which paint above page content. */}
