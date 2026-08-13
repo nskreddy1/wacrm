@@ -648,8 +648,23 @@ export function MembersTab() {
             />
           ) : (
             <>
-              {/* Users table — Bigin columns: Full Name | Email | Role | Profile. */}
-              <DataTable<AccountMember>
+                {/* Two orthogonal access axes, spelled out once here so
+                    admins aren't left guessing why both columns exist:
+                    Role = data visibility (hierarchy), Profile =
+                    permissions (capabilities). */}
+                {canManageMembers && (
+                  <p className="text-muted-foreground mb-3 text-xs">
+                    {t.rich('roleProfileHint', {
+                      bold: (chunks) => (
+                        <span className="text-foreground font-medium">
+                          {chunks}
+                        </span>
+                      ),
+                    })}
+                  </p>
+                )}
+                {/* Users table — Bigin columns: Full Name | Email | Role | Profile. */}
+                <DataTable<AccountMember>
                 rows={members}
                 rowKey={(m) => m.user_id}
                 empty={
@@ -664,7 +679,7 @@ export function MembersTab() {
                   {
                     id: 'name',
                     header: t('colName'),
-                    className: 'w-[30%]',
+                    className: 'w-[26%]',
                     cell: (member) => {
                       const isSelf = member.user_id === user?.id;
                       return (
@@ -685,11 +700,21 @@ export function MembersTab() {
                           <span className="text-foreground truncate font-medium">
                             {personDisplayName(member.full_name, member.email)}
                           </span>
-                          {isSelf && (
-                            <Badge className="bg-muted text-muted-foreground border-border text-[10px] tracking-wide uppercase">
+                          {/* "Owner" is the tenant-visible way to convey
+                              "this account's top authority". The platform
+                              tier (profiles.is_super_admin) is deliberately
+                              NOT surfaced here — it is invisible to
+                              customers, so its name must never leak into a
+                              tenant-facing table. */}
+                          {member.is_owner ? (
+                            <Badge className="bg-primary-soft text-primary border-primary/20 shrink-0 text-[10px] tracking-wide uppercase">
+                              {t('ownerBadge')}
+                            </Badge>
+                          ) : isSelf ? (
+                            <Badge className="bg-muted text-muted-foreground border-border shrink-0 text-[10px] tracking-wide uppercase">
                               {t('you')}
                             </Badge>
-                          )}
+                          ) : null}
                         </div>
                       );
                     },
@@ -697,7 +722,7 @@ export function MembersTab() {
                   {
                     id: 'email',
                     header: t('colEmail'),
-                    className: 'w-[32%]',
+                    className: 'w-[26%]',
                     cell: (member) => (
                       <span className="text-muted-foreground truncate">
                         {member.email ?? '—'}
@@ -706,8 +731,15 @@ export function MembersTab() {
                   },
                   {
                     id: 'role',
-                    header: t('colRole'),
-                    className: 'w-[16%]',
+                    header: (
+                      <span
+                        className="decoration-muted-foreground/40 cursor-help underline decoration-dotted underline-offset-4"
+                        title={t('colRoleHelp')}
+                      >
+                        {t('colRole')}
+                      </span>
+                    ),
+                    className: 'w-[19%]',
                     cell: (member) => {
                       const isBusy = pendingMemberAction === member.user_id;
                       // Read-only for non-managers and on the archival
@@ -719,9 +751,13 @@ export function MembersTab() {
                         statusFilter !== 'active' ||
                         roleOptions.length === 0
                       ) {
-                        return (
-                          <span className="text-foreground">
-                            {member.workspace_role?.name ?? '—'}
+                        return member.workspace_role ? (
+                          <span className="text-foreground truncate">
+                            {member.workspace_role.name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground italic">
+                            {t('unassigned')}
                           </span>
                         );
                       }
@@ -730,9 +766,16 @@ export function MembersTab() {
                           value={member.workspace_role?.id ?? ''}
                           onValueChange={(v) => v && handleRoleChange(member, v)}
                         >
-                          <SelectTrigger className="w-36" disabled={isBusy}>
-                            <SelectValue placeholder="—">
-                              {member.workspace_role?.name ?? '—'}
+                          <SelectTrigger
+                            className="w-full max-w-[11rem]"
+                            disabled={isBusy}
+                          >
+                            <SelectValue placeholder={t('unassigned')}>
+                              {member.workspace_role?.name ?? (
+                                <span className="text-muted-foreground italic">
+                                  {t('unassigned')}
+                                </span>
+                              )}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
@@ -748,28 +791,39 @@ export function MembersTab() {
                   },
                   {
                     id: 'profile',
-                    header: t('colProfile'),
-                    className: 'w-[16%]',
+                    header: (
+                      <span
+                        className="decoration-muted-foreground/40 cursor-help underline decoration-dotted underline-offset-4"
+                        title={t('colProfileHelp')}
+                      >
+                        {t('colProfile')}
+                      </span>
+                    ),
+                    className: 'w-[19%]',
                     cell: (member) => {
                       const isSelf = member.user_id === user?.id;
                       const isBusy = pendingMemberAction === member.user_id;
-                      // Owner is the immutable Super Admin; self can't
-                      // edit own profile; non-managers see text only.
-                      if (member.is_owner) {
-                        return (
-                          <span className="text-foreground font-medium">
-                            {t('superAdmin')}
-                          </span>
-                        );
-                      }
+                      // The owner's permission set is fixed (demoting the
+                      // owner could lock the account out of its own
+                      // administration), so it renders read-only — but it
+                      // renders the REAL assigned profile from the
+                      // database. It used to hardcode the platform-tier
+                      // name "Super Admin", which both lied about the
+                      // actual grant and exposed a platform concept that
+                      // tenants must never see.
                       if (
+                        member.is_owner ||
                         !canManageMembers ||
                         isSelf ||
                         statusFilter !== 'active'
                       ) {
-                        return (
-                          <span className="text-foreground">
-                            {member.workspace_profile?.name ?? '—'}
+                        return member.workspace_profile ? (
+                          <span className="text-foreground truncate">
+                            {member.workspace_profile.name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground italic">
+                            {t('unassigned')}
                           </span>
                         );
                       }
@@ -780,11 +834,18 @@ export function MembersTab() {
                             v && handleProfileChange(member, v)
                           }
                         >
-                          <SelectTrigger className="w-40" disabled={isBusy}>
+                          <SelectTrigger
+                            className="w-full max-w-[11rem]"
+                            disabled={isBusy}
+                          >
                             {/* Explicit children so a not-yet-loaded option
                                 list can never surface the raw UUID value. */}
-                            <SelectValue placeholder="—">
-                              {member.workspace_profile?.name ?? '—'}
+                            <SelectValue placeholder={t('unassigned')}>
+                              {member.workspace_profile?.name ?? (
+                                <span className="text-muted-foreground italic">
+                                  {t('unassigned')}
+                                </span>
+                              )}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
@@ -801,7 +862,11 @@ export function MembersTab() {
                   {
                     id: 'actions',
                     header: <span className="sr-only">{t('colActions')}</span>,
-                    className: 'w-12 text-right',
+                    // Column widths must total exactly 100%: 26 + 26 + 19
+                    // + 19 + 10. They previously summed to 94% plus a
+                    // fixed 48px, so the table's leftover width rendered
+                    // as a stray empty cell after the row menu.
+                    className: 'w-[10%] text-right',
                     cell: (member) => {
                       const isSelf = member.user_id === user?.id;
                       const isBusy = pendingMemberAction === member.user_id;
