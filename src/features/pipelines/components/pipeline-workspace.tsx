@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { RecordOwnerAvatar } from '@/components/shared/record-sheet';
+import { RecordTitleButton } from '@/components/shared/record-title-button';
 import { sheetTable } from '@/components/shared/sheet-table';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -1149,8 +1150,14 @@ function DealCard({
       aria-label={`Deal ${deal.title}. Double-click to edit.`}
     >
       <div className="flex items-start justify-between gap-2">
+        {/* Deliberately NOT RecordTitleButton (ADR-003 D1): this card is a
+            dnd-kit draggable that spreads {...listeners} across the same
+            region, and the shared primitive is documented as unsafe there.
+            The focus ring is still applied by hand — focus styling cannot
+            interfere with the drag listeners. */}
         <button
-          className="hover:text-primary min-w-0 flex-1 truncate text-left text-sm leading-5 font-bold"
+          type="button"
+          className="hover:text-primary focus-visible:ring-ring min-w-0 flex-1 truncate rounded text-left text-sm leading-5 font-bold focus-visible:ring-2 focus-visible:outline-none"
           onClick={() => onOpen(deal)}
         >
           {deal.title}
@@ -1325,12 +1332,9 @@ function DealTable({
                 </span>
               </td>
               <td className="px-3 py-3">
-                <button
-                  className="hover:text-primary focus-visible:ring-ring font-semibold focus-visible:ring-2 focus-visible:outline-none"
-                  onClick={() => onOpen(deal)}
-                >
+                <RecordTitleButton onOpen={() => onOpen(deal)}>
                   {deal.title}
-                </button>
+                </RecordTitleButton>
               </td>
               <td className="text-muted-foreground truncate px-3 py-3">
                 {deal.contact ? (

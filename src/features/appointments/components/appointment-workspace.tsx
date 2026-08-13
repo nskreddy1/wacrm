@@ -40,6 +40,7 @@ import {
   WorkspaceToolbarSearch,
   WorkspaceToolbarSeparator,
 } from '@/components/shared/workspace-toolbar';
+import { RecordTitleButton } from '@/components/shared/record-title-button';
 import {
   Select,
   SelectContent,
@@ -543,8 +544,17 @@ export function AppointmentWorkspace() {
                             </span>
                           </div>
                           <div className="min-w-0">
-                            <h3 className="text-foreground truncate text-sm font-semibold">
-                              {item.title}
+                            {/* Previously plain text, which made Appointments
+                                the only surface where a record could not be
+                                opened by clicking it (ADR-003 D1). The pencil
+                                button further down the row still works. */}
+                            <h3 className="truncate text-sm">
+                              <RecordTitleButton
+                                onOpen={() => setEditing(item)}
+                                className="text-foreground"
+                              >
+                                {item.title}
+                              </RecordTitleButton>
                             </h3>
                             <p className="text-muted-foreground mt-1 truncate text-sm">
                               {item.contactName ?? 'Unknown contact'}

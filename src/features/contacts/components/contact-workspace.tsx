@@ -68,6 +68,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ContactField, WorkspaceContact } from '@/lib/data/contacts/types';
 import { cn } from '@/lib/utils';
+import { RecordTitleButton } from '@/components/shared/record-title-button';
 import { sheetTable } from '@/components/shared/sheet-table';
 import {
   contactsPath,
@@ -815,12 +816,11 @@ export function ContactWorkspace({
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <button
-                      className="hover:text-primary truncate font-semibold"
-                      onClick={() => setContactSheet({ mode: 'view', contact })}
+                    <RecordTitleButton
+                      onOpen={() => setContactSheet({ mode: 'view', contact })}
                     >
                       {valueText(contact.values.name)}
-                    </button>
+                    </RecordTitleButton>
                     <p className="text-muted-foreground truncate text-sm">
                       {valueText(contact.values.company)}
                     </p>

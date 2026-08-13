@@ -64,6 +64,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { RecordTitleButton } from '@/components/shared/record-title-button';
 import {
   WorkspaceToolbar,
   WorkspaceToolbarActions,
@@ -362,20 +363,16 @@ export function CatalogWorkspace() {
                     <Package className="size-4.5" aria-hidden="true" />
                   </div>
                   <div className="min-w-0">
-                    {/* The name opens the record, matching the deal-title
-                        button in Pipelines. A button inside the heading keeps
-                        the heading semantics while giving keyboard users a
-                        real focus target — preferable to a click handler on
-                        the whole card, which would nest the actions menu
-                        inside a clickable region. */}
+                    {/* Inside the heading so heading semantics survive. A
+                        card-level click handler is not an option here: the
+                        row already contains the actions menu. */}
                     <h2 className="truncate text-sm">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(item)}
-                        className="text-foreground hover:text-primary focus-visible:ring-ring max-w-full truncate rounded font-semibold hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                      <RecordTitleButton
+                        onOpen={() => openEdit(item)}
+                        className="text-foreground"
                       >
                         {item.name}
-                      </button>
+                      </RecordTitleButton>
                     </h2>
                     <p className="text-muted-foreground truncate text-sm">
                       {item.category ?? 'Uncategorized'}
