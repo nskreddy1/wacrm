@@ -119,10 +119,31 @@ describe('catalogItemUpdateSchema', () => {
   it('allows a partial update without re-sending the name', () => {
     const parsed = catalogItemUpdateSchema.parse({ id: UUID, isActive: false });
     expect(parsed.isActive).toBe(false);
-    // .partial() drops the defaults, so an omitted field stays undefined
-    // instead of being silently reset to the create-time default.
+    // An omitted field must stay undefined rather than being reset to the
+    // create-time default, because updateCatalogItem() decides what to write
+    // with `if (input.x !== undefined)`.
     expect(parsed.price).toBeUndefined();
     expect(parsed.currency).toBeUndefined();
+  });
+
+  it('does not reset price or currency when only archiving (regression)', () => {
+    /* The Archive/Activate toggle in catalog-workspace sends nothing but
+       { id, isActive }. When the update schema was built with
+       catalogItemCreateSchema.partial(), Zod 4 still applied the create
+       defaults to the omitted keys, so the parsed payload arrived carrying
+       price: 0 and currency: 'USD'. That defeated the repository's
+       `!== undefined` guard and silently overwrote a real stored price with
+       zero on every archive. This test reproduces the repository's decision
+       logic so the data loss can never come back. */
+    const parsed = catalogItemUpdateSchema.parse({ id: UUID, isActive: false });
+    const { id: _id, ...fields } = parsed;
+
+    const patch: Record<string, unknown> = {};
+    if (fields.price !== undefined) patch.price = fields.price;
+    if (fields.currency !== undefined) patch.currency = fields.currency;
+    if (fields.isActive !== undefined) patch.is_active = fields.isActive;
+
+    expect(patch).toEqual({ is_active: false });
   });
 
   it('still enforces field bounds on the fields that are present', () => {
