@@ -252,7 +252,9 @@ export function PipelineWorkspace({
     // Membership lists only ever narrow real sub-pipelines.
     const isRootTab =
       !activeSubPipeline || activeSubPipeline.id === snapshot.pipeline.id;
-    const allowed = isRootTab ? null : new Set(activeSubPipeline.dealIds);
+    const allowed = isRootTab
+      ? null
+      : new Set(activeSubPipeline.dealIds);
     const term = query.trim().toLowerCase();
     return snapshot.deals
       .filter(
@@ -956,8 +958,8 @@ function Insight({
 }
 
 function dealCountLabel(count: number) {
-  // Only 1 is singular — `count > 1` rendered an empty stage as "0 Deal".
-  return `${count} Deal${count === 1 ? '' : 's'}`;
+    // Only 1 is singular — `count > 1` rendered an empty stage as "0 Deal".
+    return `${count} Deal${count === 1 ? '' : 's'}`;
 }
 
 function StageColumn({
@@ -1337,7 +1339,7 @@ function DealTable({
               <td className="px-3 py-3 whitespace-nowrap">
                 {stages.find((item) => item.id === deal.stageId)?.name ?? '—'}
               </td>
-              <td className="px-3 py-3 font-medium whitespace-nowrap tabular-nums">
+              <td className="px-3 py-3 font-medium tabular-nums whitespace-nowrap">
                 {money(deal.value, workspaceCurrency)}
               </td>
               <td className="text-muted-foreground truncate px-3 py-3">
