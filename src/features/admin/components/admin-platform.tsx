@@ -5,7 +5,9 @@
 //
 // Two sections:
 //   1. Platform settings — the `ai_engine` flag (direct vs
-//      langchain), read/written through /api/admin/platform-settings.
+//      langchain) and `invite_delivery_mode` (email vs link-only),
+//      read/written through /api/admin/platform-settings. Both are
+//      platform-operator switches, NOT per-workspace settings.
 //   2. Audit trail — keyset-paginated read of platform_audit_log
 //      via /api/admin/audit (the only read surface of the table).
 // ============================================================
@@ -14,7 +16,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { toast } from 'sonner';
-import { Bot, Loader2, ScrollText, SlidersHorizontal } from 'lucide-react';
+import { Bot, Loader2, Mail, ScrollText, SlidersHorizontal } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,6 +43,19 @@ import {
 } from '@/components/ui/table';
 
 type AiEngine = 'direct' | 'langchain';
+
+/**
+ * Mirrors the shape of /api/admin/platform-settings. `InviteDeliveryMode`
+ * is re-declared here rather than imported from the server module so this
+ * client component doesn't pull a server-only file (and its Supabase
+ * admin client) into the browser bundle.
+ */
+type InviteDeliveryMode = 'email' | 'link_only';
+
+interface PlatformSettings {
+  ai_engine: AiEngine;
+  invite_delivery_mode: InviteDeliveryMode;
+}
 
 interface AuditEntry {
   id: string;

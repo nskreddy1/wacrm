@@ -100,3 +100,70 @@ export async function getInviteDeliveryMode(): Promise<InviteDeliveryMode> {
 export function resetInviteDeliveryModeCache(): void {
   cached = null;
 }
+
+/** How many consecutive failures before email auto-disables itself. */
+export const FAILURE_THRESHOLD = 3;
+
+/**
+ * Record a failed invite delivery. After FAILURE_THRESHOLD consecutive
+ * failures the platform flips itself back to 'link_only'.
+ *
+ * Why auto-disable at all: `mode = 'email'` is a promise that mail gets
+ * delivered. When credentials rot, that promise silently breaks — admins
+ * keep seeing "invited" while nothing arrives. Degrading to link-only
+ * turns an invisible failure into a visible, working fallback.
+ *
+ * Counting/threshold logic lives in the SQL function so concurrent
+ * serverless invocations can't lose updates on the counter.
+ * Never throws: bookkeeping must not fail the caller.
+ */
+export async function recordInviteDeliveryFailure(
+  error: string | null
+): Promise<{ tripped: boolean } | null> {
+  try {
+    const { data, error: rpcError } = await supabaseAdmin().rpc(
+      'record_invite_delivery_failure',
+      { p_error: error?.slice(0, 500) ?? null, p_threshold: FAILURE_THRESHOLD }
+    );
+    if (rpcError) {
+      console.error(
+        '[invite-delivery-mode] failure bookkeeping failed:',
+        rpcError.message
+      );
+      return null;
+    }
+    const tripped = Boolean((data as { tripped?: boolean } | null)?.tripped);
+    if (tripped) {
+      // Drop the cache so the very next send sees 'link_only'.
+      cached = null;
+      console.error(
+        `[invite-delivery-mode] auto-disabled after ${FAILURE_THRESHOLD} consecutive failures; invites are now link-only. Last error: ${error ?? 'unknown'}`
+      );
+    }
+    return { tripped };
+  } catch (err) {
+    console.error('[invite-delivery-mode] failure bookkeeping threw:', err);
+    return null;
+  }
+}
+
+/**
+ * Clear the failure streak after a successful delivery, so three
+ * failures spread over months never add up to an auto-disable.
+ * Never throws.
+ */
+export async function resetInviteDeliveryFailures(): Promise<void> {
+  try {
+    const { error } = await supabaseAdmin().rpc(
+      'reset_invite_delivery_failures'
+    );
+    if (error) {
+      console.error(
+        '[invite-delivery-mode] failure reset failed:',
+        error.message
+      );
+    }
+  } catch (err) {
+    console.error('[invite-delivery-mode] failure reset threw:', err);
+  }
+}

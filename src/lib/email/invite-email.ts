@@ -21,11 +21,21 @@
 // Delivery is BEST-EFFORT and never throws — a failed send must
 // not fail the invite API call. Callers get `{ sent, provider,
 // reason }` and surface the copyable link.
+//
+// Self-healing: consecutive real send failures (rotted SMTP
+// credentials, revoked API key, blocked sender) are counted, and
+// after the threshold the platform flips ITSELF back to link-only.
+// A workspace that simply hasn't configured email yet does not
+// count — that's a setup state, not a broken provider.
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendEmail } from './mailer';
-import { getInviteDeliveryMode } from './invite-delivery-mode';
+import {
+  getInviteDeliveryMode,
+  recordInviteDeliveryFailure,
+  resetInviteDeliveryFailures,
+} from './invite-delivery-mode';
 
 export interface InviteEmailParams {
   to: string;
@@ -190,6 +200,20 @@ async function sendViaResend(p: InviteEmailParams): Promise<InviteEmailResult> {
  * Never throws — delivery is best-effort and the invitation row
  * exists either way.
  */
+/**
+ * Health bookkeeping must never be able to fail a send. The helpers
+ * already swallow their own errors, but this module must not *depend*
+ * on that — a future change there shouldn't be able to turn a handled
+ * delivery failure into a 500 on the invite API.
+ */
+async function safely(work: Promise<unknown>): Promise<void> {
+  try {
+    await work;
+  } catch (err) {
+    console.error('[invite-email] delivery bookkeeping failed:', err);
+  }
+}
+
 export async function sendInviteEmail(
   p: InviteEmailParams
 ): Promise<InviteEmailResult> {
@@ -202,6 +226,7 @@ export async function sendInviteEmail(
   }
 
   // 1. Workspace-configured provider (tenant's own SMTP/Resend/MSG91).
+  let lastError: string | null = null;
   if (p.workspace) {
     const viaWorkspace = await sendEmail(
       p.workspace.db,
@@ -213,15 +238,42 @@ export async function sendInviteEmail(
       }
     );
     if (viaWorkspace.sent) {
+      await safely(resetInviteDeliveryFailures());
       return { sent: true, provider: viaWorkspace.provider, reason: 'sent' };
+    }
+    // "Not configured" is a setup state, not a broken provider — a
+    // workspace that never entered SMTP details must not burn down the
+    // platform-wide breaker for everyone else. Only real send failures
+    // (auth rejected, network down, 4xx/5xx) count toward auto-disable.
+    if (viaWorkspace.provider !== null) {
+      lastError = viaWorkspace.error ?? 'workspace provider failed';
     }
   }
 
   // 2. Platform Resend, only when an operator supplied a key.
   if (process.env.RESEND_API_KEY) {
     const result = await sendViaResend(p);
-    if (result.sent) return { ...result, reason: 'sent' };
+    if (result.sent) {
+      await safely(resetInviteDeliveryFailures());
+      return { ...result, reason: 'sent' };
+    }
+    // Every provider we have refused. Count it — enough of these in a
+    // row and email auto-disables itself, so admins fall back to the
+    // link that always works instead of invites vanishing into a
+    // broken SMTP config.
+    await safely(recordInviteDeliveryFailure(result.error ?? lastError));
     return { ...result, reason: 'send_failed' };
+  }
+
+  // The workspace provider was the only option, and it failed.
+  if (lastError) {
+    await safely(recordInviteDeliveryFailure(lastError));
+    return {
+      sent: false,
+      provider: null,
+      reason: 'send_failed',
+      error: lastError,
+    };
   }
 
   // Delivery is on, but nothing is configured to actually deliver.
