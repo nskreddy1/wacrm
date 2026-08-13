@@ -72,8 +72,9 @@ Adopt the **one-identity / N-memberships** model (Notion/Linear pattern):
    hidden when the user has exactly one membership.
 5. **D5 — Invite delivery hardening**: make the email path primary in the UI
    (status of the configured channel shown before invite creation; admin
-   pointed to Settings → Email delivery when unconfigured); copy-link demoted
-   to explicit fallback.
+   pointed to Settings → Email delivery when unconfigured). Copy-link is not
+   an automatic fallback — it is a separate delivery mode an admin activates
+   deliberately (see D7).
 6. **D6 — Delivery fallback chain and shared-sender separation.** Answers two
    operational questions: *what if a workspace never configures SMTP?* and
    *if one platform sender serves all workspaces, how do tenants stay
@@ -97,10 +98,11 @@ Adopt the **one-identity / N-memberships** model (Notion/Linear pattern):
       `from_email`. Display-name + Reply-To is the standard shared-sender
       pattern (GitHub, Linear, and Notion invites all arrive "via" the
       platform domain).
-   3. **Copy-link** — only when neither is configured. The UI must say
-      honestly that no email was sent and show the admin a one-click path to
-      Settings → Email delivery. Silent non-delivery is a bug, not a
-      fallback.
+   3. **Neither configured** — in `'email'` mode (D7) invite creation
+      *blocks* with a clear pointer to Settings → Email delivery; it never
+      silently degrades to a link. Workspaces that genuinely cannot run SMTP
+      switch to `'link'` mode deliberately via the D7 toggle. Silent
+      non-delivery is a bug, not a fallback.
 
    Per-tenant sending subdomains with individual DKIM keys (the full
    isolation pattern for high-volume senders) are **rejected for now**:
@@ -109,6 +111,41 @@ Adopt the **one-identity / N-memberships** model (Notion/Linear pattern):
    start sending customer-facing campaign mail through the platform sender —
    broadcasts already go through WhatsApp, not email, so this is not
    expected.
+
+7. **D7 — Admin-controlled delivery mode toggle.** Delivery is not an
+   implicit fallback chain from the inviter's point of view — it is an
+   explicit, admin-owned workspace setting with exactly two modes, and
+   **inviting users see only the active mode**:
+
+   - `invite_delivery_mode = 'email'` — the invite sheet sends mail through
+     the D6 chain (workspace SMTP first, platform sender second). No link is
+     shown to the inviter at all; the join URL exists only inside the email.
+     If *neither* sender is configured, the invite sheet does not silently
+     degrade — it blocks with "Email delivery is not configured" and a link
+     to Settings → Email delivery (admins) or "ask your admin" (non-admins).
+   - `invite_delivery_mode = 'link'` — no email is attempted. The invite
+     sheet generates the invitation, stores it exactly as today (SHA-256
+     token hash, single-use, 7-day expiry, bound to `invited_email`), and
+     presents the join link once for the inviter to deliver out-of-band.
+
+   Rules that make this enterprise-grade rather than a footgun:
+
+   - The toggle lives in Settings → user controls, **admin/owner only** —
+     agents and viewers never see or change it. Column on
+     `account_email_settings` (or a workspace-settings row), default
+     `'email'`: the secure, auditable channel is the default and `'link'` is
+     the deliberate opt-out for workspaces without SMTP.
+   - Mode is enforced **server-side in the invite-creation route**, not in
+     the UI: in `'email'` mode the response never includes the join URL; in
+     `'link'` mode the route skips the mailer entirely. Hiding the link
+     client-side while still returning it in JSON would defeat the toggle.
+   - **F1 still binds in link mode**: `invited_email` remains mandatory and
+     redemption still requires the session's verified email to match. The
+     link is transport, not authentication — whoever the URL leaks to, only
+     the invited mailbox owner can redeem it.
+   - Mode changes are audit-logged (who flipped it, when), and invitations
+     record which mode delivered them (`delivered_via: 'email' | 'link'`)
+     so an admin reviewing membership can see how each member arrived.
 
 ## Options considered
 

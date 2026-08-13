@@ -328,14 +328,71 @@ export async function POST(request: Request) {
 - [ ] **Step 3:** Browser-verify: user with 2 memberships sees switcher, switches, `/pipelines` shows the other workspace's deals; user with 1 membership sees no switcher. Screenshot to `/tmp/agent-browser/adr004-switcher.png`.
 - [ ] **Step 4: Commit** `feat(layout): sidebar workspace switcher (ADR-004 D4)`
 
-### Task 8: Invite delivery — email primary, link fallback (D5, F7)
+### Task 8: Invite delivery — admin-controlled mode toggle (D5, D6, D7, F7, F8)
+
+Delivery is an explicit workspace setting with two modes, owned by
+admin/owner. Inviting users see only the active mode — never both.
 
 **Files:**
-- Modify: `src/features/settings/components/invite-user-sheet.tsx`
+- Create: `supabase/migrations/040_invite_delivery_mode.sql` (check `ls supabase/migrations/ | sort | tail -1` first; use the next free number)
+- Modify: `src/app/api/account/invitations/route.ts` (server-side mode enforcement)
+- Modify: `src/features/settings/components/invite-user-sheet.tsx` (render per mode)
+- Modify: the email-settings tab in `src/features/settings/components/` (admin toggle — find it with `grep -rln "email" src/features/settings/components/`)
+- Test: `src/features/auth/lib/invitations.delivery.test.ts`
 
-- [ ] **Step 1:** Read the sheet and `src/lib/email/mailer.ts` delivery-status helper (mailer already reports the configured channel). Before invite creation, surface channel state: configured → "Invite will be emailed to {email}"; unconfigured → inline notice linking to Settings → Email delivery, copy-link presented as the explicit fallback.
-- [ ] **Step 2:** On send failure (mailer throws), keep the invite created but show the copy-link with a visible warning — never silently (F7). Email field becomes required (F1 makes email binding mandatory — the backend now rejects NULL-email redemptions, so the form must not create them).
-- [ ] **Step 3:** Browser-verify both states; commit `feat(settings): invite email primary, link fallback with warning (ADR-004 D5)`
+**Interfaces:**
+- Consumes: `getCurrentAccount()` (role for admin gating), `sendMail` from `src/lib/email/mailer.ts`, invite creation from Task 3.
+- Produces: `invite_delivery_mode` column read by the invite route; creation response shape `{ invitation, joinUrl: string | null, deliveredVia: 'email' | 'link' }` — `joinUrl` is non-null ONLY in link mode.
+
+- [ ] **Step 1: Migration** — additive, idempotent:
+
+```sql
+-- 040_invite_delivery_mode.sql
+ALTER TABLE public.account_email_settings
+  ADD COLUMN IF NOT EXISTS invite_delivery_mode text NOT NULL DEFAULT 'email'
+  CHECK (invite_delivery_mode IN ('email', 'link'));
+
+ALTER TABLE public.invitations
+  ADD COLUMN IF NOT EXISTS delivered_via text
+  CHECK (delivered_via IN ('email', 'link'));
+```
+
+CAUTION: confirm the settings table name from the migration that created it
+(`grep -rln "email_settings" supabase/migrations/`) — if per-workspace email
+settings live elsewhere, put the column on that table instead. Default
+`'email'`: the auditable channel is the default; `'link'` is the deliberate
+opt-out (D7).
+
+- [ ] **Step 2: Failing tests** for the route contract:
+
+```ts
+// invitations.delivery.test.ts
+it("email mode: response contains NO joinUrl", async () => {
+  const res = await createInvitation(ctxWithMode("email"), payload)
+  expect(res.joinUrl).toBeNull()
+  expect(res.deliveredVia).toBe("email")
+})
+it("email mode with no sender configured: 409, no invitation row created", async () => {
+  await expect(createInvitation(ctxWithMode("email", { sender: null }), payload))
+    .rejects.toMatchObject({ status: 409 })
+})
+it("link mode: joinUrl returned once, mailer never called", async () => {
+  const res = await createInvitation(ctxWithMode("link"), payload)
+  expect(res.joinUrl).toMatch(/\/join\//)
+  expect(mailerSpy).not.toHaveBeenCalled()
+})
+it("mode toggle rejected for role=agent", async () => {
+  await expect(updateDeliveryMode(ctxWithRole("agent"), "link"))
+    .rejects.toMatchObject({ status: 403 })
+})
+```
+
+- [ ] **Step 3: Enforce server-side in the invite-creation route.** Read the mode inside the route; in `'email'` mode strip the join URL from the response entirely and send via the D6 chain (workspace SMTP → platform sender; on the platform sender the From address is the hard-coded platform domain, tenant name only in the sanitized display name, inviter in Reply-To — F8). If neither sender is configured, return 409 `"Email delivery is not configured"` — do not create the invitation, do not degrade to link. In `'link'` mode skip the mailer and return the URL. Record `delivered_via` on the invitation row either way. `invited_email` stays mandatory in BOTH modes (F1 — the link is transport, not authentication).
+- [ ] **Step 4:** Run tests → green.
+- [ ] **Step 5: Admin toggle UI** in the email-settings tab: a two-option radio ("Send invites by email" / "Generate invite links"), visible and mutable only for owner/admin — enforce the role server-side in the settings route, not just by hiding the control. Log mode changes to the existing audit path if one exists (`grep -rn "audit" src/lib/ src/features/settings/`).
+- [ ] **Step 6: Invite sheet renders per mode.** Email mode: email field required, "Invite will be emailed to {email}", no link ever shown; unconfigured-sender error surfaces the 409 with a Settings link (admins) or "ask your admin" (non-admins). Link mode: after creation show the join URL once with a copy button and the note "Only {email} will be able to use this link". On mailer send failure AFTER creation (email mode), show the error honestly and offer re-send — never silently swallow (F7).
+- [ ] **Step 7:** Browser-verify all three states (email-configured, email-unconfigured 409, link mode); screenshot each to `/tmp/agent-browser/adr004-invite-{state}.png`.
+- [ ] **Step 8: Commit** `feat(settings): admin-controlled invite delivery mode (ADR-004 D7)`
 
 ### Task 9: Validation sweep + docs closeout
 
@@ -353,6 +410,6 @@ export async function POST(request: Request) {
 
 ## Self-review notes
 
-- **Spec coverage:** D1→T1, D2→T2, D3→T3+T6, D4→T4+T5+T7, D5→T8; F1→T1+T3+T8, F2→T6, F3 existing CHECK + create-route assert (T8 Step 2 keeps email required; role ceiling already enforced by DB CHECK — verify in T9 tests), F4→T4+T5, F5→T4, F6→T1, F7→T8.
+- **Spec coverage:** D1→T1, D2→T2, D3→T3+T6, D4→T4+T5+T7, D5+D6+D7→T8; F1→T1+T3+T8 (email required in both delivery modes), F2→T6, F3 existing CHECK + create-route assert (role ceiling already enforced by DB CHECK — verify in T9 tests), F4→T4+T5, F5→T4, F6→T1, F7→T8 Step 6, F8→T8 Step 3 (platform From hard-coded, display name sanitized).
 - **Known uncertainty flagged inline:** enum comparison direction (T2) and the exact profiles role columns (T3) must be read from the authoritative migrations before writing — both marked CAUTION with the authoritative file named.
 - **Rollback:** every migration is additive; `is_account_member` can be restored from `20260724180000` verbatim if Stage 1 misbehaves — policies never changed.
