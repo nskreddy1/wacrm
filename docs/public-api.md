@@ -8,7 +8,38 @@ broadcasts — without going through the dashboard UI.
 > messages / contacts / conversations / broadcasts endpoints, and
 > outbound event [webhooks](#webhooks) all ship now.
 
+## What is and isn't public
+
+`/api/v1` holds 25 route files, but **only the 11 API-key routes below
+are the public contract.** The prefix is shared for historical reasons;
+authentication is not. Three regimes live under it:
+
+| Regime                   | Routes                                                                                                   | Authenticated by                     | Public contract? |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------- |
+| **API key** (documented) | `me`, `messages`, `contacts`, `contacts/[id]`, `conversations`, `conversations/[id]`, `conversations/[id]/messages`, `broadcasts`, `broadcasts/[id]`, `webhooks`, `webhooks/[id]` | `requireApiKey(request, scope)`      | **Yes** — additive changes only |
+| **Session (BFF)**        | `workspace/*`, `dashboard`, `notifications`, `session`, `security/devices`, `security/login-activity`     | `getCurrentAccount()` session cookie | No — internal to our own UI |
+| **Pre-auth**             | `security/login`                                                                                         | Nothing — it *is* the sign-in door   | No |
+
+Why it matters:
+
+- **Integrators:** a bearer key will not open a session route, and the
+  session routes are free to change shape without notice. Build only
+  against the API-key table above.
+- **Contributors:** the regime is a property of the route, not of the
+  `/api/v1` prefix. A new route inherits nothing — pick the helper
+  deliberately. Adding a session route means it is *not* covered by the
+  scope model, so its account scoping has to hold on its own.
+- **`security/login` is unauthenticated on purpose.** It replaced a
+  browser-side Supabase call so brute force could be throttled
+  server-side: email-keyed lockout after 5 failures in 15 minutes,
+  deliberately uniform "Invalid email or password" responses so it
+  cannot enumerate accounts, and every attempt written to
+  `auth_login_attempts`. Any change here needs those four properties
+  re-verified.
+
 ## Authentication
+
+This section describes the **API-key** regime — the public contract.
 
 Every request authenticates with an **API key**, sent as a bearer
 token:
