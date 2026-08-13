@@ -447,8 +447,84 @@ CREATE TRIGGER trg_repoint_on_member_removal
   FOR EACH ROW EXECUTE FUNCTION public.repoint_on_member_removal();
 ```
 
-- [ ] **Step 2: Apply; verify** — switch to member account: true + pointer flips. Switch to non-member uuid: false, pointer unchanged. Delete a membership: pointer repoints to remaining membership.
-- [ ] **Step 3: Commit** `feat(db): switch_active_account and removal repoint (ADR-004 D4, F4, F5)`
+- [x] **Step 2: Apply; verify** — done, 35/35 against the live applied objects.
+- [x] **Step 3: Commit** — done, migration
+  `20260813132000_switch_active_account_and_revocation.sql`.
+
+**DONE — but the task was three times bigger than planned, and the draft's
+trigger was dead code.**
+
+`switch_active_account` shipped essentially as designed (single-statement
+check-and-write, so no TOCTOU; `false` → 404 so the endpoint cannot probe
+which account ids exist) **plus** the Task 3 escalation guard the draft
+omitted: it clears `workspace_role_id` / `workspace_profile_id` that belong
+to the account being left, while preserving one that legitimately belongs
+to the target. Without that, every switch re-opened the exact hole Task 3
+closed. Measured `admin=true` in the pre-switch state again, so this was
+live, not hypothetical.
+
+**F5's `AFTER DELETE` trigger would never have fired.** Nothing in this
+codebase deletes from `account_members`; the schema is built for
+soft-delete (`status` CHECK `('active','inactive','deleted')`, and the
+pre-existing `guard_last_owner` reasons about transitions away from
+`'active'`). The trigger now fires on `UPDATE` **and** `DELETE`, so no
+write path — current, future, or manual SQL — can strand a user. It is
+`AFTER`, so it does not interfere with the `BEFORE` owner guard.
+
+**Three defects found by reading the live membership write paths. All were
+consequences of Task 3 making `account_members` authoritative while every
+writer still operated on the single `profiles` pointer:**
+
+1. **`remove_account_member` was broken outright — removal was impossible.**
+   It unconditionally ran `INSERT INTO accounts` to give the removed user a
+   fresh home. That only worked because redeem used to *delete* the joiner's
+   account, so they owned none. Task 3 correctly stopped deleting, so the
+   insert now collides with `idx_accounts_one_per_owner` → **SQLSTATE 23505**.
+   Reproduced live before the fix. Removal now re-points the user at the
+   account they already own; verified they end up owning exactly one account,
+   with no orphan.
+2. **Removal did not revoke access.** It never touched `account_members` at
+   all, and `is_account_member` grants from that row. Even had the insert
+   succeeded, the "removed" user kept full access to the workspace.
+3. **Deactivating a member did not revoke access either, and risked a
+   cross-workspace lockout.** `set_member_status` wrote `profiles.status` —
+   a *global, per-user* flag referenced by 2 RLS policies — and never
+   `account_members.status`. Measured live: after
+   `set_member_status(user,'inactive')` the membership was still `active`
+   and `is_account_member` still returned **true**. Member status is
+   per-membership and now lives on `account_members`; `profiles.status` is
+   left alone (asserted, so a member cannot be locked out of their own
+   workspace by an admin in another one).
+
+Removal is a **soft-delete** (`status='deleted'`), not a hard one: it keeps
+the audit trail, matches the CHECK the schema already carried, and lets
+Task 3's `ON CONFLICT` reactivate the same row on re-invite.
+
+Also hardened: `EXECUTE` revoked from `anon` on all three RPCs (they held it
+by inheritance and every one raises 42501 without a session, so nothing
+regresses), and both membership writers now `SELECT ... FOR UPDATE` so
+concurrent admin actions cannot interleave.
+
+**A mistake of mine, caught by the tests rather than by review:** I wrote
+`updated_at = now()` on `account_members`, which has no such column — only
+`created_at`. The same "trust the live schema, not your assumption" failure I
+had been flagging in the plan. 5 tests failed, I checked the real columns and
+removed it.
+
+**Verification:** 33/33 with the migration applied inside a rolled-back
+transaction, then 35/35 re-run against the **live applied** objects (adding
+assertions that all four objects exist, that the live `remove` no longer
+blindly inserts an account, that the live `set_member_status` writes
+`account_members`, and that the trigger is installed). Covers the switcher,
+both escalation directions, revocation via all three paths (RPC removal,
+status change, hard delete), the authz matrix, last-owner protection, grants,
+and migration idempotency. Repo-wide: `pnpm typecheck` clean, `pnpm test`
+**833/833**.
+
+**Note for Task 5:** the switch endpoint can be built exactly as drafted — the
+RPC returns `boolean` and the route maps `false` → 404. `getCurrentAccount()`
+should read memberships from `account_members` filtered to `status='active'`,
+since that is now the authoritative grant.
 
 ### Task 5: BFF — memberships in `AccountContext` + switch route
 

@@ -149,6 +149,10 @@ export async function DELETE(
       entity: `member:${userId}`,
     });
 
+    // `newPersonalAccountId` is the account the removed user's active-workspace
+    // pointer now rests on. Since ADR-004 Task 4 that is normally the account
+    // they ALREADY owned rather than a freshly minted one — removal no longer
+    // creates a duplicate account. Field name kept for wire compatibility.
     return NextResponse.json({ ok: true, newPersonalAccountId: data });
   } catch (err) {
     return toErrorResponse(err);
