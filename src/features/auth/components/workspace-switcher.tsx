@@ -25,6 +25,7 @@
 import { useMemo, useState } from 'react';
 import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react';
 
+import { AxonMark } from '@/features/brand/components/axon-logo';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import type { AccountRole } from '@/features/auth/lib/roles';
 import type { SessionMembership } from '@/features/auth/lib/session-payload';
@@ -142,16 +143,24 @@ export function WorkspaceSwitcher() {
           />
         }
       >
-        <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold">
-          {initialsOf(activeName)}
+        {/* The brand mark stays the sidebar's anchor — identical to the
+            single-workspace BrandHeader, so gaining a second workspace
+            changes what the row DOES, never what the product looks
+            like. Per-workspace identity is carried by the name and the
+            role badge; the popover rows use initials to tell workspaces
+            apart, which is not this row's job. */}
+        <span className="text-sidebar-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+          <AxonMark size={26} variant="mono" aria-hidden="true" />
         </span>
-        <span className="grid flex-1 text-left leading-tight">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
           <span className="truncate text-sm font-semibold">{activeName}</span>
-          <span className="text-muted-foreground truncate text-xs">
-            {memberships.length} workspaces
-          </span>
+          {active && (
+            <Badge variant="secondary" className="shrink-0 text-[10px]">
+              {ROLE_LABEL[active.role]}
+            </Badge>
+          )}
         </span>
-        <ChevronsUpDown className="ml-auto size-4" aria-hidden="true" />
+        <ChevronsUpDown className="ml-auto size-4 shrink-0" aria-hidden="true" />
       </PopoverTrigger>
 
       <PopoverContent
