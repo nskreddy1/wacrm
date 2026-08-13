@@ -28,7 +28,7 @@
 **Interfaces:**
 - Produces: `RecordTitleButton({ onOpen, children, className }: { onOpen: () => void; children: React.ReactNode; className?: string })` — named export. Tasks 2–5 import it as `import { RecordTitleButton } from '@/components/shared/record-title-button';`
 
-- [ ] **Step 1: Write the component**
+- [x] **Step 1: Write the component**
 
 ```tsx
 import type { ReactNode } from 'react';
@@ -72,12 +72,12 @@ export function RecordTitleButton({
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm typecheck && pnpm lint`
 Expected: clean. (No unit test — node-env Vitest cannot render components; the four adoption tasks are its verification.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/shared/record-title-button.tsx
@@ -94,7 +94,7 @@ git commit -m "feat(shared): RecordTitleButton — canonical record-open afforda
 **Interfaces:**
 - Consumes: `RecordTitleButton` from Task 1. Existing `openEdit(item: CatalogItem)` in the same file stays unchanged.
 
-- [ ] **Step 1: Replace the inline title button**
+- [x] **Step 1: Replace the inline title button**
 
 Current code (added by commit `bcc0336`, keep the comment, swap the button):
 
@@ -126,12 +126,12 @@ Add the import alongside the other `@/components/shared/` imports:
 import { RecordTitleButton } from '@/components/shared/record-title-button';
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm typecheck && pnpm lint`
 Browser: /catalog → click item name → "Edit Catalog Item" sheet opens; Tab to the name → visible focus ring.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/features/catalog/components/catalog-workspace.tsx
@@ -148,7 +148,7 @@ git commit -m "refactor(catalog): adopt RecordTitleButton for item titles"
 **Interfaces:**
 - Consumes: `RecordTitleButton` from Task 1. Existing `setContactSheet({ mode: 'view', contact })` stays unchanged.
 
-- [ ] **Step 1: Replace the bare title button**
+- [x] **Step 1: Replace the bare title button**
 
 Current code (note: no type="button", no focus ring — both fixed by the primitive):
 
@@ -173,12 +173,12 @@ becomes:
 
 Add the import: `import { RecordTitleButton } from '@/components/shared/record-title-button';`
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm typecheck && pnpm lint`
 Browser: /contacts → click a contact name → record sheet opens; Tab → visible focus ring (this is new).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/features/contacts/components/contact-workspace.tsx
@@ -197,7 +197,7 @@ git commit -m "refactor(contacts): adopt RecordTitleButton — adds missing keyb
 
 **Scope guard:** The BOARD card title (~line 1153, inside the dnd-kit draggable that spreads `{...listeners}`) is explicitly OUT of scope per the primitive's doc comment and ADR-003 — leave it as-is with a code comment. Only the LIST view row title changes.
 
-- [ ] **Step 1: Replace the list-view title button**
+- [x] **Step 1: Replace the list-view title button**
 
 The list-view `<td>` contains a plain button with `hover:text-primary ... truncate text-left font-semibold` classes calling `onOpen(deal)`. Replace it:
 
@@ -209,7 +209,7 @@ The list-view `<td>` contains a plain button with `hover:text-primary ... trunca
 
 Add the import: `import { RecordTitleButton } from '@/components/shared/record-title-button';`
 
-- [ ] **Step 2: Annotate the board-card exception**
+- [x] **Step 2: Annotate the board-card exception**
 
 Above the board card's title button (~line 1153), add:
 
@@ -218,12 +218,12 @@ Above the board card's title button (~line 1153), add:
     and spreads {...listeners}; see ADR-003 D1 exception. */}
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `pnpm typecheck && pnpm lint`
 Browser: /pipelines → List view → click deal title → deal sheet opens; Tab → focus ring. Board view: drag still works.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/features/pipelines/components/pipeline-workspace.tsx
@@ -240,7 +240,7 @@ git commit -m "refactor(pipelines): adopt RecordTitleButton in list view; annota
 **Interfaces:**
 - Consumes: `RecordTitleButton` from Task 1. Existing `setEditing(item)` (state declared line 178, already used by the pencil at line 617) is the open action — reuse it, do not add new state.
 
-- [ ] **Step 1: Wrap the title in RecordTitleButton**
+- [x] **Step 1: Wrap the title in RecordTitleButton**
 
 Current:
 
@@ -267,12 +267,12 @@ Add the import: `import { RecordTitleButton } from '@/components/shared/record-t
 
 Keep the pencil button (line ~611) — it stays as a secondary affordance, consistent with Catalog keeping its dropdown Edit.
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm typecheck && pnpm lint`
 Browser: /appointments → click an appointment title → edit sheet opens (same one the pencil opens); pencil still works.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/features/appointments/components/appointment-workspace.tsx
@@ -295,7 +295,7 @@ git commit -m "fix(appointments): titles open the record via RecordTitleButton (
 - Produces (hook): `useRowSelection(ids: string[])` returning `{ selected: Set<string>; allSelected: boolean; toggle(id: string): void; toggleAllRows(): void; clear(): void }`
 - Task 7 consumes the hook in catalog. A later (out-of-plan) refactor can adopt it in contacts.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // src/hooks/row-selection.test.ts
@@ -340,12 +340,12 @@ describe('areAllSelected', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm exec vitest run src/hooks/row-selection.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // src/hooks/use-row-selection.ts
@@ -406,11 +406,11 @@ export function useRowSelection(ids: string[]) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify pass, then full gate**
+- [x] **Step 4: Run tests to verify pass, then full gate**
 
 Run: `pnpm exec vitest run src/hooks/row-selection.test.ts` → PASS, then `pnpm typecheck && pnpm lint && pnpm test`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/hooks/use-row-selection.ts src/hooks/row-selection.test.ts
@@ -428,7 +428,7 @@ git commit -m "feat(hooks): useRowSelection + pure selection helpers with tests 
 - Consumes: `useRowSelection` from Task 6; existing `DELETE /api/v1/workspace/catalog` with body `{ ids: string[] }` (already implemented and admin-gated by RLS — see `src/app/api/v1/workspace/catalog/route.ts`); existing `Checkbox` from `@/components/ui/checkbox`; existing SWR `mutate` in the component.
 - Model: the contacts bulk bar (`contact-workspace.tsx` lines 596–612) — copy its structure, not its code verbatim.
 
-- [ ] **Step 1: Wire selection state**
+- [x] **Step 1: Wire selection state**
 
 In the workspace component, after the filtered list is computed (it is the
 `filtered` useMemo at line ~119):
@@ -445,7 +445,7 @@ const { selected, allSelected, toggle, toggleAllRows, clear } =
 (The `useMemo` keeps the `ids` array reference stable so the hook's
 `toggleAllRows` callback is not rebuilt every render.)
 
-- [ ] **Step 2: Add a per-card Checkbox**
+- [x] **Step 2: Add a per-card Checkbox**
 
 Inside each item card, before the icon block, mirroring contacts' row checkbox:
 
@@ -459,16 +459,16 @@ Inside each item card, before the icon block, mirroring contacts' row checkbox:
 
 Add a "select all" Checkbox in the toolbar row with `checked={allSelected}` / `onCheckedChange={toggleAllRows}` and `aria-label="Select all items"`.
 
-- [ ] **Step 3: Add the bulk bar**
+- [x] **Step 3: Add the bulk bar**
 
 Rendered only when `selected.size > 0`, structured like contacts' bar (lines 596–612): count on the left, destructive "Delete selected" button on the right that opens the EXISTING delete `AlertDialog` flow, posting `{ ids: [...selected] }` to the existing DELETE endpoint, then `clear()` and `mutate()`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test`
 Browser: /catalog → select the item → bulk bar appears with "1 selected" → Delete selected → confirm dialog → item gone → recreate an item via New Item so the workspace is not left empty.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/features/catalog/components/catalog-workspace.tsx
@@ -486,7 +486,7 @@ git commit -m "feat(catalog): bulk selection UI over existing bulk-delete API (A
 **Interfaces:**
 - Consumes: `catalogItemCreateSchema`, `catalogItemUpdateSchema`, `idListSchema` from `src/lib/data/operations/validation.ts`; `buildAssistantTools(ctx)` from `src/features/assistant/lib/tools.ts` (ctx carries `accountId`, `userId`, and the Supabase client — stub the client with a chainable object).
 
-- [ ] **Step 1: Write failing validation tests**
+- [x] **Step 1: Write failing validation tests**
 
 ```ts
 // src/lib/data/operations/validation.test.ts
@@ -548,11 +548,11 @@ describe('idListSchema', () => {
 
 Note: if a default/limit assertion fails, read `validation.ts` and match the test to ACTUAL behavior — these tests pin existing behavior, they do not change it. If actual behavior looks wrong (e.g. empty ids accepted), flag it in the commit message rather than silently changing the schema.
 
-- [ ] **Step 2: Run, adjust to actual behavior, get green**
+- [x] **Step 2: Run, adjust to actual behavior, get green**
 
 Run: `pnpm exec vitest run src/lib/data/operations/validation.test.ts`
 
-- [ ] **Step 3: Add AI-tool scoping tests**
+- [x] **Step 3: Add AI-tool scoping tests**
 
 Extend the existing `tool-registration.test.ts` (or a sibling `catalog-tools.test.ts`) with a chainable Supabase stub asserting that `list_catalog_items.execute()` filters by the ctx account:
 
@@ -591,7 +591,7 @@ it('list_catalog_items scopes to the ctx account', async () => {
 
 Adjust the ctx shape to match `AssistantContext` in `src/features/assistant/lib/tools.ts` (read lines 20–60 first — the client property name may be `db` or `supabase`).
 
-- [ ] **Step 4: Full gate and commit**
+- [x] **Step 4: Full gate and commit**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test`
 
@@ -610,7 +610,7 @@ git commit -m "test(catalog): pin validation schema behavior and AI tool account
 
 **Interfaces:** none — documentation only. Additive; no route moves (ADR-003 D3 defers relocation behind its trigger).
 
-- [ ] **Step 1: Add the auth-regime section to public-api.md**
+- [x] **Step 1: Add the auth-regime section to public-api.md**
 
 Near the top (after the intro/auth section), add:
 
@@ -630,7 +630,7 @@ Relocation of `workspace/*` out of `/api/v1` is deferred per ADR-003 D3
 until the first external-developer or versioning trigger fires.
 ```
 
-- [ ] **Step 2: Annotate ADR-001**
+- [x] **Step 2: Annotate ADR-001**
 
 In `docs/adr/001-workspace-modules.md`, find the claim that all `/api/v1` routes funnel through `requireApiKey` (search: `grep -n "requireApiKey" docs/adr/001-workspace-modules.md`) and append directly below it:
 
@@ -641,7 +641,7 @@ In `docs/adr/001-workspace-modules.md`, find the claim that all `/api/v1` routes
 > "Route namespaces and auth regimes" in `docs/public-api.md`.
 ```
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run: `pnpm format:check` (docs are prettier-checked) — fix with `pnpm format` if needed.
 
@@ -656,12 +656,12 @@ git commit -m "docs(api): document /api/v1 dual auth regimes; annotate stale ADR
 
 **Files:** none created — verification only.
 
-- [ ] **Step 1: Full gate**
+- [x] **Step 1: Full gate**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`
 Expected: all pass (build required for release-bound work per AGENTS.md).
 
-- [ ] **Step 2: Browser regression pass**
+- [x] **Step 2: Browser regression pass**
 
 One agent-browser session, viewport 1033x632 dark, login admin@gmail.com/admin:
 1. /contacts — click name → sheet; Tab → ring
@@ -670,11 +670,11 @@ One agent-browser session, viewport 1033x632 dark, login admin@gmail.com/admin:
 4. /appointments — click title → edit sheet; pencil still works
 5. Screenshot each to /tmp/agent-browser/adr003-<page>.png
 
-- [ ] **Step 3: Confirm no dropped selections regression in contacts**
+- [x] **Step 3: Confirm no dropped selections regression in contacts**
 
 Contacts was NOT refactored to `useRowSelection` in this plan (deliberate — avoid touching its working bulk flow while extracting the pattern). Verify its select-all + bulk delete bar still behaves.
 
-- [ ] **Step 4: Commit anything the sweep fixed; otherwise done**
+- [x] **Step 4: Commit anything the sweep fixed; otherwise done**
 
 ---
 
@@ -685,3 +685,45 @@ Contacts was NOT refactored to `useRowSelection` in this plan (deliberate — av
 - Relocating `/api/v1/workspace/*` routes — documented instead
 - Refactoring contacts onto `useRowSelection` — future cleanup, listed in ADR-003 consequences
 - Board-card title in pipelines — dnd-kit exception, annotated in code
+
+---
+
+## Completion record (Task 10 final gate)
+
+**Gate:** `pnpm typecheck` clean · `pnpm test` 833 passed / 0 failed ·
+`pnpm build` exit 0 · `pnpm lint` 0 problems in every file this plan touched
+(the 8 remaining repo errors are pre-existing, all in `v0_memories/` skill
+fixtures).
+
+**Browser regression pass** (1033×681, dark, matching the preview):
+
+| Surface | Verified |
+| --- | --- |
+| `/contacts` cards | title opens the record sheet; focus-ring classes now present where previously absent; select → bulk bar renders → clear removes it |
+| `/pipelines` list | title opens **Edit Deal** |
+| `/pipelines` board | drag intact — `aria-roledescription="draggable"`, tabindex 0, Space announced pickup via the dnd-kit live region, Escape cancelled with the deal still in New Lead |
+| `/catalog` | archive → activate round-trip preserved **₹2.00 / INR** |
+| `/appointments` | title opens **Edit Appointment** (the outlier this plan fixed) |
+
+All browser-mutated data was returned to its original state.
+
+**Two findings escalated beyond the plan's scope:**
+
+1. **Data-loss bug, fixed.** `catalogItemUpdateSchema` was
+   `catalogItemCreateSchema.partial()`, and Zod 4 keeps `.default()` through
+   `.partial()`. A `{ id, isActive }` PATCH parsed into
+   `{ isActive, price: 0, currency: 'USD' }`, defeating
+   `updateCatalogItem()`'s `!== undefined` guard — so **every archive silently
+   zeroed the item's price**. The Archive/Activate toggle sends exactly that
+   payload, so this fired in normal use. Fixed by giving create and update
+   separate schemas over shared bounds; the regression test reproduces the
+   repository's write logic and was confirmed non-vacuous by reverting the fix.
+   This was the only `.partial()` in `src/`.
+
+2. **Ungated surface, documented not fixed.** The 13 session-authenticated
+   `/api/v1` routes call neither `requirePermission` nor `requireRole`, so
+   ADR-001's enforcement layers 3 and 4 reach none of them. Account scoping
+   still holds (`getCurrentAccount()` fails closed without an account), but
+   implementing ADR-001 as written would leave `/api/v1/workspace/*`
+   unmodule-gated. Recorded as ADR-001 checklist item 6a — deliberately left as
+   a decision for the module work rather than silently patched here.
