@@ -665,6 +665,10 @@ export function MembersTab() {
                 )}
                 {/* Users table — Bigin columns: Full Name | Email | Role | Profile. */}
                 <DataTable<AccountMember>
+                // Column widths already total 100%, so DataTable's default
+                // slack column would render as a stray empty cell after the
+                // row menu.
+                fill={false}
                 rows={members}
                 rowKey={(m) => m.user_id}
                 empty={
