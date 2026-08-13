@@ -19,7 +19,16 @@
 // We deliberately do NOT redeem automatically on page load — the
 // invitee should confirm what account/role they're accepting.
 // Auto-redeem would also race with the signup flow returning to
-// this page after email verification.
+// this page after email verification. Redemption happens ONLY in
+// the POST handler behind the Accept button (ADR-004 F2): a link
+// that joins a workspace on GET would be redeemable by anything
+// that merely follows links, including a mail client's preview
+// fetch or a chat app's URL unfurler.
+//
+// Accepting is ADDITIVE since ADR-004 Task 3 — the invitee keeps
+// every workspace they already had — so there is no longer any
+// "you already have an account" refusal, and no dead end telling
+// an invited user to sign up with a different email.
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
@@ -43,14 +52,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { createClient } from '@/lib/supabase/client';
 
 interface PeekOk {
@@ -96,6 +97,38 @@ const ROLE_LABEL: Record<PeekOk['role'], string> = {
   viewer: 'Viewer',
 };
 
+/**
+ * A refusal from the redeem endpoint that the invitee cannot retry away.
+ * Keyed off the endpoint's machine-readable `reason` rather than its
+ * message text, so rewording the database's prose cannot change which
+ * recovery path the user is offered.
+ */
+type BlockerReason = 'email_mismatch' | 'email_unverified';
+
+interface AcceptBlocker {
+  reason: BlockerReason;
+  message: string;
+}
+
+const BLOCKER_COPY: Record<
+  BlockerReason,
+  { title: string; body: string; action: 'switch-account' | 'recheck' }
+> = {
+  email_mismatch: {
+    title: 'Signed in with a different email',
+    // The fix is to switch accounts, NOT to create a new one: the invite
+    // is bound to a specific address, and signing up again with yet
+    // another address would fail the same check.
+    body: 'This invitation was sent to a different email address. Sign in with the invited address to accept it — your current workspace stays exactly as it is.',
+    action: 'switch-account',
+  },
+  email_unverified: {
+    title: 'Verify your email first',
+    body: 'Confirm your email address before joining this workspace. Open the verification link we emailed you, then come back to this page.',
+    action: 'recheck',
+  },
+};
+
 const FAIL_COPY: Record<PeekFail['reason'], { title: string; body: string }> = {
   not_found: {
     title: 'Invite not found',
@@ -131,11 +164,17 @@ export default function JoinPage() {
     undefined // undefined = unknown / still loading; null = signed out
   );
   const [accepting, setAccepting] = useState(false);
-  // `redeem_invitation` returns 409 when the caller's current account
-  // has domain data, or they're already a member of a shared account.
-  // A transient toast wasn't enough — the user has no actionable next
-  // step. Surface a blocking modal that walks them through it.
-  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+  // A refusal that the invitee cannot fix by retrying — they are signed
+  // in as the wrong person, or their email is unverified. Shown inline
+  // with the one action that actually resolves it.
+  //
+  // This replaces the old 409 "conflict" dialog. That dialog existed
+  // because redeeming used to be refused when the caller's own account
+  // held data, and its only advice was "sign out and sign up with a
+  // different email" — telling an invited user to abandon their account
+  // to accept an invitation. ADR-004 Task 3 made joining additive, so
+  // the refusal can no longer happen and the dead end is deleted.
+  const [blocker, setBlocker] = useState<AcceptBlocker | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
   // Extracted so the "Try again" button on the server_error card
@@ -192,7 +231,11 @@ export default function JoinPage() {
     };
   }, [token]);
 
-  const handleAccept = useCallback(async () => {
+  // `accountName` is passed in rather than read from `peek` so the
+  // callback needs no `peek` dependency and cannot close over a stale
+  // one. The only call site is inside the peek.ok branch, where the
+  // name is already narrowed to a string.
+  const handleAccept = useCallback(async (accountName: string) => {
     if (!token) return;
     setAccepting(true);
     try {
@@ -203,26 +246,31 @@ export default function JoinPage() {
       if (!res.ok) {
         const payload = (await res.json().catch(() => ({}))) as {
           error?: string;
+          reason?: string;
         };
-        // 409 = caller already has data / is in another shared
-        // account. The redeem RPC's error message is descriptive
-        // enough to show directly; we open a modal so the user has
-        // a clear next-action (sign out → use different email)
-        // rather than a 3-second toast.
-        if (res.status === 409) {
-          setConflictMessage(
-            payload.error ||
-              'You are already in another account. Sign in with a different email to join this one.'
-          );
+        // Switch on the endpoint's stable `reason`, never on its prose.
+        // These two are unfixable by retrying, so they get a persistent
+        // inline panel with the action that resolves them; everything
+        // else is transient and a toast is right.
+        if (
+          payload.reason === 'email_mismatch' ||
+          payload.reason === 'email_unverified'
+        ) {
+          setBlocker({
+            reason: payload.reason,
+            message: payload.error ?? '',
+          });
         } else {
           toast.error(payload.error || 'Failed to accept invitation');
         }
         setAccepting(false);
         return;
       }
-      toast.success('Welcome to the team');
-      // Full reload (not router.push) so AuthProvider re-fetches
-      // the profile with the new account_id and account_role.
+      toast.success(`Welcome to ${accountName}`);
+      // Full reload (not router.push) so AuthProvider re-fetches the
+      // profile with the new active workspace. Joining is additive now,
+      // so any workspace the user already had is still theirs and shows
+      // up in the switcher.
       window.location.href = '/dashboard';
     } catch (err) {
       console.error('[join] redeem error:', err);
@@ -350,13 +398,58 @@ export default function JoinPage() {
 
   // ----- Authed: show Accept button -----
   if (authedUserId) {
+    const blockerCopy = blocker ? BLOCKER_COPY[blocker.reason] : null;
+
     return (
       <>
         <Card className="border-border bg-card w-full max-w-md">
           {inviteHeader}
           <CardContent className="flex flex-col gap-3">
+            {blockerCopy ? (
+              <div
+                role="alert"
+                className="border-border bg-muted/40 flex flex-col gap-3 rounded-lg border p-4"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+                  <div className="flex flex-col gap-1">
+                    <p className="text-foreground text-sm font-medium">
+                      {blockerCopy.title}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {blockerCopy.body}
+                    </p>
+                  </div>
+                </div>
+                {blockerCopy.action === 'switch-account' ? (
+                  <Button
+                    onClick={handleSignOutAndRetry}
+                    disabled={signingOut}
+                    variant="outline"
+                    className="border-border text-foreground hover:bg-muted w-full"
+                  >
+                    {signingOut ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Signing out…
+                      </>
+                    ) : (
+                      'Sign in with the invited address'
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={loadPeekAndAuth}
+                    variant="outline"
+                    className="border-border text-foreground hover:bg-muted w-full"
+                  >
+                    I&apos;ve verified — check again
+                  </Button>
+                )}
+              </div>
+            ) : null}
             <Button
-              onClick={handleAccept}
+              onClick={() => handleAccept(peek.account_name)}
               disabled={accepting}
               className="bg-primary text-primary-foreground hover:bg-primary/90 w-full"
             >
@@ -372,69 +465,21 @@ export default function JoinPage() {
                 </>
               )}
             </Button>
+            {/* Honest about what accepting does. The old copy promised
+                the user's "empty personal account will be cleaned up",
+                which was true when joining MOVED the account and
+                deleted the old one. Since ADR-004 Task 3 joining is
+                additive: nothing is deleted, and both workspaces stay
+                available in the switcher. */}
             <p className="text-muted-foreground text-center text-xs">
-              Accepting moves your login into{' '}
-              <span className="text-muted-foreground">{peek.account_name}</span>
-              . Your empty personal account from signup will be cleaned up.
+              You&apos;ll switch to{' '}
+              <span className="text-foreground">{peek.account_name}</span>. Any
+              workspace you already have stays yours — you can switch back
+              anytime.
             </p>
           </CardContent>
         </Card>
 
-        {/* Conflict modal — opens when the redeem endpoint returns 409
-            (caller already in a shared account or has domain data).
-            Blocks the flow until the user picks a recovery action so
-            they aren't stuck retrying an inevitable failure. */}
-        <Dialog
-          open={conflictMessage !== null}
-          onOpenChange={(open) => {
-            if (!open) setConflictMessage(null);
-          }}
-        >
-          <DialogContent className="bg-popover border-border sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-popover-foreground flex items-center gap-2">
-                <AlertTriangle className="size-4 text-amber-400" />
-                Can&apos;t join {peek.account_name} with this account
-              </DialogTitle>
-              <DialogDescription className="text-muted-foreground">
-                {conflictMessage}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="text-muted-foreground space-y-2 py-2 text-xs">
-              <p>
-                To join{' '}
-                <span className="text-popover-foreground">
-                  {peek.account_name}
-                </span>
-                , sign out and sign up again with a different email address. The
-                invite link stays valid as long as it hasn&apos;t expired.
-              </p>
-            </div>
-            <DialogFooter className="bg-popover border-border">
-              <Button
-                variant="outline"
-                onClick={() => setConflictMessage(null)}
-                className="border-border text-popover-foreground hover:bg-muted"
-              >
-                Stay signed in
-              </Button>
-              <Button
-                onClick={handleSignOutAndRetry}
-                disabled={signingOut}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                {signingOut ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Signing out…
-                  </>
-                ) : (
-                  'Sign out & use a different email'
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </>
     );
   }
