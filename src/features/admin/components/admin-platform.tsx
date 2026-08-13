@@ -381,31 +381,73 @@ const ENGINE_OPTIONS: {
   },
 ];
 
+const DELIVERY_OPTIONS: {
+  value: InviteDeliveryMode;
+  title: string;
+  description: string;
+}[] = [
+  {
+    value: 'link_only',
+    title: 'Link only',
+    description:
+      'Nothing is emailed. Admins copy the invite link and share it themselves.',
+  },
+  {
+    value: 'email',
+    title: 'Send email',
+    description:
+      "Emails the invite using the workspace's own SMTP settings, or the platform key.",
+  },
+];
+
 function EngineFlagSection() {
-  const { data, isLoading, mutate } = useSWR<{ ai_engine: AiEngine }>(
+  const { data, isLoading, mutate } = useSWR<PlatformSettings>(
     '/api/admin/platform-settings',
     jsonFetcher
   );
   const [saving, setSaving] = useState(false);
 
-  async function setEngine(engine: AiEngine) {
-    if (engine === data?.ai_engine) return;
+  async function patch(
+    body: Partial<PlatformSettings>,
+    successMessage: string
+  ): Promise<void> {
     setSaving(true);
     try {
       const res = await fetch('/api/admin/platform-settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ai_engine: engine }),
+        body: JSON.stringify(body),
       });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Failed to save setting');
-      await mutate({ ai_engine: engine }, { revalidate: false });
-      toast.success(`AI engine switched to ${engine}`);
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(payload?.error ?? 'Failed to save setting');
+      // Merge, never replace: PATCH echoes back only the keys it wrote,
+      // so replacing the cache would blank the other setting until the
+      // next revalidate.
+      await mutate(
+        (prev) => ({ ...(prev as PlatformSettings), ...body }),
+        { revalidate: false }
+      );
+      toast.success(successMessage);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setSaving(false);
     }
+  }
+
+  async function setEngine(engine: AiEngine) {
+    if (engine === data?.ai_engine) return;
+    await patch({ ai_engine: engine }, `AI engine switched to ${engine}`);
+  }
+
+  async function setDeliveryMode(mode: InviteDeliveryMode) {
+    if (mode === data?.invite_delivery_mode) return;
+    await patch(
+      { invite_delivery_mode: mode },
+      mode === 'email'
+        ? 'Invite emails will now be sent'
+        : 'Invite emails are off — links only'
+    );
   }
 
   return (
@@ -465,6 +507,69 @@ function EngineFlagSection() {
             ))}
           </RadioGroup>
         )}
+
+        {/* Invite delivery — platform-level, deliberately NOT a
+            per-workspace setting. A tenant configures their own SMTP
+            credentials in Settings → Email delivery, but only a
+            platform operator decides whether the system may send
+            outbound mail at all. */}
+        <div className="flex flex-col gap-4 border-t pt-4">
+          <div className="grid leading-tight">
+            <span className="text-sm font-medium">Invite delivery</span>
+            <span className="text-muted-foreground text-xs">
+              Whether workspace invitations are emailed, or shared as a
+              copy-paste link. Off by default.
+            </span>
+          </div>
+
+          {isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (
+            <RadioGroup
+              value={data?.invite_delivery_mode ?? 'link_only'}
+              onValueChange={(v) => {
+                if (v === 'email' || v === 'link_only') void setDeliveryMode(v);
+              }}
+              className="@md/card:grid-cols-2 grid gap-3"
+              aria-label="Invite delivery"
+            >
+              {DELIVERY_OPTIONS.map(({ value, title, description }) => (
+                <div
+                  key={value}
+                  className="has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5 hover:border-muted-foreground/40 flex items-start gap-2 rounded-lg border p-3 transition-[border-color,background-color] duration-150 ease-out"
+                >
+                  <RadioGroupItem
+                    value={value}
+                    id={`delivery-${value}`}
+                    disabled={saving}
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor={`delivery-${value}`}
+                    className="grid cursor-pointer gap-0.5 leading-tight"
+                  >
+                    <span>{title}</span>
+                    <span className="text-muted-foreground text-xs font-normal">
+                      {description}
+                    </span>
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          )}
+
+          {data?.invite_delivery_mode === 'email' ? (
+            <p className="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed">
+              <Mail
+                className="mt-0.5 size-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              Invites are emailed. If a workspace has no email provider
+              configured, the invite is still created and the admin gets the
+              link.
+            </p>
+          ) : null}
+        </div>
 
         {saving && (
           <p className="text-muted-foreground flex items-center gap-2 text-xs">

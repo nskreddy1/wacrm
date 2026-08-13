@@ -32,7 +32,10 @@ import {
   inviteUrl,
 } from '@/features/auth/lib/invitations';
 import { isAccountRole } from '@/features/auth/lib/roles';
-import { sendInviteEmail } from '@/lib/email/invite-email';
+import {
+  sendInviteEmail,
+  type InviteEmailReason,
+} from '@/lib/email/invite-email';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -406,6 +409,7 @@ export async function POST(request: Request) {
     // link in the response.
     let emailSent = false;
     let emailProvider: string | null = null;
+    let emailReason: InviteEmailReason | null = null;
     if (invitedEmail) {
       const [{ data: accountRow }, { data: inviterProfile }] =
         await Promise.all([
@@ -436,6 +440,7 @@ export async function POST(request: Request) {
       });
       emailSent = result.sent;
       emailProvider = result.provider;
+      emailReason = result.reason ?? null;
     }
 
     return NextResponse.json(
@@ -447,6 +452,9 @@ export async function POST(request: Request) {
         expiresInDays: expiryDays,
         emailSent,
         emailProvider,
+        // Why it wasn't sent, so the UI can say "sending is off, copy
+        // this link" instead of implying the invite is in their inbox.
+        emailReason,
       },
       { status: 201 }
     );
