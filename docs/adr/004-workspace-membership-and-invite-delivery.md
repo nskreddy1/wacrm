@@ -74,6 +74,41 @@ Adopt the **one-identity / N-memberships** model (Notion/Linear pattern):
    (status of the configured channel shown before invite creation; admin
    pointed to Settings → Email delivery when unconfigured); copy-link demoted
    to explicit fallback.
+6. **D6 — Delivery fallback chain and shared-sender separation.** Answers two
+   operational questions: *what if a workspace never configures SMTP?* and
+   *if one platform sender serves all workspaces, how do tenants stay
+   separated?*
+
+   **Resolution order** (first configured wins; `mailer.ts` already implements
+   1→2, this decision makes it a contract):
+
+   1. **Workspace settings** (`account_email_settings`, credentials
+      AES-256-GCM encrypted) — mail goes out under the tenant's own verified
+      `from_email`. Their domain, their reputation, their choice.
+   2. **Platform sender** (`RESEND_API_KEY` env, ops-level) — mail goes out
+      **only under the platform's own domain**. The workspace's name appears
+      in the From *display name* and the inviter's address goes in
+      `Reply-To`: `From: "Acme Agency (via WACRM)" <invites@platform-domain>`,
+      `Reply-To: inviter@acme.com`. The tenant's domain must NEVER appear in
+      the From address on the shared sender — DMARC alignment requires the
+      From domain to match the SPF/DKIM-authenticated domain, so
+      tenant-domain From would both fail DMARC at the receiver *and* let any
+      workspace impersonate any other by typing a rival's address into
+      `from_email`. Display-name + Reply-To is the standard shared-sender
+      pattern (GitHub, Linear, and Notion invites all arrive "via" the
+      platform domain).
+   3. **Copy-link** — only when neither is configured. The UI must say
+      honestly that no email was sent and show the admin a one-click path to
+      Settings → Email delivery. Silent non-delivery is a bug, not a
+      fallback.
+
+   Per-tenant sending subdomains with individual DKIM keys (the full
+   isolation pattern for high-volume senders) are **rejected for now**:
+   invites are low-volume transactional mail, and the platform-domain-only
+   rule already removes the spoofing surface. Revisit only if workspaces
+   start sending customer-facing campaign mail through the platform sender —
+   broadcasts already go through WhatsApp, not email, so this is not
+   expected.
 
 ## Options considered
 
@@ -112,7 +147,7 @@ export/import — never a side effect of accepting an invite.
 ## Security review (sharp-edges analysis)
 
 Threats probed with the scoundrel / lazy-developer / confused-developer
-model. Findings **F1–F7** are binding on the implementation:
+model. Findings **F1–F8** are binding on the implementation:
 
 - **F1 — Bearer-token invites (Critical).** `invited_email` is *nullable*: a
   NULL-email invite is redeemable by anyone holding the link (leaked via
@@ -148,6 +183,16 @@ model. Findings **F1–F7** are binding on the implementation:
   (write-only fields), and the mailer must not log credentials or full
   recipient lists. Send failures fall back to copy-link with an explicit
   warning, never silently.
+- **F8 — Shared-sender tenant impersonation.** On the platform fallback (D6
+  step 2), the From *address* is hard-coded to the platform domain in the
+  mailer — it must never be interpolated from `account_email_settings.
+  from_email` or any tenant-supplied value. A scoundrel tenant setting
+  `from_email = billing@rival-agency.com` would otherwise send
+  platform-authenticated mail as their rival. Tenant identity travels only in
+  the From display name (sanitized: strip `<`, `>`, `"`, CR/LF to block
+  header injection) and in `Reply-To`. Tenant-controlled From addresses are
+  legitimate ONLY on path 1, where the tenant's own credentials authenticate
+  the send.
 
 Residual risk accepted: invite links still transit email; mitigated by expiry
 (existing `expires_at`), single-use (`accepted_at`), hashing at rest, and F1's
