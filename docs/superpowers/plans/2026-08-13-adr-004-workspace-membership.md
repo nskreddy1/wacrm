@@ -563,8 +563,44 @@ export async function POST(request: Request) {
 }
 ```
 
-- [ ] **Step 4: Run tests — PASS**; `pnpm typecheck`.
-- [ ] **Step 5: Commit** `feat(account): memberships in context + switch endpoint (ADR-004 D4)`
+- [x] **Step 4: Run tests — PASS**; `pnpm typecheck` — done. 25/25 in a
+  rolled-back transaction, 9/9 live end-to-end, `pnpm test` 855/855 (+22),
+  typecheck clean, eslint clean on all touched files.
+- [x] **Step 5: Commit** — done, as `690624c` plus migration
+  `20260813133000_account_context_memberships.sql`.
+
+**Deviations from the draft above, and why:**
+
+1. **`memberships` comes from the RPC, not a second query.** Step 3's
+   `from('account_members').select('account_id, role, accounts(name)')` would
+   have added a round trip to *every* authenticated request and reintroduced
+   the PostgREST embedded join (`accounts(name)`) that issue #294 removed —
+   `account.test.ts` exists specifically to keep that embed out, because a
+   stale schema cache makes it fail hard and blanks the whole context.
+   Extending `get_account_context()` keeps ADR-001 C3's "zero extra round
+   trips" and matches what ADR-001 already prescribes.
+2. **The status gate had to be fixed here.** Task 4 made
+   `account_members.status` authoritative, but this RPC still read
+   `profiles.status`, so a member deactivated in one workspace was still
+   reported active. The natural repair, `coalesce(m.status, p.status)`, is
+   fail-OPEN: the SELECT policy on `account_members` only matches ACTIVE
+   rows, so a deactivated member's row goes invisible, the LEFT JOIN yields
+   NULL, and the coalesce falls back to `profiles.status = 'active'`. Now
+   gated on positive proof (`m.id IS NOT NULL`), with `account_role`
+   likewise refusing to fall back to the stale denormalised copy.
+3. **No `zod`.** These routes hand-validate (no `zod` import anywhere under
+   `src/app/api/account/`); added a uuid regex instead of a new dependency
+   on an existing convention.
+4. **Auth before body validation.** The draft's order is fine either way for
+   correctness, but validating first lets an unauthenticated caller learn
+   whether their payload was well-formed. Ordering is now pinned by a test.
+5. **`!limit.success`, not `!limit.ok`.** `RateLimitResult` has no `ok`
+   field; an `ok` check is silently `undefined` and would have 429'd every
+   request. Caught by typecheck, and the same bug in the test's own mock was
+   caught by the suite.
+6. **404 is verified to be a non-oracle.** Confirmed live that a foreign
+   account and a nonexistent uuid both return `false` from the RPC and are
+   indistinguishable at the HTTP layer.
 
 ### Task 6: Join page — explicit accept, dead ends removed
 
