@@ -38,6 +38,53 @@
 **Interfaces:**
 - Produces: table `account_members(account_id uuid, user_id uuid, role account_role_enum, status text, invited_by uuid, created_at timestamptz)`, `UNIQUE(account_id, user_id)`; used by every later task.
 
+**DONE — applied to dev, with 5 corrections the draft SQL above did not survive.**
+The SQL in this task was written before the live schema was inspected. As
+executed it differs, and the migration file is authoritative over this block:
+
+1. `status` — draft used `CHECK (status IN ('active','suspended'))` and backfilled
+   a literal `'active'`. Live `profiles.status` is `active|inactive|deleted`, so
+   the draft would have **reactivated deactivated members** and used a
+   vocabulary that doesn't exist elsewhere. Now mirrors profiles and carries
+   status across.
+2. `role` — draft inserted `p.account_role` directly. COALESCEd to `'viewer'`
+   (least privilege) so the NOT NULL column can't fail on older databases.
+3. **Owners** — draft backfilled only from `profiles`. `accounts.owner_user_id`
+   is the authoritative owner, so an owner recorded lower in profiles would have
+   been **locked out of their own workspace**. Owners are now backfilled from
+   that column and promoted.
+4. **RLS recursion** — the draft policy sub-queries `account_members` from a
+   policy *on* `account_members`; Postgres aborts with `infinite recursion
+   detected in policy for relation`. Delegates to the existing SECURITY DEFINER
+   `is_account_member()` instead, matching the other 201 policies.
+5. `uuid_generate_v4()` → `gen_random_uuid()` (pgcrypto is present, uuid-ossp is
+   not guaranteed).
+
+**Verified on dev** (all probes inside rolled-back transactions): F6 blocks
+demote/deactivate/delete of a last owner yet still allows demotion once a second
+owner exists; RLS SELECT neither recurses nor leaks across workspaces; both
+migrations replay cleanly; invariants "no ownerless account", "no profile without
+membership", "no status mismatch", "no live NULL-email invite" all 0.
+
+**Two schema facts discovered here that later tasks depend on:**
+- `account_role_enum` sort order is `owner=1, admin=2, agent=3, viewer=4`, so
+  "at least admin" is `role <= 'admin'`. Task 2 must not invert this.
+- `idx_accounts_one_per_owner` is `UNIQUE(accounts.owner_user_id)` — a user may
+  be a *member* of many workspaces but may **own** only one. V2's switcher is
+  unaffected; "user owns two workspaces" would require dropping that index.
+
+- [x] **Task 1b (unplanned, required): create membership on signup**
+  — `supabase/migrations/20260813121000_handle_new_user_membership.sql`
+
+`handle_new_user()` predates `account_members`: it writes `profiles` and
+`accounts` but no membership row. Since Task 2 repoints `is_account_member()` at
+`account_members`, without this every **new signup** would authenticate and then
+be denied by all ~201 account-scoped policies. Existing users were already
+backfilled, so this would have shipped looking healthy and broken only new
+signups. Covers both trigger paths (fresh signup → `owner`; verified-domain
+auto-join → the account's `default_member_role`), copying the rest of the body
+verbatim to avoid regressing onboarding/domain-claim logic.
+
 - [ ] **Step 1: Write the migration**
 
 ```sql
