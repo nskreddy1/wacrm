@@ -37,18 +37,21 @@ CREATE INDEX IF NOT EXISTS idx_account_members_account_status
 ALTER TABLE account_members ENABLE ROW LEVEL SECURITY;
 
 -- Members may read the roster of workspaces they actively belong to.
--- Self-referential by design: membership in the row's account is what grants
--- visibility of that account's rows.
+--
+-- This MUST delegate to is_account_member() rather than sub-querying
+-- account_members directly. A policy on account_members that reads
+-- account_members re-triggers this same policy inside its own subquery and
+-- Postgres aborts with "infinite recursion detected in policy for relation".
+-- is_account_member() is SECURITY DEFINER, so its internal reads bypass RLS
+-- and terminate the cycle. This is also exactly how the other 201 policies in
+-- this database express account scoping, so the semantics stay uniform.
+--
+-- min_role 'viewer' == "is an active member of this account", which is the
+-- correct bar for seeing the roster.
 DROP POLICY IF EXISTS account_members_select ON account_members;
 CREATE POLICY account_members_select ON account_members
-  FOR SELECT TO authenticated USING (
-    EXISTS (
-      SELECT 1 FROM account_members me
-      WHERE me.account_id = account_members.account_id
-        AND me.user_id = auth.uid()
-        AND me.status = 'active'
-    )
-  );
+  FOR SELECT TO authenticated
+  USING (public.is_account_member(account_id, 'viewer'::account_role_enum));
 
 -- ---------------------------------------------------------------------------
 -- Backfill (idempotent). Two sources, in this order:
@@ -56,8 +59,13 @@ CREATE POLICY account_members_select ON account_members
 
 -- 1. Existing profile pointers. Carries status ACROSS rather than forcing
 --    'active' — an inactive/deleted member must not be reactivated by this
---    migration. account_role is nullable on profiles, so COALESCE to the
---    least-privilege role rather than letting the NOT NULL constraint fail.
+--    migration.
+--
+--    profiles.account_role and profiles.status are both NOT NULL in the live
+--    schema, so the COALESCEs below are belt-and-braces rather than load
+--    bearing: they keep this migration safe to run against an older database
+--    where those columns were still nullable, and they fail toward the
+--    LEAST privilege ('viewer') rather than toward access.
 INSERT INTO account_members (account_id, user_id, role, status)
 SELECT
   p.account_id,
