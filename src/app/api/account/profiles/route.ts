@@ -56,9 +56,12 @@ export async function GET() {
       );
     }
 
-    // Member counts per profile — drives the "N users" column.
+    // Member counts per profile — drives the "N users" column. Counted
+    // from `account_members`, the authoritative per-account grant;
+    // `profiles` only mirrors the member's ACTIVE workspace, so it
+    // undercounted anyone currently switched into another workspace.
     const { data: counts } = await ctx.supabase
-      .from('profiles')
+      .from('account_members')
       .select('workspace_profile_id')
       .eq('account_id', ctx.accountId)
       .neq('status', 'deleted')

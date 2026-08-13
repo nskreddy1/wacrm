@@ -138,6 +138,9 @@ export function MembersTab() {
   const [profileOptions, setProfileOptions] = useState<
     WorkspaceProfileOption[]
   >([]);
+  // Hierarchy roles (the "where do you sit" axis). Without these the
+  // Role column had no options to offer and rendered a dead "—".
+  const [roleOptions, setRoleOptions] = useState<WorkspaceProfileOption[]>([]);
   const [summary, setSummary] = useState<StatusSummary | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -171,13 +174,16 @@ export function MembersTab() {
         // underneath so counts stay warm.
         params.set('status', status === 'invited' ? 'active' : status);
         if (q) params.set('q', q);
-        const [mres, ires, pres] = await Promise.all([
+        const [mres, ires, pres, rres] = await Promise.all([
           fetch(`/api/account/members?${params}`, { cache: 'no-store' }),
           canManageMembers
             ? fetch('/api/account/invitations', { cache: 'no-store' })
             : Promise.resolve(null),
           canManageMembers
             ? fetch('/api/account/profiles', { cache: 'no-store' })
+            : Promise.resolve(null),
+          canManageMembers
+            ? fetch('/api/account/roles', { cache: 'no-store' })
             : Promise.resolve(null),
         ]);
         if (seq !== requestSeq.current) return;
@@ -213,6 +219,14 @@ export function MembersTab() {
           // The profiles API returns { data }; tolerate legacy { profiles }.
           const list = pdata.data ?? pdata.profiles ?? [];
           setProfileOptions(list.map((p) => ({ id: p.id, name: p.name })));
+        }
+        if (rres && rres.ok) {
+          const rdata = (await rres.json()) as {
+            data?: WorkspaceProfileOption[];
+          };
+          setRoleOptions(
+            (rdata.data ?? []).map((r) => ({ id: r.id, name: r.name }))
+          );
         }
       } catch (err) {
         console.error('[MembersTab] load error:', err);
@@ -325,6 +339,52 @@ export function MembersTab() {
         )
       );
       console.error('[MembersTab] profile change error:', err);
+      toast.error('Could not reach the server');
+    } finally {
+      setPendingMemberAction(null);
+    }
+  }
+
+  /** PATCH a member's hierarchy role (reporting line / visibility). */
+  async function handleRoleChange(member: AccountMember, roleId: string) {
+    if (member.workspace_role?.id === roleId) return;
+    const previous = member.workspace_role;
+    const nextRole = roleOptions.find((r) => r.id === roleId) ?? null;
+    setPendingMemberAction(member.user_id);
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.user_id === member.user_id ? { ...m, workspace_role: nextRole } : m
+      )
+    );
+    try {
+      const res = await fetch(`/api/account/members/${member.user_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role_id: roleId }),
+      });
+      if (!res.ok) {
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.user_id === member.user_id ? { ...m, workspace_role: previous } : m
+          )
+        );
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || 'Failed to update role');
+        return;
+      }
+      toast.success(
+        t('roleUpdatedToast', {
+          name: member.full_name || t('unnamed'),
+          role: nextRole?.name ?? '',
+        })
+      );
+    } catch (err) {
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === member.user_id ? { ...m, workspace_role: previous } : m
+        )
+      );
+      console.error('[MembersTab] role change error:', err);
       toast.error('Could not reach the server');
     } finally {
       setPendingMemberAction(null);
@@ -648,11 +708,43 @@ export function MembersTab() {
                     id: 'role',
                     header: t('colRole'),
                     className: 'w-[16%]',
-                    cell: (member) => (
-                      <span className="text-foreground">
-                        {member.workspace_role?.name ?? '—'}
-                      </span>
-                    ),
+                    cell: (member) => {
+                      const isBusy = pendingMemberAction === member.user_id;
+                      // Read-only for non-managers and on the archival
+                      // tabs; otherwise assignable. Unlike the profile
+                      // axis the owner IS assignable, since a hierarchy
+                      // role is a reporting line, not a permission set.
+                      if (
+                        !canManageMembers ||
+                        statusFilter !== 'active' ||
+                        roleOptions.length === 0
+                      ) {
+                        return (
+                          <span className="text-foreground">
+                            {member.workspace_role?.name ?? '—'}
+                          </span>
+                        );
+                      }
+                      return (
+                        <Select
+                          value={member.workspace_role?.id ?? ''}
+                          onValueChange={(v) => v && handleRoleChange(member, v)}
+                        >
+                          <SelectTrigger className="w-36" disabled={isBusy}>
+                            <SelectValue placeholder="—">
+                              {member.workspace_role?.name ?? '—'}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roleOptions.map((r) => (
+                              <SelectItem key={r.id} value={r.id}>
+                                {r.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      );
+                    },
                   },
                   {
                     id: 'profile',

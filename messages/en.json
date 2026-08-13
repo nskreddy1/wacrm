@@ -1371,6 +1371,7 @@
       "superAdmin": "Super Admin",
       "working": "Working…",
       "profileUpdatedToast": "Profile updated",
+    "roleUpdatedToast": "Role updated",
       "deactivateDialogTitle": "Deactivate user?",
       "deactivateDialogDesc": "<bold>{name}</bold> will lose access to this workspace but their data and history stay intact. You can reactivate them anytime.",
       "deactivateBtn": "Deactivate",
