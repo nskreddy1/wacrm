@@ -390,7 +390,7 @@ export async function dispatchInboundToAiReply(
       const waited = waitingMinutes(conv);
       const [knowledge, crmContext] = await Promise.all([
         retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
-        buildCrmContext(db, contactId),
+        buildCrmContext(db, accountId, contactId, config.autoReplyTimezone),
       ]);
 
       let holdingText: string | null = null;
@@ -460,7 +460,7 @@ export async function dispatchInboundToAiReply(
     // contact's live CRM record (both best-effort, fetched in parallel).
     const [knowledge, crmContext] = await Promise.all([
       retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
-      buildCrmContext(db, contactId),
+      buildCrmContext(db, accountId, contactId, config.autoReplyTimezone),
     ]);
 
     // Cache-aligned prompt (the only path — benchmarked at ~70% fewer
