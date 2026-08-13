@@ -522,7 +522,11 @@ export function AppointmentWorkspace() {
                       return (
                         <article
                           key={item.id}
-                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1fr)_minmax(8rem,0.35fr)_9rem_auto] md:items-center md:gap-5 md:px-6"
+                          // Title was on 1fr while location was capped at
+                          // 0.35fr, so on a wide screen the title column
+                          // swallowed every spare pixel and left a void
+                          // before the location. Both now grow together.
+                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1.6fr)_minmax(8rem,1fr)_9rem_auto] md:items-center md:gap-5 md:px-6"
                         >
                           <div className="flex items-baseline gap-2 md:flex-col md:items-start md:gap-0.5">
                             <time

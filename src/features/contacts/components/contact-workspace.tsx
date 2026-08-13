@@ -624,16 +624,18 @@ export function ContactWorkspace({
           <table className={sheetTable.table}>
             <thead className={sheetTable.thead}>
               <tr>
-                <th className={cn(sheetTable.th, 'w-12 p-3')}>
-                  <Checkbox
-                    checked={allSelected}
-                    onCheckedChange={toggleCurrentPage}
-                    aria-label={
-                      allSelected
-                        ? 'Deselect contacts on this page'
-                        : 'Select contacts on this page'
-                    }
-                  />
+                <th className={cn(sheetTable.th, 'w-12 px-2 py-2')}>
+                  <span className="flex items-center justify-center">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleCurrentPage}
+                      aria-label={
+                        allSelected
+                          ? 'Deselect contacts on this page'
+                          : 'Select contacts on this page'
+                      }
+                    />
+                  </span>
                 </th>
                 {visibleFields.map((field) => (
                   <th
@@ -658,26 +660,41 @@ export function ContactWorkspace({
                     </button>
                   </th>
                 ))}
+                {/* Slack column: keeps surplus width off the actions cell. */}
+                <th className={sheetTable.spacer} aria-hidden="true" />
                 <th className={cn(sheetTable.th, 'w-12 border-r-0 p-2')}>
                   <span className="sr-only">Row actions</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((contact) => (
+              {rows.map((contact, index) => (
                 <tr
                   key={contact.id}
+                  // Drives the gutter's number → checkbox swap in CSS, so a
+                  // selected row keeps its checkbox visible after the pointer
+                  // leaves.
+                  data-selected={selected.has(contact.id)}
                   className={cn(
                     sheetTable.row,
                     selected.has(contact.id) && sheetTable.rowSelected
                   )}
                 >
-                  <td className={cn(sheetTable.td, 'p-3')}>
-                    <Checkbox
-                      checked={selected.has(contact.id)}
-                      onCheckedChange={() => toggleSelected(contact.id)}
-                      aria-label={`Select ${valueText(contact.values.name)}`}
-                    />
+                  <td className={sheetTable.gutter}>
+                    <span className={sheetTable.gutterStack}>
+                      {/* Numbered against the full result set, not the page,
+                          so row 21 stays row 21 on page two. */}
+                      <span className={sheetTable.gutterNumber}>
+                        {safePage * pageSize + index + 1}
+                      </span>
+                      <span className={sheetTable.gutterCheckbox}>
+                        <Checkbox
+                          checked={selected.has(contact.id)}
+                          onCheckedChange={() => toggleSelected(contact.id)}
+                          aria-label={`Select ${valueText(contact.values.name)}`}
+                        />
+                      </span>
+                    </span>
                   </td>
                   {visibleFields.map((field) => {
                     const active =
@@ -758,6 +775,7 @@ export function ContactWorkspace({
                       </td>
                     );
                   })}
+                  <td className={sheetTable.spacer} aria-hidden="true" />
                   <td className={cn(sheetTable.td, 'border-r-0 p-1')}>
                     <Button
                       variant="ghost"

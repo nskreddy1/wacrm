@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { RecordOwnerAvatar } from '@/components/shared/record-sheet';
+import { sheetTable } from '@/components/shared/sheet-table';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -1255,21 +1256,23 @@ function DealTable({
       <table className="min-w-full text-sm">
         <thead className="bg-card sticky top-0 shadow-[0_1px_0_var(--border)]">
           <tr>
-            <th className="w-12 p-3">
-              <Checkbox
-                checked={
-                  deals.length > 0 &&
-                  deals.every((deal) => selected.has(deal.id))
-                }
-                onCheckedChange={() =>
-                  onSelected(
+            <th className="w-12 px-2 py-3">
+              <span className="flex items-center justify-center">
+                <Checkbox
+                  checked={
+                    deals.length > 0 &&
                     deals.every((deal) => selected.has(deal.id))
-                      ? new Set()
-                      : new Set(deals.map((deal) => deal.id))
-                  )
-                }
-                aria-label="Select all deals"
-              />
+                  }
+                  onCheckedChange={() =>
+                    onSelected(
+                      deals.every((deal) => selected.has(deal.id))
+                        ? new Set()
+                        : new Set(deals.map((deal) => deal.id))
+                    )
+                  }
+                  aria-label="Select all deals"
+                />
+              </span>
             </th>
             {[
               'Deal',
@@ -1282,30 +1285,39 @@ function DealTable({
             ].map((label) => (
               <th
                 key={label}
-                className="text-muted-foreground px-3 py-3 text-left text-xs font-medium"
+                className="text-muted-foreground px-3 py-3 text-left text-xs font-medium whitespace-nowrap"
               >
                 {label}
               </th>
             ))}
+            {/* Slack column so Closing date isn't stretched across the
+                leftover width on a wide viewport. */}
+            <th className="w-full p-0" aria-hidden="true" />
           </tr>
         </thead>
         <tbody>
-          {deals.map((deal) => (
+          {deals.map((deal, index) => (
             <tr
               key={deal.id}
-              className="hover:bg-muted/40 focus-within:bg-muted/40 border-b transition-colors"
+              data-selected={selected.has(deal.id)}
+              className="group/row hover:bg-muted/40 focus-within:bg-muted/40 border-b transition-colors"
             >
-              <td className="p-3">
-                <Checkbox
-                  checked={selected.has(deal.id)}
-                  onCheckedChange={() => {
-                    const next = new Set(selected);
-                    if (next.has(deal.id)) next.delete(deal.id);
-                    else next.add(deal.id);
-                    onSelected(next);
-                  }}
-                  aria-label={`Select ${deal.title}`}
-                />
+              <td className="px-2 py-3">
+                <span className={sheetTable.gutterStack}>
+                  <span className={sheetTable.gutterNumber}>{index + 1}</span>
+                  <span className={sheetTable.gutterCheckbox}>
+                    <Checkbox
+                      checked={selected.has(deal.id)}
+                      onCheckedChange={() => {
+                        const next = new Set(selected);
+                        if (next.has(deal.id)) next.delete(deal.id);
+                        else next.add(deal.id);
+                        onSelected(next);
+                      }}
+                      aria-label={`Select ${deal.title}`}
+                    />
+                  </span>
+                </span>
               </td>
               <td className="px-3 py-3">
                 <button
@@ -1330,9 +1342,10 @@ function DealTable({
               <td className="text-muted-foreground px-3 py-3">
                 {deal.owner?.name ?? 'Unassigned'}
               </td>
-              <td className="text-muted-foreground px-3 py-3">
+              <td className="text-muted-foreground px-3 py-3 whitespace-nowrap">
                 {deal.due ?? '—'}
               </td>
+              <td className="p-0" aria-hidden="true" />
             </tr>
           ))}
         </tbody>
