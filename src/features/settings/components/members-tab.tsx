@@ -291,7 +291,12 @@ export function MembersTab() {
       const res = await fetch(`/api/account/members/${member.user_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceProfileId: profileId }),
+        // Key must be snake_case `profile_id` — that is what the PATCH
+        // route reads. A camelCase key parsed as `undefined`, so the
+        // route saw an empty patch and rejected it with the
+        // "Provide 'profile_id' and/or 'status'" 400 before ever
+        // reaching set_member_profile().
+        body: JSON.stringify({ profile_id: profileId }),
       });
       if (!res.ok) {
         setMembers((prev) =>
