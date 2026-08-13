@@ -190,8 +190,73 @@ $$;
 
 **CAUTION:** verify enum comparison direction first: run `SELECT 'owner'::account_role_enum < 'viewer'::account_role_enum;`. The existing function body (migration `20260724180000_fix_is_account_member_role.sql`) is the authority — copy its exact role-comparison expression and only swap the table it reads from `profiles` to `account_members`. Do not invent a new comparison.
 
-- [ ] **Step 2: Apply; smoke-test RLS** — as a normal user session, `SELECT count(*) FROM contacts;` must return the same count before and after this migration (backfill guarantees equivalence).
-- [ ] **Step 3: Commit** `feat(db): is_account_member reads account_members (ADR-004 D2)`
+- [x] **Step 2: Apply; smoke-test RLS** — done.
+- [x] **Step 3: Commit** — done, as
+  `supabase/migrations/20260813122000_is_account_member_membership.sql`
+  (not `..._membership_functions.sql`; one migration per concern).
+
+**DONE — applied to dev. The draft SQL above was materially wrong and was NOT used.**
+
+The `CAUTION` was right to demand the live body. The real function grants access
+through **three independent sources**, not one role comparison:
+
+1. `accounts.owner_user_id = auth.uid()` — the account's owner, and
+2. the member's `role`, **and**
+3. `workspace_profiles.permissions` — e.g. `'settings:manage'` confers admin,
+   and the `*:write` permissions confer agent.
+
+Had I shipped the draft's single `m.role <= min_role`, source 1 and source 3
+would have been **silently dropped**, revoking access for every user whose
+admin/agent rights come from a custom workspace profile. Nothing would have
+errored — 201 policies would just have started returning fewer rows. The
+migration therefore preserves the live `CASE` ladder verbatim and changes only
+*where membership, status and role are read from* (`profiles` → `account_members`).
+
+`workspace_profiles` grants stay scoped to the user's active workspace: `profiles`
+is `UNIQUE(user_id)`, so one profile per user is exactly how that already behaved.
+
+**Equivalence proven before applying, not after:** a candidate function was
+created alongside the live one inside a rolled-back transaction and compared
+across every user x account x min_role combination — **16/16 identical**. The
+same probe confirmed the new function grants access to a *second* workspace where
+the old one returned false, which is the entire point of ADR-004.
+
+**Verified after applying** (all inside rolled-back transactions):
+- reads `account_members`; still `STABLE` + `SECURITY DEFINER`; signature
+  unchanged, so **201 policies needed no edit** and all still reference it;
+- `wp.permissions` and `owner_user_id` grants both still present in the body;
+- every existing active membership retains correct access; non-members and
+  anonymous are denied;
+- deactivating a member revokes access (`status` is enforced);
+- an `agent` gets viewer+agent but **not** admin/owner (no privilege escalation);
+- one user reaches **two workspaces at once** — impossible under
+  `profiles.account_id`;
+- end-to-end on a real account-scoped table (`contacts`): own rows readable,
+  foreign rows invisible, and cross-tenant `INSERT`/`UPDATE`/`DELETE` all
+  rejected by RLS.
+
+**Harness pitfall worth recording:** `set_config('request.jwt.claims', …, true)`
+is **transaction-local**. An early verification run did these checks outside an
+explicit transaction, so `auth.uid()` was `NULL` and two owners looked like they
+had "lost access". That was a false alarm from the test, not a regression — every
+`auth.uid()`-dependent probe must run inside `BEGIN`, and should assert
+`auth.uid()` is actually set before trusting a `false`.
+
+**Audit findings (from the Supabase security checklist), recorded not silently changed:**
+- No `public` table has RLS disabled; no `public` view lacks `security_invoker`.
+- 40 UPDATE/ALL policies have no `WITH CHECK`. **Investigated: false positive** —
+  Postgres reuses the `USING` expression as the check when `WITH CHECK` is
+  omitted, and the cross-tenant write tests above confirm INSERT/UPDATE into a
+  foreign account are rejected. No change needed.
+- `wacrm_internal.schema_migrations` has RLS off but grants **no** privileges to
+  `anon`/`authenticated`, so it is not Data-API reachable. Not a finding.
+- **Known pre-existing perf property:** `EXPLAIN` shows
+  `Filter: is_account_member(account_id, …)` evaluated **per row** (it depends on
+  each row's `account_id`, so it cannot be hoisted into an InitPlan). This is how
+  all 201 policies already behaved; `account_members` is indexed on
+  `(account_id,user_id)`, `(user_id)` and `(account_id,status)`, so each call is
+  an index lookup. Optimizing this pattern is a separate change and must not be
+  smuggled into an ADR-004 task.
 
 ### Task 3: Rewrite `redeem_invitation` — join, never move
 
