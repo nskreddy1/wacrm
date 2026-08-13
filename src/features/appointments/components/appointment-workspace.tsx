@@ -40,6 +40,7 @@ import {
   WorkspaceToolbarSearch,
   WorkspaceToolbarSeparator,
 } from '@/components/shared/workspace-toolbar';
+import { RecordTitleButton } from '@/components/shared/record-title-button';
 import {
   Select,
   SelectContent,
@@ -522,7 +523,11 @@ export function AppointmentWorkspace() {
                       return (
                         <article
                           key={item.id}
-                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1fr)_minmax(8rem,0.35fr)_9rem_auto] md:items-center md:gap-5 md:px-6"
+                          // Title was on 1fr while location was capped at
+                          // 0.35fr, so on a wide screen the title column
+                          // swallowed every spare pixel and left a void
+                          // before the location. Both now grow together.
+                          className="group hover:bg-muted/30 flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors md:grid md:grid-cols-[7rem_minmax(0,1.6fr)_minmax(8rem,1fr)_9rem_auto] md:items-center md:gap-5 md:px-6"
                         >
                           <div className="flex items-baseline gap-2 md:flex-col md:items-start md:gap-0.5">
                             <time
@@ -539,8 +544,17 @@ export function AppointmentWorkspace() {
                             </span>
                           </div>
                           <div className="min-w-0">
-                            <h3 className="text-foreground truncate text-sm font-semibold">
-                              {item.title}
+                            {/* Previously plain text, which made Appointments
+                                the only surface where a record could not be
+                                opened by clicking it (ADR-003 D1). The pencil
+                                button further down the row still works. */}
+                            <h3 className="truncate text-sm">
+                              <RecordTitleButton
+                                onOpen={() => setEditing(item)}
+                                className="text-foreground"
+                              >
+                                {item.title}
+                              </RecordTitleButton>
                             </h3>
                             <p className="text-muted-foreground mt-1 truncate text-sm">
                               {item.contactName ?? 'Unknown contact'}

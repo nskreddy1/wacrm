@@ -208,6 +208,7 @@ export function DataTable<Row>({
   empty,
   onRowClick,
   className,
+  fill = true,
 }: {
   columns: DataTableColumn<Row>[];
   rows: Row[];
@@ -216,6 +217,12 @@ export function DataTable<Row>({
   empty?: ReactNode;
   onRowClick?: (row: Row) => void;
   className?: string;
+  /**
+   * Append a flexible slack column so surplus width collects there instead
+   * of stretching the last real column on a wide viewport. Opt out only for
+   * a table whose final column genuinely should grow.
+   */
+  fill?: boolean;
 }) {
   return (
     <div className={cn(sheetTable.frame, className)}>
@@ -231,13 +238,16 @@ export function DataTable<Row>({
                 {column.header}
               </th>
             ))}
+            {fill ? (
+              <th className={sheetTable.spacer} aria-hidden="true" />
+            ) : null}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length}
+                colSpan={columns.length + (fill ? 1 : 0)}
                 className="text-muted-foreground px-4 py-10 text-center"
               >
                 {empty ?? 'No records found.'}
@@ -261,6 +271,9 @@ export function DataTable<Row>({
                     {column.cell(row)}
                   </td>
                 ))}
+                {fill ? (
+                  <td className={sheetTable.spacer} aria-hidden="true" />
+                ) : null}
               </tr>
             ))
           )}

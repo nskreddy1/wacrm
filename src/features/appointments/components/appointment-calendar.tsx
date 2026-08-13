@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type {
@@ -33,8 +39,18 @@ import { cn } from '@/lib/utils';
 
 export type CalendarRange = 'day' | 'week' | 'month';
 
+// Density: 64px per hour gives a 30-minute appointment 32px, enough for one
+// comfortable line. At the previous 48px a half-hour chip was 24px tall while
+// unconditionally rendering three stacked lines (~49px), so its own content
+// overflowed the chip — the sliced-text artifact in the week view.
 /** Row height for one hour in the day/week time grid, in px. */
-const HOUR_HEIGHT = 48;
+const HOUR_HEIGHT = 64;
+/** Floor for a chip's height so very short records stay legible. */
+const MIN_CHIP_HEIGHT = 22;
+/** At/above this height a chip can afford a second line (the time range). */
+const CHIP_TIME_HEIGHT = 34;
+/** At/above this height a chip can afford a third line (the contact). */
+const CHIP_CONTACT_HEIGHT = 56;
 /** Scroll position on mount — the working day, not midnight. */
 const SCROLL_TO_HOUR = 7;
 
@@ -72,15 +88,76 @@ const fullDayFormatter = new Intl.DateTimeFormat('en', {
   day: 'numeric',
 });
 
-const CHIP_STYLE: Record<AppointmentStatus, string> = {
-  scheduled: 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/15',
-  completed:
-    'bg-positive/10 text-positive border-positive/30 hover:bg-positive/15',
-  cancelled:
-    'bg-muted text-muted-foreground border-border line-through hover:bg-muted/80',
-  no_show:
-    'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/15',
+// Cron/Notion-Calendar chip treatment: a tinted translucent body, a hairline
+// inset ring instead of a hard border (so adjacent lanes never double up to
+// 2px), and a saturated 3px accent bar down the leading edge that carries the
+// status colour even when the chip is only one line tall.
+const CHIP_STYLE: Record<
+  AppointmentStatus,
+  { surface: string; accent: string }
+> = {
+  scheduled: {
+    surface:
+      'bg-primary/8 text-primary ring-primary/20 hover:bg-primary/15 hover:ring-primary/35',
+    accent: 'bg-primary',
+  },
+  completed: {
+    surface:
+      'bg-positive/8 text-positive ring-positive/20 hover:bg-positive/15 hover:ring-positive/35',
+    accent: 'bg-positive',
+  },
+  cancelled: {
+    surface:
+      'bg-muted/60 text-muted-foreground ring-border line-through hover:bg-muted',
+    accent: 'bg-muted-foreground/40',
+  },
+  no_show: {
+    surface:
+      'bg-destructive/8 text-destructive ring-destructive/20 hover:bg-destructive/15 hover:ring-destructive/35',
+    accent: 'bg-destructive',
+  },
 };
+
+// ------------------------------------------------------------
+// Shared minute clock.
+//
+// The current-time marker and the past-hours wash both need "now", but
+// reading the clock during render would make the server and client HTML
+// disagree. This is a proper external store instead: one interval for the
+// whole app regardless of how many grids mount, a server snapshot of 0 so
+// SSR renders no marker, and a snapshot that only changes on the minute so
+// re-renders stay bounded.
+// ------------------------------------------------------------
+let minuteSnapshot = 0;
+const minuteListeners = new Set<() => void>();
+let minuteTimer: ReturnType<typeof setInterval> | null = null;
+
+function subscribeMinute(listener: () => void) {
+  minuteListeners.add(listener);
+  if (minuteTimer === null) {
+    minuteTimer = setInterval(() => {
+      minuteSnapshot = Date.now();
+      for (const notify of minuteListeners) notify();
+    }, 60_000);
+  }
+  return () => {
+    minuteListeners.delete(listener);
+    if (minuteListeners.size === 0 && minuteTimer !== null) {
+      clearInterval(minuteTimer);
+      minuteTimer = null;
+    }
+  };
+}
+
+function getMinuteSnapshot() {
+  if (minuteSnapshot === 0) minuteSnapshot = Date.now();
+  return minuteSnapshot;
+}
+
+/** 0 means "clock unknown" — SSR draws no marker and no wash. */
+function getMinuteServerSnapshot() {
+  return 0;
+}
 
 function localDayKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -184,7 +261,10 @@ function layoutDay(day: Date, items: Appointment[]): PositionedAppointment[] {
     cluster.push({
       item,
       top: (start / 60) * HOUR_HEIGHT,
-      height: Math.max(((end - start) / 60) * HOUR_HEIGHT, 18),
+      height: Math.max(
+        ((end - start) / 60) * HOUR_HEIGHT,
+        MIN_CHIP_HEIGHT
+      ),
       lane,
       lanes: 1,
     });
@@ -194,22 +274,45 @@ function layoutDay(day: Date, items: Appointment[]): PositionedAppointment[] {
   return placed;
 }
 
+/**
+ * One appointment rendered as a Cron-style card.
+ *
+ * `height` is the chip's real pixel height on the time grid. Line count is
+ * derived from it rather than fixed, which is what keeps the content inside
+ * the box at every duration: a 30-minute record shows just its title, and
+ * the time range and contact appear only once there is room to draw them.
+ * Anything dropped visually still reaches the tooltip and the aria-label,
+ * so nothing is actually lost.
+ */
 function AppointmentChip({
   item,
   onSelect,
   className,
   style,
   compact,
+  height,
 }: {
   item: Appointment;
   onSelect?: (item: Appointment) => void;
   className?: string;
   style?: React.CSSProperties;
   compact?: boolean;
+  height?: number;
 }) {
+  const timeRange = `${timeFormatter.format(new Date(item.startsAt))}${
+    item.endsAt ? ` – ${timeFormatter.format(new Date(item.endsAt))}` : ''
+  }`;
   const label = `${timeFormatter.format(new Date(item.startsAt))} ${item.title}${
     item.contactName ? ` with ${item.contactName}` : ''
   }`;
+  const tone = CHIP_STYLE[item.status];
+
+  // Month chips are always single-line; grid chips measure themselves.
+  const showTime = !compact && (height == null || height >= CHIP_TIME_HEIGHT);
+  const showContact =
+    !compact &&
+    Boolean(item.contactName) &&
+    (height == null || height >= CHIP_CONTACT_HEIGHT);
 
   return (
     <button
@@ -218,36 +321,43 @@ function AppointmentChip({
       // hands the record to the same sheet the agenda rows open.
       onClick={onSelect ? () => onSelect(item) : undefined}
       disabled={!onSelect}
-      title={label}
+      title={`${timeRange} · ${item.title}${item.contactName ? ` · ${item.contactName}` : ''}`}
       aria-label={onSelect ? `Edit ${item.title}, ${label}` : label}
       style={style}
       className={cn(
-        'focus-visible:ring-ring overflow-hidden rounded border px-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-default',
-        CHIP_STYLE[item.status],
-        compact
-          ? 'truncate py-0.5 text-[11px] leading-tight'
-          : 'flex flex-col py-1 text-[11px] leading-tight',
+        'group/chip focus-visible:ring-ring relative overflow-hidden rounded-md py-0.5 pr-1.5 pl-2.5 text-left text-[11px] leading-tight ring-1 ring-inset transition-[background-color,box-shadow] focus-visible:ring-2 focus-visible:outline-none disabled:cursor-default',
+        'shadow-xs hover:shadow-sm',
+        tone.surface,
+        compact ? 'block truncate' : 'flex flex-col justify-center',
         className
       )}
     >
+      {/* Leading accent bar — the status colour survives even at 22px. */}
+      <span
+        className={cn(
+          'absolute inset-y-0 left-0 w-[3px] rounded-l-md',
+          tone.accent
+        )}
+        aria-hidden="true"
+      />
+
       {compact ? (
         <>
-          <span className="tabular-nums">
+          <span className="tabular-nums opacity-70">
             {timeFormatter.format(new Date(item.startsAt))}
           </span>{' '}
-          {item.title}
+          <span className="font-medium">{item.title}</span>
         </>
       ) : (
         <>
           <span className="truncate font-medium">{item.title}</span>
-          <span className="truncate tabular-nums opacity-80">
-            {timeFormatter.format(new Date(item.startsAt))}
-            {item.endsAt
-              ? ` – ${timeFormatter.format(new Date(item.endsAt))}`
-              : ''}
-          </span>
-          {item.contactName ? (
-            <span className="truncate opacity-80">{item.contactName}</span>
+          {showTime ? (
+            <span className="truncate tabular-nums opacity-75">
+              {timeRange}
+            </span>
+          ) : null}
+          {showContact ? (
+            <span className="truncate opacity-75">{item.contactName}</span>
           ) : null}
         </>
       )}
@@ -276,10 +386,30 @@ function TimeGrid({
     }
   }, [days.length]);
 
-  const nowOffset = useMemo(() => {
-    const now = new Date();
-    return ((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR_HEIGHT;
-  }, []);
+  // Client-only clock, refreshed on the minute so "now" stays honest on a
+  // tab left open all afternoon.
+  const nowStamp = useSyncExternalStore(
+    subscribeMinute,
+    getMinuteSnapshot,
+    getMinuteServerSnapshot
+  );
+  const now = nowStamp === 0 ? null : new Date(nowStamp);
+
+  const nowMinutes = now ? now.getHours() * 60 + now.getMinutes() : null;
+  const nowOffset = nowMinutes == null ? null : (nowMinutes / 60) * HOUR_HEIGHT;
+
+  /**
+   * How much of a column is in the past, in px — drives the dimming wash.
+   * One element per day instead of a class on all 24 hour cells.
+   */
+  function elapsedHeight(day: Date) {
+    if (!now || nowMinutes == null) return 0;
+    const dayStart = startOfDay(day).getTime();
+    const todayStart = startOfDay(now).getTime();
+    if (dayStart > todayStart) return 0;
+    if (dayStart < todayStart) return HOURS.length * HOUR_HEIGHT;
+    return (nowMinutes / 60) * HOUR_HEIGHT;
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -294,18 +424,23 @@ function TimeGrid({
             <div
               key={key}
               className={cn(
-                'flex flex-1 items-baseline justify-center gap-1.5 border-r px-2 py-1.5 last:border-r-0',
+                'border-border/50 flex flex-1 flex-col items-center gap-0.5 border-r px-2 py-2 last:border-r-0',
                 isToday && 'bg-primary/5'
               )}
             >
-              <span className="text-muted-foreground text-xs font-medium">
+              <span
+                className={cn(
+                  'text-[11px] font-medium tracking-wide uppercase',
+                  isToday ? 'text-primary' : 'text-muted-foreground'
+                )}
+              >
                 {WEEKDAYS[(day.getDay() + 6) % 7]}
               </span>
               <span
                 className={cn(
-                  'text-sm tabular-nums',
+                  'flex size-7 items-center justify-center rounded-full text-sm tabular-nums',
                   isToday
-                    ? 'bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-full font-semibold'
+                    ? 'bg-primary text-primary-foreground font-semibold'
                     : 'text-foreground'
                 )}
               >
@@ -322,20 +457,34 @@ function TimeGrid({
       >
         <div className="flex">
           {/* Hour rail */}
-          <div className="w-14 shrink-0 border-r" aria-hidden="true">
+          <div
+            className="border-border/50 relative w-14 shrink-0 border-r"
+            aria-hidden="true"
+          >
             {HOURS.map((hour) => (
               <div
                 key={hour}
                 style={{ height: HOUR_HEIGHT }}
                 className="text-muted-foreground relative text-[11px] tabular-nums"
               >
-                <span className="absolute -top-1.5 right-1.5">
+                <span className="absolute -top-1.5 right-2">
                   {hour === 0
                     ? ''
                     : hourFormatter.format(new Date(2000, 0, 1, hour))}
                 </span>
               </div>
             ))}
+
+            {/* "Now" pill in the gutter, so the marker is readable as a
+                time and not just a red line across the columns. */}
+            {nowOffset != null && now ? (
+              <span
+                className="bg-destructive text-destructive-foreground absolute right-1 z-20 rounded-sm px-1 py-px text-[10px] font-medium tabular-nums"
+                style={{ top: nowOffset - 8 }}
+              >
+                {timeFormatter.format(now)}
+              </span>
+            ) : null}
           </div>
 
           {days.map((day) => {
@@ -347,7 +496,7 @@ function TimeGrid({
               <div
                 key={key}
                 className={cn(
-                  'relative flex-1 border-r last:border-r-0',
+                  'border-border/50 relative flex-1 border-r last:border-r-0',
                   isToday && 'bg-primary/5'
                 )}
                 style={{ height: HOURS.length * HOUR_HEIGHT }}
@@ -356,20 +505,35 @@ function TimeGrid({
                   <div
                     key={hour}
                     style={{ height: HOUR_HEIGHT }}
-                    className="border-border/60 border-b"
+                    className="border-border/50 relative border-b"
+                    aria-hidden="true"
+                  >
+                    {/* Dashed half-hour rule — a Cron signature. It gives
+                        the eye a 30-minute reference without competing
+                        with the solid hour lines. */}
+                    <span className="border-border/30 absolute inset-x-0 top-1/2 border-b border-dashed" />
+                  </div>
+                ))}
+
+                {/* Elapsed time recedes so the remaining day is what reads
+                    as active. One element per column, not per hour. */}
+                {elapsedHeight(day) > 0 ? (
+                  <div
+                    className="bg-muted/25 pointer-events-none absolute inset-x-0 top-0"
+                    style={{ height: elapsedHeight(day) }}
                     aria-hidden="true"
                   />
-                ))}
+                ) : null}
 
                 {/* Current-time marker, the one piece of chrome that tells
                     you where "now" sits without reading the rail. */}
-                {isToday && (
+                {isToday && nowOffset != null && (
                   <div
                     className="bg-destructive pointer-events-none absolute inset-x-0 z-10 h-px"
                     style={{ top: nowOffset }}
                     aria-hidden="true"
                   >
-                    <span className="bg-destructive absolute -top-[3px] left-0 size-[7px] rounded-full" />
+                    <span className="bg-destructive ring-card absolute -top-[3px] left-0 size-2 rounded-full ring-2" />
                   </div>
                 )}
 
@@ -378,12 +542,13 @@ function TimeGrid({
                     key={item.id}
                     item={item}
                     onSelect={onSelect}
+                    height={height}
                     className="absolute"
                     style={{
                       top,
                       height,
                       left: `calc(${(lane / lanes) * 100}% + 2px)`,
-                      width: `calc(${100 / lanes}% - 4px)`,
+                      width: `calc(${100 / lanes}% - 5px)`,
                     }}
                   />
                 ))}
@@ -422,7 +587,10 @@ function MonthGrid({
         aria-hidden="true"
       >
         {WEEKDAYS.map((day) => (
-          <div key={day} className="px-2 py-1.5 text-xs font-medium">
+          <div
+            key={day}
+            className="px-2 py-2 text-[11px] font-medium tracking-wide uppercase"
+          >
             {day}
           </div>
         ))}
@@ -439,7 +607,7 @@ function MonthGrid({
             <div
               key={key}
               className={cn(
-                'flex min-h-0 flex-col gap-1 border-r border-b p-1.5 last:border-r-0',
+                'border-border/50 flex min-h-0 flex-col gap-1 border-r border-b p-1.5 last:border-r-0',
                 // Trailing/leading days stay visible for continuity but
                 // recede, so the current month reads as one block.
                 !isCurrentMonth && 'bg-muted/30'

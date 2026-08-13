@@ -68,6 +68,8 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ContactField, WorkspaceContact } from '@/lib/data/contacts/types';
 import { cn } from '@/lib/utils';
+import { BulkActionBar } from '@/components/shared/bulk-action-bar';
+import { RecordTitleButton } from '@/components/shared/record-title-button';
 import { sheetTable } from '@/components/shared/sheet-table';
 import {
   contactsPath,
@@ -593,29 +595,19 @@ export function ContactWorkspace({
         </div>
       )}
 
-      {selected.size > 0 && (
-        <div className="bg-muted flex flex-wrap items-center gap-2 border-b px-3 py-2 text-sm">
-          <strong>{selected.size} selected</strong>
-          <span className="text-muted-foreground hidden sm:inline">
-            Bulk actions apply only to selected contacts.
-          </span>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="ml-auto"
-            onClick={() => setConfirmBulkDelete(true)}
-          >
-            <Trash2 data-icon="inline-start" /> Delete selected
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelected(new Set())}
-          >
-            <X data-icon="inline-start" /> Clear selection
-          </Button>
-        </div>
-      )}
+      <BulkActionBar
+        count={selected.size}
+        hint="Bulk actions apply only to selected contacts."
+        onClear={() => setSelected(new Set())}
+      >
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => setConfirmBulkDelete(true)}
+        >
+          <Trash2 data-icon="inline-start" /> Delete selected
+        </Button>
+      </BulkActionBar>
 
       {/* fab-safe-area keeps the last row scrollable clear of the shell's
           floating launchers, which paint above page content. */}
@@ -624,16 +616,18 @@ export function ContactWorkspace({
           <table className={sheetTable.table}>
             <thead className={sheetTable.thead}>
               <tr>
-                <th className={cn(sheetTable.th, 'w-12 p-3')}>
-                  <Checkbox
-                    checked={allSelected}
-                    onCheckedChange={toggleCurrentPage}
-                    aria-label={
-                      allSelected
-                        ? 'Deselect contacts on this page'
-                        : 'Select contacts on this page'
-                    }
-                  />
+                <th className={cn(sheetTable.th, 'w-12 px-2 py-2')}>
+                  <span className="flex items-center justify-center">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleCurrentPage}
+                      aria-label={
+                        allSelected
+                          ? 'Deselect contacts on this page'
+                          : 'Select contacts on this page'
+                      }
+                    />
+                  </span>
                 </th>
                 {visibleFields.map((field) => (
                   <th
@@ -658,26 +652,41 @@ export function ContactWorkspace({
                     </button>
                   </th>
                 ))}
+                {/* Slack column: keeps surplus width off the actions cell. */}
+                <th className={sheetTable.spacer} aria-hidden="true" />
                 <th className={cn(sheetTable.th, 'w-12 border-r-0 p-2')}>
                   <span className="sr-only">Row actions</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((contact) => (
+              {rows.map((contact, index) => (
                 <tr
                   key={contact.id}
+                  // Drives the gutter's number → checkbox swap in CSS, so a
+                  // selected row keeps its checkbox visible after the pointer
+                  // leaves.
+                  data-selected={selected.has(contact.id)}
                   className={cn(
                     sheetTable.row,
                     selected.has(contact.id) && sheetTable.rowSelected
                   )}
                 >
-                  <td className={cn(sheetTable.td, 'p-3')}>
-                    <Checkbox
-                      checked={selected.has(contact.id)}
-                      onCheckedChange={() => toggleSelected(contact.id)}
-                      aria-label={`Select ${valueText(contact.values.name)}`}
-                    />
+                  <td className={sheetTable.gutter}>
+                    <span className={sheetTable.gutterStack}>
+                      {/* Numbered against the full result set, not the page,
+                          so row 21 stays row 21 on page two. */}
+                      <span className={sheetTable.gutterNumber}>
+                        {safePage * pageSize + index + 1}
+                      </span>
+                      <span className={sheetTable.gutterCheckbox}>
+                        <Checkbox
+                          checked={selected.has(contact.id)}
+                          onCheckedChange={() => toggleSelected(contact.id)}
+                          aria-label={`Select ${valueText(contact.values.name)}`}
+                        />
+                      </span>
+                    </span>
                   </td>
                   {visibleFields.map((field) => {
                     const active =
@@ -758,6 +767,7 @@ export function ContactWorkspace({
                       </td>
                     );
                   })}
+                  <td className={sheetTable.spacer} aria-hidden="true" />
                   <td className={cn(sheetTable.td, 'border-r-0 p-1')}>
                     <Button
                       variant="ghost"
@@ -797,12 +807,11 @@ export function ContactWorkspace({
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <button
-                      className="hover:text-primary truncate font-semibold"
-                      onClick={() => setContactSheet({ mode: 'view', contact })}
+                    <RecordTitleButton
+                      onOpen={() => setContactSheet({ mode: 'view', contact })}
                     >
                       {valueText(contact.values.name)}
-                    </button>
+                    </RecordTitleButton>
                     <p className="text-muted-foreground truncate text-sm">
                       {valueText(contact.values.company)}
                     </p>

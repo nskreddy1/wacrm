@@ -435,6 +435,39 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
       },
     }),
 
+    list_catalog_items: tool({
+      description:
+        'List the products/services catalog for this workspace (courses, treatments, service packages) with prices. Use to answer internal pricing questions or to find a catalog item id. Read-only.',
+      inputSchema: z.object({
+        search: z
+          .string()
+          .max(120)
+          .optional()
+          .describe('Optional name filter, case-insensitive'),
+        category: z.string().max(120).optional(),
+        include_inactive: z
+          .boolean()
+          .default(false)
+          .describe('Include items that have been deactivated'),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+      execute: async ({ search, category, include_inactive, limit }) => {
+        let q = db
+          .from('catalog_items')
+          .select(
+            'id, name, description, category, price, currency, is_active'
+          )
+          .eq('account_id', ctx.accountId);
+        if (!include_inactive) q = q.eq('is_active', true);
+        if (category) q = q.eq('category', category);
+        if (search) q = q.ilike('name', `%${search}%`);
+
+        const { data, error } = await q.order('name').limit(limit);
+        if (error) return { error: 'Could not load the catalog.' };
+        return { items: data };
+      },
+    }),
+
     list_broadcasts: tool({
       description:
         'List broadcast campaigns with status and recipient counts. Read-only.',
@@ -705,6 +738,95 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
       },
     }),
 
+    create_catalog_item: tool({
+      description:
+        'Add a new product/service to the catalog with a price. WRITE action — requires user approval.',
+      inputSchema: z.object({
+        name: z.string().min(1).max(200),
+        description: z.string().max(1000).optional(),
+        category: z
+          .string()
+          .max(120)
+          .optional()
+          .describe('Grouping label, e.g. "Programs" or "Add-ons"'),
+        price: z.number().min(0).default(0),
+        currency: z
+          .string()
+          .length(3)
+          .optional()
+          .describe('ISO code, e.g. USD. Omit to use the workspace default.'),
+      }),
+      execute: async ({ name, description, category, price, currency }) => {
+        const { data, error } = await db
+          .from('catalog_items')
+          .insert({
+            account_id: ctx.accountId,
+            created_by: ctx.userId,
+            name,
+            description: description ?? null,
+            category: category ?? null,
+            price,
+            // Omitted rather than nulled so the column default applies.
+            ...(currency ? { currency: currency.toUpperCase() } : {}),
+          })
+          .select('id, name, price, currency')
+          .single();
+        if (error || !data)
+          return { error: 'Could not create the catalog item.' };
+        return { created: true, item: data };
+      },
+    }),
+
+    update_catalog_item: tool({
+      description:
+        'Update a catalog item — change its price, description, category, or deactivate it. Deactivating keeps history intact instead of deleting. WRITE action — requires user approval.',
+      inputSchema: z.object({
+        item_id: z
+          .string()
+          .uuid()
+          .describe('Catalog item id from list_catalog_items'),
+        name: z.string().min(1).max(200).optional(),
+        description: z.string().max(1000).optional(),
+        category: z.string().max(120).optional(),
+        price: z.number().min(0).optional(),
+        currency: z.string().length(3).optional(),
+        is_active: z
+          .boolean()
+          .optional()
+          .describe('Set false to deactivate without deleting'),
+      }),
+      execute: async ({ item_id, currency, ...fields }) => {
+        // Scope the existence check to the account so a guessed id from
+        // another workspace cannot be probed or modified.
+        const { data: existing } = await db
+          .from('catalog_items')
+          .select('id, name')
+          .eq('account_id', ctx.accountId)
+          .eq('id', item_id)
+          .maybeSingle();
+        if (!existing)
+          return { error: 'Catalog item not found in this workspace.' };
+
+        const patch: Record<string, unknown> = Object.fromEntries(
+          Object.entries(fields).filter(([, value]) => value !== undefined)
+        );
+        if (currency) patch.currency = currency.toUpperCase();
+        if (Object.keys(patch).length === 0)
+          return { error: 'Nothing to update — provide at least one field.' };
+
+        const { data, error } = await db
+          .from('catalog_items')
+          .update(patch)
+          .eq('account_id', ctx.accountId)
+          .eq('id', item_id)
+          .select('id, name, price, currency, is_active')
+          .single();
+        if (error || !data)
+          return { error: 'Could not update the catalog item.' };
+        return { updated: true, item: data };
+      },
+    }),
+
     create_workflow: tool({
       description:
         'Create a complete WhatsApp workflow (flow) end-to-end: trigger + a linear sequence of steps, saved as a draft the user can open, edit and activate in the visual builder. Use when the user asks to "create a workflow/flow/automation" like a welcome message, keyword auto-reply, follow-up sequence, or office-hours responder. WRITE action — requires user approval.',
@@ -845,7 +967,7 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
           }
         }
 
-        // Build the node chain: step-1 → step-2 → … → end. Keys are
+        // Build the node chain: step-1 ��� step-2 → … → end. Keys are
         // deterministic so the summary reads cleanly in the builder.
         const nodeKeys = steps.map((s, i) => `step-${i + 1}-${s.type}`);
         const nodes: {
@@ -1115,6 +1237,8 @@ export const WRITE_TOOL_NAMES = [
   'create_contact',
   'create_task',
   'add_contact_note',
+  'create_catalog_item',
+  'update_catalog_item',
   'create_workflow',
   'activate_workflow',
   'create_support_ticket',
@@ -1131,6 +1255,7 @@ export const READ_TOOL_NAMES = [
   'list_recent_conversations',
   'get_conversation_messages',
   'list_upcoming_appointments',
+  'list_catalog_items',
   'list_broadcasts',
   'list_templates',
   'list_automations',

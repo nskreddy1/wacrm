@@ -20,7 +20,7 @@ advanced editor for changing it later.
 | Permission model | `workspace_profiles` + slugs, `hasPermission` | Mature Zoho-style model, ~30 call sites |
 | Single-round-trip context | `get_account_context()` RPC + React `cache()` | `getCurrentAccount()` runs at most once per request |
 | Cookie-auth chokepoints | `requirePermission(slug)`, `requireRole(min)` | Every dashboard page/action funnels here |
-| API-key chokepoint | `requireApiKey(request, scope)` | All 25 `/api/v1` routes funnel here |
+| API-key chokepoint | `requireApiKey(request, scope)` | **11 of the 25** `/api/v1` routes funnel here — see correction below |
 | Per-tenant platform override | `account_limit_overrides`, `/api/admin/workspaces/[id]/limits` | Proven: service-role write + `logPlatformAudit` |
 
 This is **one new orthogonal axis** on an existing system, not a new nav system.
@@ -62,7 +62,12 @@ actions". That is opt-in enforcement: every forgotten call site is a silent
 hole, and the real surface is far larger than revision 1 assumed —
 
 - 11 module pages + their server actions
-- **25 `/api/v1` routes** (API-key auth) — not mentioned in revision 1
+- **11 `/api/v1` routes** under API-key auth — not mentioned in revision 1
+- **13 further `/api/v1` routes** under *session* auth (`workspace/*`,
+  `dashboard`, `notifications`, `session`, `security/devices`,
+  `security/login-activity`). These share the `/api/v1` prefix but not its auth,
+  and they call neither `requirePermission` nor `requireApiKey` — so no
+  chokepoint below reaches them (see the correction under "Enforcement layers")
 - **`/api/mcp/[transport]`** — AI agent access, not mentioned
 - **`/api/v1/workspace/navigation`** — an external nav consumer, not mentioned
 - **`/api/flows/cron`** — background execution, not mentioned
@@ -175,12 +180,38 @@ restriction. Rejected on both counts.
 | 1. Data | Extend `get_account_context()` to return both arrays | Zero extra round trips (C3) |
 | 2. Nav | `navigationForAccess()` also filters on module state | Cosmetic only |
 | 3. Cookie auth | Module check **inside** `requirePermission` / `requireRole` | All pages + server actions, automatically (C2) |
-| 4. API key | Module check **inside** `requireApiKey` via scope→module | All 25 `/api/v1` routes + MCP, automatically (C2) |
+| 4. API key | Module check **inside** `requireApiKey` via scope→module | The 11 API-key `/api/v1` routes + MCP, automatically (C2) |
 | 5. Background | `flows/cron` filters runs by entitled accounts | Stops invisible execution (C2) |
 | 6. Write-time | Validate keys against registry; warn on dependency breaks | C4, C5 |
 
 Layers 3 and 4 are the design's core: enforcement lives at the chokepoint, so
 no future module can forget it.
+
+> **Correction (verified against the tree, ADR-003 Task 9).** Layer 4 does
+> **not** cover all 25 `/api/v1` routes, and this ADR previously claimed twice
+> that it did. The prefix carries three auth regimes:
+>
+> - **11 routes** authenticate with `requireApiKey` → covered by layer 4.
+> - **13 routes** (`workspace/*`, `dashboard`, `notifications`, `session`,
+>   `security/devices`, `security/login-activity`) authenticate with
+>   `getCurrentAccount()` → covered by **neither layer 3 nor layer 4**, because
+>   none of them call `requirePermission` / `requireRole`.
+> - **1 route** (`security/login`) is pre-auth by design.
+>
+> `getCurrentAccount()` authenticates the user and resolves account + role,
+> failing closed when the profile has no account — so **account scoping and
+> tenant isolation hold on these 13 routes today.** What is missing is the
+> permission-slug and module check. Implementing this ADR by putting the module
+> gate only inside `requirePermission` and `requireApiKey` would therefore leave
+> the entire session-authenticated BFF surface ungated — a disabled module would
+> still be fully reachable through `/api/v1/workspace/*`, which is exactly the
+> "future module forgets it" failure the chokepoint design exists to prevent.
+>
+> Layer 3 must therefore be stated as *the `requirePermission`/`requireRole`
+> chokepoint*, and the 13 session routes need an explicit decision: route them
+> through that chokepoint, or add a third chokepoint for session-authenticated
+> route handlers. See `docs/public-api.md` → "What is and isn't public" for the
+> per-route breakdown.
 
 ### Tenant-facing denial UX (C-P2)
 
@@ -228,7 +259,12 @@ identically); mapping entitlement onto billing plans; onboarding presets.
 
 **Phase 2 — enforcement (fail-closed)**
 5. [ ] Module check inside `requirePermission` / `requireRole`
-6. [ ] Module check inside `requireApiKey` (covers v1 + MCP)
+6. [ ] Module check inside `requireApiKey` (covers the 11 API-key v1 routes + MCP)
+   6a. [ ] **Gate the 13 session-authenticated `/api/v1` routes.** Steps 5 and 6
+   do not reach them — they authenticate with `getCurrentAccount()` and call
+   neither helper, so a disabled module stays reachable through
+   `/api/v1/workspace/*`. Either route them through `requirePermission` or add a
+   third chokepoint for session route handlers.
 7. [ ] Filter `flows/cron` by entitled accounts
 8. [ ] `firstAllowedModule()`; replace the 6 hardcoded `/dashboard` redirects
 9. [ ] `module-unavailable` page with the three states

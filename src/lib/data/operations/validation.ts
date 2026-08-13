@@ -26,19 +26,40 @@ export const customValuesSchema = z
     message: 'Too many custom field values',
   });
 
-export const catalogItemCreateSchema = z.object({
+/* Field bounds live here once so create and update can never drift apart.
+   Deliberately declared WITHOUT .default() — defaults are applied only by
+   the create schema below. */
+const catalogItemFields = {
   name: requiredText(160),
   description: optionalText(2000),
   category: optionalText(80),
-  price: z.number().min(0).max(999_999_999).default(0),
-  currency: z.string().trim().length(3).toUpperCase().default('USD'),
-  isActive: z.boolean().default(true),
+  price: z.number().min(0).max(999_999_999),
+  currency: z.string().trim().length(3).toUpperCase(),
+  isActive: z.boolean(),
   customValues: customValuesSchema.nullish(),
+};
+
+export const catalogItemCreateSchema = z.object({
+  ...catalogItemFields,
+  price: catalogItemFields.price.default(0),
+  currency: catalogItemFields.currency.default('USD'),
+  isActive: catalogItemFields.isActive.default(true),
 });
 
-export const catalogItemUpdateSchema = catalogItemCreateSchema
-  .partial()
-  .extend({ id: uuid });
+/* NOT catalogItemCreateSchema.partial(): in Zod 4 the create-time defaults
+   survive .partial(), so a payload of { id, isActive } parsed into
+   { isActive, price: 0, currency: 'USD' }. updateCatalogItem() writes any
+   key that is `!== undefined`, so archiving an item silently reset its price
+   to zero. Explicit .optional() fields keep omitted keys undefined, matching
+   appointmentUpdateSchema. */
+export const catalogItemUpdateSchema = z.object({
+  id: uuid,
+  ...catalogItemFields,
+  name: catalogItemFields.name.optional(),
+  price: catalogItemFields.price.optional(),
+  currency: catalogItemFields.currency.optional(),
+  isActive: catalogItemFields.isActive.optional(),
+});
 
 export const appointmentCreateSchema = z
   .object({

@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
 } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import {
@@ -44,6 +45,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { RecordOwnerAvatar } from '@/components/shared/record-sheet';
+import { RecordTitleButton } from '@/components/shared/record-title-button';
+import { sheetTable } from '@/components/shared/sheet-table';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -97,6 +100,7 @@ import { formatCurrency } from '@/lib/currency';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { downloadCsv } from '@/lib/download-csv';
 import { pipelinePath } from '@/lib/routes/dashboard-routes';
+import { routes } from '@/lib/routing/routes';
 import { cn } from '@/lib/utils';
 
 type SortKey = 'createdAt' | 'value' | 'due';
@@ -1146,8 +1150,14 @@ function DealCard({
       aria-label={`Deal ${deal.title}. Double-click to edit.`}
     >
       <div className="flex items-start justify-between gap-2">
+        {/* Deliberately NOT RecordTitleButton (ADR-003 D1): this card is a
+            dnd-kit draggable that spreads {...listeners} across the same
+            region, and the shared primitive is documented as unsafe there.
+            The focus ring is still applied by hand — focus styling cannot
+            interfere with the drag listeners. */}
         <button
-          className="hover:text-primary min-w-0 flex-1 truncate text-left text-sm leading-5 font-bold"
+          type="button"
+          className="hover:text-primary focus-visible:ring-ring min-w-0 flex-1 truncate rounded text-left text-sm leading-5 font-bold focus-visible:ring-2 focus-visible:outline-none"
           onClick={() => onOpen(deal)}
         >
           {deal.title}
@@ -1255,84 +1265,111 @@ function DealTable({
       <table className="min-w-full text-sm">
         <thead className="bg-card sticky top-0 shadow-[0_1px_0_var(--border)]">
           <tr>
-            <th className="w-12 p-3">
-              <Checkbox
-                checked={
-                  deals.length > 0 &&
-                  deals.every((deal) => selected.has(deal.id))
-                }
-                onCheckedChange={() =>
-                  onSelected(
+            <th className="w-12 px-2 py-3">
+              <span className="flex items-center justify-center">
+                <Checkbox
+                  checked={
+                    deals.length > 0 &&
                     deals.every((deal) => selected.has(deal.id))
-                      ? new Set()
-                      : new Set(deals.map((deal) => deal.id))
-                  )
-                }
-                aria-label="Select all deals"
-              />
+                  }
+                  onCheckedChange={() =>
+                    onSelected(
+                      deals.every((deal) => selected.has(deal.id))
+                        ? new Set()
+                        : new Set(deals.map((deal) => deal.id))
+                    )
+                  }
+                  aria-label="Select all deals"
+                />
+              </span>
             </th>
+            {/* Explicit widths: with only a slack column and no widths, the
+                browser shrinks each column to its content and short values
+                ("New Lead") wrap mid-phrase. */}
             {[
-              'Deal',
-              'Contact',
-              'Company',
-              'Stage',
-              'Amount',
-              'Owner',
-              'Closing date',
-            ].map((label) => (
+              { label: 'Deal', width: 'w-56' },
+              { label: 'Contact', width: 'w-44' },
+              { label: 'Company', width: 'w-44' },
+              { label: 'Stage', width: 'w-36' },
+              { label: 'Amount', width: 'w-28' },
+              { label: 'Owner', width: 'w-52' },
+              { label: 'Closing date', width: 'w-36' },
+            ].map(({ label, width }) => (
               <th
                 key={label}
-                className="text-muted-foreground px-3 py-3 text-left text-xs font-medium"
+                className={`text-muted-foreground px-3 py-3 text-left text-xs font-medium whitespace-nowrap ${width}`}
               >
                 {label}
               </th>
             ))}
+            {/* Slack column so Closing date isn't stretched across the
+                leftover width on a wide viewport. */}
+            <th className="w-full p-0" aria-hidden="true" />
           </tr>
         </thead>
         <tbody>
-          {deals.map((deal) => (
+          {deals.map((deal, index) => (
             <tr
               key={deal.id}
-              className="hover:bg-muted/40 focus-within:bg-muted/40 border-b transition-colors"
+              data-selected={selected.has(deal.id)}
+              className="group/row hover:bg-muted/40 focus-within:bg-muted/40 border-b transition-colors"
             >
-              <td className="p-3">
-                <Checkbox
-                  checked={selected.has(deal.id)}
-                  onCheckedChange={() => {
-                    const next = new Set(selected);
-                    if (next.has(deal.id)) next.delete(deal.id);
-                    else next.add(deal.id);
-                    onSelected(next);
-                  }}
-                  aria-label={`Select ${deal.title}`}
-                />
+              <td className="px-2 py-3">
+                <span className={sheetTable.gutterStack}>
+                  <span className={sheetTable.gutterNumber}>{index + 1}</span>
+                  <span className={sheetTable.gutterCheckbox}>
+                    <Checkbox
+                      checked={selected.has(deal.id)}
+                      onCheckedChange={() => {
+                        const next = new Set(selected);
+                        if (next.has(deal.id)) next.delete(deal.id);
+                        else next.add(deal.id);
+                        onSelected(next);
+                      }}
+                      aria-label={`Select ${deal.title}`}
+                    />
+                  </span>
+                </span>
               </td>
               <td className="px-3 py-3">
-                <button
-                  className="hover:text-primary focus-visible:ring-ring font-semibold focus-visible:ring-2 focus-visible:outline-none"
-                  onClick={() => onOpen(deal)}
-                >
+                <RecordTitleButton onOpen={() => onOpen(deal)}>
                   {deal.title}
-                </button>
+                </RecordTitleButton>
               </td>
-              <td className="text-muted-foreground px-3 py-3">
-                {deal.contact?.name ?? '—'}
+              <td className="text-muted-foreground truncate px-3 py-3">
+                {deal.contact ? (
+                  // Links to the contacts page, which already owns the record
+                  // sheet plus the field/preference/owner data it needs.
+                  // Navigating there beats embedding that 800-line sheet here
+                  // and duplicating all of its data fetching into pipelines.
+                  <Link
+                    href={routes.app.contact(deal.contact.id)}
+                    className="hover:text-primary focus-visible:ring-ring rounded hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    {deal.contact.name}
+                  </Link>
+                ) : (
+                  '—'
+                )}
               </td>
-              <td className="text-muted-foreground px-3 py-3">
+              {/* Company stays plain text: it is free-form text on the contact
+                  record, not an entity with a page to link to. */}
+              <td className="text-muted-foreground truncate px-3 py-3">
                 {deal.company ?? '—'}
               </td>
-              <td className="px-3 py-3">
+              <td className="px-3 py-3 whitespace-nowrap">
                 {stages.find((item) => item.id === deal.stageId)?.name ?? '—'}
               </td>
-              <td className="px-3 py-3 font-medium tabular-nums">
+              <td className="px-3 py-3 font-medium tabular-nums whitespace-nowrap">
                 {money(deal.value, workspaceCurrency)}
               </td>
-              <td className="text-muted-foreground px-3 py-3">
+              <td className="text-muted-foreground truncate px-3 py-3">
                 {deal.owner?.name ?? 'Unassigned'}
               </td>
-              <td className="text-muted-foreground px-3 py-3">
+              <td className="text-muted-foreground px-3 py-3 whitespace-nowrap">
                 {deal.due ?? '—'}
               </td>
+              <td className="p-0" aria-hidden="true" />
             </tr>
           ))}
         </tbody>
