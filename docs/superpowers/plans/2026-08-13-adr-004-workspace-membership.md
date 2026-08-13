@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Migrations are **idempotent**, new-file-only (never edit an existing migration), timestamped `20260813...` per current convention.
-- Security decisions **F1–F7 in ADR-004 are binding**; do not relax them for convenience.
+- Security decisions **F1–F8 in ADR-004 are binding**; do not relax them for convenience.
 - `AccountContext` (`src/features/auth/lib/account.ts:89`) keeps its shape: `accountId` remains the *active* workspace id. Downstream code must not break.
 - Role ladder `owner > admin > agent > viewer` (`account_role_enum`); invites can never grant `owner` (existing DB CHECK).
 - Every task: `pnpm typecheck && pnpm test` green before commit. Feature branch, no pushes to main.
@@ -25,7 +25,7 @@
 - Create: `src/app/api/account/switch/route.ts` (Task 5)
 - Modify: `src/app/join/[token]/page.tsx` + `src/app/api/invitations/[token]/redeem/route.ts` (Task 6)
 - Create: `src/components/layout/workspace-switcher.tsx`; Modify: sidebar layout component (Task 7)
-- Modify: `src/features/settings/components/invite-user-sheet.tsx` (Task 8)
+- Create: `supabase/migrations/20260813122000_invite_delivery_mode.sql`; Modify: `src/app/api/account/invitations/route.ts`, `src/features/settings/components/invite-user-sheet.tsx`, email-settings tab (Task 8)
 - Modify: `AGENTS.md`, `docs/adr/004-*.md` status (Task 9)
 
 ---
@@ -334,25 +334,25 @@ Delivery is an explicit workspace setting with two modes, owned by
 admin/owner. Inviting users see only the active mode — never both.
 
 **Files:**
-- Create: `supabase/migrations/040_invite_delivery_mode.sql` (check `ls supabase/migrations/ | sort | tail -1` first; use the next free number)
+- Create: `supabase/migrations/20260813122000_invite_delivery_mode.sql` (timestamped, per the same convention as Tasks 1–4)
 - Modify: `src/app/api/account/invitations/route.ts` (server-side mode enforcement)
 - Modify: `src/features/settings/components/invite-user-sheet.tsx` (render per mode)
 - Modify: the email-settings tab in `src/features/settings/components/` (admin toggle — find it with `grep -rln "email" src/features/settings/components/`)
 - Test: `src/features/auth/lib/invitations.delivery.test.ts`
 
 **Interfaces:**
-- Consumes: `getCurrentAccount()` (role for admin gating), `sendMail` from `src/lib/email/mailer.ts`, invite creation from Task 3.
+- Consumes: `getCurrentAccount()` (role for admin gating), `sendMail` from `src/lib/email/mailer.ts`, and the EXISTING invite-creation route `src/app/api/account/invitations/route.ts` (Task 3 changed redemption only; creation is untouched until this task).
 - Produces: `invite_delivery_mode` column read by the invite route; creation response shape `{ invitation, joinUrl: string | null, deliveredVia: 'email' | 'link' }` — `joinUrl` is non-null ONLY in link mode.
 
 - [ ] **Step 1: Migration** — additive, idempotent:
 
 ```sql
--- 040_invite_delivery_mode.sql
+-- 20260813122000_invite_delivery_mode.sql (ADR-004 D7)
 ALTER TABLE public.account_email_settings
   ADD COLUMN IF NOT EXISTS invite_delivery_mode text NOT NULL DEFAULT 'email'
   CHECK (invite_delivery_mode IN ('email', 'link'));
 
-ALTER TABLE public.invitations
+ALTER TABLE public.account_invitations
   ADD COLUMN IF NOT EXISTS delivered_via text
   CHECK (delivered_via IN ('email', 'link'));
 ```

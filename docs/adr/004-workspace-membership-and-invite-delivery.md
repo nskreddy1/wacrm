@@ -218,8 +218,10 @@ model. Findings **F1–F8** are binding on the implementation:
 - **F7 — SMTP credentials.** Already AES-256-GCM at rest; the settings route
   must remain admin-gated, never echo secrets back to the client after save
   (write-only fields), and the mailer must not log credentials or full
-  recipient lists. Send failures fall back to copy-link with an explicit
-  warning, never silently.
+  recipient lists. A send failure after the invitation row is created
+  surfaces an explicit error with a re-send action — it never silently
+  degrades to a link (D7: the delivery mode is an admin decision, not a
+  runtime fallback).
 - **F8 — Shared-sender tenant impersonation.** On the platform fallback (D6
   step 2), the From *address* is hard-coded to the platform domain in the
   mailer — it must never be interpolated from `account_email_settings.
