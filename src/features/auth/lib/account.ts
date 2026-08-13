@@ -107,6 +107,63 @@ export interface AccountContext {
   workspaceProfile: { id: string; name: string } | null;
   /** Derived capability flags for existing call sites. */
   capabilities: MemberCapabilities;
+  /**
+   * Every workspace the caller is an ACTIVE member of, including the
+   * active one, sorted by name. This is the switcher's data source and
+   * the allow-list the switch endpoint is checked against.
+   *
+   * Comes back on the same round trip as the rest of the context, so the
+   * switcher costs no extra query. Sourced from `account_members` (the
+   * authoritative grant since ADR-004 Task 3), never from the
+   * denormalised `profiles` pointer, and filtered by RLS — so a
+   * workspace the caller does not belong to can never appear here.
+   *
+   * V1 normally yields exactly one entry. It only exceeds one once a
+   * user has been invited into someone else's workspace, which is
+   * already possible today; ADR-004 V2 makes that the common case.
+   */
+  memberships: readonly AccountMembershipSummary[];
+}
+
+/** One workspace the caller can act in. */
+export interface AccountMembershipSummary {
+  accountId: string;
+  accountName: string;
+  role: AccountRole;
+  /** True for the workspace currently backing this context. */
+  isActive: boolean;
+}
+
+/**
+ * Narrow the RPC's `memberships` JSON into typed entries.
+ *
+ * Defensive on purpose: this crosses the DB -> TS boundary, where the
+ * value is `unknown` at runtime whatever the generated types claim. An
+ * entry with an unrecognised role is DROPPED rather than coerced —
+ * `isAccountRole` is the same guard the active role goes through, so a
+ * future enum widening cannot silently introduce an unmodelled role
+ * into a UI that gates on it.
+ */
+function parseMemberships(
+  value: unknown,
+  activeAccountId: string
+): AccountMembershipSummary[] {
+  if (!Array.isArray(value)) return [];
+  const out: AccountMembershipSummary[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { account_id: id, account_name: name, role } = entry as
+      Record<string, unknown>;
+    if (typeof id !== 'string' || !id) continue;
+    if (!isAccountRole(role)) continue;
+    out.push({
+      accountId: id,
+      accountName: typeof name === 'string' && name ? name : 'Workspace',
+      role,
+      isActive: id === activeAccountId,
+    });
+  }
+  return out;
 }
 
 /**
@@ -180,7 +237,15 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
   // authenticated but must not reach any workspace data. RLS blocks
   // them at the database too (is_account_member checks status);
   // this throw gives them a clean 403 instead of empty responses.
-  const status = typeof row.status === 'string' ? row.status : 'active';
+  //
+  // FAIL CLOSED. A missing/non-string status is treated as a denial,
+  // not as 'active'. The old `?? 'active'` default meant that if the
+  // RPC ever stopped returning the column — a schema-cache miss, a
+  // future signature change, a partially-applied migration — every
+  // caller would silently be admitted as active. The status column is
+  // guaranteed by migration 20260813133000; if it is absent, something
+  // is wrong and refusing is the only safe answer.
+  const status = typeof row.status === 'string' ? row.status : null;
   if (status !== 'active') {
     throw new ForbiddenError('This user account has been deactivated');
   }
@@ -204,6 +269,7 @@ export const getCurrentAccount = cache(async (): Promise<AccountContext> => {
         ? { id: row.workspace_profile_id, name: row.workspace_profile_name }
         : null,
     capabilities: deriveCapabilities(permissions, isOwner),
+    memberships: parseMemberships(row.memberships, row.account_id),
   };
 });
 
@@ -286,6 +352,21 @@ async function getCurrentAccountLegacy(
     status,
     workspaceProfile,
     capabilities: deriveCapabilities(permissions, isOwner),
+    // The fallback resolves only the ACTIVE workspace, so it reports just
+    // that one rather than inventing a list it has not verified. Effect:
+    // during a rollout window where the RPC is unavailable the switcher
+    // shows the current workspace and offers no targets, which degrades to
+    // V1 behaviour. Deliberately not backfilled with a second query — this
+    // path exists to keep auth alive, not to power the switcher, and the
+    // switch endpoint re-checks membership in the database anyway.
+    memberships: [
+      {
+        accountId: account.id,
+        accountName: account.name,
+        role: data.account_role,
+        isActive: true,
+      },
+    ],
   };
 }
 
