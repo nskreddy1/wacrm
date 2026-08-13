@@ -1,8 +1,17 @@
 import 'server-only';
 
 import { getCurrentAccount } from '@/features/auth/lib/account';
+import type { AccountMembershipSummary } from '@/features/auth/lib/account';
 import type { AccountRole } from '@/features/auth/lib/roles';
 import { getDataSource } from '@/lib/data/runtime';
+
+/**
+ * One workspace the viewer can switch into. Re-exported from the
+ * server-only account module so client components can import the type
+ * from here (type-only imports are erased, so the 'server-only' guard
+ * never runs in the browser) without the shape being able to drift.
+ */
+export type SessionMembership = AccountMembershipSummary;
 
 export type SessionProfile = {
   id: string;
@@ -43,6 +52,16 @@ export type SessionPayload = {
     user: SessionUser;
     profile: SessionProfile;
     account: SessionAccount;
+    /**
+     * Every workspace the viewer is an ACTIVE member of, including the
+     * current one. Drives the sidebar workspace switcher.
+     *
+     * This is display + navigation data only — it is NOT the security
+     * boundary. `POST /api/account/switch` re-verifies the target
+     * against `account_members` server-side, so a tampered client list
+     * cannot move anyone into a workspace they don't belong to.
+     */
+    memberships: SessionMembership[];
   };
   meta: { source: 'mock' | 'supabase' };
 };
@@ -105,6 +124,9 @@ export async function getSessionPayload(): Promise<SessionPayload> {
         workspace_profile: context.workspaceProfile,
       },
       account,
+      // Already resolved by getCurrentAccount() on the same round trip,
+      // so surfacing it here costs no extra query.
+      memberships: [...context.memberships],
     },
     meta: { source },
   };

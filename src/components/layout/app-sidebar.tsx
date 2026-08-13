@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 
 import { AxonMark } from '@/features/brand/components/axon-logo';
+import { WorkspaceSwitcher } from '@/features/auth/components/workspace-switcher';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { PresenceDot } from '@/features/presence/components/presence-dot';
 import { useSelfPresence } from '@/features/presence/components/presence-provider';
@@ -100,7 +101,20 @@ function isActive(pathname: string, href: string) {
 }
 
 function BrandHeader() {
-  const { account, loading } = useAuth();
+  const { account, loading, canSwitchWorkspace } = useAuth();
+  // Members of several workspaces get the switcher in place of the
+  // static brand link (ADR-004 D3). Everyone else — the V1 norm of one
+  // workspace per user — keeps the plain link, so no one is shown a
+  // control that can only ever resolve to where they already are.
+  if (canSwitchWorkspace) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <WorkspaceSwitcher />
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
   return (
     <SidebarMenu>
       <SidebarMenuItem>
