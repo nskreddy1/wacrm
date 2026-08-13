@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
 } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import {
@@ -98,6 +99,7 @@ import { formatCurrency } from '@/lib/currency';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { downloadCsv } from '@/lib/download-csv';
 import { pipelinePath } from '@/lib/routes/dashboard-routes';
+import { routes } from '@/lib/routing/routes';
 import { cn } from '@/lib/utils';
 
 type SortKey = 'createdAt' | 'value' | 'due';
@@ -1331,8 +1333,23 @@ function DealTable({
                 </button>
               </td>
               <td className="text-muted-foreground truncate px-3 py-3">
-                {deal.contact?.name ?? '—'}
+                {deal.contact ? (
+                  // Links to the contacts page, which already owns the record
+                  // sheet plus the field/preference/owner data it needs.
+                  // Navigating there beats embedding that 800-line sheet here
+                  // and duplicating all of its data fetching into pipelines.
+                  <Link
+                    href={routes.app.contact(deal.contact.id)}
+                    className="hover:text-primary focus-visible:ring-ring rounded hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    {deal.contact.name}
+                  </Link>
+                ) : (
+                  '—'
+                )}
               </td>
+              {/* Company stays plain text: it is free-form text on the contact
+                  record, not an entity with a page to link to. */}
               <td className="text-muted-foreground truncate px-3 py-3">
                 {deal.company ?? '—'}
               </td>
