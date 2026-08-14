@@ -3,6 +3,18 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     tsconfigPaths: true,
+    alias: {
+      // `server-only` is a build-time guard with no Node entry point, so
+      // importing any module that uses it (e.g. src/lib/email/mailer.ts)
+      // throws "Cannot find package" under Vitest. Alias it to an empty
+      // stub so server modules are unit-testable; the real package is
+      // still resolved by the Next.js client build, so the guard against
+      // importing server code into a client bundle is unaffected.
+      'server-only': new URL(
+        './src/lib/test/server-only-stub.ts',
+        import.meta.url
+      ).pathname,
+    },
   },
   test: {
     environment: 'node',

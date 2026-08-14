@@ -39,7 +39,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { IdentityAvatar } from '@/components/shared/identity-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
