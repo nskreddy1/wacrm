@@ -306,9 +306,11 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
             />
           )}
 
-          {/* Tier badge keeps the "Level N" ordering you could read off
-              the old names, now that the names are job titles. Indent
-              alone conveys depth but not which rung you're on. */}
+          {/* Tier badge survives a rename: the seeded roles are named
+              "Level N", but an admin may relabel them to their own org's
+              titles, and indent alone shows depth without saying which
+              rung. The badge reads off system_key, so the ladder
+              position stays visible either way. */}
           {tierLabel(role.system_key) && (
             <Badge
               variant="outline"
@@ -364,6 +366,16 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
 
   return (
     <section className="animate-in fade-in-50">
+      {/* The single most-asked question about this screen is "we already
+          set permissions on Profiles — what is a Role for?". Answering
+          it in place is cheaper than a docs link: a Profile is one
+          shared row, so it can only say WHAT actions are allowed, never
+          WHOSE records, because "their own records" resolves to a
+          different set for every user holding that profile. */}
+      <p className="text-muted-foreground border-border/70 bg-muted/30 mb-3 rounded-md border px-3 py-2 text-xs leading-relaxed">
+        {t('rolesVsProfiles')}
+      </p>
+
       {/* Expand / collapse controls left, New Role action right */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 text-sm">

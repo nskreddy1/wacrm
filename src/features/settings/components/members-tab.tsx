@@ -683,7 +683,13 @@ export function MembersTab() {
                   {
                     id: 'name',
                     header: t('colName'),
-                    className: 'w-[26%]',
+                    // Percentages alone let the Role/Profile selects get
+                    // crushed below their content width on a laptop
+                    // viewport (the Profile column was clipping). Pairing
+                    // each width with a min-width makes the table claim
+                    // the space it needs and lets the frame scroll
+                    // instead — the selects stay readable at any width.
+                    className: 'w-[26%] min-w-[13rem]',
                     cell: (member) => {
                       const isSelf = member.user_id === user?.id;
                       return (
@@ -726,7 +732,7 @@ export function MembersTab() {
                   {
                     id: 'email',
                     header: t('colEmail'),
-                    className: 'w-[26%]',
+                    className: 'w-[26%] min-w-[12rem]',
                     cell: (member) => (
                       <span className="text-muted-foreground truncate">
                         {member.email ?? '—'}
@@ -743,7 +749,7 @@ export function MembersTab() {
                         {t('colRole')}
                       </span>
                     ),
-                    className: 'w-[19%]',
+                    className: 'w-[19%] min-w-[11rem]',
                     cell: (member) => {
                       const isBusy = pendingMemberAction === member.user_id;
                       // Read-only for non-managers and on the archival
@@ -803,7 +809,7 @@ export function MembersTab() {
                         {t('colProfile')}
                       </span>
                     ),
-                    className: 'w-[19%]',
+                    className: 'w-[19%] min-w-[11rem]',
                     cell: (member) => {
                       const isSelf = member.user_id === user?.id;
                       const isBusy = pendingMemberAction === member.user_id;

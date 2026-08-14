@@ -185,8 +185,17 @@ COMMENT ON FUNCTION public.can_view_owned_record(UUID, UUID) IS
 
 -- contacts: owner column is user_id
 DROP POLICY IF EXISTS contacts_select ON contacts;
+-- TO authenticated, service_role rather than the default PUBLIC: the
+-- policy body calls can_view_owned_record, which anon has no EXECUTE
+-- on. Left as a PUBLIC policy, an unauthenticated read would raise
+-- "permission denied for function" instead of returning nothing.
+-- Scoping the policy means anon matches no policy at all and gets an
+-- empty result — still fail-closed, without turning an ordinary empty
+-- read into an error.
 CREATE POLICY contacts_select ON contacts
-  FOR SELECT USING (
+  FOR SELECT
+  TO authenticated, service_role
+  USING (
     is_account_member(account_id)
     AND can_view_owned_record(account_id, user_id)
   );
@@ -194,7 +203,9 @@ CREATE POLICY contacts_select ON contacts
 -- deals: assigned_to is the working owner, user_id the creator.
 DROP POLICY IF EXISTS deals_select ON deals;
 CREATE POLICY deals_select ON deals
-  FOR SELECT USING (
+  FOR SELECT
+  TO authenticated, service_role
+  USING (
     is_account_member(account_id)
     AND can_view_owned_record(account_id, COALESCE(assigned_to, user_id))
   );
