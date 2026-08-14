@@ -15,7 +15,11 @@ import { NextResponse } from 'next/server';
 
 import { getCurrentAccount, toErrorResponse } from '@/features/auth/lib/account';
 
-const ROLE_SELECT = 'id, name, description, parent_role_id, created_at';
+// system_key ships to the client so the UI can show a seeded role's tier
+// ("L1") beside the job title. The ladder position stays legible even
+// though `name` is now a free-text label an admin may rename.
+const ROLE_SELECT =
+  'id, name, description, parent_role_id, system_key, created_at';
 
 export async function GET() {
   try {

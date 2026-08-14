@@ -396,18 +396,32 @@ function FooterMenu() {
             {isCollapsed && (
               <>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>
-                    {displayName}
-                    {roleLabel && (
-                      <span className="text-muted-foreground block text-xs font-normal">
-                        {roleLabel}
+                  {/* Account card, not three stacked text lines: the
+                      avatar anchors the identity the same way it does on
+                      the rail, and the email drops to the muted xs step
+                      so name > role > email reads as a real hierarchy
+                      instead of one flat block. */}
+                  <DropdownMenuLabel className="flex items-center gap-2.5 py-2 font-normal">
+                    <Avatar size="sm" className="shrink-0">
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="grid min-w-0 flex-1 leading-tight">
+                      <span className="text-foreground truncate text-sm font-semibold">
+                        {displayName}
                       </span>
-                    )}
-                    {displayEmail && (
-                      <span className="text-muted-foreground block font-normal">
-                        {displayEmail}
-                      </span>
-                    )}
+                      {roleLabel && (
+                        <span className="text-muted-foreground truncate text-xs">
+                          {roleLabel}
+                        </span>
+                      )}
+                      {displayEmail && (
+                        <span className="text-muted-foreground truncate text-xs">
+                          {displayEmail}
+                        </span>
+                      )}
+                    </span>
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

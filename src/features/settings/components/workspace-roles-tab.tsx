@@ -68,6 +68,16 @@ interface WorkspaceRole {
   parent_role_id: string | null;
   peer_visibility: boolean;
   is_system: boolean;
+  // 'level_1'..'level_5' for seeded roles, null for admin-created ones.
+  // Renders the tier badge, and is the stable key server code matches
+  // on so renaming a role can't break seeding.
+  system_key: string | null;
+}
+
+/** "level_3" -> "L3". Null for custom roles, which have no fixed tier. */
+function tierLabel(systemKey: string | null): string | null {
+  const n = systemKey?.match(/^level_([1-5])$/)?.[1];
+  return n ? `L${n}` : null;
 }
 
 interface RoleMember {
@@ -112,7 +122,7 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
       const { data } = await supabase
         .from('workspace_roles')
         .select(
-          'id, name, description, parent_role_id, peer_visibility, is_system'
+          'id, name, description, parent_role_id, peer_visibility, is_system, system_key'
         )
         .eq('account_id', accountId)
         .order('created_at', { ascending: true });
@@ -296,6 +306,17 @@ export function WorkspaceRolesTab({ canManage }: { canManage: boolean }) {
             />
           )}
 
+          {/* Tier badge keeps the "Level N" ordering you could read off
+              the old names, now that the names are job titles. Indent
+              alone conveys depth but not which rung you're on. */}
+          {tierLabel(role.system_key) && (
+            <Badge
+              variant="outline"
+              className="text-muted-foreground h-5 shrink-0 px-1.5 font-mono text-[10px] tabular-nums"
+            >
+              {tierLabel(role.system_key)}
+            </Badge>
+          )}
           <button
             type="button"
             className="text-foreground hover:text-primary text-sm font-medium hover:underline"
