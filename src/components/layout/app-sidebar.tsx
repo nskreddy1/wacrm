@@ -27,7 +27,7 @@ import {
 
 import { AxonMark } from '@/features/brand/components/axon-logo';
 import { WorkspaceSwitcher } from '@/features/auth/components/workspace-switcher';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { IdentityAvatar } from '@/components/shared/identity-avatar';
 import { PresenceDot } from '@/features/presence/components/presence-dot';
 import { useSelfPresence } from '@/features/presence/components/presence-provider';
 import {
@@ -79,18 +79,6 @@ const navIcons: Record<NavIconName, ComponentType<{ className?: string }>> = {
   'layout-template': LayoutTemplate,
   settings: Settings,
 };
-
-function initialsOf(
-  name: string | null | undefined,
-  email: string | null | undefined
-): string {
-  // Derive initials from the friendly display name, never a raw email.
-  const source = personDisplayName(name, email);
-  if (!source || source === 'Account') return '?';
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return source.slice(0, 2).toUpperCase();
-}
 
 function isActive(pathname: string, href: string) {
   // Exact-match-only routes. These are leaf workspaces that navigate via
@@ -333,7 +321,6 @@ function FooterMenu() {
   // email lives in the dropdown so identity isn't duplicated on the rail.
   const displayName = personDisplayName(profile?.full_name, profile?.email);
   const displayEmail = profile?.email ?? '';
-  const initials = initialsOf(profile?.full_name, profile?.email);
   // Identity line is synced with the assigned workspace profile for
   // everyone — the owner is auto-assigned the "Administrator" system
   // profile at signup, so this reflects the same default profile
@@ -362,11 +349,15 @@ function FooterMenu() {
                 absolutely positioned against it and must not be clipped
                 by the avatar's own rounded overflow. */}
             <span className="relative shrink-0">
-              <Avatar size="sm">
-                <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              {/* IdentityAvatar (circle = person) so the user mark here
+                  matches the welcome overlay and the members table,
+                  which each used to compute their own initials. */}
+              <IdentityAvatar
+                kind="user"
+                name={displayName}
+                imageUrl={profile?.avatar_url}
+                size="sm"
+              />
               {/* ring matches the sidebar surface so the dot reads as a
                   cutout rather than a sticker. aria-hidden: the menu
                   states the status in words, so announcing it twice
@@ -402,11 +393,12 @@ function FooterMenu() {
                       so name > role > email reads as a real hierarchy
                       instead of one flat block. */}
                   <DropdownMenuLabel className="flex items-center gap-2.5 py-2 font-normal">
-                    <Avatar size="sm" className="shrink-0">
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
+                    <IdentityAvatar
+                      kind="user"
+                      name={displayName}
+                      imageUrl={profile?.avatar_url}
+                      size="md"
+                    />
                     <span className="grid min-w-0 flex-1 leading-tight">
                       <span className="text-foreground truncate text-sm font-semibold">
                         {displayName}

@@ -25,6 +25,7 @@
 import { useMemo, useState } from 'react';
 import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react';
 
+import { IdentityAvatar } from '@/components/shared/identity-avatar';
 import { AxonMark } from '@/features/brand/components/axon-logo';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import type { AccountRole } from '@/features/auth/lib/roles';
@@ -56,14 +57,6 @@ const ROLE_LABEL: Record<AccountRole, string> = {
   agent: 'Agent',
   viewer: 'Viewer',
 };
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  }
-  return name.slice(0, 2).toUpperCase() || 'W';
-}
 
 export function WorkspaceSwitcher() {
   const { memberships, accountId } = useAuth();
@@ -211,9 +204,11 @@ export function WorkspaceSwitcher() {
                       pendingId !== null && 'pointer-events-none opacity-60'
                     )}
                   >
-                    <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded text-[10px] font-semibold">
-                      {initialsOf(name)}
-                    </span>
+                    {/* Squared workspace mark, tinted per name: with
+                        several workspaces in the list a single flat
+                        primary chip made every row look identical, so
+                        the initials were doing all the work. */}
+                    <IdentityAvatar kind="workspace" name={name} size="xs" />
                     <span className="min-w-0 flex-1 truncate">{name}</span>
                     <Badge variant="secondary" className="shrink-0 text-[10px]">
                       {ROLE_LABEL[m.role]}

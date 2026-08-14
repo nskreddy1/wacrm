@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { IdentityAvatar } from '@/components/shared/identity-avatar';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { personDisplayName } from '@/lib/display-name';
 import { WelcomeHalftoneCanvas } from './welcome-halftone-canvas';
@@ -69,7 +70,6 @@ export function WelcomeScreen({ onDismiss }: { onDismiss: () => void }) {
     () => personDisplayName(profile?.full_name, profile?.email),
     [profile?.full_name, profile?.email]
   );
-  const initial = name.charAt(0).toUpperCase();
 
   const leave = useCallback(
     (withSound: boolean) => {
@@ -141,12 +141,17 @@ export function WelcomeScreen({ onDismiss }: { onDismiss: () => void }) {
           style={{ animationDelay: `${1.1 + TITLE_WORDS.length * 0.07}s` }}
         >
           <span className="inline-flex min-w-0 items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 sm:gap-2">
-            <span
-              aria-hidden
-              className="bg-primary text-primary-foreground grid size-5 shrink-0 place-items-center rounded text-[11px] font-semibold sm:size-6 sm:text-xs"
-            >
-              {initial}
-            </span>
+                {/* Same person mark as the sidebar. This chip used to be
+                    a rounded SQUARE with a single letter, while the rail
+                    showed a circle with two — the same user, drawn two
+                    different ways on consecutive screens. */}
+                <IdentityAvatar
+                  kind="user"
+                  name={name}
+                  imageUrl={profile?.avatar_url}
+                  size="xs"
+                  className="size-5 text-[11px] sm:size-6 sm:text-xs"
+                />
             {/* Matches Twenty's chip cap so a long name truncates
                 instead of stretching the title off-screen. */}
             <span className="min-w-0 max-w-[min(40vw,360px)] truncate">

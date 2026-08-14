@@ -585,13 +585,11 @@ export function MembersTab() {
                       .join(' ');
                     return (
                       <div className="flex min-w-0 items-center gap-3">
-                        <Avatar className="size-8 shrink-0">
-                          <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                            {(name || inv.invited_email || inv.label || 'U')
-                              .charAt(0)
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                        <IdentityAvatar
+                          kind="user"
+                          name={name || inv.invited_email || inv.label}
+                          size="sm"
+                        />
                         <span className="text-foreground truncate font-medium">
                           {name || inv.label || t('untitledInvite')}
                         </span>
@@ -694,19 +692,12 @@ export function MembersTab() {
                       const isSelf = member.user_id === user?.id;
                       return (
                         <div className="flex min-w-0 items-center gap-3">
-                          <Avatar className="size-8 shrink-0">
-                            {member.avatar_url ? (
-                              <AvatarImage
-                                src={member.avatar_url}
-                                alt={member.full_name || 'Member'}
-                              />
-                            ) : null}
-                            <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                              {(member.full_name || member.email || 'U')
-                                .charAt(0)
-                                .toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
+                    <IdentityAvatar
+                      kind="user"
+                      name={personDisplayName(member.full_name, member.email)}
+                      imageUrl={member.avatar_url}
+                      size="sm"
+                    />
                           <span className="text-foreground truncate font-medium">
                             {personDisplayName(member.full_name, member.email)}
                           </span>
