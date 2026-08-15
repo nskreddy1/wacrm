@@ -141,9 +141,25 @@ $function$;
 -- ------------------------------------------------------------------
 -- (C) Switching adopts the target membership's grants
 -- ------------------------------------------------------------------
+-- SECURITY DEFINER is LOAD-BEARING, not boilerplate. `profiles` carries a
+-- BEFORE UPDATE guard (migration 034) that raises 42501 whenever
+-- account_id/account_role change while `current_user = 'authenticated'`,
+-- because those columns are membership state and must only move through
+-- supervised RPCs. This IS one of those RPCs, and it runs as its
+-- postgres owner so the guard sees `postgres` and lets the write
+-- through. `CREATE OR REPLACE` does NOT inherit the previous function's
+-- security mode, so omitting this line downgrades the function to
+-- INVOKER and every switch fails with "account_role and account_id
+-- cannot be changed directly".
+--
+-- Running as owner bypasses RLS, so authorisation is enforced inline
+-- instead: every branch is keyed to `auth.uid()` and requires an ACTIVE
+-- `account_members` row for the target account, and each adopted
+-- profile/role id is re-validated against that account.
 CREATE OR REPLACE FUNCTION public.switch_active_account(p_account_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 DECLARE
