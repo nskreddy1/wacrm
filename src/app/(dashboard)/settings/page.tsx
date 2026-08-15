@@ -86,7 +86,15 @@ export default function SettingsPage() {
 
       <div className="grid flex-1 gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
         <SettingsRail active={section} onSelect={go} hints={hints} />
-        <div className="flex min-w-0 flex-col lg:self-stretch">
+        {/* Keyed by section so each panel mounts fresh. Several sections
+            render the SAME component in this slot (WhatsApp / SMS / Email
+            are all <ChannelConnections>), and without a key React reuses
+            that instance — every open sheet, selected row, and draft form
+            from the previous channel survived the switch. */}
+        <div
+          key={section}
+          className="flex min-w-0 flex-col lg:self-stretch"
+        >
           {panel[section]}
         </div>
       </div>

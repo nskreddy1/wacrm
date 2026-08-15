@@ -182,7 +182,16 @@ export function ChannelConnections({
     '/api/settings/channels',
     fetcher
   );
-  const [channel, setChannel] = useState<ChannelKind>(fixedChannel ?? 'email');
+  // `fixedChannel` is the URL-driven section (Settings → WhatsApp / SMS /
+  // Email). It must WIN over local state: the settings panel renders the
+  // same component in the same slot for every channel, so React reuses
+  // this instance when the section changes. Seeding state from the prop
+  // (`useState(fixedChannel ?? 'email')`) pinned the view to whichever
+  // channel was mounted first — switching WhatsApp → SMS changed the rail
+  // and the prop but kept rendering WhatsApp until a hard refresh. Local
+  // state now only backs the tabbed, unfixed variant.
+  const [pickedChannel, setPickedChannel] = useState<ChannelKind>('email');
+  const channel = fixedChannel ?? pickedChannel;
   const [connectOpen, setConnectOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupInit, setSetupInit] = useState<ChannelSetupInit | null>(null);
@@ -302,7 +311,7 @@ export function ChannelConnections({
 
       <Tabs
         value={channel}
-        onValueChange={(value) => setChannel(value as ChannelKind)}
+        onValueChange={(value) => setPickedChannel(value as ChannelKind)}
       >
         {fixedChannel ? null : (
           <TabsList>

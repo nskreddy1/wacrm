@@ -46,10 +46,13 @@ import { SidebarMenuButton, useSidebar } from '@/components/ui/sidebar';
 const SEARCH_THRESHOLD = 6;
 
 /**
- * Membership-role labels. Mirrors the map in the /join page — these are
- * the coarse account roles (`account_members.role`), NOT the per-workspace
- * hierarchy roles ("Level 1") or permission profiles ("Standard") shown
- * in Settings, which are workspace-scoped and irrelevant here.
+ * Membership-role labels — the coarse account roles
+ * (`account_members.role`). Only a FALLBACK for the badge now: a
+ * membership carries the workspace permission profile it was granted
+ * ("Administrator", "Standard", a custom one), and that is what the user
+ * recognises from Settings. Showing "Agent" next to a workspace where
+ * they hold a named profile read as a downgrade that matched nothing
+ * else in the product.
  */
 const ROLE_LABEL: Record<AccountRole, string> = {
   owner: 'Owner',
@@ -57,6 +60,11 @@ const ROLE_LABEL: Record<AccountRole, string> = {
   agent: 'Agent',
   viewer: 'Viewer',
 };
+
+/** Per-workspace profile name, falling back to the membership role. */
+function membershipLabel(m: SessionMembership) {
+  return m.profileName ?? ROLE_LABEL[m.role];
+}
 
 export function WorkspaceSwitcher() {
   const { memberships, accountId } = useAuth();
@@ -149,7 +157,7 @@ export function WorkspaceSwitcher() {
           <span className="truncate text-sm font-semibold">{activeName}</span>
           {active && (
             <Badge variant="secondary" className="shrink-0 text-[10px]">
-              {ROLE_LABEL[active.role]}
+              {membershipLabel(active)}
             </Badge>
           )}
         </span>
@@ -211,7 +219,7 @@ export function WorkspaceSwitcher() {
                     <IdentityAvatar kind="workspace" name={name} size="xs" />
                     <span className="min-w-0 flex-1 truncate">{name}</span>
                     <Badge variant="secondary" className="shrink-0 text-[10px]">
-                      {ROLE_LABEL[m.role]}
+                      {membershipLabel(m)}
                     </Badge>
                     {isPending ? (
                       <Loader2

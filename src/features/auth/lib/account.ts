@@ -130,6 +130,15 @@ export interface AccountMembershipSummary {
   accountId: string;
   accountName: string;
   role: AccountRole;
+  /**
+   * The permission profile granted in THAT workspace ("Administrator",
+   * "Standard", a custom one), or null when the membership carries no
+   * profile. Per-workspace by definition: the same user is commonly an
+   * Administrator in their own workspace and something narrower in a
+   * workspace they were invited into, so the UI must label each row from
+   * this instead of the coarse membership role.
+   */
+  profileName: string | null;
   /** True for the workspace currently backing this context. */
   isActive: boolean;
 }
@@ -152,14 +161,20 @@ function parseMemberships(
   const out: AccountMembershipSummary[] = [];
   for (const entry of value) {
     if (!entry || typeof entry !== 'object') continue;
-    const { account_id: id, account_name: name, role } = entry as
-      Record<string, unknown>;
+    const {
+      account_id: id,
+      account_name: name,
+      role,
+      profile_name: profileName,
+    } = entry as Record<string, unknown>;
     if (typeof id !== 'string' || !id) continue;
     if (!isAccountRole(role)) continue;
     out.push({
       accountId: id,
       accountName: typeof name === 'string' && name ? name : 'Workspace',
       role,
+      profileName:
+        typeof profileName === 'string' && profileName ? profileName : null,
       isActive: id === activeAccountId,
     });
   }
@@ -364,6 +379,7 @@ async function getCurrentAccountLegacy(
         accountId: account.id,
         accountName: account.name,
         role: data.account_role,
+        profileName: workspaceProfile?.name ?? null,
         isActive: true,
       },
     ],

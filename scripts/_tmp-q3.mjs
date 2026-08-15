@@ -1,0 +1,10 @@
+import { Client } from 'pg';
+const c = new Client({ connectionString: (process.env.POSTGRES_URL_NON_POOLING||process.env.POSTGRES_URL).replace(/[?&]sslmode=[^&]*/,''), ssl:{rejectUnauthorized:false} });
+await c.connect();
+let r = await c.query(`select indexname, indexdef from pg_indexes where tablename='channel_connections'`);
+console.table(r.rows);
+r = await c.query(`select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid='channel_connections'::regclass`);
+console.table(r.rows);
+r = await c.query(`select id,account_id,channel,provider,display_name,external_identity,external_account_id,status,is_enabled,is_primary,last_error from channel_connections order by account_id,channel`);
+console.table(r.rows);
+await c.end();
