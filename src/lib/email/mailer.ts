@@ -313,6 +313,48 @@ async function sendViaMsg91(
   }
 }
 
+/**
+ * Turns a failed provider response into a message an operator can act on.
+ *
+ * Bare `mailtrap 403` tells nobody anything. Providers put the real
+ * reason in the body ("recipient not allowed in demo domain",
+ * "domain not verified", "invalid api token"), so we surface a trimmed
+ * version of it alongside the status.
+ *
+ * Only the response body is echoed — never the request, so the API
+ * token cannot leak into a toast or an audit row. The result is capped
+ * because some providers return HTML error pages.
+ */
+function describeProviderFailure(
+  provider: string,
+  status: number,
+  rawBody: string
+): string {
+  let reason = '';
+  try {
+    const parsed: unknown = JSON.parse(rawBody);
+    if (parsed && typeof parsed === 'object') {
+      const o = parsed as Record<string, unknown>;
+      // Mailtrap → { errors: [...] }, Resend → { message }, MSG91 → { message }
+      if (Array.isArray(o.errors)) {
+        reason = o.errors.filter((e) => typeof e === 'string').join('; ');
+      } else if (typeof o.message === 'string') {
+        reason = o.message;
+      } else if (typeof o.error === 'string') {
+        reason = o.error;
+      }
+    }
+  } catch {
+    // Not JSON (HTML error page, empty body) — fall through to the raw text.
+  }
+  if (!reason) {
+    // Collapse whitespace so a multi-line HTML page stays readable.
+    reason = rawBody.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  const capped = reason.length > 180 ? `${reason.slice(0, 180)}…` : reason;
+  return capped ? `${provider} ${status}: ${capped}` : `${provider} ${status}`;
+}
+
 // ------------------------------------------------------------
 // Adapter: Mailtrap Email Sending API
 // ------------------------------------------------------------
