@@ -269,7 +269,11 @@ async function sendViaResendKey(
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.error('[mailer] resend send failed:', res.status, detail);
-      return { sent: false, provider, error: `resend ${res.status}` };
+      return {
+        sent: false,
+        provider,
+        error: describeProviderFailure('resend', res.status, detail),
+      };
     }
     return { sent: true, provider };
   } catch (err) {
@@ -304,7 +308,11 @@ async function sendViaMsg91(
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.error('[mailer] msg91 send failed:', res.status, detail);
-      return { sent: false, provider: 'msg91', error: `msg91 ${res.status}` };
+      return {
+        sent: false,
+        provider: 'msg91',
+        error: describeProviderFailure('msg91', res.status, detail),
+      };
     }
     return { sent: true, provider: 'msg91' };
   } catch (err) {
@@ -383,7 +391,11 @@ async function sendViaMailtrapToken(
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.error('[mailer] mailtrap send failed:', res.status, detail);
-      return { sent: false, provider, error: `mailtrap ${res.status}` };
+      return {
+        sent: false,
+        provider,
+        error: describeProviderFailure('mailtrap', res.status, detail),
+      };
     }
     return { sent: true, provider };
   } catch (err) {

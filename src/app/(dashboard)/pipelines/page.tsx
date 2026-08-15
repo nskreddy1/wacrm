@@ -2,10 +2,22 @@ import { Suspense } from 'react';
 import { PipelineWorkspace } from '@/features/pipelines/components/pipeline-workspace';
 import { getPipelineRuntime } from '@/features/pipelines/lib/pipeline-runtime';
 
+/**
+ * Mirrors exactly what `pipelinePath()` writes into the URL.
+ *
+ * These MUST stay in sync with `src/lib/routes/dashboard-routes.ts`.
+ * They previously drifted: the builder emits snake_case
+ * (`sub_pipeline`, `saved_view`) and omitted nothing, while this page
+ * read camelCase (`subPipeline`, `savedView`) and never read `pipeline`
+ * at all — so switching pipelines updated the URL but always
+ * re-rendered the default pipeline, and sub-pipeline / saved-view deep
+ * links silently reset.
+ */
 type PipelineSearchParams = Promise<{
+  pipeline?: string;
   view?: string;
-  subPipeline?: string;
-  savedView?: string;
+  sub_pipeline?: string;
+  saved_view?: string;
 }>;
 
 /**
@@ -32,11 +44,12 @@ async function PipelineWorkspaceLoader({
 }: {
   searchParams: PipelineSearchParams;
 }) {
-  const [{ view, subPipeline, savedView }, runtime] = await Promise.all([
-    searchParams,
-    getPipelineRuntime(),
-  ]);
-  const snapshot = await runtime.repository.getSnapshot();
+  const [{ pipeline, view, sub_pipeline, saved_view }, runtime] =
+    await Promise.all([searchParams, getPipelineRuntime()]);
+  // `getSnapshot` resolves the id against this account's own pipeline
+  // list and returns null when it does not match, so a hand-edited
+  // ?pipeline= cannot reach another workspace's data.
+  const snapshot = await runtime.repository.getSnapshot(pipeline);
 
   if (!snapshot) {
     return (
@@ -55,8 +68,8 @@ async function PipelineWorkspaceLoader({
     <PipelineWorkspace
       initialSnapshot={snapshot}
       initialMode={mode}
-      initialSubPipelineId={subPipeline}
-      initialSavedViewId={savedView}
+      initialSubPipelineId={sub_pipeline}
+      initialSavedViewId={saved_view}
     />
   );
 }
