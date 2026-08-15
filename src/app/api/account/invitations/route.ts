@@ -403,10 +403,10 @@ export async function POST(request: Request) {
 
     const url = inviteUrl(token, getBaseUrl(request));
 
-    // Best-effort email delivery — Resend in production, Supabase's
-    // built-in invite email as the default/testing fallback. A failed
-    // send never fails the invite: the admin still gets the copyable
-    // link in the response.
+    // Best-effort email delivery through the platform operator's
+    // transport, and only when the operator has switched invite
+    // delivery to 'email'. A failed or disabled send never fails the
+    // invite: the admin still gets the copyable link in the response.
     let emailSent = false;
     let emailProvider: string | null = null;
     let emailReason: InviteEmailReason | null = null;
@@ -434,9 +434,10 @@ export async function POST(request: Request) {
           inviterProfile?.full_name ?? inviterProfile?.email ?? 'A teammate',
         inviteUrl: url,
         expiresInDays: expiryDays,
-        // Prefer the workspace's own provider (Settings → Email
-        // delivery: SMTP / Resend / MSG91) over platform fallbacks.
-        workspace: { db: ctx.supabase, accountId: ctx.accountId },
+        // No workspace transport is passed, on purpose: invite mail
+        // is sent only by the operator's configured sender (Platform
+        // admin → Invite delivery), so a workspace cannot send
+        // invitations from its own SMTP server.
       });
       emailSent = result.sent;
       emailProvider = result.provider;

@@ -8,10 +8,18 @@
 // they like. That is the safe default, because the invitation row
 // and its link are created regardless of whether mail goes out.
 //
-// When sending IS enabled, providers are resolved at send time:
-//   1. The workspace's own provider (SMTP / Resend / MSG91)
-//      configured in Settings → Email delivery.
-//   2. Platform Resend, when RESEND_API_KEY is set.
+// When sending IS enabled, the transport is resolved at send time —
+// and it is always the PLATFORM's, never a tenant's:
+//   1. The operator's configured transport (Platform admin → Invite
+//      delivery): SMTP, Resend, or Mailtrap.
+//   2. Platform Resend, when RESEND_API_KEY is set (ops/dev escape
+//      hatch that predates the UI).
+//
+// Workspace email settings are deliberately NOT consulted. Invites
+// reach people who have no account yet, so allowing each tenant to
+// choose the sending server would let any workspace send mail in the
+// platform's name, invisibly to the operator. Tenant providers still
+// power broadcasts and template test-sends via mailer.sendEmail().
 //
 // There is deliberately no third fallback. `inviteUserByEmail`
 // used to sit here and was removed: it creates an auth user for
@@ -29,8 +37,8 @@
 // count — that's a setup state, not a broken provider.
 // ============================================================
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { sendEmail } from './mailer';
+import { sendWithSettings } from './mailer';
+import { getPlatformTransport } from './platform-invite-transport';
 import {
   getInviteDeliveryMode,
   recordInviteDeliveryFailure,
@@ -48,12 +56,6 @@ export interface InviteEmailParams {
   /** The one-time invite accept URL (/join/<token>). */
   inviteUrl: string;
   expiresInDays: number;
-  /**
-   * When provided, the workspace's own email provider (SMTP /
-   * Resend / MSG91, configured in Settings → Email delivery) is
-   * tried FIRST, before the platform-level fallbacks below.
-   */
-  workspace?: { db: SupabaseClient; accountId: string };
 }
 
 /**
@@ -193,9 +195,9 @@ async function sendViaResend(p: InviteEmailParams): Promise<InviteEmailResult> {
  *   mode = 'link_only' (default) → send nothing, return
  *      reason 'link_only'. The caller already has the /join/<token>
  *      URL and shows it for the admin to deliver by hand.
- *   mode = 'email' → try the workspace's own configured provider
- *      (SMTP / Resend / MSG91 from Settings → Email delivery),
- *      then the platform Resend key.
+ *   mode = 'email' → try the operator's configured transport
+ *      (Platform admin → Invite delivery), then the platform
+ *      RESEND_API_KEY env fallback.
  *
  * Never throws — delivery is best-effort and the invitation row
  * exists either way.
@@ -225,29 +227,28 @@ export async function sendInviteEmail(
     return { sent: false, provider: null, reason: 'link_only' };
   }
 
-  // 1. Workspace-configured provider (tenant's own SMTP/Resend/MSG91).
+  // 1. The platform operator's transport (Platform admin → Invite
+  //    delivery). This is the ONLY tenant-independent sender: a
+  //    workspace owner cannot point invite mail at their own SMTP
+  //    server, because invites go to strangers and must come from
+  //    the platform's verified sender, under operator control.
   let lastError: string | null = null;
-  if (p.workspace) {
-    const viaWorkspace = await sendEmail(
-      p.workspace.db,
-      p.workspace.accountId,
-      {
-        to: p.to,
-        subject: `You've been invited to join ${p.accountName}`,
-        html: renderHtml(p),
-      }
-    );
-    if (viaWorkspace.sent) {
+  const platform = await getPlatformTransport();
+  if (platform) {
+    const viaPlatform = await sendWithSettings(platform, {
+      to: p.to,
+      subject: `You've been invited to join ${p.accountName}`,
+      html: renderHtml(p),
+    });
+    if (viaPlatform.sent) {
       await safely(resetInviteDeliveryFailures());
-      return { sent: true, provider: viaWorkspace.provider, reason: 'sent' };
+      return { sent: true, provider: viaPlatform.provider, reason: 'sent' };
     }
-    // "Not configured" is a setup state, not a broken provider — a
-    // workspace that never entered SMTP details must not burn down the
-    // platform-wide breaker for everyone else. Only real send failures
-    // (auth rejected, network down, 4xx/5xx) count toward auto-disable.
-    if (viaWorkspace.provider !== null) {
-      lastError = viaWorkspace.error ?? 'workspace provider failed';
-    }
+    // A configured-but-failing transport (rotted password, revoked
+    // key, blocked sender) is a real failure and counts toward the
+    // auto-disable breaker. "Not configured at all" does not — that
+    // is a setup state, handled by falling through below.
+    lastError = viaPlatform.error ?? 'platform transport failed';
   }
 
   // 2. Platform Resend, only when an operator supplied a key.

@@ -12,19 +12,36 @@ const {
   getInviteDeliveryMode,
   recordInviteDeliveryFailure,
   resetInviteDeliveryFailures,
-  sendEmail,
+  sendWithSettings,
+  getPlatformTransport,
 } = vi.hoisted(() => ({
   getInviteDeliveryMode: vi.fn(),
   recordInviteDeliveryFailure: vi.fn(),
   resetInviteDeliveryFailures: vi.fn(),
-  sendEmail: vi.fn(),
+  sendWithSettings: vi.fn(),
+  getPlatformTransport: vi.fn(),
 }));
 vi.mock('./invite-delivery-mode', () => ({
   getInviteDeliveryMode,
   recordInviteDeliveryFailure,
   resetInviteDeliveryFailures,
 }));
-vi.mock('./mailer', () => ({ sendEmail }));
+vi.mock('./mailer', () => ({ sendWithSettings }));
+vi.mock('./platform-invite-transport', () => ({ getPlatformTransport }));
+
+/** A configured platform transport, as the operator would have saved. */
+const PLATFORM_TRANSPORT = {
+  provider: 'smtp' as const,
+  fromEmail: 'invites@platform.test',
+  fromName: 'Axon',
+  credentials: {
+    host: 'smtp.platform.test',
+    port: 587,
+    secure: false,
+    username: 'ops',
+    password: 'secret',
+  },
+};
 
 import { sendInviteEmail } from './invite-email';
 
@@ -41,7 +58,8 @@ const params = {
 describe('sendInviteEmail — platform gate', () => {
   beforeEach(() => {
     getInviteDeliveryMode.mockReset();
-    sendEmail.mockReset();
+    sendWithSettings.mockReset();
+    getPlatformTransport.mockReset().mockResolvedValue(null);
     recordInviteDeliveryFailure.mockReset().mockResolvedValue({
       tripped: false,
     });
@@ -64,18 +82,18 @@ describe('sendInviteEmail — platform gate', () => {
       provider: null,
       reason: 'link_only',
     });
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(sendWithSettings).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('does not touch the workspace provider when link_only', async () => {
+  it('does not even resolve the transport when link_only', async () => {
     getInviteDeliveryMode.mockResolvedValue('link_only');
-    // Even with a workspace SMTP configured, the operator gate wins.
-    await sendInviteEmail({
-      ...params,
-      workspace: { db: {} as never, accountId: 'acct-1' },
-    });
-    expect(sendEmail).not.toHaveBeenCalled();
+    // Even with a transport configured, the operator gate wins — and
+    // we must not read credentials we are not going to use.
+    getPlatformTransport.mockResolvedValue(PLATFORM_TRANSPORT);
+    await sendInviteEmail(params);
+    expect(getPlatformTransport).not.toHaveBeenCalled();
+    expect(sendWithSettings).not.toHaveBeenCalled();
   });
 
   it('ignores a platform Resend key when link_only', async () => {
@@ -87,15 +105,17 @@ describe('sendInviteEmail — platform gate', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('uses the workspace provider when delivery is enabled', async () => {
+  it('uses the platform transport when delivery is enabled', async () => {
     getInviteDeliveryMode.mockResolvedValue('email');
-    sendEmail.mockResolvedValue({ sent: true, provider: 'smtp' });
-    const res = await sendInviteEmail({
-      ...params,
-      workspace: { db: {} as never, accountId: 'acct-1' },
-    });
+    getPlatformTransport.mockResolvedValue(PLATFORM_TRANSPORT);
+    sendWithSettings.mockResolvedValue({ sent: true, provider: 'smtp' });
+    const res = await sendInviteEmail(params);
     expect(res).toEqual({ sent: true, provider: 'smtp', reason: 'sent' });
-    expect(sendEmail).toHaveBeenCalledTimes(1);
+    // Sent with the OPERATOR's settings, not a tenant's.
+    expect(sendWithSettings).toHaveBeenCalledWith(
+      PLATFORM_TRANSPORT,
+      expect.objectContaining({ to: params.to })
+    );
   });
 
   it('reports no_provider when enabled but nothing is configured', async () => {
@@ -107,18 +127,16 @@ describe('sendInviteEmail — platform gate', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('falls back to platform Resend when the workspace send fails', async () => {
+  it('falls back to platform Resend when the transport send fails', async () => {
     getInviteDeliveryMode.mockResolvedValue('email');
-    sendEmail.mockResolvedValue({ sent: false, provider: null });
+    getPlatformTransport.mockResolvedValue(PLATFORM_TRANSPORT);
+    sendWithSettings.mockResolvedValue({ sent: false, provider: 'smtp' });
     process.env.RESEND_API_KEY = 're_test_key';
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
       text: async () => '',
     } as Response);
-    const res = await sendInviteEmail({
-      ...params,
-      workspace: { db: {} as never, accountId: 'acct-1' },
-    });
+    const res = await sendInviteEmail(params);
     expect(res).toEqual({ sent: true, provider: 'resend', reason: 'sent' });
   });
 
@@ -137,13 +155,13 @@ describe('sendInviteEmail — platform gate', () => {
 
   it('escapes HTML in the rendered email (no injection via names)', async () => {
     getInviteDeliveryMode.mockResolvedValue('email');
-    sendEmail.mockResolvedValue({ sent: true, provider: 'smtp' });
+    getPlatformTransport.mockResolvedValue(PLATFORM_TRANSPORT);
+    sendWithSettings.mockResolvedValue({ sent: true, provider: 'smtp' });
     await sendInviteEmail({
       ...params,
       accountName: '<script>alert(1)</script>',
-      workspace: { db: {} as never, accountId: 'acct-1' },
     });
-    const html = sendEmail.mock.calls[0][2].html as string;
+    const html = sendWithSettings.mock.calls[0][1].html as string;
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
   });
@@ -158,7 +176,8 @@ describe('sendInviteEmail — platform gate', () => {
 describe('sendInviteEmail — delivery health bookkeeping', () => {
   beforeEach(() => {
     getInviteDeliveryMode.mockReset();
-    sendEmail.mockReset();
+    sendWithSettings.mockReset();
+    getPlatformTransport.mockReset().mockResolvedValue(null);
     recordInviteDeliveryFailure.mockReset().mockResolvedValue({
       tripped: false,
     });
@@ -175,47 +194,36 @@ describe('sendInviteEmail — delivery health bookkeeping', () => {
 
   it('clears the failure streak after a successful send', async () => {
     getInviteDeliveryMode.mockResolvedValue('email');
-    sendEmail.mockResolvedValue({ sent: true, provider: 'smtp' });
-    await sendInviteEmail({
-      ...params,
-      workspace: { db: {} as never, accountId: 'acct-1' },
-    });
+    getPlatformTransport.mockResolvedValue(PLATFORM_TRANSPORT);
+    sendWithSettings.mockResolvedValue({ sent: true, provider: 'smtp' });
+    await sendInviteEmail(params);
     expect(resetInviteDeliveryFailures).toHaveBeenCalledOnce();
     expect(recordInviteDeliveryFailure).not.toHaveBeenCalled();
   });
 
-  it('records a failure when the workspace provider rejects the send', async () => {
+  it('records a failure when the platform transport rejects the send', async () => {
     getInviteDeliveryMode.mockResolvedValue('email');
-    // provider is non-null => a real configured provider that failed.
-    sendEmail.mockResolvedValue({
+    getPlatformTransport.mockResolvedValue(PLATFORM_TRANSPORT);
+    // A configured transport that failed: rotted password, revoked key.
+    sendWithSettings.mockResolvedValue({
       sent: false,
       provider: 'smtp',
       error: 'Invalid login: 535 auth failed',
     });
-    const res = await sendInviteEmail({
-      ...params,
-      workspace: { db: {} as never, accountId: 'acct-1' },
-    });
+    const res = await sendInviteEmail(params);
     expect(res.reason).toBe('send_failed');
     expect(recordInviteDeliveryFailure).toHaveBeenCalledWith(
       'Invalid login: 535 auth failed'
     );
   });
 
-  it('does NOT count a workspace that simply has no provider configured', async () => {
+  it('does NOT count an unconfigured transport as a failure', async () => {
     getInviteDeliveryMode.mockResolvedValue('email');
-    // This is what mailer returns when the tenant never set up SMTP:
-    // a setup state, not a broken provider. Counting it would let one
-    // unconfigured workspace disable email platform-wide.
-    sendEmail.mockResolvedValue({
-      sent: false,
-      provider: null,
-      error: 'no email provider configured',
-    });
-    const res = await sendInviteEmail({
-      ...params,
-      workspace: { db: {} as never, accountId: 'acct-1' },
-    });
+    // The operator switched delivery on but never saved a transport:
+    // a setup state, not a broken provider. Counting it would burn the
+    // breaker down on a deployment that has never sent a single mail.
+    getPlatformTransport.mockResolvedValue(null);
+    const res = await sendInviteEmail(params);
     expect(res.reason).toBe('no_provider');
     expect(recordInviteDeliveryFailure).not.toHaveBeenCalled();
   });
