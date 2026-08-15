@@ -1,6 +1,8 @@
+import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { PipelineWorkspace } from '@/features/pipelines/components/pipeline-workspace';
 import { getPipelineRuntime } from '@/features/pipelines/lib/pipeline-runtime';
+import { pipelinePath } from '@/lib/routes/dashboard-routes';
 
 /**
  * Mirrors exactly what `pipelinePath()` writes into the URL.
@@ -64,8 +66,31 @@ async function PipelineWorkspaceLoader({
 
   const mode = view === 'list' || view === 'sheet' ? view : 'board';
 
+  // Clicking "Pipelines" in the sidebar lands on the bare `/pipelines`,
+  // which renders the account's default pipeline but leaves the URL
+  // without a `?pipeline=` id. That made the address bar disagree with the
+  // board and made the default pipeline the only one that could not be
+  // linked to or restored on reload. Canonicalise once to the resolved id
+  // so every pipeline view has the same shareable shape. Only the
+  // param-less entry redirects, so this cannot loop.
+  if (!pipeline) {
+    redirect(
+      pipelinePath(snapshot.accountId, snapshot.pipeline.id, mode, {
+        subPipeline: sub_pipeline,
+        savedView: saved_view,
+      })
+    );
+  }
+
   return (
+    // Keyed by pipeline id so switching pipelines remounts the workspace.
+    // Without it React reuses the instance and every piece of
+    // pipeline-scoped `useState` (active sub-pipeline tab, collapsed
+    // stages, saved filter presets, owner/stage filters holding ids from
+    // the previous pipeline) survives the switch and points at rows that
+    // no longer exist.
     <PipelineWorkspace
+      key={snapshot.pipeline.id}
       initialSnapshot={snapshot}
       initialMode={mode}
       initialSubPipelineId={sub_pipeline}
