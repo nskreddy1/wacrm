@@ -421,6 +421,14 @@ function EngineFlagSection() {
     '/api/admin/platform-settings',
     jsonFetcher
   );
+  // Same SWR key the sender panel uses, so saving a sender there
+  // revalidates this cache entry and unlocks 'Send email' without a
+  // page reload.
+  const { data: transport } = useSWR<{ configured: boolean }>(
+    '/api/admin/invite-transport',
+    jsonFetcher
+  );
+  const canSendEmail = transport?.configured === true;
   const [saving, setSaving] = useState(false);
 
   async function patch(
@@ -551,46 +559,52 @@ function EngineFlagSection() {
               className="@md/card:grid-cols-2 grid gap-3"
               aria-label="Invite delivery"
             >
-              {DELIVERY_OPTIONS.map(({ value, title, description }) => (
-                <div
-                  key={value}
-                  className="has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5 hover:border-muted-foreground/40 flex items-start gap-2 rounded-lg border p-3 transition-[border-color,background-color] duration-150 ease-out"
-                >
-                  <RadioGroupItem
-                    value={value}
-                    id={`delivery-${value}`}
-                    disabled={saving}
-                    className="mt-0.5"
-                  />
-                  <Label
-                    htmlFor={`delivery-${value}`}
-                    className="grid cursor-pointer gap-0.5 leading-tight"
+              {DELIVERY_OPTIONS.map(({ value, title, description }) => {
+                // 'Send email' stays locked until a sender exists, so the
+                // operator cannot enable delivery that would silently
+                // no-op. The API enforces this too (409); this just makes
+                // the requirement visible instead of a surprise error.
+                const locked = value === 'email' && !canSendEmail;
+                return (
+                  <div
+                    key={value}
+                    className="has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5 hover:border-muted-foreground/40 flex items-start gap-2 rounded-lg border p-3 transition-[border-color,background-color] duration-150 ease-out has-disabled:opacity-60"
                   >
-                    <span>{title}</span>
-                    <span className="text-muted-foreground text-xs font-normal">
-                      {description}
-                    </span>
-                  </Label>
-                </div>
-              ))}
+                    <RadioGroupItem
+                      value={value}
+                      id={`delivery-${value}`}
+                      disabled={saving || locked}
+                      className="mt-0.5"
+                    />
+                    <Label
+                      htmlFor={`delivery-${value}`}
+                      className="grid gap-0.5 leading-tight not-has-disabled:cursor-pointer"
+                    >
+                      <span>{title}</span>
+                      <span className="text-muted-foreground text-xs font-normal">
+                        {locked
+                          ? 'Add a sender below first, then this unlocks.'
+                          : description}
+                      </span>
+                    </Label>
+                  </div>
+                );
+              })}
             </RadioGroup>
           )}
 
-          {data?.invite_delivery_mode === 'email' ? (
-            <p className="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed">
-              <Mail className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              Invites are emailed using the platform sender below. If no sender
-              is configured, the invite is still created and the admin gets the
-              copyable link.
-            </p>
-          ) : null}
+          <p className="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed">
+            <Mail className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            {data?.invite_delivery_mode === 'email'
+              ? 'Invites are emailed from the sender below. If a send fails, the invite is still created and the admin keeps the copyable link.'
+              : 'Invites generate a copyable link. Configure a sender below to unlock emailing.'}
+          </p>
         </div>
 
-        {/* The sender is only meaningful when email delivery is on, so
-            it appears with the mode rather than as dead configuration. */}
-        {data?.invite_delivery_mode === 'email' ? (
-          <InviteTransportPanel />
-        ) : null}
+        {/* Always visible: the sender must be configurable BEFORE email
+            delivery can be switched on, so hiding it behind the very
+            mode it unlocks would be a deadlock. */}
+        <InviteTransportPanel />
 
         {saving && (
           <p className="text-muted-foreground flex items-center gap-2 text-xs">

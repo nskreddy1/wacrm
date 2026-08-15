@@ -171,14 +171,21 @@ function TransportForm({
           ...(secret.trim() ? { secret: secret.trim() } : {}),
         }),
       });
-      const body = await res.json();
+      const body = await readJson(res);
       if (!res.ok) {
-        toast.error(body.error ?? 'Could not save transport');
+        toast.error(
+          typeof body.error === 'string' ? body.error : 'Could not save sender'
+        );
         return;
       }
       setSecret('');
       onSaved();
       toast.success('Invite sender saved');
+    } catch {
+      // fetch() itself rejected (offline, DNS, aborted). Without this
+      // the click handler leaks an unhandled rejection and the operator
+      // sees nothing at all.
+      toast.error('Could not reach the server. Check your connection.');
     } finally {
       setSaving(false);
     }
@@ -196,12 +203,16 @@ function TransportForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: testTo.trim() }),
       });
-      const body = await res.json();
+      const body = await readJson(res);
       if (!res.ok || body.sent === false) {
-        toast.error(body.error ?? 'Test send failed');
+        toast.error(
+          typeof body.error === 'string' ? body.error : 'Test send failed'
+        );
         return;
       }
       toast.success(`Test email sent to ${testTo.trim()}`);
+    } catch {
+      toast.error('Could not reach the server. Check your connection.');
     } finally {
       setTesting(false);
     }

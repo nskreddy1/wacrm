@@ -14,6 +14,7 @@ import {
   PLATFORM_SETTING_KEY,
 } from '@/lib/email/invite-delivery-mode';
 import { logPlatformAudit } from '@/features/admin/lib/platform/audit';
+import { getPlatformTransportSummary } from '@/lib/email/platform-invite-transport';
 
 // ============================================================
 // Platform settings — super-admin control surface.
@@ -106,6 +107,26 @@ export async function PATCH(request: Request) {
         { error: "invite_delivery_mode must be 'email' or 'link_only'" },
         { status: 400 }
       );
+    }
+    // Configure-before-enable: turning email delivery ON is only
+    // allowed once a sender actually exists. Otherwise the operator
+    // flips the switch, invites silently fall through to no_provider,
+    // and nobody notices until a new hire never gets their invite.
+    // Enforced here (not just in the UI) because the UI is not a
+    // security or correctness boundary.
+    if (value === 'email') {
+      const summary = await getPlatformTransportSummary();
+      const envFallback = Boolean(process.env.RESEND_API_KEY);
+      if (!summary.configured && !envFallback) {
+        return NextResponse.json(
+          {
+            error:
+              'Configure an invite sender before enabling email delivery. ' +
+              'Until then, invites keep generating copyable links.',
+          },
+          { status: 409 }
+        );
+      }
     }
     rows.push({ key: PLATFORM_SETTING_KEY, value, updated_at: now });
     result.invite_delivery_mode = value;
