@@ -26,7 +26,8 @@ import {
 } from 'lucide-react';
 
 import { AxonMark } from '@/features/brand/components/axon-logo';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { WorkspaceSwitcher } from '@/features/auth/components/workspace-switcher';
+import { IdentityAvatar } from '@/components/shared/identity-avatar';
 import { PresenceDot } from '@/features/presence/components/presence-dot';
 import { useSelfPresence } from '@/features/presence/components/presence-provider';
 import {
@@ -79,18 +80,6 @@ const navIcons: Record<NavIconName, ComponentType<{ className?: string }>> = {
   settings: Settings,
 };
 
-function initialsOf(
-  name: string | null | undefined,
-  email: string | null | undefined
-): string {
-  // Derive initials from the friendly display name, never a raw email.
-  const source = personDisplayName(name, email);
-  if (!source || source === 'Account') return '?';
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return source.slice(0, 2).toUpperCase();
-}
-
 function isActive(pathname: string, href: string) {
   // Exact-match-only routes. These are leaf workspaces that navigate via
   // query params (?c=, ?pipeline=) rather than nested segments, so prefix
@@ -100,7 +89,20 @@ function isActive(pathname: string, href: string) {
 }
 
 function BrandHeader() {
-  const { account, loading } = useAuth();
+  const { account, loading, canSwitchWorkspace } = useAuth();
+  // Members of several workspaces get the switcher in place of the
+  // static brand link (ADR-004 D3). Everyone else — the V1 norm of one
+  // workspace per user — keeps the plain link, so no one is shown a
+  // control that can only ever resolve to where they already are.
+  if (canSwitchWorkspace) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <WorkspaceSwitcher />
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -319,7 +321,6 @@ function FooterMenu() {
   // email lives in the dropdown so identity isn't duplicated on the rail.
   const displayName = personDisplayName(profile?.full_name, profile?.email);
   const displayEmail = profile?.email ?? '';
-  const initials = initialsOf(profile?.full_name, profile?.email);
   // Identity line is synced with the assigned workspace profile for
   // everyone — the owner is auto-assigned the "Administrator" system
   // profile at signup, so this reflects the same default profile
@@ -348,11 +349,15 @@ function FooterMenu() {
                 absolutely positioned against it and must not be clipped
                 by the avatar's own rounded overflow. */}
             <span className="relative shrink-0">
-              <Avatar size="sm">
-                <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              {/* IdentityAvatar (circle = person) so the user mark here
+                  matches the welcome overlay and the members table,
+                  which each used to compute their own initials. */}
+              <IdentityAvatar
+                kind="user"
+                name={displayName}
+                imageUrl={profile?.avatar_url}
+                size="sm"
+              />
               {/* ring matches the sidebar surface so the dot reads as a
                   cutout rather than a sticker. aria-hidden: the menu
                   states the status in words, so announcing it twice
@@ -382,18 +387,33 @@ function FooterMenu() {
             {isCollapsed && (
               <>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>
-                    {displayName}
-                    {roleLabel && (
-                      <span className="text-muted-foreground block text-xs font-normal">
-                        {roleLabel}
+                  {/* Account card, not three stacked text lines: the
+                      avatar anchors the identity the same way it does on
+                      the rail, and the email drops to the muted xs step
+                      so name > role > email reads as a real hierarchy
+                      instead of one flat block. */}
+                  <DropdownMenuLabel className="flex items-center gap-2.5 py-2 font-normal">
+                    <IdentityAvatar
+                      kind="user"
+                      name={displayName}
+                      imageUrl={profile?.avatar_url}
+                      size="md"
+                    />
+                    <span className="grid min-w-0 flex-1 leading-tight">
+                      <span className="text-foreground truncate text-sm font-semibold">
+                        {displayName}
                       </span>
-                    )}
-                    {displayEmail && (
-                      <span className="text-muted-foreground block font-normal">
-                        {displayEmail}
-                      </span>
-                    )}
+                      {roleLabel && (
+                        <span className="text-muted-foreground truncate text-xs">
+                          {roleLabel}
+                        </span>
+                      )}
+                      {displayEmail && (
+                        <span className="text-muted-foreground truncate text-xs">
+                          {displayEmail}
+                        </span>
+                      )}
+                    </span>
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

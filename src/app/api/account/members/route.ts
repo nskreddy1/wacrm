@@ -37,7 +37,8 @@ import {
 } from '@/features/auth/lib/account';
 import type { AccountMember } from '@/types';
 
-interface ProfileRow {
+/** One row as returned by the `list_account_members` RPC. */
+interface MemberRow {
   user_id: string;
   full_name: string | null;
   email: string | null;
@@ -46,8 +47,10 @@ interface ProfileRow {
   created_at: string;
   status: string | null;
   workspace_profile_id: string | null;
-  workspace_profiles: { id: string; name: string } | null;
-  workspace_role: { id: string; name: string } | null;
+  workspace_profile_name: string | null;
+  workspace_role_id: string | null;
+  workspace_role_name: string | null;
+  is_owner: boolean;
 }
 
 const MEMBER_STATUSES = ['active', 'inactive', 'deleted'] as const;
@@ -56,9 +59,6 @@ type MemberStatus = (typeof MEMBER_STATUSES)[number];
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 const MAX_SEARCH_LEN = 120;
-
-const SELECT_COLUMNS =
-  'user_id, full_name, email, avatar_url, account_role, created_at, status, workspace_profile_id, workspace_profiles(id, name), workspace_role:workspace_roles(id, name)';
 
 /** Parse `<created_at>|<user_id>` keyset cursors. Returns null on garbage. */
 function parseCursor(
@@ -73,17 +73,9 @@ function parseCursor(
   return { createdAt, userId };
 }
 
-/**
- * Escape PostgREST `or=` filter syntax inside a user-supplied search
- * term: commas/parens are structural in the filter grammar, and `%`
- * and `_` are LIKE wildcards.
- */
-function escapeSearchTerm(q: string): string {
-  return q
-    .replace(/[%_]/g, '\\$&')
-    .replace(/[(),.]/g, ' ')
-    .trim();
-}
+// The PostgREST `or=` escaper that used to live here is gone: search
+// is now a bound `p_q` parameter inside list_account_members, so the
+// term never reaches a filter grammar that needs escaping.
 
 export async function GET(request: Request) {
   try {
@@ -109,7 +101,7 @@ export async function GET(request: Request) {
     const canSeeEmails = ctx.capabilities.canManageMembers;
     const ownerUserId = await getOwnerUserId(ctx.supabase, ctx.accountId);
 
-    const toMember = (row: ProfileRow): AccountMember => ({
+    const toMember = (row: MemberRow): AccountMember => ({
       user_id: row.user_id,
       full_name: row.full_name ?? '',
       email: canSeeEmails ? row.email : null,
@@ -119,23 +111,31 @@ export async function GET(request: Request) {
       role: (row.account_role as AccountMember['role']) ?? 'viewer',
       joined_at: row.created_at,
       status: (row.status as AccountMember['status']) ?? 'active',
-      is_owner: row.user_id === ownerUserId,
-      workspace_profile: row.workspace_profiles
-        ? { id: row.workspace_profiles.id, name: row.workspace_profiles.name }
-        : null,
-      workspace_role: row.workspace_role
-        ? { id: row.workspace_role.id, name: row.workspace_role.name }
-        : null,
+      // The RPC derives this from account_members.role, but the
+      // accounts.owner_user_id lookup stays authoritative.
+      is_owner: row.is_owner || row.user_id === ownerUserId,
+      workspace_profile:
+        row.workspace_profile_id && row.workspace_profile_name
+          ? {
+              id: row.workspace_profile_id,
+              name: row.workspace_profile_name,
+            }
+          : null,
+      workspace_role:
+        row.workspace_role_id && row.workspace_role_name
+          ? { id: row.workspace_role_id, name: row.workspace_role_name }
+          : null,
     });
 
     // ---------- Legacy mode: full list, unchanged shape ----------
     if (!paginated) {
-      const { data, error } = await ctx.supabase
-        .from('profiles')
-        .select(SELECT_COLUMNS)
-        .eq('account_id', ctx.accountId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: true });
+      const { data, error } = await ctx.supabase.rpc('list_account_members', {
+        p_status: 'active',
+        p_q: null,
+        p_limit: MAX_PAGE_SIZE,
+        p_cursor_created: null,
+        p_cursor_user: null,
+      });
 
       if (error) {
         console.error('[GET /api/account/members] fetch error:', error);
@@ -145,7 +145,7 @@ export async function GET(request: Request) {
         );
       }
 
-      const members = (data as unknown as ProfileRow[]).map(toMember);
+      const members = ((data ?? []) as MemberRow[]).map(toMember);
       return NextResponse.json({ members });
     }
 
@@ -156,52 +156,23 @@ export async function GET(request: Request) {
     );
     const cursor = parseCursor(cursorRaw);
 
-    let query = ctx.supabase
-      .from('profiles')
-      .select(SELECT_COLUMNS)
-      .eq('account_id', ctx.accountId)
-      .eq('status', status)
-      .order('created_at', { ascending: true })
-      .order('user_id', { ascending: true })
-      // Over-fetch by one row to know whether a next page exists
-      // without a second count round trip.
-      .limit(limit + 1);
-
-    if (qRaw) {
-      const term = escapeSearchTerm(qRaw);
-      if (term) {
-        query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%`);
-      }
-    }
-    if (cursor) {
-      // Keyset: strictly after (created_at, user_id) of the previous
-      // page's last row. Two-clause OR expresses the tuple compare.
-      query = query.or(
-        `created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},user_id.gt.${cursor.userId})`
-      );
-    }
-
-    // Status summary — indexed head-counts in parallel with the page
-    // query (plus pending invitations for the "Invited" pill). Head
-    // counts return no row payload, so this stays cheap at scale.
-    const statusCountPromises = MEMBER_STATUSES.map((s) =>
-      ctx.supabase
-        .from('profiles')
-        .select('user_id', { count: 'exact', head: true })
-        .eq('account_id', ctx.accountId)
-        .eq('status', s)
-    );
-    const invitedCountPromise = ctx.supabase
-      .from('account_invitations')
-      .select('id', { count: 'exact', head: true })
-      .eq('account_id', ctx.accountId)
-      .is('accepted_at', null)
-      .gt('expires_at', new Date().toISOString());
-
-    const [pageResult, invitedResult, ...statusResults] = await Promise.all([
-      query,
-      invitedCountPromise,
-      ...statusCountPromises,
+    // Both the page and the counts now come from `account_members`,
+    // the authoritative per-account grant. Listing from `profiles`
+    // (as this route used to) reported each user's GLOBAL status and
+    // their role in whatever workspace they had last switched to, so
+    // deactivating somebody here never changed what this endpoint
+    // returned. See 20260814100000_account_members_listing.sql.
+    const [pageResult, countsResult] = await Promise.all([
+      ctx.supabase.rpc('list_account_members', {
+        p_status: status,
+        p_q: qRaw ?? null,
+        // Over-fetch by one row to know whether a next page exists
+        // without a second count round trip.
+        p_limit: limit + 1,
+        p_cursor_created: cursor?.createdAt ?? null,
+        p_cursor_user: cursor?.userId ?? null,
+      }),
+      ctx.supabase.rpc('count_account_members'),
     ]);
 
     const { data, error } = pageResult;
@@ -213,17 +184,34 @@ export async function GET(request: Request) {
       );
     }
 
-    const rows = (data ?? []) as unknown as ProfileRow[];
+    const rows = (data ?? []) as MemberRow[];
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const last = pageRows[pageRows.length - 1];
 
+    if (countsResult.error) {
+      console.error(
+        '[GET /api/account/members] count error:',
+        countsResult.error
+      );
+    }
+    // `count_account_members` returns a single row; it already excludes
+    // invitations belonging to people who have since joined, so an
+    // accepted invite stops inflating the "Invited" pill.
+    const counts = (
+      (countsResult.data ?? []) as {
+        active: number;
+        inactive: number;
+        deleted: number;
+        invited: number;
+      }[]
+    )[0];
     const summary: Record<string, number> = {
-      invited: invitedResult.count ?? 0,
+      active: Number(counts?.active ?? 0),
+      inactive: Number(counts?.inactive ?? 0),
+      deleted: Number(counts?.deleted ?? 0),
+      invited: Number(counts?.invited ?? 0),
     };
-    MEMBER_STATUSES.forEach((s, i) => {
-      summary[s] = statusResults[i]?.count ?? 0;
-    });
 
     return NextResponse.json({
       members: pageRows.map(toMember),

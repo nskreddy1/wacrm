@@ -7,6 +7,14 @@ import {
   resetEngineCache,
   type AiEngine,
 } from '@/features/assistant/lib/ai/engine-flag';
+import {
+  getInviteDeliveryMode,
+  isInviteDeliveryMode,
+  resetInviteDeliveryModeCache,
+  PLATFORM_SETTING_KEY,
+} from '@/lib/email/invite-delivery-mode';
+import { logPlatformAudit } from '@/features/admin/lib/platform/audit';
+import { getPlatformTransportSummary } from '@/lib/email/platform-invite-transport';
 
 // ============================================================
 // Platform settings — super-admin control surface.
@@ -34,11 +42,18 @@ export async function GET() {
     return toErrorResponse(err);
   }
 
-  // Resolve fresh (bust the local cache first) so a super admin never
+  // Resolve fresh (bust the local caches first) so a super admin never
   // reads a stale value from this instance's TTL cache.
   resetEngineCache();
-  const engine = await getAiEngine();
-  return NextResponse.json({ ai_engine: engine });
+  resetInviteDeliveryModeCache();
+  const [engine, inviteDeliveryMode] = await Promise.all([
+    getAiEngine(),
+    getInviteDeliveryMode(),
+  ]);
+  return NextResponse.json({
+    ai_engine: engine,
+    invite_delivery_mode: inviteDeliveryMode,
+  });
 }
 
 /**
@@ -50,30 +65,83 @@ export async function GET() {
  * instances converge within the cache TTL (~30s).
  */
 export async function PATCH(request: Request) {
+  let ctx;
   try {
-    await requireSuperAdmin();
+    ctx = await requireSuperAdmin();
   } catch (err) {
     return toErrorResponse(err);
   }
 
   const body = (await request.json().catch(() => null)) as {
     ai_engine?: unknown;
+    invite_delivery_mode?: unknown;
   } | null;
-  const value = body?.ai_engine;
-  if (value !== 'direct' && value !== 'langchain') {
+  if (!body) {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  // Build the upsert set from ONLY the keys the caller actually sent, so
+  // patching one setting can't silently reset the other. Unknown values
+  // are rejected outright rather than coerced — this table drives
+  // whether the platform emails strangers.
+  const rows: { key: string; value: string; updated_at: string }[] = [];
+  const now = new Date().toISOString();
+  const result: { ai_engine?: AiEngine; invite_delivery_mode?: string } = {};
+
+  if ('ai_engine' in body) {
+    const value = body.ai_engine;
+    if (value !== 'direct' && value !== 'langchain') {
+      return NextResponse.json(
+        { error: "ai_engine must be 'direct' or 'langchain'" },
+        { status: 400 }
+      );
+    }
+    rows.push({ key: 'ai_engine', value, updated_at: now });
+    result.ai_engine = value satisfies AiEngine;
+  }
+
+  if ('invite_delivery_mode' in body) {
+    const value = body.invite_delivery_mode;
+    if (!isInviteDeliveryMode(value)) {
+      return NextResponse.json(
+        { error: "invite_delivery_mode must be 'email' or 'link_only'" },
+        { status: 400 }
+      );
+    }
+    // Configure-before-enable: turning email delivery ON is only
+    // allowed once a sender actually exists. Otherwise the operator
+    // flips the switch, invites silently fall through to no_provider,
+    // and nobody notices until a new hire never gets their invite.
+    // Enforced here (not just in the UI) because the UI is not a
+    // security or correctness boundary.
+    if (value === 'email') {
+      const summary = await getPlatformTransportSummary();
+      const envFallback = Boolean(process.env.RESEND_API_KEY);
+      if (!summary.configured && !envFallback) {
+        return NextResponse.json(
+          {
+            error:
+              'Configure an invite sender before enabling email delivery. ' +
+              'Until then, invites keep generating copyable links.',
+          },
+          { status: 409 }
+        );
+      }
+    }
+    rows.push({ key: PLATFORM_SETTING_KEY, value, updated_at: now });
+    result.invite_delivery_mode = value;
+  }
+
+  if (rows.length === 0) {
     return NextResponse.json(
-      { error: "ai_engine must be 'direct' or 'langchain'" },
+      { error: 'Provide ai_engine and/or invite_delivery_mode' },
       { status: 400 }
     );
   }
-  const engine: AiEngine = value;
 
   const { error } = await supabaseAdmin()
     .from('platform_settings')
-    .upsert(
-      { key: 'ai_engine', value: engine, updated_at: new Date().toISOString() },
-      { onConflict: 'key' }
-    );
+    .upsert(rows, { onConflict: 'key' });
 
   if (error) {
     console.error('[admin/platform-settings PATCH] upsert failed:', error);
@@ -83,6 +151,22 @@ export async function PATCH(request: Request) {
     );
   }
 
-  resetEngineCache();
-  return NextResponse.json({ ai_engine: engine });
+  // Turning invite email on/off must take effect now, not in 30s.
+  if (result.ai_engine !== undefined) resetEngineCache();
+  if (result.invite_delivery_mode !== undefined) {
+    resetInviteDeliveryModeCache();
+  }
+
+  // Record who flipped a platform-wide switch. Enabling outbound mail
+  // is exactly the kind of change that needs an operator trail.
+  // `logPlatformAudit` never throws — it logs and moves on.
+  await logPlatformAudit(ctx.supabase, {
+    actorId: ctx.userId,
+    accountId: null, // platform-wide, not tenant-scoped
+    action: 'platform_settings.update',
+    entity: 'platform_settings',
+    after: result,
+  });
+
+  return NextResponse.json(result);
 }

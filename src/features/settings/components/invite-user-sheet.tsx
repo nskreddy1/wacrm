@@ -60,9 +60,14 @@ interface InviteUserSheetProps {
   onCreated: () => void;
 }
 
+/** Mirrors InviteEmailReason from '@/lib/email/invite-email' (server-only). */
+type InviteEmailReason = 'sent' | 'link_only' | 'no_provider' | 'send_failed';
+
 interface SentInvite {
   url: string;
   emailSent: boolean;
+  /** Why it wasn't emailed, so we don't imply mail that never left. */
+  emailReason: InviteEmailReason | null;
 }
 
 export function InviteUserSheet({
@@ -182,13 +187,18 @@ export function InviteUserSheet({
       const data = (await res.json()) as {
         url: string;
         emailSent?: boolean;
+        emailReason?: InviteEmailReason | null;
       };
 
       onCreated();
       onOpenChange(false);
       reset();
       // Bigin-style confirmation dialog — after the sheet closes.
-      setSent({ url: data.url, emailSent: Boolean(data.emailSent) });
+      setSent({
+        url: data.url,
+        emailSent: Boolean(data.emailSent),
+        emailReason: data.emailReason ?? null,
+      });
     } catch (err) {
       console.error('[InviteUserSheet] create error:', err);
       toast.error(t('inviteFailed'));

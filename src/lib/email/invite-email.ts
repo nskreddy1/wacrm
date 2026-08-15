@@ -1,24 +1,49 @@
 // ============================================================
 // Invite email delivery
 //
-// Two providers, resolved at send time:
+// Sending is OFF unless a platform super admin turns it on
+// (`invite_delivery_mode` in platform_settings — see
+// ./invite-delivery-mode.ts). With it off, invites are link-only:
+// the admin copies the /join/<token> URL and delivers it however
+// they like. That is the safe default, because the invitation row
+// and its link are created regardless of whether mail goes out.
 //
-//   1. Resend  — production path. Used when RESEND_API_KEY is
-//      set. Sends a branded HTML email through the Resend REST
-//      API (plain fetch — no SDK dependency needed).
-//   2. Supabase — default / testing path. Falls back to
-//      `auth.admin.inviteUserByEmail`, which delivers Supabase's
-//      built-in invite email and redirects the user to our
-//      /join/<token> accept page after they authenticate.
+// When sending IS enabled, the transport is resolved at send time —
+// and it is always the PLATFORM's, never a tenant's:
+//   1. The operator's configured transport (Platform admin → Invite
+//      delivery): SMTP, Resend, or Mailtrap.
+//   2. Platform Resend, when RESEND_API_KEY is set (ops/dev escape
+//      hatch that predates the UI).
 //
-// Email delivery is BEST-EFFORT: the invitation row + link are
-// already created by the time we get here, so a failed send never
-// fails the API call. We report `{ sent, provider }` and the UI
-// can still surface the copyable link.
+// Workspace email settings are deliberately NOT consulted. Invites
+// reach people who have no account yet, so allowing each tenant to
+// choose the sending server would let any workspace send mail in the
+// platform's name, invisibly to the operator. Tenant providers still
+// power broadcasts and template test-sends via mailer.sendEmail().
+//
+// There is deliberately no third fallback. `inviteUserByEmail`
+// used to sit here and was removed: it creates an auth user for
+// whatever address it is handed, so it both ignored the operator
+// gate and allowed pre-creating accounts for arbitrary emails.
+//
+// Delivery is BEST-EFFORT and never throws — a failed send must
+// not fail the invite API call. Callers get `{ sent, provider,
+// reason }` and surface the copyable link.
+//
+// Self-healing: consecutive real send failures (rotted SMTP
+// credentials, revoked API key, blocked sender) are counted, and
+// after the threshold the platform flips ITSELF back to link-only.
+// A workspace that simply hasn't configured email yet does not
+// count — that's a setup state, not a broken provider.
 // ============================================================
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { sendEmail } from './mailer';
+import { sendWithSettings } from './mailer';
+import { getPlatformTransport } from './platform-invite-transport';
+import {
+  getInviteDeliveryMode,
+  recordInviteDeliveryFailure,
+  resetInviteDeliveryFailures,
+} from './invite-delivery-mode';
 
 export interface InviteEmailParams {
   to: string;
@@ -31,17 +56,23 @@ export interface InviteEmailParams {
   /** The one-time invite accept URL (/join/<token>). */
   inviteUrl: string;
   expiresInDays: number;
-  /**
-   * When provided, the workspace's own email provider (SMTP /
-   * Resend / MSG91, configured in Settings → Email delivery) is
-   * tried FIRST, before the platform-level fallbacks below.
-   */
-  workspace?: { db: SupabaseClient; accountId: string };
 }
+
+/**
+ * Why an invite email was or wasn't delivered. The invite API returns
+ * this so the UI can tell the admin the truth — "copy this link,
+ * sending is off" reads very differently from "we emailed them".
+ */
+export type InviteEmailReason =
+  | 'sent'
+  | 'link_only'
+  | 'no_provider'
+  | 'send_failed';
 
 export interface InviteEmailResult {
   sent: boolean;
   provider: string | null;
+  reason?: InviteEmailReason;
   error?: string;
 }
 
@@ -157,94 +188,105 @@ async function sendViaResend(p: InviteEmailParams): Promise<InviteEmailResult> {
   }
 }
 
-// ------------------------------------------------------------
-// Provider: Supabase (default / testing)
-// ------------------------------------------------------------
-async function sendViaSupabase(
-  p: InviteEmailParams
-): Promise<InviteEmailResult> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.zepo_SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.zepo_SUPABASE_SECRET_KEY ??
-    process.env.SUPABASE_SECRET_KEY;
-
-  if (!url || !serviceKey) {
-    return {
-      sent: false,
-      provider: null,
-      error: 'supabase admin not configured',
-    };
-  }
-
+/**
+ * Send the invitation email — IF the platform operator has enabled
+ * email delivery.
+ *
+ *   mode = 'link_only' (default) → send nothing, return
+ *      reason 'link_only'. The caller already has the /join/<token>
+ *      URL and shows it for the admin to deliver by hand.
+ *   mode = 'email' → try the operator's configured transport
+ *      (Platform admin → Invite delivery), then the platform
+ *      RESEND_API_KEY env fallback.
+ *
+ * Never throws — delivery is best-effort and the invitation row
+ * exists either way.
+ */
+/**
+ * Health bookkeeping must never be able to fail a send. The helpers
+ * already swallow their own errors, but this module must not *depend*
+ * on that — a future change there shouldn't be able to turn a handled
+ * delivery failure into a 500 on the invite API.
+ */
+async function safely(work: Promise<unknown>): Promise<void> {
   try {
-    const admin = createClient(url, serviceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    // Supabase sends its built-in "You have been invited" email.
-    // After the user authenticates, they're redirected to our
-    // /join/<token> page which redeems the workspace invitation.
-    const { error } = await admin.auth.admin.inviteUserByEmail(p.to, {
-      redirectTo: p.inviteUrl,
-      data: {
-        full_name:
-          [p.firstName, p.lastName].filter(Boolean).join(' ').trim() ||
-          undefined,
-        invited_to_account: p.accountName,
-      },
-    });
-
-    if (error) {
-      // Most common: the auth user already exists (they have an
-      // account elsewhere). Not fatal — the admin still has the
-      // copyable link to share directly.
-      console.error('[invite-email] supabase invite failed:', error.message);
-      return { sent: false, provider: 'supabase', error: error.message };
-    }
-    return { sent: true, provider: 'supabase' };
+    await work;
   } catch (err) {
-    console.error('[invite-email] supabase invite error:', err);
-    return { sent: false, provider: 'supabase', error: 'unexpected error' };
+    console.error('[invite-email] delivery bookkeeping failed:', err);
   }
 }
 
-/**
- * Send the invitation email. Delivery chain, first success wins:
- *
- *   1. Workspace provider (SMTP / Resend / MSG91) via the generic
- *      mailer — when the caller passes `workspace` and the account
- *      configured email delivery in Settings.
- *   2. Platform Resend (RESEND_API_KEY env).
- *   3. Supabase's built-in invite email (default / testing).
- *
- * Never throws — delivery is best-effort.
- */
 export async function sendInviteEmail(
   p: InviteEmailParams
 ): Promise<InviteEmailResult> {
-  // 1. Workspace-configured provider (tenant's own SMTP/Resend/MSG91).
-  if (p.workspace) {
-    const viaWorkspace = await sendEmail(p.workspace.db, p.workspace.accountId, {
+  // Gate FIRST, before touching any provider. Checking the mode
+  // after a send attempt would be pointless — the mail would
+  // already be gone.
+  const mode = await getInviteDeliveryMode();
+  if (mode !== 'email') {
+    return { sent: false, provider: null, reason: 'link_only' };
+  }
+
+  // 1. The platform operator's transport (Platform admin → Invite
+  //    delivery). This is the ONLY tenant-independent sender: a
+  //    workspace owner cannot point invite mail at their own SMTP
+  //    server, because invites go to strangers and must come from
+  //    the platform's verified sender, under operator control.
+  let lastError: string | null = null;
+  const platform = await getPlatformTransport();
+  if (platform) {
+    const viaPlatform = await sendWithSettings(platform, {
       to: p.to,
       subject: `You've been invited to join ${p.accountName}`,
       html: renderHtml(p),
     });
-    if (viaWorkspace.sent) {
-      return { sent: true, provider: viaWorkspace.provider };
+    if (viaPlatform.sent) {
+      await safely(resetInviteDeliveryFailures());
+      return { sent: true, provider: viaPlatform.provider, reason: 'sent' };
     }
+    // A configured-but-failing transport (rotted password, revoked
+    // key, blocked sender) is a real failure and counts toward the
+    // auto-disable breaker. "Not configured at all" does not — that
+    // is a setup state, handled by falling through below.
+    lastError = viaPlatform.error ?? 'platform transport failed';
   }
 
-  // 2-3. Platform fallbacks.
+  // 2. Platform Resend, only when an operator supplied a key.
   if (process.env.RESEND_API_KEY) {
     const result = await sendViaResend(p);
-    // If Resend is configured but the send bounced (e.g. unverified
-    // sender domain), fall back to Supabase so the invite still
-    // reaches the user in dev/testing setups.
-    if (result.sent) return result;
-    const fallback = await sendViaSupabase(p);
-    return fallback.sent ? fallback : result;
+    if (result.sent) {
+      await safely(resetInviteDeliveryFailures());
+      return { ...result, reason: 'sent' };
+    }
+    // Every provider we have refused. Count it — enough of these in a
+    // row and email auto-disables itself, so admins fall back to the
+    // link that always works instead of invites vanishing into a
+    // broken SMTP config.
+    await safely(recordInviteDeliveryFailure(result.error ?? lastError));
+    return { ...result, reason: 'send_failed' };
   }
-  return sendViaSupabase(p);
+
+  // The workspace provider was the only option, and it failed.
+  if (lastError) {
+    await safely(recordInviteDeliveryFailure(lastError));
+    return {
+      sent: false,
+      provider: null,
+      reason: 'send_failed',
+      error: lastError,
+    };
+  }
+
+  // Delivery is on, but nothing is configured to actually deliver.
+  // Report it plainly instead of silently reaching for a fallback:
+  // the previous code called Supabase's `inviteUserByEmail` here,
+  // which CREATES an auth user for the address and mails Supabase's
+  // own magic link. That both bypassed this gate and let anyone with
+  // invite rights pre-create accounts for arbitrary addresses.
+  return {
+    sent: false,
+    provider: null,
+    reason: 'no_provider',
+    error: 'no email provider configured',
+  };
 }

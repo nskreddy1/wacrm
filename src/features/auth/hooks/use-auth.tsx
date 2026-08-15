@@ -16,6 +16,7 @@ import {
 // client-fetched session can never drift in shape.
 import type {
   SessionAccount as AccountSummary,
+  SessionMembership,
   SessionPayload,
   SessionProfile as Profile,
 } from '@/features/auth/lib/session-payload';
@@ -45,6 +46,14 @@ interface AuthContextValue {
   permissions: readonly string[];
   /** Assigned workspace profile (permission set), if any. */
   workspaceProfile: { id: string; name: string } | null;
+  /**
+   * Every workspace the viewer can act in, for the sidebar switcher.
+   * Usually length 1; longer once they've joined someone else's
+   * workspace. Display data only — switching is verified server-side.
+   */
+  memberships: readonly SessionMembership[];
+  /** True iff the viewer belongs to more than one workspace. */
+  canSwitchWorkspace: boolean;
   /** True iff the member holds `slug` (owners always pass). */
   can: (slug: PermissionSlug) => boolean;
 }
@@ -81,6 +90,12 @@ export function AuthProvider({
     () => deriveCapabilities(permissions, isOwner),
     [permissions, isOwner]
   );
+  // Same reasoning as `permissions`: keep the empty fallback stable so
+  // it can't invalidate the context memo on every render.
+  const memberships = useMemo(
+    () => session?.memberships ?? [],
+    [session?.memberships]
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -110,9 +125,11 @@ export function AuthProvider({
       canSendMessages: caps.canSendMessages,
       permissions,
       workspaceProfile: session?.profile.workspace_profile ?? null,
+      memberships,
+      canSwitchWorkspace: memberships.length > 1,
       can: (slug: PermissionSlug) => hasPermission(permissions, slug, isOwner),
     }),
-    [isLoading, mutate, role, session, isOwner, caps, permissions]
+    [isLoading, mutate, role, session, isOwner, caps, permissions, memberships]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

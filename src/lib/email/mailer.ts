@@ -120,6 +120,93 @@ function formatFrom(fromEmail: string, fromName: string | null): string {
   return fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 }
 
+/**
+ * Load email settings from the workspace's connected email CHANNEL
+ * (`channel_connections`), which is what Settings → Channels → Email
+ * actually writes.
+ *
+ * Why this exists: this module originally read only
+ * `account_email_settings`, a second table written exclusively by an
+ * API route whose UI panel is mounted nowhere. In practice that table
+ * is always empty, so `sendEmail()` always skipped the tenant and fell
+ * through to platform env keys — and with no env keys set, invitation
+ * email could never send no matter what an admin configured in the UI.
+ * Reading the channel closes that gap and makes the visible,
+ * test-before-enable connection the real source of truth.
+ *
+ * Only `status = 'connected'` rows qualify: that status is set after
+ * the adapter's verify() succeeds, so we never try to send through a
+ * half-configured or known-broken transport.
+ */
+async function loadEmailChannelSettings(
+  db: SupabaseClient,
+  accountId: string
+): Promise<AccountEmailSettings | null> {
+  const { data, error } = await db
+    .from('channel_connections')
+    .select(
+      'provider, external_identity, configuration, credentials_encrypted, status'
+    )
+    .eq('account_id', accountId)
+    .eq('channel', 'email')
+    .eq('status', 'connected')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.credentials_encrypted || !data.external_identity) {
+    return null;
+  }
+
+  const config = (data.configuration ?? {}) as Record<string, unknown>;
+  const fromName =
+    typeof config.fromName === 'string' && config.fromName.trim()
+      ? config.fromName.trim()
+      : null;
+
+  try {
+    // Channel credentials are a discriminated { provider, value } blob,
+    // unlike the flat shape used by account_email_settings — map it
+    // onto this module's AccountEmailSettings so both paths converge on
+    // the same sendWithSettings() dispatch.
+    const parsed = JSON.parse(decrypt(data.credentials_encrypted)) as {
+      provider: string;
+      value: Record<string, unknown>;
+    };
+    if (parsed.provider !== data.provider) return null;
+
+    let credentials: EmailCredentials;
+    if (parsed.provider === 'smtp') {
+      const port = Number(config.port);
+      if (!config.host || !Number.isFinite(port)) return null;
+      credentials = {
+        host: String(config.host),
+        port,
+        secure: config.secure === true,
+        username: String(parsed.value.username ?? ''),
+        password: String(parsed.value.password ?? ''),
+      };
+    } else if (parsed.provider === 'resend') {
+      credentials = { apiKey: String(parsed.value.apiKey ?? '') };
+    } else if (parsed.provider === 'mailtrap') {
+      credentials = { token: String(parsed.value.token ?? '') };
+    } else {
+      // google/twilio/meta are not transactional-email transports here.
+      return null;
+    }
+
+    return {
+      provider: parsed.provider as EmailProvider,
+      fromEmail: data.external_identity,
+      fromName,
+      credentials,
+    };
+  } catch (err) {
+    console.error('[mailer] failed to decrypt email channel:', err);
+    return null;
+  }
+}
+
 // ------------------------------------------------------------
 // Adapter: SMTP (nodemailer) — Gmail, Zoho, Outlook, cPanel, ...
 // ------------------------------------------------------------
@@ -182,7 +269,11 @@ async function sendViaResendKey(
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.error('[mailer] resend send failed:', res.status, detail);
-      return { sent: false, provider, error: `resend ${res.status}` };
+      return {
+        sent: false,
+        provider,
+        error: describeProviderFailure('resend', res.status, detail),
+      };
     }
     return { sent: true, provider };
   } catch (err) {
@@ -217,13 +308,59 @@ async function sendViaMsg91(
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.error('[mailer] msg91 send failed:', res.status, detail);
-      return { sent: false, provider: 'msg91', error: `msg91 ${res.status}` };
+      return {
+        sent: false,
+        provider: 'msg91',
+        error: describeProviderFailure('msg91', res.status, detail),
+      };
     }
     return { sent: true, provider: 'msg91' };
   } catch (err) {
     console.error('[mailer] msg91 network error:', err);
     return { sent: false, provider: 'msg91', error: 'network error' };
   }
+}
+
+/**
+ * Turns a failed provider response into a message an operator can act on.
+ *
+ * Bare `mailtrap 403` tells nobody anything. Providers put the real
+ * reason in the body ("recipient not allowed in demo domain",
+ * "domain not verified", "invalid api token"), so we surface a trimmed
+ * version of it alongside the status.
+ *
+ * Only the response body is echoed — never the request, so the API
+ * token cannot leak into a toast or an audit row. The result is capped
+ * because some providers return HTML error pages.
+ */
+function describeProviderFailure(
+  provider: string,
+  status: number,
+  rawBody: string
+): string {
+  let reason = '';
+  try {
+    const parsed: unknown = JSON.parse(rawBody);
+    if (parsed && typeof parsed === 'object') {
+      const o = parsed as Record<string, unknown>;
+      // Mailtrap → { errors: [...] }, Resend → { message }, MSG91 → { message }
+      if (Array.isArray(o.errors)) {
+        reason = o.errors.filter((e) => typeof e === 'string').join('; ');
+      } else if (typeof o.message === 'string') {
+        reason = o.message;
+      } else if (typeof o.error === 'string') {
+        reason = o.error;
+      }
+    }
+  } catch {
+    // Not JSON (HTML error page, empty body) — fall through to the raw text.
+  }
+  if (!reason) {
+    // Collapse whitespace so a multi-line HTML page stays readable.
+    reason = rawBody.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  const capped = reason.length > 180 ? `${reason.slice(0, 180)}…` : reason;
+  return capped ? `${provider} ${status}: ${capped}` : `${provider} ${status}`;
 }
 
 // ------------------------------------------------------------
@@ -254,7 +391,11 @@ async function sendViaMailtrapToken(
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.error('[mailer] mailtrap send failed:', res.status, detail);
-      return { sent: false, provider, error: `mailtrap ${res.status}` };
+      return {
+        sent: false,
+        provider,
+        error: describeProviderFailure('mailtrap', res.status, detail),
+      };
     }
     return { sent: true, provider };
   } catch (err) {
@@ -307,12 +448,21 @@ export async function sendEmail(
   accountId: string,
   msg: EmailMessage
 ): Promise<EmailSendResult> {
-  const settings = await loadAccountEmailSettings(db, accountId);
-  if (settings) {
+  // Tenant transports, in order of trustworthiness: the connected
+  // email channel (verified by a real test send before it was marked
+  // 'connected') first, then the legacy account_email_settings row.
+  // Trying both keeps any existing legacy config working while making
+  // the channel the primary, UI-visible source of truth.
+  const tenantSettings = [
+    await loadEmailChannelSettings(db, accountId),
+    await loadAccountEmailSettings(db, accountId),
+  ].filter((s): s is AccountEmailSettings => s !== null);
+
+  for (const settings of tenantSettings) {
     const result = await sendWithSettings(settings, msg);
     if (result.sent) return result;
     // Tenant config broken (expired password, revoked key...) —
-    // fall through to platform fallback so mail still goes out.
+    // fall through to the next transport so mail still goes out.
   }
 
   // Platform fallback chain: Resend first, then Mailtrap. Each is

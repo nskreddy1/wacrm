@@ -10,6 +10,14 @@ const PUBLIC_PREFIXES = [
   '/join/',
   '/api/webhooks/',
   '/api/v1/',
+  // The /join/<token> page is public, so the endpoints it calls must be
+  // too. Both authenticate with the invite token itself (hashed before it
+  // reaches the DB) rather than a session: `peek` renders "you're invited
+  // to <Account> as <Role>" for a signed-out visitor, and `redeem` is
+  // reached right after sign-up. Without this exemption the proxy
+  // 307-redirects those fetches to /login and the invitee is stuck on a
+  // permanently loading page — which is the whole link-only invite flow.
+  '/api/invitations/',
   // Provider webhooks authenticate via request signatures inside the route handlers.
   '/api/channels/webhooks/',
   '/api/whatsapp/webhook',

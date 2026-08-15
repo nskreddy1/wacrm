@@ -39,7 +39,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { IdentityAvatar } from '@/components/shared/identity-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -138,6 +138,9 @@ export function MembersTab() {
   const [profileOptions, setProfileOptions] = useState<
     WorkspaceProfileOption[]
   >([]);
+  // Hierarchy roles (the "where do you sit" axis). Without these the
+  // Role column had no options to offer and rendered a dead "—".
+  const [roleOptions, setRoleOptions] = useState<WorkspaceProfileOption[]>([]);
   const [summary, setSummary] = useState<StatusSummary | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -171,13 +174,16 @@ export function MembersTab() {
         // underneath so counts stay warm.
         params.set('status', status === 'invited' ? 'active' : status);
         if (q) params.set('q', q);
-        const [mres, ires, pres] = await Promise.all([
+        const [mres, ires, pres, rres] = await Promise.all([
           fetch(`/api/account/members?${params}`, { cache: 'no-store' }),
           canManageMembers
             ? fetch('/api/account/invitations', { cache: 'no-store' })
             : Promise.resolve(null),
           canManageMembers
             ? fetch('/api/account/profiles', { cache: 'no-store' })
+            : Promise.resolve(null),
+          canManageMembers
+            ? fetch('/api/account/roles', { cache: 'no-store' })
             : Promise.resolve(null),
         ]);
         if (seq !== requestSeq.current) return;
@@ -213,6 +219,14 @@ export function MembersTab() {
           // The profiles API returns { data }; tolerate legacy { profiles }.
           const list = pdata.data ?? pdata.profiles ?? [];
           setProfileOptions(list.map((p) => ({ id: p.id, name: p.name })));
+        }
+        if (rres && rres.ok) {
+          const rdata = (await rres.json()) as {
+            data?: WorkspaceProfileOption[];
+          };
+          setRoleOptions(
+            (rdata.data ?? []).map((r) => ({ id: r.id, name: r.name }))
+          );
         }
       } catch (err) {
         console.error('[MembersTab] load error:', err);
@@ -291,7 +305,12 @@ export function MembersTab() {
       const res = await fetch(`/api/account/members/${member.user_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceProfileId: profileId }),
+        // Key must be snake_case `profile_id` — that is what the PATCH
+        // route reads. A camelCase key parsed as `undefined`, so the
+        // route saw an empty patch and rejected it with the
+        // "Provide 'profile_id' and/or 'status'" 400 before ever
+        // reaching set_member_profile().
+        body: JSON.stringify({ profile_id: profileId }),
       });
       if (!res.ok) {
         setMembers((prev) =>
@@ -320,6 +339,52 @@ export function MembersTab() {
         )
       );
       console.error('[MembersTab] profile change error:', err);
+      toast.error('Could not reach the server');
+    } finally {
+      setPendingMemberAction(null);
+    }
+  }
+
+  /** PATCH a member's hierarchy role (reporting line / visibility). */
+  async function handleRoleChange(member: AccountMember, roleId: string) {
+    if (member.workspace_role?.id === roleId) return;
+    const previous = member.workspace_role;
+    const nextRole = roleOptions.find((r) => r.id === roleId) ?? null;
+    setPendingMemberAction(member.user_id);
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.user_id === member.user_id ? { ...m, workspace_role: nextRole } : m
+      )
+    );
+    try {
+      const res = await fetch(`/api/account/members/${member.user_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role_id: roleId }),
+      });
+      if (!res.ok) {
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.user_id === member.user_id ? { ...m, workspace_role: previous } : m
+          )
+        );
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || 'Failed to update role');
+        return;
+      }
+      toast.success(
+        t('roleUpdatedToast', {
+          name: member.full_name || t('unnamed'),
+          role: nextRole?.name ?? '',
+        })
+      );
+    } catch (err) {
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === member.user_id ? { ...m, workspace_role: previous } : m
+        )
+      );
+      console.error('[MembersTab] role change error:', err);
       toast.error('Could not reach the server');
     } finally {
       setPendingMemberAction(null);
@@ -520,13 +585,11 @@ export function MembersTab() {
                       .join(' ');
                     return (
                       <div className="flex min-w-0 items-center gap-3">
-                        <Avatar className="size-8 shrink-0">
-                          <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                            {(name || inv.invited_email || inv.label || 'U')
-                              .charAt(0)
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                        <IdentityAvatar
+                          kind="user"
+                          name={name || inv.invited_email || inv.label}
+                          size="sm"
+                        />
                         <span className="text-foreground truncate font-medium">
                           {name || inv.label || t('untitledInvite')}
                         </span>
@@ -583,8 +646,27 @@ export function MembersTab() {
             />
           ) : (
             <>
-              {/* Users table — Bigin columns: Full Name | Email | Role | Profile. */}
-              <DataTable<AccountMember>
+                {/* Two orthogonal access axes, spelled out once here so
+                    admins aren't left guessing why both columns exist:
+                    Role = data visibility (hierarchy), Profile =
+                    permissions (capabilities). */}
+                {canManageMembers && (
+                  <p className="text-muted-foreground mb-3 text-xs">
+                    {t.rich('roleProfileHint', {
+                      bold: (chunks) => (
+                        <span className="text-foreground font-medium">
+                          {chunks}
+                        </span>
+                      ),
+                    })}
+                  </p>
+                )}
+                {/* Users table — Bigin columns: Full Name | Email | Role | Profile. */}
+                <DataTable<AccountMember>
+                // Column widths already total 100%, so DataTable's default
+                // slack column would render as a stray empty cell after the
+                // row menu.
+                fill={false}
                 rows={members}
                 rowKey={(m) => m.user_id}
                 empty={
@@ -599,32 +681,41 @@ export function MembersTab() {
                   {
                     id: 'name',
                     header: t('colName'),
-                    className: 'w-[30%]',
+                    // Percentages alone let the Role/Profile selects get
+                    // crushed below their content width on a laptop
+                    // viewport (the Profile column was clipping). Pairing
+                    // each width with a min-width makes the table claim
+                    // the space it needs and lets the frame scroll
+                    // instead — the selects stay readable at any width.
+                    className: 'w-[26%] min-w-[13rem]',
                     cell: (member) => {
                       const isSelf = member.user_id === user?.id;
                       return (
                         <div className="flex min-w-0 items-center gap-3">
-                          <Avatar className="size-8 shrink-0">
-                            {member.avatar_url ? (
-                              <AvatarImage
-                                src={member.avatar_url}
-                                alt={member.full_name || 'Member'}
-                              />
-                            ) : null}
-                            <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                              {(member.full_name || member.email || 'U')
-                                .charAt(0)
-                                .toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
+                    <IdentityAvatar
+                      kind="user"
+                      name={personDisplayName(member.full_name, member.email)}
+                      imageUrl={member.avatar_url}
+                      size="sm"
+                    />
                           <span className="text-foreground truncate font-medium">
                             {personDisplayName(member.full_name, member.email)}
                           </span>
-                          {isSelf && (
-                            <Badge className="bg-muted text-muted-foreground border-border text-[10px] tracking-wide uppercase">
+                          {/* "Owner" is the tenant-visible way to convey
+                              "this account's top authority". The platform
+                              tier (profiles.is_super_admin) is deliberately
+                              NOT surfaced here — it is invisible to
+                              customers, so its name must never leak into a
+                              tenant-facing table. */}
+                          {member.is_owner ? (
+                            <Badge className="bg-primary-soft text-primary border-primary/20 shrink-0 text-[10px] tracking-wide uppercase">
+                              {t('ownerBadge')}
+                            </Badge>
+                          ) : isSelf ? (
+                            <Badge className="bg-muted text-muted-foreground border-border shrink-0 text-[10px] tracking-wide uppercase">
                               {t('you')}
                             </Badge>
-                          )}
+                          ) : null}
                         </div>
                       );
                     },
@@ -632,7 +723,7 @@ export function MembersTab() {
                   {
                     id: 'email',
                     header: t('colEmail'),
-                    className: 'w-[32%]',
+                    className: 'w-[26%] min-w-[12rem]',
                     cell: (member) => (
                       <span className="text-muted-foreground truncate">
                         {member.email ?? '—'}
@@ -641,38 +732,99 @@ export function MembersTab() {
                   },
                   {
                     id: 'role',
-                    header: t('colRole'),
-                    className: 'w-[16%]',
-                    cell: (member) => (
-                      <span className="text-foreground">
-                        {member.workspace_role?.name ?? '—'}
+                    header: (
+                      <span
+                        className="decoration-muted-foreground/40 cursor-help underline decoration-dotted underline-offset-4"
+                        title={t('colRoleHelp')}
+                      >
+                        {t('colRole')}
                       </span>
                     ),
-                  },
-                  {
-                    id: 'profile',
-                    header: t('colProfile'),
-                    className: 'w-[16%]',
+                    className: 'w-[19%] min-w-[11rem]',
                     cell: (member) => {
-                      const isSelf = member.user_id === user?.id;
                       const isBusy = pendingMemberAction === member.user_id;
-                      // Owner is the immutable Super Admin; self can't
-                      // edit own profile; non-managers see text only.
-                      if (member.is_owner) {
-                        return (
-                          <span className="text-foreground font-medium">
-                            {t('superAdmin')}
+                      // Read-only for non-managers and on the archival
+                      // tabs; otherwise assignable. Unlike the profile
+                      // axis the owner IS assignable, since a hierarchy
+                      // role is a reporting line, not a permission set.
+                      if (
+                        !canManageMembers ||
+                        statusFilter !== 'active' ||
+                        roleOptions.length === 0
+                      ) {
+                        return member.workspace_role ? (
+                          <span className="text-foreground truncate">
+                            {member.workspace_role.name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground italic">
+                            {t('unassigned')}
                           </span>
                         );
                       }
+                      return (
+                        <Select
+                          value={member.workspace_role?.id ?? ''}
+                          onValueChange={(v) => v && handleRoleChange(member, v)}
+                        >
+                          <SelectTrigger
+                            className="w-full max-w-[11rem]"
+                            disabled={isBusy}
+                          >
+                            <SelectValue placeholder={t('unassigned')}>
+                              {member.workspace_role?.name ?? (
+                                <span className="text-muted-foreground italic">
+                                  {t('unassigned')}
+                                </span>
+                              )}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roleOptions.map((r) => (
+                              <SelectItem key={r.id} value={r.id}>
+                                {r.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      );
+                    },
+                  },
+                  {
+                    id: 'profile',
+                    header: (
+                      <span
+                        className="decoration-muted-foreground/40 cursor-help underline decoration-dotted underline-offset-4"
+                        title={t('colProfileHelp')}
+                      >
+                        {t('colProfile')}
+                      </span>
+                    ),
+                    className: 'w-[19%] min-w-[11rem]',
+                    cell: (member) => {
+                      const isSelf = member.user_id === user?.id;
+                      const isBusy = pendingMemberAction === member.user_id;
+                      // The owner's permission set is fixed (demoting the
+                      // owner could lock the account out of its own
+                      // administration), so it renders read-only — but it
+                      // renders the REAL assigned profile from the
+                      // database. It used to hardcode the platform-tier
+                      // name "Super Admin", which both lied about the
+                      // actual grant and exposed a platform concept that
+                      // tenants must never see.
                       if (
+                        member.is_owner ||
                         !canManageMembers ||
                         isSelf ||
                         statusFilter !== 'active'
                       ) {
-                        return (
-                          <span className="text-foreground">
-                            {member.workspace_profile?.name ?? '—'}
+                        return member.workspace_profile ? (
+                          <span className="text-foreground truncate">
+                            {member.workspace_profile.name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground italic">
+                            {t('unassigned')}
                           </span>
                         );
                       }
@@ -683,11 +835,18 @@ export function MembersTab() {
                             v && handleProfileChange(member, v)
                           }
                         >
-                          <SelectTrigger className="w-40" disabled={isBusy}>
+                          <SelectTrigger
+                            className="w-full max-w-[11rem]"
+                            disabled={isBusy}
+                          >
                             {/* Explicit children so a not-yet-loaded option
                                 list can never surface the raw UUID value. */}
-                            <SelectValue placeholder="—">
-                              {member.workspace_profile?.name ?? '—'}
+                            <SelectValue placeholder={t('unassigned')}>
+                              {member.workspace_profile?.name ?? (
+                                <span className="text-muted-foreground italic">
+                                  {t('unassigned')}
+                                </span>
+                              )}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
@@ -704,7 +863,11 @@ export function MembersTab() {
                   {
                     id: 'actions',
                     header: <span className="sr-only">{t('colActions')}</span>,
-                    className: 'w-12 text-right',
+                    // Column widths must total exactly 100%: 26 + 26 + 19
+                    // + 19 + 10. They previously summed to 94% plus a
+                    // fixed 48px, so the table's leftover width rendered
+                    // as a stray empty cell after the row menu.
+                    className: 'w-[10%] text-right',
                     cell: (member) => {
                       const isSelf = member.user_id === user?.id;
                       const isBusy = pendingMemberAction === member.user_id;

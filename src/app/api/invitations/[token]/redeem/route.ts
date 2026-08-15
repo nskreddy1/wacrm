@@ -1,16 +1,24 @@
 // ============================================================
 // POST /api/invitations/[token]/redeem
 //
-// Authenticated. Caller atomically moves from their personal
-// account (created at signup) to the inviter's account with the
-// invite's role. Heavy lifting lives in the SECURITY DEFINER
-// `redeem_invitation` RPC from migration 019.
+// Authenticated. Caller ADDS a membership in the inviter's
+// workspace and switches into it, keeping every workspace they
+// already belong to (ADR-004 D3 — joining is additive since
+// Task 3; it used to move the caller and delete their old
+// account). Heavy lifting lives in the SECURITY DEFINER
+// `redeem_invitation` RPC.
 //
-// Refusal contract (from the RPC)
-//   - SQLSTATE 42501 → 401 (caller not authenticated)
-//   - SQLSTATE 22023 → 400 (invitation not_found / used / expired)
-//   - SQLSTATE 23505 → 409 (caller's account already has data /
-//     they're already in this or another shared account)
+// Refusal contract (verified against the live function)
+//   - 42501 'Unauthorized'                  → 401 unauthorized
+//   - 42501 '…different email address'      → 403 email_mismatch
+//   - 42501 'Confirm your email address…'   → 403 email_unverified
+//   - 42501 '…cannot grant ownership'       → 403 forbidden
+//   - 22023 not found / used / expired      → 400 invalid
+//   - anything else                         → 500 server_error
+//
+// There is no 409. Redeeming twice is now idempotent, so the
+// "your account already has data" refusal — and the dead-end UI
+// that told users to sign up with a different email — is gone.
 //
 // Rate limit (per IP) is the same shape as peek but tighter —
 // a successful redeem changes data, and the RPC's data-loss
@@ -39,21 +47,69 @@ function getClientIp(request: Request): string {
   return 'unknown';
 }
 
+/**
+ * Machine-readable refusal reason. The join page switches on this
+ * instead of string-matching the database's prose, so reworded
+ * messages can't silently change which UI state the user lands in.
+ */
+export type RedeemFailureReason =
+  | 'unauthorized'
+  | 'email_mismatch'
+  | 'email_unverified'
+  | 'forbidden'
+  | 'invalid'
+  | 'server_error';
+
+function fail(
+  status: number,
+  reason: RedeemFailureReason,
+  error: string
+): NextResponse {
+  return NextResponse.json({ error, reason }, { status });
+}
+
+/**
+ * Map the RPC's SQLSTATE + message onto an HTTP status and a reason.
+ *
+ * `redeem_invitation` raises exactly two errcodes (verified against the
+ * live function), and 42501 covers FOUR distinct situations that need
+ * different UI. They are separated here on message because the RPC has
+ * no room for a finer code, but the resulting `reason` is what the UI
+ * consumes — the prose stays server-side.
+ *
+ * The distinction matters: an email mismatch is NOT 401. A 401 tells the
+ * client "log in", so the invitee logs in again as the same wrong user
+ * and loops. It is 403 + email_mismatch — authenticated, but not the
+ * addressee.
+ *
+ * Note 23505 is deliberately absent. Task 3 made re-redemption
+ * idempotent, so the old 409 "you already have data, sign up with a
+ * different email" dead end can no longer occur; a 23505 arriving here
+ * now means an unexpected constraint violation, which is a 500.
+ */
 function rpcErrorToResponse(err: PostgrestError): NextResponse {
   if (err.code === '42501') {
-    return NextResponse.json({ error: err.message }, { status: 401 });
+    const m = err.message;
+    if (m.includes('different email address')) {
+      return fail(403, 'email_mismatch', m);
+    }
+    if (m.includes('Confirm your email address')) {
+      return fail(403, 'email_unverified', m);
+    }
+    if (m.includes('cannot grant ownership')) {
+      return fail(403, 'forbidden', m);
+    }
+    return fail(401, 'unauthorized', m);
   }
   if (err.code === '22023') {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    // not found / already redeemed / expired / legacy link-only invite.
+    return fail(400, 'invalid', err.message);
   }
-  if (err.code === '23505') {
-    return NextResponse.json({ error: err.message }, { status: 409 });
-  }
+  // Unexpected: log server-side, return a generic message. The raw
+  // message can name tables and constraints, which is free schema
+  // reconnaissance for an unauthenticated-ish caller.
   console.error('[redeem] unexpected RPC error:', err);
-  return NextResponse.json(
-    { error: 'Failed to redeem invitation' },
-    { status: 500 }
-  );
+  return fail(500, 'server_error', 'Failed to redeem invitation');
 }
 
 export async function POST(

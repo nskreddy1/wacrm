@@ -67,31 +67,54 @@ export async function PATCH(
 
     const body = (await request.json().catch(() => null)) as {
       profile_id?: unknown;
+      role_id?: unknown;
       status?: unknown;
     } | null;
 
-    const profileId =
-      typeof body?.profile_id === 'string' ? body.profile_id : undefined;
+    // `null` is meaningful — it unassigns. So presence of the key, not
+    // truthiness, decides whether we call the RPC.
+    const hasProfile =
+      !!body &&
+      'profile_id' in body &&
+      (typeof body.profile_id === 'string' || body.profile_id === null);
+    const profileId = hasProfile
+      ? ((body.profile_id as string | null) || null)
+      : undefined;
+
+    const hasRole =
+      !!body &&
+      'role_id' in body &&
+      (typeof body.role_id === 'string' || body.role_id === null);
+    const roleId = hasRole ? ((body.role_id as string | null) || null) : undefined;
+
     const status =
       typeof body?.status === 'string' &&
       (MEMBER_STATUSES as readonly string[]).includes(body.status)
         ? body.status
         : undefined;
 
-    if (!profileId && !status) {
+    if (!hasProfile && !hasRole && !status) {
       return NextResponse.json(
         {
           error:
-            "Provide 'profile_id' (workspace profile) and/or 'status' (active | inactive | deleted)",
+            "Provide 'profile_id' (workspace profile), 'role_id' (hierarchy role) and/or 'status' (active | inactive | deleted)",
         },
         { status: 400 }
       );
     }
 
-    if (profileId) {
+    if (hasProfile) {
       const { error } = await ctx.supabase.rpc('set_member_profile', {
         p_user_id: userId,
         p_profile_id: profileId,
+      });
+      if (error) return rpcErrorToResponse(error);
+    }
+
+    if (hasRole) {
+      const { error } = await ctx.supabase.rpc('set_member_workspace_role', {
+        p_user_id: userId,
+        p_role_id: roleId,
       });
       if (error) return rpcErrorToResponse(error);
     }
@@ -110,7 +133,8 @@ export async function PATCH(
       action: 'member.updated',
       entity: `member:${userId}`,
       meta: {
-        ...(profileId ? { profile_id: profileId } : {}),
+        ...(hasProfile ? { profile_id: profileId } : {}),
+        ...(hasRole ? { role_id: roleId } : {}),
         ...(status ? { status } : {}),
       },
     });
@@ -149,6 +173,10 @@ export async function DELETE(
       entity: `member:${userId}`,
     });
 
+    // `newPersonalAccountId` is the account the removed user's active-workspace
+    // pointer now rests on. Since ADR-004 Task 4 that is normally the account
+    // they ALREADY owned rather than a freshly minted one — removal no longer
+    // creates a duplicate account. Field name kept for wire compatibility.
     return NextResponse.json({ ok: true, newPersonalAccountId: data });
   } catch (err) {
     return toErrorResponse(err);

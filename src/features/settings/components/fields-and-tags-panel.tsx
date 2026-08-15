@@ -117,7 +117,11 @@ function FieldRow({
           type="button"
           onClick={() => onEdit(field)}
           aria-label={`Edit ${field.label}`}
-          className="bg-card text-muted-foreground hover:text-primary absolute inset-y-0 right-0 hidden items-center pr-3 pl-2 group-hover/field:flex"
+          // Opacity, not `hidden`: a display:none button is removed from
+          // the tab order entirely, so keyboard and touch users could
+          // never reach the rename action. It stays in the DOM and
+          // becomes visible on hover OR keyboard focus.
+          className="bg-card text-muted-foreground hover:text-primary focus-visible:text-primary absolute inset-y-0 right-0 flex items-center pr-3 pl-2 opacity-0 transition-opacity group-hover/field:opacity-100 focus-visible:opacity-100"
         >
           <svg
             aria-hidden

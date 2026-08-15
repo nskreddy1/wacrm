@@ -160,8 +160,13 @@ export function SectionToolbar({
   const searchId = useId();
   return (
     <div
+      // flex-wrap rather than a hard sm: row. Both groups have real
+      // intrinsic widths (filter chips left, fixed-width search right),
+      // so on mid-size viewports they used to overlap: the chips could
+      // not shrink and the search group was shrink-0. Wrapping drops the
+      // right group onto its own line instead of colliding.
       className={cn(
-        'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+        'flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between',
         className
       )}
     >
