@@ -61,6 +61,23 @@ const fetcher = async (url: string) => {
 };
 
 /**
+ * Reads a JSON body without throwing.
+ *
+ * A route that dies before its handler runs (misconfigured env, crash in
+ * a framework layer) returns an HTML error page, not JSON. Calling
+ * `res.json()` on that rejects and — inside a click handler — surfaces as
+ * an unhandled rejection with no user-visible feedback. Falling back to
+ * an empty object lets the caller show the generic message instead.
+ */
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Fetches the redacted summary, then mounts the form.
  *
  * The form is a separate keyed component so its fields can be seeded
