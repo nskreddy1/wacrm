@@ -141,7 +141,7 @@ export function PipelineWorkspace({
   // calls with { revalidate: false }. Revalidation must stay fully off —
   // otherwise SWR joins the array key into a bogus URL ("/account,…,snapshot")
   // and hits the global fetcher with it (observed as repeating 404s).
-  const { data: snapshot = initialSnapshot, mutate } = useSWR<PipelineSnapshot>(
+  const { data: cached, mutate } = useSWR<PipelineSnapshot>(
     cacheKeys.pipelineSnapshot(
       initialSnapshot.accountId,
       initialSnapshot.pipeline.id
@@ -155,6 +155,19 @@ export function PipelineWorkspace({
       revalidateOnReconnect: false,
     }
   );
+  // The server prop is the source of truth for *which* pipeline is on
+  // screen. Because the fetcher is `null` and every revalidation trigger
+  // is off, SWR has no cycle in which to re-read the new key's
+  // `fallbackData` — switching pipelines changed the key and the props but
+  // `data` stayed pinned to the previously resolved pipeline, so the board
+  // only updated on a hard refresh. Falling back to `initialSnapshot`
+  // whenever the cached entry describes a different pipeline keeps
+  // optimistic `mutate` writes (same pipeline id) while making a pipeline
+  // switch render immediately.
+  const snapshot =
+    cached && cached.pipeline.id === initialSnapshot.pipeline.id
+      ? cached
+      : initialSnapshot;
   const [query, setQuery] = useState('');
   const [owner, setOwner] = useState('all');
   const [stage, setStage] = useState('all');
