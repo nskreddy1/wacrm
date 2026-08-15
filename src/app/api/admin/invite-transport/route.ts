@@ -97,7 +97,9 @@ export async function PUT(request: Request) {
     accountId: null,
     action: 'invite_transport.update',
     entity: 'platform_settings',
-    after: result.summary,
+    // Spread: the audit column is a JSON `Record<string, unknown>` and
+    // a closed interface has no index signature to satisfy it.
+    after: { ...result.summary },
   });
 
   return NextResponse.json(result.summary);

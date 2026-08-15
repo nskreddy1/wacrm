@@ -41,6 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { InviteTransportPanel } from './invite-transport-panel';
 
 type AiEngine = 'direct' | 'langchain';
 
@@ -411,7 +412,7 @@ const DELIVERY_OPTIONS: {
     value: 'email',
     title: 'Send email',
     description:
-      "Emails the invite using the workspace's own SMTP settings, or the platform key.",
+      'Emails the invite from the platform sender configured below.',
   },
 ];
 
@@ -524,10 +525,12 @@ function EngineFlagSection() {
         )}
 
         {/* Invite delivery — platform-level, deliberately NOT a
-            per-workspace setting. A tenant configures their own SMTP
-            credentials in Settings → Email delivery, but only a
-            platform operator decides whether the system may send
-            outbound mail at all. */}
+            per-workspace setting. Both the on/off mode AND the sending
+            credentials live here: invites reach people who have no
+            account yet, so only the operator decides whether mail goes
+            out and which verified sender it comes from. Tenant email
+            providers (Settings → Channels) power broadcasts, never
+            invitations. */}
         <div className="flex flex-col gap-4 border-t pt-4">
           <div className="grid leading-tight">
             <span className="text-sm font-medium">Invite delivery</span>
@@ -575,16 +578,19 @@ function EngineFlagSection() {
 
           {data?.invite_delivery_mode === 'email' ? (
             <p className="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed">
-              <Mail
-                className="mt-0.5 size-3.5 shrink-0"
-                aria-hidden="true"
-              />
-              Invites are emailed. If a workspace has no email provider
-              configured, the invite is still created and the admin gets the
-              link.
+              <Mail className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              Invites are emailed using the platform sender below. If no sender
+              is configured, the invite is still created and the admin gets the
+              copyable link.
             </p>
           ) : null}
         </div>
+
+        {/* The sender is only meaningful when email delivery is on, so
+            it appears with the mode rather than as dead configuration. */}
+        {data?.invite_delivery_mode === 'email' ? (
+          <InviteTransportPanel />
+        ) : null}
 
         {saving && (
           <p className="text-muted-foreground flex items-center gap-2 text-xs">
