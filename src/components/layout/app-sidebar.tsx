@@ -304,8 +304,15 @@ function PlatformGroup() {
 function FooterMenu() {
   const router = useRouter();
   const { mode, setMode } = useTheme();
-  const { signOut, profile, isOwner, canEditSettings, workspaceProfile } =
-    useAuth();
+  const {
+    signOut,
+    profile,
+    isOwner,
+    canEditSettings,
+    workspaceProfile,
+    memberships,
+    accountId,
+  } = useAuth();
   const { isMobile, setOpenMobile, state } = useSidebar();
   // Reads the status the app is already publishing — no extra realtime
   // channel or roster fetch just to render one dot.
@@ -321,11 +328,22 @@ function FooterMenu() {
   // email lives in the dropdown so identity isn't duplicated on the rail.
   const displayName = personDisplayName(profile?.full_name, profile?.email);
   const displayEmail = profile?.email ?? '';
-  // Identity line is synced with the assigned workspace profile for
-  // everyone — the owner is auto-assigned the "Administrator" system
-  // profile at signup, so this reflects the same default profile
-  // shown in Settings instead of a hardcoded "Super Admin" label.
-  const roleLabel = workspaceProfile?.name ?? (isOwner ? 'Administrator' : '');
+  // Identity line = the profile the viewer holds IN THE ACTIVE
+  // WORKSPACE, never a hardcoded label. It changes with the workspace:
+  // the same person can be "Administrator" in their own workspace and
+  // "Standard" in one they were invited into.
+  //
+  // Fallback chain, first hit wins:
+  //   1. the session's resolved workspace profile
+  //   2. the active membership's profile (covers a session resolved
+  //      before the grant was mirrored onto the profiles pointer)
+  //   3. "Administrator" for the owner, whose profile is seeded at
+  //      signup — never left blank for the account holder.
+  const activeMembership = memberships.find((m) => m.accountId === accountId);
+  const roleLabel =
+    workspaceProfile?.name ??
+    activeMembership?.profileName ??
+    (isOwner ? 'Administrator' : '');
 
   const handleSignOut = async () => {
     await signOut();
