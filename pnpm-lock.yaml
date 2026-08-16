@@ -148,6 +148,9 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      use-stick-to-bottom:
+        specifier: ^1.1.6
+        version: 1.1.6(react@19.2.4)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -4969,6 +4972,11 @@ packages:
     resolution: {integrity: sha512-p6/gCromeBoec+wEuOIkPaytH77RBjW94KWv8MRsNrbI4UOx8QgwNhgl9lbPOKM/b0dpanLhCYztLEH5yQUjtg==}
     peerDependencies:
       react: ^17.0.0 || ^18.0.0 || >=19.0.0-rc <19.0.0 || ^19.0.0
+
+  use-stick-to-bottom@1.1.6:
+    resolution: {integrity: sha512-z3Up8jYQGTkUCsGBnwg6/wj70KgXoW5Kz1AAc1j8MtQuYMBo6ZsdhrIXoegxa7gaMMilgQYyTohTrt3p94jHog==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   use-sync-external-store@1.6.0:
     resolution: {integrity: sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==}
@@ -10353,6 +10361,10 @@ snapshots:
       '@schummar/icu-type-parser': 1.21.5
       icu-minify: 4.13.2
       intl-messageformat: 11.2.11
+      react: 19.2.4
+
+  use-stick-to-bottom@1.1.6(react@19.2.4):
+    dependencies:
       react: 19.2.4
 
   use-sync-external-store@1.6.0(react@19.2.4):
