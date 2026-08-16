@@ -196,6 +196,19 @@ function SignupPageInner() {
               label="Continue with Google"
             />
 
+            {/* The email/password path is pre-verified against the
+                invitation before any account is created, but Google's
+                is not verifiable up front: the chosen address is only
+                known after the redirect, by which point the account
+                exists. So the one thing we can do here is make the
+                requirement explicit before they pick an account. */}
+            {inviteToken && (
+              <p className="text-muted-foreground text-center text-xs">
+                Choose the Google account for the address the invitation
+                was sent to.
+              </p>
+            )}
+
             <FieldSeparator>or</FieldSeparator>
 
             <form onSubmit={handleSignup} className="contents">
