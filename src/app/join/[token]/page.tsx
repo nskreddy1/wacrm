@@ -45,6 +45,29 @@ interface PeekOk {
   account_name: string;
   role: 'admin' | 'agent' | 'viewer';
   expires_at: string;
+  /**
+   * The invited address, masked ('al***@example.com').
+   *
+   * Masked because peek is anonymous — an unmasked address would make
+   * every invite link an email-disclosure for anyone it gets forwarded
+   * to. Enough for the real recipient to recognise; used for display
+   * only, never for the decision.
+   *
+   * Optional: an older deployment of the RPC omits it.
+   */
+  invited_email_hint?: string;
+  /**
+   * Whether the signed-in visitor's email is the invited one. Computed
+   * in the database so the plaintext never crosses the wire.
+   *
+   *   true   — this link is for this person; accepting will work.
+   *   false  — signed in as somebody else; redeem WILL refuse.
+   *   null   — nobody signed in yet, so there is nothing to compare.
+   *
+   * `false` and `null` are deliberately distinct: one is a wrong
+   * identity to warn about, the other is simply "not yet known".
+   */
+  invited_email_matches?: boolean | null;
 }
 interface PeekFail {
   ok: false;
@@ -414,13 +437,43 @@ export default function JoinPage() {
         <p className="text-muted-foreground text-sm">
           Joining as {ROLE_LABEL[peek.role]}
         </p>
+        {/* Which address the link is bound to. Redeem accepts only this
+            one, so naming it up front is what turns a link that "might
+            work" into one the recipient can verify at a glance — and
+            tells someone signing up which of their addresses to use.
+            Masked, because this renders pre-auth to whoever holds the
+            link. */}
+        {peek.invited_email_hint ? (
+          <p className="text-muted-foreground/80 font-mono text-xs">
+            {peek.invited_email_hint}
+          </p>
+        ) : null}
       </div>
     </>
   );
 
   // ----- Authed: show Accept button -----
   if (authedUserId) {
-    const blockerCopy = blocker ? BLOCKER_COPY[blocker.reason] : null;
+    // Peek already told us whether this session is the invited one, so
+    // the mismatch can be stated on arrival instead of after a failed
+    // attempt. `blocker` (set by an actual refusal) wins, since it
+    // reports what the server really said; this only fills the gap
+    // before the first click.
+    //
+    // Same reason code either way, so the wording and the recovery
+    // path cannot drift apart between the two moments.
+    const preflightMismatch = !blocker && peek.invited_email_matches === false;
+    const blockerCopy = blocker
+      ? BLOCKER_COPY[blocker.reason]
+      : preflightMismatch
+        ? BLOCKER_COPY.email_mismatch
+        : null;
+
+    // Don't offer an action that is guaranteed to be refused. When we
+    // already know the identity is wrong, "Continue as <email>" is a
+    // button whose only outcome is an error — the switch-account
+    // control inside the notice is the real next step.
+    const canAccept = !preflightMismatch;
 
     return (
       <JoinShell>
@@ -474,22 +527,24 @@ export default function JoinPage() {
                 which account you are signed in as — behind a refusal
                 shown only afterwards. `truncate` because an email can
                 be longer than the button. */}
-            <Button
-              onClick={() => handleAccept(peek.account_name)}
-              disabled={accepting}
-              className="w-full"
-            >
-              {accepting ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                  Joining…
-                </>
-              ) : (
-                <span className="truncate">
-                  {authedEmail ? `Continue as ${authedEmail}` : 'Continue'}
-                </span>
-              )}
-            </Button>
+            {canAccept ? (
+              <Button
+                onClick={() => handleAccept(peek.account_name)}
+                disabled={accepting}
+                className="w-full"
+              >
+                {accepting ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    Joining…
+                  </>
+                ) : (
+                  <span className="truncate">
+                    {authedEmail ? `Continue as ${authedEmail}` : 'Continue'}
+                  </span>
+                )}
+              </Button>
+            ) : null}
         </div>
       </JoinShell>
     );
