@@ -78,6 +78,21 @@ interface PeekOk {
    */
   profile_name?: string | null;
   /**
+   * The workspace reporting role the inviter actually selected
+   * ('Level 1'), resolved from the invite's `workspace_role_id`.
+   *
+   * Prefer this over `role` for display. `role` is a legacy enum the
+   * invite sheet DERIVES rather than asks for: the Administrator system
+   * profile maps to 'admin' and every other profile collapses to
+   * 'agent'. So 'agent' is the residue of a lossy mapping, not a choice
+   * anyone made — which is why a Level 1 / Standard invite was reading
+   * as "Joining as Agent".
+   *
+   * Null on invites created before workspace roles existed, where the
+   * legacy enum is genuinely all we have.
+   */
+  workspace_role_name?: string | null;
+  /**
    * The exact invited address — populated ONLY when
    * `invited_email_matches` is true, i.e. only for a caller already
    * authenticated as that address. Masking a value from the one person
@@ -462,6 +477,16 @@ export default function JoinPage() {
   const invitedEmailDisplay =
     peek.invited_email_exact ?? peek.invited_email_hint;
 
+  // The role the inviter actually chose, with the legacy enum as a
+  // fallback only for invites that predate workspace roles.
+  //
+  // This is the fix for "Joining as Agent" on an invite created as
+  // Level 1 / Standard: `peek.role` is derived, not chosen — every
+  // non-Administrator profile collapses to 'agent' — so it was
+  // reporting a value the admin never picked and understating a Level 1
+  // reporting role as the bottom of the ladder.
+  const roleLabel = peek.workspace_role_name ?? ROLE_LABEL[peek.role];
+
   const inviteHeader = (
     <>
       <TeamMark name={workspaceLabel} />
@@ -476,11 +501,11 @@ export default function JoinPage() {
           You&apos;ve been invited to join{' '}
           <span className="font-semibold">{workspaceLabel}</span>
         </h1>
-        {/* Role AND permission set. The invite writes both to
-            account_members on redeem, so listing only the role
-            understated the access being granted. */}
+        {/* Role AND permission set — both are written to
+            account_members on redeem, so naming only one understated
+            the access being granted. */}
         <p className="text-muted-foreground text-sm">
-          Joining as {ROLE_LABEL[peek.role]}
+          Joining as {roleLabel}
           {peek.profile_name ? ` · ${peek.profile_name} access` : ''}
         </p>
         {/* Which address the link is bound to. Redeem accepts only this
