@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { validateFlowForActivation } from '@/features/flows/lib/validate';
 import { findExistingContact } from '@/features/contacts/lib/dedupe';
+import { runNamedOperation } from '@/features/integrations/lib/run';
+import { IntegrationError } from '@/features/integrations/lib/types';
 import { toE164 } from '@/lib/phone/e164';
 
 // ============================================================
@@ -1229,6 +1231,116 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
         };
       },
     }),
+
+    list_integration_operations: tool({
+      description:
+        "List the named operations an admin has published against this account's connected business systems (an orders database, a fees API, and so on). Shows each operation's mode (read or write) and which contact field its parameter binds to. Call this to find out what can be looked up before using lookup_integration_records. Read-only.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const { data, error } = await db
+          .from('integration_operations')
+          .select('name, description, mode, bindings, requires_confirmation')
+          .eq('account_id', ctx.accountId)
+          .eq('enabled', true)
+          .order('name');
+        if (error) return { error: 'Could not list integration operations.' };
+        return {
+          operations: (data ?? []).map((op) => ({
+            name: op.name,
+            description: op.description,
+            mode: op.mode,
+            // Surfaced so the model can explain WHY it cannot look up an
+            // arbitrary reference number: the parameter is bound to a
+            // contact field, not to anything it supplies.
+            bound_to: (
+              op.bindings as Array<{ source: string }> | null
+            )?.map((b) => b.source),
+            requires_confirmation: op.requires_confirmation,
+          })),
+          note: 'Parameters are filled from the contact record server-side. You choose the operation and the contact, never the lookup value.',
+        };
+      },
+    }),
+
+    lookup_integration_records: tool({
+      description:
+        "Look up one contact's records in a connected business system (for example their orders or outstanding fees) by running a published READ operation. You supply the operation name and the contact id; the lookup value is taken from the stored contact record, so this can only return rows belonging to that contact. Write operations are rejected here — use run_integration_write_operation for those. Read-only.",
+      inputSchema: z.object({
+        operation: z
+          .string()
+          .max(120)
+          .describe('Operation name from list_integration_operations.'),
+        contact_id: z.string().describe('Contact to look up records for.'),
+      }),
+      execute: async ({ operation, contact_id }) => {
+        try {
+          const result = await runNamedOperation({
+            db,
+            accountId: ctx.accountId,
+            name: operation,
+            contactId: contact_id,
+            // Hard false: this tool is in READ_TOOL_NAMES and therefore
+            // runs without an approval prompt, so it must never be able
+            // to reach a write-mode operation even if an admin flips one.
+            allowWrite: false,
+          });
+          return {
+            operation: result.operation,
+            row_count: result.rowCount,
+            truncated: result.truncated,
+            rows: result.rows,
+          };
+        } catch (err) {
+          return {
+            error:
+              err instanceof IntegrationError
+                ? err.message
+                : 'Could not run that lookup.',
+          };
+        }
+      },
+    }),
+
+    run_integration_write_operation: tool({
+      description:
+        "Run a published WRITE operation against a connected business system for one contact — for example marking a fee paid. Changes data in the customer's own system of record, so it is approval-gated: the user must grant access for each call. Pass dry_run first to preview the effect without applying it.",
+      inputSchema: z.object({
+        operation: z
+          .string()
+          .max(120)
+          .describe('Write-mode operation name.'),
+        contact_id: z.string().describe('Contact to run the operation for.'),
+        dry_run: z
+          .boolean()
+          .default(false)
+          .describe('Plan and roll back instead of committing.'),
+      }),
+      execute: async ({ operation, contact_id, dry_run }) => {
+        try {
+          const result = await runNamedOperation({
+            db,
+            accountId: ctx.accountId,
+            name: operation,
+            contactId: contact_id,
+            dryRun: dry_run,
+            allowWrite: true,
+          });
+          return {
+            operation: result.operation,
+            row_count: result.rowCount,
+            rolled_back: result.rolledBack,
+            rows: result.rows,
+          };
+        } catch (err) {
+          return {
+            error:
+              err instanceof IntegrationError
+                ? err.message
+                : 'Could not run that operation.',
+          };
+        }
+      },
+    }),
   };
 }
 
@@ -1242,6 +1354,9 @@ export const WRITE_TOOL_NAMES = [
   'create_workflow',
   'activate_workflow',
   'create_support_ticket',
+  // Writes into the customer's OWN system of record, so it belongs in
+  // the approval gate alongside the CRM writes.
+  'run_integration_write_operation',
 ] as const;
 
 /** Read-only tool names — safe to expose on the MCP server without approval. */
@@ -1262,4 +1377,6 @@ export const READ_TOOL_NAMES = [
   'list_tasks',
   'list_support_tickets',
   'get_ai_agent_status',
+  'list_integration_operations',
+  'lookup_integration_records',
 ] as const;

@@ -16,14 +16,8 @@
 import { requireApiKey } from '@/features/auth/lib/api-context';
 import { hasScope } from '@/features/api-keys/lib/scopes';
 import { ok, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
-import { decrypt } from '@/features/whatsapp/lib/encryption';
-import { executeOperation } from '@/features/integrations/lib/execute';
-import {
-  IntegrationError,
-  type BindableContact,
-  type IntegrationConnection,
-  type IntegrationOperation,
-} from '@/features/integrations/lib/types';
+import { runNamedOperation } from '@/features/integrations/lib/run';
+import { IntegrationError } from '@/features/integrations/lib/types';
 
 export async function POST(request: Request) {
   try {
@@ -53,87 +47,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: operationRow } = await ctx.supabase
-      .from('integration_operations')
-      .select(
-        'id, account_id, connection_id, name, description, mode, statement, bindings, expose_to_autoreply, requires_confirmation, row_limit, timeout_ms, enabled'
-      )
-      .eq('account_id', ctx.accountId)
-      .eq('name', name)
-      .eq('enabled', true)
-      .maybeSingle();
-
-    const operation = operationRow as IntegrationOperation | null;
-    if (!operation) {
-      return fail('not_found', `No enabled operation named "${name}"`, 404);
-    }
-
-    if (
-      operation.mode === 'write' &&
-      !hasScope(ctx.scopes, 'integrations:write')
-    ) {
-      return fail(
-        'forbidden',
-        `"${name}" is a write operation and requires the integrations:write scope`,
-        403
-      );
-    }
-
-    const { data: connectionRow } = await ctx.supabase
-      .from('integration_connections')
-      .select(
-        'id, account_id, name, kind, base_url, read_only, enabled, last_tested_at, last_error, encrypted_secret'
-      )
-      .eq('account_id', ctx.accountId)
-      .eq('id', operation.connection_id)
-      .maybeSingle();
-
-    const connection = connectionRow as
-      | (IntegrationConnection & { encrypted_secret: string | null })
-      | null;
-    if (!connection) {
-      return fail('not_found', 'Connection for this operation is missing', 404);
-    }
-
-    // Scoped by account_id as well as id: the contact must belong to
-    // this key's account, or one tenant could look up another's records.
-    const { data: contactRow } = await ctx.supabase
-      .from('contacts')
-      .select('id, account_id, phone, phone_normalized, email, name, company')
-      .eq('id', contactId)
-      .eq('account_id', ctx.accountId)
-      .maybeSingle();
-
-    const contact = contactRow as BindableContact | null;
-    if (!contact) {
-      return fail('not_found', 'Contact not found', 404);
-    }
-
-    let secret: string | null = null;
-    if (connection.encrypted_secret) {
-      try {
-        secret = decrypt(connection.encrypted_secret);
-      } catch {
-        return fail(
-          'internal',
-          'Stored credential for this connection could not be read',
-          500
-        );
-      }
-    }
-
-    const result = await executeOperation({
-      connection,
-      operation,
-      contact,
-      secret,
+    const result = await runNamedOperation({
+      db: ctx.supabase,
+      accountId: ctx.accountId,
+      name,
+      contactId,
       dryRun,
+      // A write-mode operation needs the stronger scope. Resolved here
+      // rather than inside the runner so the HTTP transport owns its own
+      // authorization decision.
+      allowWrite: hasScope(ctx.scopes, 'integrations:write'),
     });
 
     return ok({
-      operation: operation.name,
-      mode: operation.mode,
-      contact_id: contact.id,
+      operation: result.operation,
+      mode: result.mode,
+      contact_id: result.contactId,
       row_count: result.rowCount,
       truncated: result.truncated,
       rolled_back: result.rolledBack,
