@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 
 import { useCan } from '@/features/auth/hooks/use-can';
-import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TagManager } from './tag-manager';
 import { DealsSettings } from './deals-settings';

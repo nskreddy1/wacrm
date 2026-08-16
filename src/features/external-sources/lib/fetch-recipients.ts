@@ -312,9 +312,32 @@ async function fetchPostgresRows(
     );
   }
 
+  // The REST adapter has always been SSRF-guarded, but this branch was
+  // not — yet a connection string is just as attacker-influenced (any
+  // admin can save one) and we dial it from our own network. Without
+  // this check `postgres://…@127.0.0.1:5432/postgres` or a
+  // link-local/metadata address turns a "recipient list" into a port
+  // scanner against internal infrastructure. `new URL()` parses a
+  // postgres:// string, so the same host resolver used for webhooks
+  // applies unchanged.
+  if (!(await isDeliverableUrl(secret))) {
+    throw new ExternalSourceError(
+      'Connection host must be a publicly routable address'
+    );
+  }
+
   const client = new PgClient({
     connectionString: secret,
-    ssl: { rejectUnauthorized: false },
+    // `rejectUnauthorized: false` accepted ANY certificate, so a
+    // man-in-the-middle on the path to the customer's database could
+    // present a self-signed cert and read every row (and the
+    // credentials) in cleartext-equivalent terms. Verify by default and
+    // let an operator opt out per-connection via an explicit
+    // `sslmode=no-verify` in their own connection string, so relaxing
+    // it is a recorded choice rather than a silent global default.
+    ssl: /[?&]sslmode=no-verify\b/.test(secret)
+      ? { rejectUnauthorized: false }
+      : true,
     connectionTimeoutMillis: FETCH_TIMEOUT_MS,
     // Applied server-side per-session below as well; this guards the socket.
     query_timeout: FETCH_TIMEOUT_MS * 2,
