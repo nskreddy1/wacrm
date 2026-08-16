@@ -12,6 +12,7 @@ import {
   History,
   MessageSquarePlus,
   Sparkles,
+  Square,
   Workflow,
   X,
 } from 'lucide-react';
@@ -81,6 +82,52 @@ function rememberSession(id: string | null) {
   }
 }
 
+/**
+ * Turn a failed turn into a cause and a way out.
+ *
+ * "Something went wrong. Please try again." was the entire error UI. It
+ * tells the user nothing they didn't already know and, worse, offers the
+ * same advice for a problem retrying fixes (a dropped connection) and
+ * one where retrying is precisely wrong (a rate limit — retrying
+ * immediately just burns the next allowance too).
+ *
+ * Only causes this endpoint genuinely emits are matched. Inventing
+ * richer-sounding classes we cannot actually detect — content filter,
+ * context window — would mislabel unrelated failures, which is worse
+ * than the generic string it replaces. Anything unrecognised keeps the
+ * honest fallback.
+ */
+function describeError(err: Error): { cause: string; recovery: string } {
+  const raw = err.message.toLowerCase();
+
+  // 429 from either the per-user or per-account cap.
+  if (raw.includes('rate limit') || raw.includes('429')) {
+    return {
+      cause: 'Too many requests in a short time.',
+      recovery: 'Wait about a minute, then send again.',
+    };
+  }
+
+  // Aborts surface here too, but the stream handler treats a
+  // user-initiated stop as success, so reaching this point means the
+  // connection itself dropped rather than the user pressing stop.
+  if (
+    raw.includes('fetch') ||
+    raw.includes('network') ||
+    raw.includes('load failed')
+  ) {
+    return {
+      cause: 'Lost connection to the server.',
+      recovery: 'Check your connection and resend.',
+    };
+  }
+
+  return {
+    cause: "Mira couldn't finish that reply.",
+    recovery: 'Resend the message to try again.',
+  };
+}
+
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -102,6 +149,7 @@ export function AssistantWidget() {
     setMessages,
     sendMessage,
     status,
+    stop,
     addToolApprovalResponse,
     error,
   } = useChat({
@@ -124,6 +172,9 @@ export function AssistantWidget() {
   });
 
   const busy = status === 'submitted' || status === 'streaming';
+
+  // Classified once per render rather than per reference in the JSX.
+  const errorNotice = error ? describeError(error) : null;
 
   // Autoscroll is handled by ChatContainerRoot (prompt-kit wraps
   // use-stick-to-bottom), which pins to the bottom only while the user
@@ -531,6 +582,31 @@ export function AssistantWidget() {
 
                 <ChatContainerScrollAnchor />
               </ChatContainerContent>
+
+              {/* Jump to latest. The scroll container deliberately
+                  releases its bottom-pin as soon as the user scrolls up
+                  mid-stream (so it never yanks the viewport away from
+                  something they're reading) — but until now there was
+                  nothing to get back with, leaving the user to scroll
+                  manually while tokens kept landing off-screen.
+
+                  It has to live inside ChatContainerRoot, because it
+                  reads `isAtBottom` from the stick-to-bottom context and
+                  hides itself when the view is already at the bottom.
+
+                  That puts an absolutely-positioned box inside the
+                  `overflow-y-auto` element — the same shape as the
+                  history-drawer trap noted above. It's safe here only
+                  because ChatContainerRoot is `position: static`, so the
+                  containing block resolves to the `relative` body
+                  wrapper and the button pins to the panel instead of
+                  scrolling away with the transcript. Adding `relative`
+                  to ChatContainerRoot would silently reintroduce that
+                  bug. */}
+              <ScrollButton
+                aria-label="Jump to latest"
+                className="absolute bottom-3 left-1/2 size-8 -translate-x-1/2 shadow-md"
+              />
             </ChatContainerRoot>
           </div>
 
@@ -544,8 +620,17 @@ export function AssistantWidget() {
               an API key in the Admin console under Platform settings.
             </div>
           ) : error ? (
-            <div className="border-destructive/30 bg-destructive/10 text-destructive mx-3 mb-1 rounded-lg border p-3 text-xs leading-relaxed">
-              Something went wrong. Please try again.
+            // Cause on the first line, the way out on the second. role
+            //="alert" because this appears after the user has committed
+            // to an action and is waiting on its outcome.
+            <div
+              role="alert"
+              className="border-destructive/30 bg-destructive/10 text-destructive mx-3 mb-1 rounded-lg border p-3 text-xs leading-relaxed"
+            >
+              <span className="font-medium">{errorNotice?.cause}</span>{' '}
+              <span className="text-destructive/80">
+                {errorNotice?.recovery}
+              </span>
             </div>
           ) : null}
 
@@ -567,18 +652,47 @@ export function AssistantWidget() {
               className="text-foreground placeholder:text-muted-foreground min-h-6 bg-transparent text-sm leading-6"
             />
             <PromptInputActions className="justify-end pt-1">
-              <PromptInputAction tooltip="Send message">
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  aria-label="Send"
-                  disabled={!input.trim() || busy}
-                  onClick={submit}
-                  className="rounded-full"
-                >
-                  <ArrowUp className="size-3.5" />
-                </Button>
-              </PromptInputAction>
+              {/* One control, two jobs. While a reply streams the send
+                  button becomes Stop rather than going disabled.
+                  Disabling it was the only option before, which left the
+                  user watching a reply they could already tell was wrong
+                  with no way to interrupt it — the composer's single
+                  affordance was inert for the whole generation.
+
+                  It stays the same button in the same place so the
+                  target never moves under the pointer, and reverts the
+                  instant streaming ends: a Stop button that outlives the
+                  stream is a lie about what's still running. */}
+              {busy ? (
+                <PromptInputAction tooltip="Stop generating">
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="secondary"
+                    aria-label="Stop generating"
+                    onClick={() => void stop()}
+                    className="rounded-full"
+                  >
+                    {/* Square, not a spinner: this is the action, not a
+                        status. The shimmer above already reports that
+                        work is in progress. */}
+                    <Square className="size-3 fill-current" />
+                  </Button>
+                </PromptInputAction>
+              ) : (
+                <PromptInputAction tooltip="Send message">
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    aria-label="Send"
+                    disabled={!input.trim()}
+                    onClick={submit}
+                    className="rounded-full"
+                  >
+                    <ArrowUp className="size-3.5" />
+                  </Button>
+                </PromptInputAction>
+              )}
             </PromptInputActions>
           </PromptInput>
         </div>
