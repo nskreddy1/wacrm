@@ -80,7 +80,9 @@ async function fetchApiKeys(url: string): Promise<ApiKey[]> {
   return data.keys;
 }
 
-export function ApiKeysSettings() {
+export function ApiKeysSettings({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const { canEditSettings } = useAuth();
   const t = useTranslations('Settings.apiKeys');
 
@@ -133,25 +135,42 @@ export function ApiKeysSettings() {
 
   return (
     <section className="animate-in fade-in-50 space-y-6 duration-200">
-      <SettingsPanelHead
-        title={t('title')}
-        description={t.rich('description', {
-          apiCode: (chunks: React.ReactNode) => (
-            <code className="text-xs">{chunks}</code>
-          ),
-          headerCode: (chunks: React.ReactNode) => (
-            <code className="text-xs">{chunks}</code>
-          ),
-        })}
-        action={
-          <RequireRole min="admin">
+      {/* Embedded as the "API keys" tab of Integrations, the tab label
+          already names the panel and the long "Keys authenticate the
+          public REST API…" blurb is reference material, not a setting —
+          it now lives with the empty state and the create dialog, where
+          someone actually about to mint a key will read it. Only the
+          action survives here. */}
+      {embedded ? (
+        <RequireRole min="admin">
+          <div className="flex justify-end">
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
               {t('newApiKey')}
             </Button>
-          </RequireRole>
-        }
-      />
+          </div>
+        </RequireRole>
+      ) : (
+        <SettingsPanelHead
+          title={t('title')}
+          description={t.rich('description', {
+            apiCode: (chunks: React.ReactNode) => (
+              <code className="text-xs">{chunks}</code>
+            ),
+            headerCode: (chunks: React.ReactNode) => (
+              <code className="text-xs">{chunks}</code>
+            ),
+          })}
+          action={
+            <RequireRole min="admin">
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="size-4" />
+                {t('newApiKey')}
+              </Button>
+            </RequireRole>
+          }
+        />
+      )}
 
       {keys.length === 0 ? (
         <Card>

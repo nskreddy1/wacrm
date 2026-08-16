@@ -94,7 +94,9 @@ async function fetchSources(url: string): Promise<ExternalSource[]> {
   return data.sources;
 }
 
-export function ExternalSourcesSettings() {
+export function ExternalSourcesSettings({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const { canEditSettings } = useAuth();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -149,7 +151,11 @@ export function ExternalSourcesSettings() {
   return (
     <section className="animate-in fade-in-50 space-y-6 duration-200">
       <SettingsPanelHead
+        // Tab label names it when embedded; keep the one-line "what is
+        // this for" description either way, since it explains a
+        // non-obvious capability rather than restating the title.
         title="External sources"
+        srOnlyTitle={embedded}
         description="Connect an outside system — a REST endpoint, Postgres database, or Google Sheet — and use it as a live recipient list when sending broadcasts. Recipients are pulled fresh at send time (up to 10,000 per broadcast)."
         action={
           <RequireRole min="admin">
