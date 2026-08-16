@@ -1,9 +1,14 @@
 # 100 known problems — ranked audit (Jul 2026)
 
-Grounded in code review of this repo (102 API routes, 77 tables,
-16 feature domains). Severity: **S1** ship-blocker before production,
-**S2** serious, fix soon, **S3** quality debt, **S4** polish.
+Grounded in code review of this repo. Severity: **S1** ship-blocker before
+production, **S2** serious, fix soon, **S3** quality debt, **S4** polish.
 Cross-reference `roadmap.md` for fix order of the top items.
+
+> **Point-in-time audit (Jul 2026), not a current-state reference.** It was
+> written against 102 API routes / 77 tables / 16 feature domains; the system
+> is now **115 routes / 88 tables / 27 modules with 913 tests**. Items marked
+> **[STALE]** below have since been resolved or re-scoped. For verified
+> current counts see `README.md` § Current shape.
 
 ## Bugs & correctness (1–15)
 
@@ -90,14 +95,14 @@ Cross-reference `roadmap.md` for fix order of the top items.
 
 ## Testing & quality (69–78)
 
-69. **S1** No E2E tests at all — inbox send/receive, auth, broadcasts are untested end to end
-70. **S2** Unit coverage concentrated in lib/ — most API routes have zero tests
+69. **S1** No E2E tests at all — inbox send/receive, auth, broadcasts are untested end to end (still true: no Playwright/Cypress config exists)
+70. **S2** Unit coverage concentrated in `features/*/lib` — **4 of 115 route handlers** have tests. Still the largest real gap, alongside the absence of any automated tenant-isolation/RLS test
 71. **S2** No webhook signature-verification tests with real provider fixtures
 72. **S2** No load tests — broadcast and webhook burst behaviour unknown
 73. **S3** No visual regression testing
 74. **S3** No contract tests for the v1 public API (breaking changes undetected)
 75. **S3** TypeScript `any` escape hatches in workflow engine payloads
-76. **S3** No CI gate for `pnpm exec tsc --noEmit` + vitest on PRs (relies on discipline)
+76. ~~**S3** No CI gate for `pnpm exec tsc --noEmit` + vitest on PRs~~ **[STALE — RESOLVED]** `.github/workflows/ci.yml` now runs format, lint, `typecheck`, `check:boundaries`, `test` and `build`; `pnpm check` is the local equivalent
 77. **S4** No accessibility audit run (keyboard nav through inbox untested)
 78. **S4** Seed script drifts from schema (manual fixes needed after migrations)
 
