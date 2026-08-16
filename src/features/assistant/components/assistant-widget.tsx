@@ -447,10 +447,10 @@ export function AssistantWidget() {
                       // long turns still read as a bubble rather than a
                       // full-width block. Assistant: single full-width
                       // column, flush left.
-                      'grid content-start gap-2.5',
+                      'flex flex-col gap-2.5',
                       message.role === 'user'
-                        ? 'grid-cols-[minmax(48px,1fr)_auto] justify-items-end [&>*]:col-start-2 [&>*]:max-w-[85%]'
-                        : 'grid-cols-1 justify-items-start'
+                        ? 'items-end [&>*]:max-w-[85%]'
+                        : 'items-start'
                     )}
                   >
                     {message.parts.map((part, i) => {
