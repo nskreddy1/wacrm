@@ -1,7 +1,7 @@
 import {
   Activity,
   BellRing,
-  Database,
+  // Database — restore this import with the deferred `integrations` section.
   Gauge,
   LifeBuoy,
   MessageCircle,
@@ -66,7 +66,10 @@ export const SETTINGS_SECTIONS = [
   'members',
   'usage',
   'fields',
-  'integrations',
+  // 'integrations' — DEFERRED, see the "Integrations is deferred" note
+  // below before re-enabling. Restoring it needs this entry, its
+  // SECTION_META record, the `Database` icon import, the resolveSection
+  // alias, and the panel map entry in settings/page.tsx.
   'activity',
   // Channels — communication surfaces and their behaviour.
   'channels',
@@ -129,12 +132,13 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
     icon: Tags,
     group: 'workspace',
   },
-  integrations: {
-    id: 'integrations',
-    label: 'Integrations',
-    icon: Database,
-    group: 'workspace',
-  },
+  // DEFERRED alongside the SETTINGS_SECTIONS entry above.
+  // integrations: {
+  //   id: 'integrations',
+  //   label: 'Integrations',
+  //   icon: Database,
+  //   group: 'workspace',
+  // },
   activity: {
     id: 'activity',
     label: 'Audit log',
@@ -191,8 +195,14 @@ export function resolveSection(raw: string | null): SettingsSection {
   // it here (it was a lone select under "Deals & currency").
   if (raw === 'tags' || raw === 'custom-fields' || raw === 'deals')
     return 'fields';
-  // Developer/data surfaces merged into one tabbed panel.
-  if (raw === 'api' || raw === 'external-sources') return 'integrations';
+  // Developer/data surfaces merged into one tabbed panel, now deferred.
+  // While deferred these must NOT return 'integrations' — that section is
+  // no longer in SETTINGS_SECTIONS, so the panel map would have no entry
+  // for it and the page would render a blank pane. Fall through to the
+  // default instead. Restore the line below when re-enabling:
+  //   if (raw === 'api' || raw === 'external-sources') return 'integrations';
+  if (raw === 'api' || raw === 'external-sources' || raw === 'integrations')
+    return DEFAULT_SECTION;
   // Appearance is a personal display pref, shown with the profile.
   if (raw === 'appearance') return 'profile';
   // Template management moved to the dedicated /templates studio, so
