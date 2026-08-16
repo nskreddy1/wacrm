@@ -22,28 +22,28 @@ An enterprise-structured, self-hosted **AI sales CRM**. V1's motive: customer co
 
 When sources disagree, trust them in this order:
 
-1. **Live database schema and `supabase/migrations/`** (currently `001`–`037`; always check the directory).
-2. **Source code** (`src/`, `server/`, `mcp-server/`).
-3. **Local architecture docs** — `docs/enterprise-v1-architecture.md`, `docs/public-api.md`, `docs/mcp.md`, and `docs/archive/architecture-delta.md`.
-4. **Upstream snapshots** — `docs/archive/upstream-wacrm/` (historical reference; describes the upstream template, not necessarily this fork).
+1. **Live database schema and `supabase/migrations/`** (currently **131** migrations: `001_…`–`037_…` numbered, everything after that timestamp-prefixed `2026…`; always check the directory rather than trusting this count).
+2. **Source code** (`src/`, `mcp-server/`).
+3. **`.agents/context/`** — the agent context pack, and the most detailed description of the system as built. Start at `.agents/context/README.md`. `database-schema.md` there is generated from the live database (`pnpm db:doc`), so it is the fastest way to get an exact column, index, RLS policy, or trigger.
+4. **Local architecture docs** — `docs/enterprise-v1-architecture.md`, `docs/public-api.md`, `docs/mcp.md`, and `docs/archive/architecture-delta.md`.
+5. **Upstream snapshots** — `docs/archive/upstream-wacrm/` (historical reference; describes the upstream template, not necessarily this fork).
 
 ## System topology
 
-Two processes, one origin from the browser's point of view:
+**One process.** A single Next.js 16 app talks straight to Supabase:
 
 ```
-Browser ──▶ Next.js 16 web/BFF (src/)          ──▶ Supabase (Postgres + Auth + Storage + Realtime, RLS)
-              │  /api/service/[...path]  forwards to
-              ▼
-            Express 5 business API (server/, port 4000)
-              │  helmet, pino-http + x-request-id, /health/live, /health/ready
-              ▼
-            /v1/<domain> routers (Supabase-token authenticated)
+Browser ──▶ Next.js 16 app + API routes (src/)  ──▶ Supabase (Postgres + Auth + Storage + Realtime, RLS)
+              │                                      RLS enabled on all 88 public tables
+              ├─ src/proxy.ts          session refresh + auth redirects
+              ├─ src/app/api/**        115 route handlers, 19 namespaces
+              └─ src/app/api/v1/**     25 public REST routes (stability contract)
 ```
 
+- An earlier design split a separate **Express 5 business API** into `server/` on port 4000, fronted by an `/api/service/[...path]` forwarder. **Both are gone** — there is no `server/` directory, no `/api/service` route, and no `concurrently`. Ignore any doc that still describes them; `pnpm dev` starts exactly one process (`scripts/run-web.mjs`).
 - External webhooks (Meta WhatsApp) hit Next.js routes directly (`src/app/api/whatsapp/webhook`).
 - The public REST API lives at `/api/v1` (Next.js) — see `docs/public-api.md`. Never break these paths.
-- `pnpm dev` / `pnpm start` launch both processes via `concurrently`.
+- `mcp-server/` is a separate Model Context Protocol server (also surfaced in-app at `/api/mcp`), not a second web backend.
 
 ## Routing and auth conventions (V1 contract)
 
@@ -54,7 +54,8 @@ Browser ──▶ Next.js 16 web/BFF (src/)          ──▶ Supabase (Postgre
 
 ## Tenancy and security rules
 
-- All domain data is **account-scoped**. RLS on every table checks account membership via `SECURITY DEFINER` helpers (migrations `017`–`020`); role changes go through RPCs that re-check the caller's role server-side. The UI disabling a button is never the security boundary.
+- All domain data is **account-scoped**. RLS is enabled on **all 88 tables** in `public`, checking account membership via `SECURITY DEFINER` helpers (`is_account_member(account_id, roles[])` is the canonical one); role changes go through RPCs that re-check the caller's role server-side. The UI disabling a button is never the security boundary.
+- `CREATE OR REPLACE FUNCTION` does **not** inherit `SECURITY DEFINER` — omit it and Postgres silently downgrades the function to INVOKER, which fails later at runtime for real users only on the paths that needed elevation. `scripts/push-supabase-schema.mjs` enforces this inside each migration's transaction; read the invariants comment there before touching a privileged function.
 - Roles: owner (one per account) → admin → agent → viewer, a strict ladder. Check the permission matrix in `docs/archive/upstream-wacrm/members.md` (still accurate for this fork).
 - `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS — only server-only modules (webhook handler, admin routes) may use it, and every service-role query must still filter by account.
 - Secrets (WhatsApp tokens, AI provider keys, webhook signing secrets) are AES-256-GCM encrypted at rest (`src/features/whatsapp/lib/encryption.ts`). API keys and invite tokens store only SHA-256 hashes.
@@ -80,17 +81,19 @@ src/
       components/ # UI for this domain
       lib/        # domain logic, data helpers, validation
       hooks/      # domain-specific hooks
-  components/     # SHARED UI only: ui/ (shadcn), layout/, providers/, shared/, tremor/
+  components/     # SHARED UI only: ui/ (shadcn), layout/, providers/, shared/,
+                  # tremor/ (charts), prompt-kit/ (AI chat primitives)
   hooks/          # generic app-wide hooks (use-mobile, use-navigation, use-theme)
   lib/            # cross-cutting infra: data/, supabase/, api/, cache/, storage/,
                   # email/, routing/, routes/, account/, navigation/, utils
-  contracts/      # shared request/response contracts
   types/          # shared TypeScript types
   i18n/           # i18n request config
   proxy.ts        # session refresh + auth redirects (Next 16 middleware)
 ```
 
-Feature domains (`src/features/`): `admin`, `agents`, `api-keys`, `appointments`, `assistant`, `auth`, `automations`, `brand`, `broadcasts`, `catalog`, `channels`, `contacts`, `dashboards`, `external-sources`, `flows`, `inbox`, `interactive`, `module-fields`, `pipelines`, `presence`, `settings`, `support`, `team-chat`, `templates`, `webhooks`, `whatsapp`.
+Feature domains (`src/features/`, 27): `admin`, `agents`, `alerts`, `api-keys`, `appointments`, `assistant`, `auth`, `brand`, `broadcasts`, `catalog`, `channels`, `contacts`, `dashboards`, `external-sources`, `flows`, `inbox`, `interactive`, `module-fields`, `onboarding`, `pipelines`, `presence`, `settings`, `support`, `team-chat`, `templates`, `webhooks`, `whatsapp`.
+
+There is no `automations` feature module: the automation engine was folded into `flows` (`src/features/flows/`), which is the unified workflow engine. Treat "automation" in older docs as meaning Flows.
 
 Import with the `@/features/<domain>/...` alias; shared code stays on `@/components/...`, `@/lib/...`, `@/hooks/...`. shadcn primitives remain at `@/components/ui/*` (do not move them — `components.json` aliases point there).
 
@@ -100,15 +103,16 @@ Import with the `@/features/<domain>/...` alias; shared code stays on `@/compone
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `src/app/(auth)/`               | login, signup, forgot/reset password                                                                                          |
 | `src/app/(dashboard)/`          | authenticated UI pages                                                                                                        |
-| `src/app/api/`                  | BFF JSON routes: `whatsapp/`, `ai/`, `automations/`, `flows/`, `account/`, `v1/` (public API), `service/` (Express forwarder) |
+| `src/app/api/`                  | JSON routes, 19 namespaces: `account/`, `admin/`, `ai/`, `alerts/`, `assistant/`, `channels/`, `dashboards/`, `email/`, `external-sources/`, `flows/`, `invitations/`, `mcp/`, `quick-replies/`, `settings/`, `sms/`, `support/`, `templates/`, `whatsapp/`, `v1/` (public API) |
 | `src/features/whatsapp/lib/`    | Meta API client, encryption, webhook signatures, phone utils                                                                  |
-| `src/features/automations/lib/` | automation engine, steps, validation                                                                                          |
+| `src/features/flows/`           | the unified workflow/automation engine (nodes, triggers, runs)                                                                |
 | `src/lib/routing/`              | canonical route constants                                                                                                     |
 | `src/lib/data/`                 | Supabase repositories per domain                                                                                              |
-| `server/`                       | Express business API (config, http middleware, domain routers)                                                                |
-| `supabase/migrations/`          | idempotent SQL, run in numeric order                                                                                          |
+| `supabase/migrations/`          | idempotent SQL, applied in filename order (`pnpm db:push`)                                                                    |
+| `scripts/`                      | `push-supabase-schema.mjs` (apply migrations), `generate-schema-doc.mjs` (`pnpm db:doc`), `check-boundaries.mjs`, `run-web.mjs` |
 | `mcp-server/`                   | Model Context Protocol server                                                                                                 |
 | `messages/`                     | i18n message catalogs                                                                                                         |
+| `.agents/context/`              | agent context pack — HLD/LLD, generated DB reference, security, roadmap                                                       |
 | `docs/`                         | local authoritative docs; `docs/archive/` holds historical planning/AI notes                                                  |
 
 ## Commands

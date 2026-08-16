@@ -40,7 +40,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:push": "node --env-file-if-exists=.env.development.local scripts/push-supabase-schema.mjs"
+    "db:push": "node --env-file-if-exists=.env.development.local scripts/push-supabase-schema.mjs",
+    "db:doc": "node --env-file-if-exists=.env.development.local scripts/generate-schema-doc.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.18",
