@@ -14,13 +14,14 @@ concurrency:
 
 jobs:
   check:
-    name: Format, lint, typecheck, boundaries, test, build
+    name: Format, lint, typecheck, boundaries, docs, test, build
     runs-on: ubuntu-latest
     # Dummy env vars so `next build` doesn't fail when it reads the
     # public Supabase config at build time. These never leave CI and
     # never hit a real service — they just satisfy the `!` non-null
     # assertions in the client factories. ENCRYPTION_KEY and
-    # META_APP_SECRET are read at module-load by lib/whatsapp/*; the
+    # META_APP_SECRET are read at module-load by
+    # src/features/whatsapp/lib/*; the
     # test suite asserts behaviour around these values, so any non-
     # empty placeholder works as long as it stays consistent with
     # vitest.config.ts.
@@ -56,6 +57,12 @@ jobs:
 
       - name: Architecture boundaries
         run: pnpm check:boundaries
+
+      # docs/architecture/ is a published mirror of .agents/context/.
+      # Fails when the two drift, so the human-facing copy cannot silently
+      # go stale after a migration or route change.
+      - name: Docs mirror in sync
+        run: pnpm check:docs
 
       - name: Test
         run: pnpm test

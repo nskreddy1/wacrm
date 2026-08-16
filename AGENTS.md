@@ -124,23 +124,25 @@ Derived from `package.json`. **pnpm is the standard package manager** (`pnpm-loc
 | ------------------------ | ----------------------------------------------------------- |
 | Install                  | `pnpm install`                                              |
 | Develop (single process) | `pnpm dev`                                                  |
-| **Full gate**            | **`pnpm check`** — typecheck + lint + boundaries + test     |
+| **Full gate**            | **`pnpm check`** — typecheck + lint + boundaries + docs + test |
 | Typecheck                | `pnpm typecheck`                                            |
 | Lint                     | `pnpm lint`                                                 |
 | Import boundaries        | `pnpm check:boundaries`                                     |
+| Docs mirror in sync      | `pnpm check:docs`                                           |
+| Republish docs mirror    | `pnpm docs:sync`                                            |
 | Format / check           | `pnpm format` / `pnpm format:check`                          |
 | Tests (Vitest)           | `pnpm test` (watch: `pnpm test:watch`) — 913 tests, 99 files |
 | Apply migrations         | `pnpm db:push`                                              |
 | Regenerate schema doc    | `pnpm db:doc`                                               |
 | Production build         | `pnpm build` then `pnpm start`                              |
 
-`pnpm check` is the single command to run before calling work done — it is what CI enforces, and it includes `check:boundaries`, which fails the build when a feature module reaches into another feature's internals.
+`pnpm check` is the single command to run before calling work done — it is what CI enforces. It includes `check:boundaries`, which fails when a feature module reaches into another feature's internals, and `check:docs`, which fails when the `docs/architecture/` mirror has drifted from `.agents/context/`.
 
 ## Before changing a module — checklist
 
 1. Read the current code and its colocated `*.test.ts` files; run the existing tests first.
 2. Check `supabase/migrations/` and the live schema before assuming any column exists.
-3. Schema change? Add a new **idempotent** migration named `YYYYMMDDHHMMSS_description.sql` (timestamp prefix — the old `NNN_` numbering stopped at `037`), apply it with `pnpm db:push`, refresh `.agents/context/database-schema.md` with `pnpm db:doc`, update `src/types/`, and never edit an existing migration.
+3. Schema change? Add a new **idempotent** migration named `YYYYMMDDHHMMSS_description.sql` (timestamp prefix — the old `NNN_` numbering stopped at `037`), apply it with `pnpm db:push`, refresh `.agents/context/database-schema.md` with `pnpm db:doc`, republish the docs mirror with `pnpm docs:sync`, update `src/types/`, and never edit an existing migration.
 4. New route? Add it to `src/lib/routing/routes.ts` and follow the simple-URL contract above.
    New domain code? Put it under `src/features/<domain>/` (components/lib/hooks), not the shared top-level folders. Only genuinely cross-cutting code belongs in `src/components/ui`, `src/lib`, or `src/hooks`.
 5. Anything touching user data? Verify account scoping and the role matrix at the RLS/RPC layer, not just the UI.
@@ -150,7 +152,9 @@ Derived from `package.json`. **pnpm is the standard package manager** (`pnpm-loc
 
 ## Focused docs
 
-Agent context pack (`.agents/context/`) — read `README.md` there first:
+Agent context pack (`.agents/context/`) — read `README.md` there first.
+**This is the source of truth and is mirrored to `docs/architecture/` for
+human readers; edit here, then run `pnpm docs:sync`.**
 
 - `hld.md` / `lld.md` — high- and low-level design of the system as built.
 - `system-design.md` — topology, request flows, scaling and failure behaviour.
