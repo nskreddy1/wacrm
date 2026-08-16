@@ -310,6 +310,13 @@ function CreateKeyDialog({
   const t = useTranslations('Settings.apiKeys');
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<ApiScope[]>([]);
+  // Production hardening: the API accepted `expiresInDays` (capped at
+  // 365) from the start, but this dialog never sent it — so every key
+  // ever minted was immortal, and a leaked key stayed valid until
+  // someone noticed and revoked it by hand. Default to 90 days so the
+  // safe choice is the default one; "never" stays available but has to
+  // be chosen deliberately.
+  const [expiresIn, setExpiresIn] = useState<string>('90');
   const [submitting, setSubmitting] = useState(false);
   // Once set, we switch from the form to the reveal view.
   const [createdKey, setCreatedKey] = useState<string | null>(null);
@@ -317,6 +324,7 @@ function CreateKeyDialog({
   function reset() {
     setName('');
     setScopes([]);
+    setExpiresIn('90');
     setSubmitting(false);
     setCreatedKey(null);
   }
@@ -338,7 +346,16 @@ function CreateKeyDialog({
       const res = await fetch('/api/account/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: trimmed, scopes }),
+        // Omit the field entirely for "never" — the route treats a
+        // missing/invalid value as no expiry, so sending null is the
+        // same thing but relies on coercion.
+        body: JSON.stringify({
+          name: trimmed,
+          scopes,
+          ...(expiresIn === 'never'
+            ? {}
+            : { expiresInDays: Number(expiresIn) }),
+        }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {

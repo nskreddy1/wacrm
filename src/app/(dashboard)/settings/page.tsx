@@ -13,12 +13,10 @@ import { ChannelConnections } from '@/features/settings/components/channel-conne
 import { QuickRepliesManager } from '@/features/settings/components/quick-replies-manager';
 import { NotificationsSettings } from '@/features/settings/components/notifications-settings';
 import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-tags-panel';
-import { DealsSettings } from '@/features/settings/components/deals-settings';
 import { MembersTab } from '@/features/settings/components/members-tab';
 import { ActivityPanel } from '@/features/settings/components/activity-panel';
 import { UsagePanel } from '@/features/settings/components/usage-panel';
-import { ApiKeysSettings } from '@/features/settings/components/api-keys-settings';
-import { ExternalSourcesSettings } from '@/features/settings/components/external-sources-settings';
+import { IntegrationsPanel } from '@/features/settings/components/integrations-panel';
 import { SupportTab } from '@/features/settings/components/support-tab';
 import {
   resolveSection,
@@ -99,20 +97,10 @@ export default function SettingsPage() {
     members: <MembersTab />,
     usage: <UsagePanel />,
     // "Deals & currency" was a lone default-currency select; it reads as a
-    // property of the data model, next to fields and tags.
-    fields: (
-      <StackedPanels>
-        {[<FieldsAndTagsPanel key="fields" />, <DealsSettings key="deals" />]}
-      </StackedPanels>
-    ),
-    integrations: (
-      <StackedPanels>
-        {[
-          <ExternalSourcesSettings key="external" />,
-          <ApiKeysSettings key="api" />,
-        ]}
-      </StackedPanels>
-    ),
+    // property of the data model, so it is now the "Currency" tab inside
+    // this panel rather than a second stacked panel with its own heading.
+    fields: <FieldsAndTagsPanel />,
+    integrations: <IntegrationsPanel />,
     activity: <ActivityPanel />,
     // One panel for every channel: ChannelConnections renders its own
     // email / whatsapp / sms tab strip when `fixedChannel` is omitted,
