@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
+  type UIMessage,
 } from 'ai';
-import { ArrowUp, Sparkles, Workflow, X } from 'lucide-react';
+import { ArrowUp, History, Sparkles, Workflow, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ChatContainerContent,
@@ -29,6 +30,8 @@ import {
   ToolStep,
   toolNameFromPart,
 } from './agent-parts';
+import { AssistantHistory } from './assistant-history';
+import type { AssistantSessionSummary } from '../lib/sessions';
 
 // ============================================================
 // Platform helper agent — floating copilot panel.
@@ -54,17 +57,40 @@ export function AssistantWidget() {
   const [input, setInput] = useState('');
   const [unconfigured, setUnconfigured] = useState(false);
 
-  const { messages, sendMessage, status, addToolApprovalResponse, error } =
-    useChat({
-      transport: new DefaultChatTransport({ api: '/api/assistant/chat' }),
-      sendAutomaticallyWhen:
-        lastAssistantMessageIsCompleteWithApprovalResponses,
-      onError: (err) => {
-        if (err.message.includes('assistant_not_configured')) {
-          setUnconfigured(true);
-        }
-      },
-    });
+  // History state. `sessionId` is the thread the next turn is recorded
+  // into; it's held in a ref as well as state because `submit` needs
+  // the freshly-created id synchronously, before a re-render.
+  const [showHistory, setShowHistory] = useState(false);
+  const [sessions, setSessions] = useState<AssistantSessionSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    addToolApprovalResponse,
+    error,
+  } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/assistant/chat',
+      // Attach the thread id to every outgoing turn so the server knows
+      // where to persist it. `prepareSendMessagesRequest` reads the ref
+      // at send time — a captured value would be stale for the very
+      // first message of a brand-new thread.
+      prepareSendMessagesRequest: ({ body, messages: outgoing }) => ({
+        body: { ...body, messages: outgoing, sessionId: sessionIdRef.current },
+      }),
+    }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onError: (err) => {
+      if (err.message.includes('assistant_not_configured')) {
+        setUnconfigured(true);
+      }
+    },
+  });
 
   const busy = status === 'submitted' || status === 'streaming';
 
@@ -75,25 +101,147 @@ export function AssistantWidget() {
   // sticks during streaming but releases the moment the user scrolls up
   // to re-read something, and ScrollButton offers the way back.
 
+  /** Point both the ref and the state at a thread. */
+  function useSession(id: string | null) {
+    sessionIdRef.current = id;
+    setSessionId(id);
+  }
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch('/api/assistant/sessions');
+      if (!res.ok) return;
+      const data = (await res.json()) as { sessions?: AssistantSessionSummary[] };
+      setSessions(data.sessions ?? []);
+    } catch {
+      // History is non-critical; the panel shows an empty list rather
+      // than an error state the user can't act on.
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  /**
+   * Ensure a thread exists before the first turn is sent.
+   *
+   * Created eagerly (rather than lazily server-side) so the id is known
+   * to both sides from turn one, and titled from the opening message so
+   * the history list never shows an untitled row.
+   */
+  async function ensureSession(firstMessage: string): Promise<string | null> {
+    if (sessionIdRef.current) return sessionIdRef.current;
+    try {
+      const res = await fetch('/api/assistant/sessions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ firstMessage }),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { session?: AssistantSessionSummary };
+      if (!data.session) return null;
+      useSession(data.session.id);
+      setSessions((prev) => [data.session as AssistantSessionSummary, ...prev]);
+      return data.session.id;
+    } catch {
+      // Fall through unrecorded: failing to create a history row must
+      // not block the user from getting an answer.
+      return null;
+    }
+  }
+
+  /** Send, creating the thread first if this is the opening message. */
+  async function send(text: string) {
+    await ensureSession(text);
+    void sendMessage({ text });
+  }
+
   function submit() {
     const text = input.trim();
     if (!text || busy) return;
     setInput('');
-    void sendMessage({ text });
+    void send(text);
+  }
+
+  /** Start a fresh thread: clear the transcript and drop the id. */
+  function startNewChat() {
+    useSession(null);
+    setMessages([]);
+    setInput('');
+    setShowHistory(false);
+  }
+
+  /** Reopen a stored thread, restoring its tool steps along with text. */
+  async function openSession(id: string) {
+    setShowHistory(false);
+    try {
+      const res = await fetch(`/api/assistant/sessions/${id}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        session?: { id: string; messages: UIMessage[] };
+      };
+      if (!data.session) return;
+      useSession(data.session.id);
+      setMessages(data.session.messages);
+    } catch {
+      // Leave the current transcript untouched on failure.
+    }
+  }
+
+  async function removeSession(id: string) {
+    // Optimistic: the row disappears immediately, and the request is
+    // idempotent server-side so a failure can't strand a phantom row.
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    if (sessionIdRef.current === id) startNewChat();
+    try {
+      await fetch(`/api/assistant/sessions/${id}`, { method: 'DELETE' });
+    } catch {
+      // Ignore — the next refresh reconciles.
+    }
+  }
+
+  /** Load the list when the drawer opens, so it's never stale. */
+  function toggleHistory() {
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next) void refreshHistory();
   }
 
   return (
     <>
-      {/* Launcher */}
-      <Button
-        type="button"
-        size="icon"
-        aria-label={open ? 'Close Mira' : 'Open Mira, your CRM copilot'}
-        onClick={() => setOpen((v) => !v)}
-        className="fixed right-20 bottom-4 z-40 size-12 rounded-full shadow-lg"
-      >
-        {open ? <X className="size-5" /> : <Sparkles className="size-5" />}
-      </Button>
+      {/* Launcher — a vertical tab on the right edge, not a second
+          round button next to team chat's. Two identical floating
+          circles at the bottom read as one control pair and give no
+          clue which is which; an edge tab is a distinct, labelled
+          affordance, and it frees the bottom-right corner for team
+          chat alone.
+
+          Hidden while the panel is open: the panel has its own close
+          button, so keeping a toggle underneath it is redundant. */}
+      {!open ? (
+        <button
+          type="button"
+          aria-label="Open Mira, your CRM copilot"
+          onClick={() => setOpen(true)}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring focus-visible:ring-offset-background fixed top-1/2 right-0 z-40 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl py-4 pr-1.5 pl-2 shadow-lg transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          <Sparkles className="size-4 shrink-0" aria-hidden />
+          {/* Upright glyphs stacked vertically rather than rotated
+              text: at this size a rotated label is harder to read than
+              three stacked letters, and it needs no transform that
+              would fight the tab's own translate. */}
+          <span
+            className="text-[11px] leading-[1.15] font-semibold tracking-wide"
+            aria-hidden
+          >
+            {'ai'.split('').map((c, i) => (
+              <span key={i} className="block">
+                {c}
+              </span>
+            ))}
+          </span>
+        </button>
+      ) : null}
 
       {/* Panel */}
       {open ? (
@@ -117,20 +265,47 @@ export function AssistantWidget() {
                 Your CRM copilot · writes need your approval
               </span>
             </div>
+            {/* One history control, not a separate "new chat" icon
+                beside it — "New chat" lives at the top of the drawer
+                this opens. aria-expanded ties the button to the state
+                it controls. */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={showHistory ? 'Hide chat history' : 'Chat history'}
+              aria-expanded={showHistory}
+              className={cn('ml-auto size-7', showHistory && 'bg-muted')}
+              onClick={toggleHistory}
+            >
+              <History className="size-4" />
+            </Button>
             <Button
               type="button"
               variant="ghost"
               size="icon"
               aria-label="Close"
-              className="ml-auto size-7"
+              className="size-7"
               onClick={() => setOpen(false)}
             >
               <X className="size-4" />
             </Button>
           </div>
 
-          {/* Transcript */}
+          {/* Transcript. `relative` also anchors the history drawer,
+              which covers this region while open. */}
           <ChatContainerRoot className="app-scrollbar relative min-h-0 flex-1">
+            {showHistory ? (
+              <AssistantHistory
+                sessions={sessions}
+                activeSessionId={sessionId}
+                loading={historyLoading}
+                onSelect={openSession}
+                onNewChat={startNewChat}
+                onDelete={removeSession}
+              />
+            ) : null}
+
             <ChatContainerContent className="px-4 py-4">
             {messages.length === 0 ? (
               <div className="flex h-full flex-col justify-end gap-5 px-1 pb-2">
@@ -158,7 +333,10 @@ export function AssistantWidget() {
                       size="lg"
                       disabled={busy}
                       onClick={() => {
-                        if (!busy) void sendMessage({ text: s.label });
+                        // Through `send`, not sendMessage directly, so a
+                        // conversation started from a suggestion is
+                        // recorded like any other.
+                        if (!busy) void send(s.label);
                       }}
                       className="bg-card hover:border-primary/40 hover:bg-muted/60 h-auto w-full justify-start gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-[13px] font-normal whitespace-normal"
                     >
