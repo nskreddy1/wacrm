@@ -617,6 +617,74 @@ html[data-theme='rose'] {
   }
 }
 
+/*
+ * Mira copilot panel entrance.
+ *
+ * Scales from 0.98 rather than 0 — nothing in the physical world
+ * appears out of nothing, and a panel growing from a point reads as a
+ * gimmick. The origin is the bottom-right corner, where the launcher
+ * tab lives, so the panel visibly comes FROM its trigger instead of
+ * materialising in place.
+ *
+ * transform + opacity only, so it composites off the main thread and
+ * stays smooth while the first request is already in flight.
+ */
+@keyframes mira-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.mira-panel {
+  transform-origin: bottom right;
+  animation: mira-panel-in var(--duration-panel) var(--ease-out) both;
+}
+
+/*
+ * History drawer. Slides in from the left edge of the panel because it
+ * covers the transcript rather than replacing it — the direction tells
+ * the user the conversation is still there, underneath.
+ */
+@keyframes mira-history-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.mira-history {
+  animation: mira-history-in var(--duration-popover) var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * Reduced motion means gentler, not none: the opacity fade still
+   * explains that a new surface arrived, only the movement goes.
+   */
+  .mira-panel,
+  .mira-history {
+    animation: mira-panel-fade 120ms ease both;
+  }
+
+  @keyframes mira-panel-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
 /* Error feedback: a short, decisive shake. Runs once on mount. */
 @keyframes auth-shake {
   0%,

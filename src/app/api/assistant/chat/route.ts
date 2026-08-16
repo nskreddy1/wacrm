@@ -30,6 +30,57 @@ import {
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+/**
+ * How many messages the model sees. Every turn re-sends the whole
+ * transcript, so this is the single biggest lever on time-to-first-token
+ * once threads are persisted and reopened.
+ */
+const MODEL_HISTORY_MESSAGES = 12;
+
+/**
+ * Cap on a single stored tool result before it is summarised.
+ *
+ * Read tools return real workspace data — a contact list or pipeline
+ * dump is easily tens of kilobytes of JSON. Replaying those verbatim on
+ * every subsequent turn is what made long threads crawl: the prompt
+ * grew without bound while adding nothing, because the model had
+ * already used the data in the answer the user can see.
+ */
+const MAX_TOOL_OUTPUT_CHARS = 1_200;
+
+/**
+ * Shrink the transcript before it goes to the model.
+ *
+ * Keeps the last two messages byte-exact — that is the turn actually
+ * being reasoned about, including any tool output the next step depends
+ * on — and truncates oversized tool results in everything older. The
+ * text of past turns is untouched, so the conversation still reads
+ * continuously; only the bulky machine payloads shrink.
+ */
+function compactForModel(messages: UIMessage[]): UIMessage[] {
+  const recent = messages.slice(-MODEL_HISTORY_MESSAGES);
+  const keepIntactFrom = recent.length - 2;
+
+  return recent.map((message, index) => {
+    if (index >= keepIntactFrom) return message;
+
+    const parts = message.parts.map((part) => {
+      if (!('output' in part) || part.output === undefined) return part;
+      const serialized =
+        typeof part.output === 'string'
+          ? part.output
+          : JSON.stringify(part.output);
+      if (serialized.length <= MAX_TOOL_OUTPUT_CHARS) return part;
+      return {
+        ...part,
+        output: `${serialized.slice(0, MAX_TOOL_OUTPUT_CHARS)}… [older result truncated — call the tool again for current data]`,
+      };
+    });
+
+    return { ...message, parts: parts as UIMessage['parts'] };
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const ctx = await getCurrentAccount();
@@ -77,13 +128,25 @@ export async function POST(req: Request) {
     const sessionId =
       typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : null;
 
-    // Hard cap on transcript size to bound cost on the platform key.
-    const recent = messages.slice(-20);
+    // Record the inbound half of the turn now, without waiting on it.
+    //
+    // `onEnd` below is the authoritative write, but it only runs if the
+    // stream reaches its end — close the panel or lose the connection
+    // mid-answer and it never fires, leaving a session row in history
+    // whose transcript is empty. Reopening that thread then looked like
+    // the click did nothing. This write is what guarantees a thread in
+    // the list always has content; it is deliberately not awaited so it
+    // adds nothing to time-to-first-token.
+    if (sessionId) {
+      void saveAssistantTurn(ctx, sessionId, messages).catch((err) => {
+        console.error('[assistant] failed to pre-persist turn', err);
+      });
+    }
 
     const result = streamText({
       model: resolveAssistantModel(config),
       system: resolveAssistantSystemPrompt(config),
-      messages: await convertToModelMessages(recent),
+      messages: await convertToModelMessages(compactForModel(messages)),
       tools: buildAssistantTools(ctx),
       // Read tools run freely; every write tool pauses the loop and
       // asks the user for permission in the chat (user requirement:
@@ -106,7 +169,7 @@ export async function POST(req: Request) {
         // Passing the inbound messages puts the SDK in persistence
         // mode: it assigns the response message a stable id and hands
         // `onEnd` the full reconciled transcript. Note this is the
-        // untrimmed list — `recent` is only what the model sees, and
+        // untrimmed list — `compactForModel` shapes what the model sees, and
         // persisting the trimmed view would silently drop the older
         // half of a long thread from history.
         originalMessages: messages,

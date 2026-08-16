@@ -62,7 +62,10 @@ export function AssistantHistory({
   onDelete,
 }: AssistantHistoryProps) {
   return (
-    <div className="bg-background absolute inset-0 z-20 flex flex-col">
+    // Positioned against the panel body, not the transcript's scroll
+    // container, so it stays put while the transcript underneath keeps
+    // its own scroll position. Only this list scrolls while it is open.
+    <div className="bg-background mira-history absolute inset-0 z-20 flex flex-col">
       <div className="flex flex-col gap-1 px-3 pt-3 pb-2">
         <Button
           type="button"
@@ -88,9 +91,8 @@ export function AssistantHistory({
             ))}
           </div>
         ) : sessions.length === 0 ? (
-          <p className="text-muted-foreground px-1 pt-4 text-xs leading-relaxed">
-            No past chats yet. Conversations you have with Mira show up here,
-            and are kept for 90 days.
+          <p className="text-muted-foreground px-1 pt-4 text-xs">
+            No chats yet.
           </p>
         ) : (
           <ul className="flex flex-col gap-0.5">
@@ -139,11 +141,6 @@ export function AssistantHistory({
         )}
       </div>
 
-      {/* States the retention policy where the data actually is, rather
-          than burying it in a settings page. */}
-      <p className="text-muted-foreground border-border border-t px-4 py-2.5 text-[11px] leading-relaxed">
-        Chats are private to you and deleted automatically after 90 days.
-      </p>
     </div>
   );
 }

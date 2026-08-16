@@ -22,7 +22,6 @@ import {
   PromptInputTextarea,
 } from '@/components/prompt-kit/prompt-input';
 import { PromptSuggestion } from '@/components/prompt-kit/prompt-suggestion';
-import { ScrollButton } from '@/components/prompt-kit/scroll-button';
 import { cn } from '@/lib/utils';
 import {
   ApprovalCard,
@@ -52,6 +51,29 @@ const SUGGESTIONS: { label: string; icon?: 'workflow' }[] = [
   { label: 'What appointments are coming up?' },
 ];
 
+/**
+ * Where the open thread id is remembered between panel opens.
+ *
+ * `sessionStorage`, not `localStorage`, is the whole point: the
+ * conversation must survive closing the panel and navigating or
+ * reloading the app, and must NOT survive closing the tab. That is
+ * exactly sessionStorage's lifetime, so the browser enforces the policy
+ * and we don't need an expiry of our own. It is also per-tab, so two
+ * tabs are two independent conversations rather than one fighting over
+ * shared state.
+ */
+const ACTIVE_SESSION_KEY = 'mira:active-session';
+
+function rememberSession(id: string | null) {
+  try {
+    if (id) sessionStorage.setItem(ACTIVE_SESSION_KEY, id);
+    else sessionStorage.removeItem(ACTIVE_SESSION_KEY);
+  } catch {
+    // Private-mode / storage-disabled: the chat still works for as long
+    // as the panel stays mounted, it just won't survive a reload.
+  }
+}
+
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -65,6 +87,8 @@ export function AssistantWidget() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  /** Guards the one-time restore so reopening never refetches. */
+  const restoredRef = useRef(false);
 
   const {
     messages,
@@ -101,10 +125,17 @@ export function AssistantWidget() {
   // sticks during streaming but releases the moment the user scrolls up
   // to re-read something, and ScrollButton offers the way back.
 
-  /** Point both the ref and the state at a thread. */
-  function useSession(id: string | null) {
+  /**
+   * Point the ref, the state and sessionStorage at a thread.
+   *
+   * Named plainly rather than `useSession` — it is a setter called from
+   * event handlers, and a `use` prefix would declare it a hook and make
+   * every conditional call a rules-of-hooks violation.
+   */
+  function setActiveSession(id: string | null) {
     sessionIdRef.current = id;
     setSessionId(id);
+    rememberSession(id);
   }
 
   const refreshHistory = useCallback(async () => {
@@ -140,7 +171,7 @@ export function AssistantWidget() {
       if (!res.ok) return null;
       const data = (await res.json()) as { session?: AssistantSessionSummary };
       if (!data.session) return null;
-      useSession(data.session.id);
+      setActiveSession(data.session.id);
       setSessions((prev) => [data.session as AssistantSessionSummary, ...prev]);
       return data.session.id;
     } catch {
@@ -165,7 +196,7 @@ export function AssistantWidget() {
 
   /** Start a fresh thread: clear the transcript and drop the id. */
   function startNewChat() {
-    useSession(null);
+    setActiveSession(null);
     setMessages([]);
     setInput('');
     setShowHistory(false);
@@ -176,16 +207,52 @@ export function AssistantWidget() {
     setShowHistory(false);
     try {
       const res = await fetch(`/api/assistant/sessions/${id}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        // A thread that no longer exists (deleted elsewhere, or aged
+        // out by the retention job) must not stay pinned as the active
+        // session, or every reopen retries the same dead id.
+        if (res.status === 404 && sessionIdRef.current === id) {
+          setActiveSession(null);
+        }
+        return;
+      }
       const data = (await res.json()) as {
         session?: { id: string; messages: UIMessage[] };
       };
       if (!data.session) return;
-      useSession(data.session.id);
+      setActiveSession(data.session.id);
       setMessages(data.session.messages);
     } catch {
       // Leave the current transcript untouched on failure.
     }
+  }
+
+  /**
+   * Open the panel, restoring the tab's conversation the first time.
+   *
+   * Restoring lazily on first open — rather than in an effect on mount —
+   * keeps the cost with the user who actually wants the copilot: someone
+   * who never opens it never pays for the fetch. The transcript comes
+   * from the server rather than a second client-side copy, so there is
+   * one source of truth for what was said.
+   */
+  function openPanel() {
+    setOpen(true);
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+
+    // Only restore into an empty panel. If the component stayed mounted
+    // (the common case — navigating between pages keeps the layout
+    // alive) the live transcript is already the newer one.
+    if (messages.length > 0 || sessionIdRef.current) return;
+
+    let stored: string | null = null;
+    try {
+      stored = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+    } catch {
+      stored = null;
+    }
+    if (stored) void openSession(stored);
   }
 
   async function removeSession(id: string) {
@@ -222,10 +289,14 @@ export function AssistantWidget() {
         <button
           type="button"
           aria-label="Open Mira, your CRM copilot"
-          onClick={() => setOpen(true)}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring focus-visible:ring-offset-background fixed top-1/2 right-0 z-40 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl py-4 pr-1.5 pl-2 shadow-lg transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          onClick={openPanel}
+          // Neutral surface with the brand colour spent only on the
+          // icon. A full primary-filled tab competed with every other
+          // accent on the page; a card-coloured tab reads as part of the
+          // chrome and lets one small mark carry the identity.
+          className="bg-card/95 text-foreground border-border hover:bg-muted focus-visible:ring-ring focus-visible:ring-offset-background fixed top-1/2 right-0 z-40 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl border border-r-0 py-4 pr-1.5 pl-2 shadow-lg backdrop-blur transition-[background-color,transform] duration-[var(--duration-press)] ease-[var(--ease-out)] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
-          <Sparkles className="size-4 shrink-0" aria-hidden />
+          <Sparkles className="text-primary size-4 shrink-0" aria-hidden />
           {/* The product name, set with real vertical writing-mode
               rather than stacked letters, so the glyphs stay kerned as
               one word and read cleanly down the right edge. */}
@@ -243,23 +314,19 @@ export function AssistantWidget() {
         <div
           role="dialog"
           aria-label="Mira — CRM copilot chat"
-          className="border-border bg-background fixed right-4 bottom-20 z-50 flex h-[min(600px,calc(100dvh-7rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_64px_-16px_rgba(0,0,0,0.4)]"
+          className="border-border bg-background mira-panel fixed right-4 bottom-20 z-50 flex h-[min(600px,calc(100dvh-7rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_64px_-16px_rgba(0,0,0,0.4)]"
         >
-          {/* Header */}
+          {/* Header — name only. The subtitle used to spell out the
+              approval model on every open; that belongs in the moment a
+              write is actually proposed, where the approval card already
+              says it, not as standing furniture. */}
           <div className="border-border flex items-center gap-2.5 border-b px-4 py-3">
-            <span className="bg-primary/10 relative flex size-8 items-center justify-center rounded-lg">
-              <Sparkles className="text-primary size-4" aria-hidden />
-              <span
-                className="border-background absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 bg-emerald-500"
-                aria-hidden
-              />
+            <span className="bg-primary/10 flex size-7 shrink-0 items-center justify-center rounded-md">
+              <Sparkles className="text-primary size-3.5" aria-hidden />
             </span>
-            <div className="flex min-w-0 flex-col">
-              <span className="text-sm leading-tight font-semibold">Mira</span>
-              <span className="text-muted-foreground text-[11px]">
-                Your CRM copilot · writes need your approval
-              </span>
-            </div>
+            <span className="text-sm leading-none font-semibold tracking-tight">
+              Mira
+            </span>
             {/* One history control, not a separate "new chat" icon
                 beside it — "New chat" lives at the top of the drawer
                 this opens. aria-expanded ties the button to the state
@@ -287,9 +354,18 @@ export function AssistantWidget() {
             </Button>
           </div>
 
-          {/* Transcript. `relative` also anchors the history drawer,
-              which covers this region while open. */}
-          <ChatContainerRoot className="app-scrollbar relative min-h-0 flex-1">
+          {/* Body. This wrapper — not the scroll container — is what the
+              history drawer is positioned against.
+
+              The drawer used to live inside ChatContainerRoot, which is
+              itself the `overflow-y-auto` element. An absolutely
+              positioned child of a scroll container is laid out against
+              its padding box and therefore SCROLLS WITH THE CONTENT, so
+              the drawer drifted as the transcript moved and its own
+              overflow-y-auto nested a second scrollbar inside the first.
+              Hoisting it one level up gives exactly one scroll region on
+              screen at a time: the transcript, or the history list. */}
+          <div className="relative flex min-h-0 flex-1 flex-col">
             {showHistory ? (
               <AssistantHistory
                 sessions={sessions}
@@ -301,20 +377,22 @@ export function AssistantWidget() {
               />
             ) : null}
 
-            <ChatContainerContent className="px-4 py-4">
+            <ChatContainerRoot className="app-scrollbar min-h-0 flex-1">
+              <ChatContainerContent className="px-4 py-4">
             {messages.length === 0 ? (
-              <div className="flex h-full flex-col justify-end gap-5 px-1 pb-2">
-                <div className="flex flex-col gap-2">
-                  <h2 className="text-lg font-semibold text-balance">
-                    {"Hi, I'm Mira"}
-                  </h2>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    I can read your whole workspace and build workflows for
-                    you end to end — from a simple welcome reply to multi-step
-                    sequences. Anything that changes data asks for your
-                    approval first.
-                  </p>
-                </div>
+              // `justify-end` with no `h-full`: the old h-full forced the
+              // empty state to the full scroll height, which produced a
+              // scrollbar on a panel that had nothing to scroll. The
+              // flex parent already fills the space.
+              <div className="flex flex-1 flex-col justify-end gap-4 px-1 pb-1">
+                {/* One line, no pitch. The capability list that used to
+                    sit here described the product to someone already
+                    inside it, and pushed the actionable suggestions
+                    below the fold. The suggestions ARE the explanation:
+                    they show what Mira does by offering to do it. */}
+                <h2 className="text-muted-foreground text-xs font-medium">
+                  How can I help?
+                </h2>
                 {/* prompt-kit's PromptSuggestion in its plain (non-
                     highlight) form: a real Button, so focus rings,
                     disabled state and the press affordance all come from
@@ -443,23 +521,10 @@ export function AssistantWidget() {
               </div>
             )}
 
-              <ChatContainerScrollAnchor />
-            </ChatContainerContent>
-
-            {/* Pinned to the bottom of the scroll viewport — near the
-                composer rather than floating over the middle of the
-                transcript. It reads isAtBottom from use-stick-to-bottom's
-                context, so it must stay inside ChatContainerRoot; it
-                fades out and goes inert once the user is at the latest
-                turn. The wrapper is pointer-events-none so the invisible
-                state can't swallow clicks on the message beneath it. */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-              <ScrollButton
-                aria-label="Scroll to latest message"
-                className="pointer-events-auto size-8 shadow-md"
-              />
-            </div>
-          </ChatContainerRoot>
+                <ChatContainerScrollAnchor />
+              </ChatContainerContent>
+            </ChatContainerRoot>
+          </div>
 
           {/* Status notices live outside the scroll area: a persistent
               condition ("not configured", "request failed") shouldn't
