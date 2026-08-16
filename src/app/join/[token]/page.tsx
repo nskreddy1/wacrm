@@ -68,6 +68,25 @@ interface PeekOk {
    * identity to warn about, the other is simply "not yet known".
    */
   invited_email_matches?: boolean | null;
+  /**
+   * The permission set the invite grants ('Standard'). Org metadata,
+   * not personal data, so it is returned to anyone holding the link —
+   * `role` above is already strictly more revealing.
+   *
+   * Null when the invite carries no explicit profile, in which case
+   * redeem falls back to the account's Standard profile.
+   */
+  profile_name?: string | null;
+  /**
+   * The exact invited address — populated ONLY when
+   * `invited_email_matches` is true, i.e. only for a caller already
+   * authenticated as that address. Masking a value from the one person
+   * who provably owns it adds no privacy, so the verified recipient
+   * sees their real address instead of 'ad****@gmail.com'.
+   */
+  invited_email_exact?: string | null;
+  /** Invited first name. Same identity gate as `invited_email_exact`. */
+  invited_first_name?: string | null;
 }
 interface PeekFail {
   ok: false;
@@ -437,6 +456,12 @@ export default function JoinPage() {
     ? `${peek.account_name.split('@')[0]}'s workspace`
     : peek.account_name;
 
+  // Exact address when the DB confirmed this caller IS the invitee,
+  // masked hint otherwise. Undefined on an older RPC that returns
+  // neither, in which case the line is simply omitted.
+  const invitedEmailDisplay =
+    peek.invited_email_exact ?? peek.invited_email_hint;
+
   const inviteHeader = (
     <>
       <TeamMark name={workspaceLabel} />
@@ -451,18 +476,27 @@ export default function JoinPage() {
           You&apos;ve been invited to join{' '}
           <span className="font-semibold">{workspaceLabel}</span>
         </h1>
+        {/* Role AND permission set. The invite writes both to
+            account_members on redeem, so listing only the role
+            understated the access being granted. */}
         <p className="text-muted-foreground text-sm">
           Joining as {ROLE_LABEL[peek.role]}
+          {peek.profile_name ? ` · ${peek.profile_name} access` : ''}
         </p>
         {/* Which address the link is bound to. Redeem accepts only this
             one, so naming it up front is what turns a link that "might
             work" into one the recipient can verify at a glance — and
             tells someone signing up which of their addresses to use.
-            Masked, because this renders pre-auth to whoever holds the
-            link. */}
-        {peek.invited_email_hint ? (
+
+            Exact address for the verified recipient, masked for everyone
+            else. `invited_email_exact` is non-null only when the DB has
+            already confirmed the caller is authenticated as that very
+            address, so showing it in full discloses nothing to them —
+            while a stranger holding a forwarded link still only ever
+            sees 'ad****@gmail.com'. */}
+        {invitedEmailDisplay ? (
           <p className="text-muted-foreground/80 font-mono text-xs">
-            {peek.invited_email_hint}
+            {invitedEmailDisplay}
           </p>
         ) : null}
       </div>
