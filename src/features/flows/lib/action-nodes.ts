@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { isDeliverableUrl } from '@/features/webhooks/lib/ssrf';
+import { decrypt } from '@/features/whatsapp/lib/encryption';
 import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
 import { engineSendTemplate } from './meta-send';
 import type {
@@ -251,14 +252,87 @@ export async function executeActionNode(
         // Stored connection: inject the secret header server-side so
         // credentials never live in node config or event payloads.
         if (cfg.connection_id) {
-          const { data: conn } = await db
+          const { data: conn, error: connErr } = await db
             .from('workflow_connections')
-            .select('auth_header_name, auth_header_value')
+            .select('auth_type, header_name, secret, secret_format, base_url')
             .eq('id', cfg.connection_id)
             .eq('account_id', run.account_id)
             .maybeSingle();
-          if (conn?.auth_header_name && conn.auth_header_value) {
-            headers[conn.auth_header_name] = conn.auth_header_value;
+
+          // Fail closed. This block previously selected
+          // `auth_header_name, auth_header_value` — neither column has
+          // ever existed on `workflow_connections` (the real columns are
+          // auth_type / header_name / secret). PostgREST therefore
+          // errored on every call, `conn` was always null, the `if`
+          // never ran, and the request went out COMPLETELY
+          // UNAUTHENTICATED while the flow still reported success. Any
+          // node configured with a connection was silently sending
+          // anonymous webhooks. Erroring here is the point: a missing
+          // credential must stop the call, not downgrade it.
+          if (connErr || !conn) {
+            return fail(
+              'send_webhook_connection',
+              connErr?.message ?? 'connection not found'
+            );
+          }
+
+          // `base_url` is documented in the schema as an allow-list
+          // prefix ("nodes using this connection may only call URLs
+          // starting with it") but nothing enforced it, so a credential
+          // scoped to one vendor could be replayed against any host an
+          // editor typed into the node.
+          if (conn.base_url && !cfg.url.startsWith(conn.base_url)) {
+            return fail(
+              'send_webhook_scope',
+              'url is outside this connection base_url'
+            );
+          }
+
+          let secret: string;
+          try {
+            // Rows written before the secret column was encrypted are
+            // marked 'plaintext' and read through as-is; new writes are
+            // 'gcm'. Format is an explicit column rather than sniffed,
+            // because a basic-auth secret ("user:pass") has exactly one
+            // colon and would be misread as the legacy CBC format.
+            secret =
+              conn.secret_format === 'gcm' ? decrypt(conn.secret) : conn.secret;
+          } catch {
+            // Never fall through to an unauthenticated send.
+            return fail(
+              'send_webhook_secret',
+              'stored credential could not be decrypted'
+            );
+          }
+
+          // Node config must not be able to shadow or spoof the
+          // credential. Plain objects treat `Authorization` and
+          // `authorization` as distinct keys, so strip every case
+          // variant before setting ours.
+          const setAuthHeader = (name: string, value: string) => {
+            for (const key of Object.keys(headers)) {
+              if (key.toLowerCase() === name.toLowerCase()) delete headers[key];
+            }
+            headers[name] = value;
+          };
+
+          if (conn.auth_type === 'header') {
+            if (!conn.header_name) {
+              return fail(
+                'send_webhook_connection',
+                "auth_type 'header' requires header_name"
+              );
+            }
+            setAuthHeader(conn.header_name, secret);
+          } else if (conn.auth_type === 'basic') {
+            // Secret is stored as `user:pass`; we base64 it here so the
+            // stored value stays readable/rotatable by an admin.
+            setAuthHeader(
+              'authorization',
+              `Basic ${Buffer.from(secret, 'utf8').toString('base64')}`
+            );
+          } else {
+            setAuthHeader('authorization', `Bearer ${secret}`);
           }
         }
         const body = cfg.body_template
