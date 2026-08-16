@@ -4,8 +4,10 @@ import {
   // Database — restore this import with the deferred `integrations` section.
   Gauge,
   LifeBuoy,
+  Mail,
   MessageCircle,
   Shield,
+  Smartphone,
   Tags,
   User,
   UsersRound,
@@ -37,10 +39,6 @@ import {
  * group heading on a group holding a single ~32px row.
  *
  * Merges applied (each is a pure re-parenting — no panel was deleted):
- * - WhatsApp + SMS + Email → `channels`. All three rendered the *same*
- *   component, `<ChannelConnections fixedChannel=…>`, which already
- *   ships its own email/whatsapp/sms tab strip when the prop is omitted.
- *   This reverses an earlier split; `?tab=channels` was still mapped.
  * - Deals & currency → `fields`. "Deals & currency" was a single
  *   `<select>` writing `accounts.default_currency`; it never contained
  *   any deal settings.
@@ -49,6 +47,21 @@ import {
  *   (This merged section is now DEFERRED — see the note below.)
  * - Appearance → `profile`. Appearance persists to localStorage only
  *   (device-scoped), exactly like the other personal display prefs.
+ *
+ * ## Channels are one row each
+ *
+ * WhatsApp, SMS and Email are separate rail rows. They share the one
+ * `<ChannelConnections>` component, which renders a single channel when
+ * given `fixedChannel` and its own tab strip when the prop is omitted —
+ * so a merged row meant a tab strip nested inside the rail, and picking
+ * "Channels" then still left you one click from the provider you wanted.
+ * Three rows make each channel a direct destination and let the rail
+ * show at a glance which surfaces exist.
+ *
+ * This costs two extra rows against the height budget described above.
+ * That fits because `integrations` was deferred at the same time and the
+ * rail now stands at 12 rows / 3 headings, well under the 16 / 6 that
+ * originally overflowed. Adding further rows needs the same math redone.
  *
  * Groups were folded too: `customization` and `data` each held one row,
  * so their headings cost more vertical space than their contents. Both
@@ -98,8 +111,11 @@ export const SETTINGS_SECTIONS = [
   // SECTION_META record, the `Database` icon import, the resolveSection
   // alias, and the panel map entry in settings/page.tsx.
   'activity',
-  // Channels — communication surfaces and their behaviour.
-  'channels',
+  // Channels — one row per communication surface, so connecting a
+  // provider is a direct destination rather than a tab inside a tab.
+  'whatsapp',
+  'sms',
+  'email',
   'quick-replies',
   'notifications',
   // Unlabeled trailing group.
@@ -172,10 +188,22 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
     icon: Activity,
     group: 'workspace',
   },
-  channels: {
-    id: 'channels',
-    label: 'Channels',
+  whatsapp: {
+    id: 'whatsapp',
+    label: 'WhatsApp',
     icon: MessageCircle,
+    group: 'channels',
+  },
+  sms: {
+    id: 'sms',
+    label: 'SMS',
+    icon: Smartphone,
+    group: 'channels',
+  },
+  email: {
+    id: 'email',
+    label: 'Email',
+    icon: Mail,
     group: 'channels',
   },
   'quick-replies': {
@@ -215,9 +243,11 @@ function isSection(value: string | null): value is SettingsSection {
  * Anything unknown falls back to DEFAULT_SECTION.
  */
 export function resolveSection(raw: string | null): SettingsSection {
-  // Per-channel sections collapsed into one panel that owns its own
-  // email / whatsapp / sms tab strip.
-  if (raw === 'whatsapp' || raw === 'sms' || raw === 'email') return 'channels';
+  // `whatsapp` / `sms` / `email` are real sections again, so they fall
+  // through to isSection below. The merged `channels` value stays mapped
+  // for bookmarks made while the three were one panel — WhatsApp is the
+  // primary channel of this product, so it is the natural landing row.
+  if (raw === 'channels') return 'whatsapp';
   // Tags and custom fields merged into "Fields" earlier; currency joined
   // it here (it was a lone select under "Deals & currency").
   if (raw === 'tags' || raw === 'custom-fields' || raw === 'deals')

@@ -107,13 +107,16 @@ export default function SettingsPage() {
     // section list must be uncommented together.
     // integrations: <IntegrationsPanel />,
     activity: <ActivityPanel />,
-    // One panel for every channel: ChannelConnections renders its own
-    // email / whatsapp / sms tab strip when `fixedChannel` is omitted,
-    // which is what the three separate rail rows were duplicating. It is
-    // also the single source of truth for email — the legacy always-visible
-    // SMTP form was removed because its prefilled placeholders read like
-    // saved defaults and bypassed connection testing.
-    channels: <ChannelConnections />,
+    // One rail row per channel. `fixedChannel` makes ChannelConnections
+    // render just that provider and drop its internal tab strip, so the
+    // rail is the only channel switcher — no tabs nested inside tabs.
+    // This is also the single source of truth for email: the legacy
+    // always-visible SMTP form was removed because its prefilled
+    // placeholders read like saved defaults and bypassed connection
+    // testing.
+    whatsapp: <ChannelConnections fixedChannel="whatsapp" />,
+    sms: <ChannelConnections fixedChannel="sms" />,
+    email: <ChannelConnections fixedChannel="email" />,
     'quick-replies': <QuickRepliesManager />,
     notifications: <NotificationsSettings />,
     support: <SupportTab />,
