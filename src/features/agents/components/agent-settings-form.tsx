@@ -5,6 +5,11 @@ import useSWR from 'swr';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import {
+  isAutoReplyLimitMode,
+  type AutoReplyLimitMode,
+} from '@/features/assistant/lib/ai/types';
 import { fetchAccountMembers, memberLabel } from '@/lib/account/members';
 import type { AccountMember } from '@/types';
 import {
@@ -53,6 +58,25 @@ export function AgentSettingsForm({
   const [replyCap, setReplyCap] = useState(
     Number(settings.replyCap) >= 1 ? Number(settings.replyCap) : 3
   );
+  // 'never' is the engine's existing "no cap" mode — auto-reply.ts only
+  // enforces a ceiling for 'per_conversation' and 'per_day'. The setup
+  // wizard could already reach it, but this form couldn't, so an account
+  // that wanted unlimited replies had no way to switch back to it after
+  // onboarding. Exposed here as a plain toggle.
+  const savedLimitMode: AutoReplyLimitMode = isAutoReplyLimitMode(
+    settings.limitMode
+  )
+    ? settings.limitMode
+    : 'per_conversation';
+  const [limitMode, setLimitMode] =
+    useState<AutoReplyLimitMode>(savedLimitMode);
+  // Which bounded mode to restore when the toggle goes back off. Without
+  // this an account counting per_day would silently become
+  // per_conversation after one round trip through the switch.
+  const [boundedMode] = useState<Exclude<AutoReplyLimitMode, 'never'>>(
+    savedLimitMode === 'never' ? 'per_conversation' : savedLimitMode
+  );
+  const unlimited = limitMode === 'never';
   const [scheduleStart, setScheduleStart] = useState(
     typeof settings.scheduleStart === 'string' ? settings.scheduleStart : ''
   );
@@ -112,6 +136,7 @@ export function AgentSettingsForm({
       }
       body.settings = {
         replyCap,
+        limitMode,
         scheduleStart: scheduleStart || null,
         scheduleEnd: scheduleEnd || null,
         timezone: scheduleStart ? timezone : null,
@@ -334,15 +359,40 @@ export function AgentSettingsForm({
               >
                 Max replies per conversation
               </label>
-              <input
-                id="cfg-cap"
-                type="number"
-                min={1}
-                max={20}
-                value={replyCap}
-                onChange={(e) => setReplyCap(Number(e.target.value) || 3)}
-                className="border-border bg-background text-foreground w-24 rounded-md border px-3 py-2 text-sm"
-              />
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  id="cfg-cap"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={replyCap}
+                  disabled={unlimited}
+                  onChange={(e) => setReplyCap(Number(e.target.value) || 3)}
+                  className="border-border bg-background text-foreground w-24 rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                />
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="cfg-unlimited"
+                    checked={unlimited}
+                    onCheckedChange={(next) =>
+                      setLimitMode(next ? 'never' : boundedMode)
+                    }
+                  />
+                  <label
+                    htmlFor="cfg-unlimited"
+                    className="text-foreground text-sm"
+                  >
+                    No limit
+                  </label>
+                </div>
+              </div>
+              <p className="text-muted-foreground mt-1 text-xs">
+                {unlimited
+                  ? 'The agent replies every time, with no per-conversation ceiling. Active hours and escalation below still apply.'
+                  : boundedMode === 'per_day'
+                    ? 'Counted per day, resetting at midnight in the timezone below.'
+                    : 'After this many replies the conversation waits for your team.'}
+              </p>
             </div>
 
             <div>
