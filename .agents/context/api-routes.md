@@ -9,12 +9,16 @@ All routes under `src/app/api/`. Conventions:
 
 ## Namespaces
 
+**115 route handlers across 19 namespaces.** Counts below are per namespace;
+re-derive with `find src/app/api/<ns> -name route.ts | wc -l`.
+
 | Namespace | Purpose | Gate |
 | --- | --- | --- |
 | `/api/account/*` | Workspace mgmt: members, invitations, profiles, api-keys, domains, email-settings, transfer-ownership, activity | account role |
 | `/api/admin/*` | Platform console: workspaces, tickets, channels (provisioning), providers (catalog/fleet/activity), ai-config, platform-settings, audit | super admin |
 | `/api/ai/*` | Agents CRUD, autoreply, draft, knowledge (+reindex), playground, runs, usage, config | account |
-| `/api/assistant/chat` | In-app AI assistant | account |
+| `/api/alerts/*` (2) | `destinations` (alert delivery targets), `dispatch` (fires due alerts) | admin for destinations; `CRON_SECRET` for dispatch |
+| `/api/assistant/*` (3) | In-app AI assistant: `chat`, `sessions`, `sessions/[id]` | account |
 | `/api/channels/webhooks/{meta,twilio}` | Inbound provider webhooks — MUST verify signatures (Meta HMAC, `X-Twilio-Signature`) | signature |
 | `/api/email/broadcast`, `/api/sms/broadcast`, `/api/whatsapp/*` | Channel sends, media, templates (submit/sync/twilio), reactions, webhook | account |
 | `/api/external-sources/*` | CSV/external recipient sources with preview | account |

@@ -86,6 +86,7 @@ src/
   hooks/          # generic app-wide hooks (use-mobile, use-navigation, use-theme)
   lib/            # cross-cutting infra: data/, supabase/, api/, cache/, storage/,
                   # email/, routing/, routes/, account/, navigation/, utils
+  contracts/      # shared request/response contracts (api.ts)
   types/          # shared TypeScript types
   i18n/           # i18n request config
   proxy.ts        # session refresh + auth redirects (Next 16 middleware)
@@ -119,32 +120,50 @@ Import with the `@/features/<domain>/...` alias; shared code stays on `@/compone
 
 Derived from `package.json`. **pnpm is the standard package manager** (`pnpm-lock.yaml` + `packageManager` field); there is no `package-lock.json`. Use `pnpm` for all commands:
 
-| Task                | Command                                |
-| ------------------- | -------------------------------------- |
-| Install             | `pnpm install`                         |
-| Develop (web + api) | `pnpm dev`                             |
-| Typecheck           | `pnpm typecheck`                       |
-| Lint                | `pnpm lint`                            |
-| Format / check      | `pnpm format` / `pnpm format:check`    |
-| Tests (Vitest)      | `pnpm test` (watch: `pnpm test:watch`) |
-| Production build    | `pnpm build` then `pnpm start`         |
+| Task                     | Command                                                     |
+| ------------------------ | ----------------------------------------------------------- |
+| Install                  | `pnpm install`                                              |
+| Develop (single process) | `pnpm dev`                                                  |
+| **Full gate**            | **`pnpm check`** — typecheck + lint + boundaries + test     |
+| Typecheck                | `pnpm typecheck`                                            |
+| Lint                     | `pnpm lint`                                                 |
+| Import boundaries        | `pnpm check:boundaries`                                     |
+| Format / check           | `pnpm format` / `pnpm format:check`                          |
+| Tests (Vitest)           | `pnpm test` (watch: `pnpm test:watch`) — 913 tests, 99 files |
+| Apply migrations         | `pnpm db:push`                                              |
+| Regenerate schema doc    | `pnpm db:doc`                                               |
+| Production build         | `pnpm build` then `pnpm start`                              |
+
+`pnpm check` is the single command to run before calling work done — it is what CI enforces, and it includes `check:boundaries`, which fails the build when a feature module reaches into another feature's internals.
 
 ## Before changing a module — checklist
 
 1. Read the current code and its colocated `*.test.ts` files; run the existing tests first.
 2. Check `supabase/migrations/` and the live schema before assuming any column exists.
-3. Schema change? Add a new **idempotent** `supabase/migrations/NNN_*.sql` (next number), update `src/types/`, and never edit an existing migration.
+3. Schema change? Add a new **idempotent** migration named `YYYYMMDDHHMMSS_description.sql` (timestamp prefix — the old `NNN_` numbering stopped at `037`), apply it with `pnpm db:push`, refresh `.agents/context/database-schema.md` with `pnpm db:doc`, update `src/types/`, and never edit an existing migration.
 4. New route? Add it to `src/lib/routing/routes.ts` and follow the simple-URL contract above.
    New domain code? Put it under `src/features/<domain>/` (components/lib/hooks), not the shared top-level folders. Only genuinely cross-cutting code belongs in `src/components/ui`, `src/lib`, or `src/hooks`.
 5. Anything touching user data? Verify account scoping and the role matrix at the RLS/RPC layer, not just the UI.
 6. Anything touching AI? Preserve precedence, caps, sticky handoff, and prompt-injection guards; consult the version-matched AI SDK docs rather than memory.
 7. Public API (`/api/v1`) or webhook payloads? These are stability contracts — additive changes only.
-8. After changes: `pnpm typecheck`, `pnpm lint`, `pnpm test`, and a production build for release-bound work.
+8. After changes: run **`pnpm check`**, plus a production build for release-bound work.
 
 ## Focused docs
+
+Agent context pack (`.agents/context/`) — read `README.md` there first:
+
+- `hld.md` / `lld.md` — high- and low-level design of the system as built.
+- `system-design.md` — topology, request flows, scaling and failure behaviour.
+- `architecture.md` — module structure and the import-boundary rules `check:boundaries` enforces.
+- `api-routes.md` — every route handler, grouped by namespace, with auth posture.
+- `database.md` — how to work with the database (access patterns, RLS helpers, migration workflow).
+- `database-schema.md` — **generated** exact reference (`pnpm db:doc`); never hand-edit.
+
+Long-form docs (`docs/`):
 
 - `docs/enterprise-v1-architecture.md` — target-state enterprise V1 architecture.
 - `docs/public-api.md` — authoritative public REST API reference.
 - `docs/mcp.md` — MCP server usage.
+- `docs/adr/` — accepted architecture decision records; ADR-004 covers invites and membership.
 - `docs/archive/architecture-delta.md` — verified differences between this fork and the upstream docs (archived).
 - `docs/archive/upstream-wacrm/README.md` — index of upstream documentation snapshots (archived).

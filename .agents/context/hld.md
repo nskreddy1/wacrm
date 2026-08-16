@@ -34,15 +34,15 @@ audit trail as a human agent.
                  │ (user's own cookie)  │
                  ▼                      ▼
      ┌───────────────────┐   ┌──────────────────────────┐
-     │  Supabase client  │   │  Route Handlers (102)    │
+     │  Supabase client  │   │  Route Handlers (115)    │
      │  (anon key + RLS) │   │  /api/**  server-only    │
      └─────────┬─────────┘   └───────────┬──────────────┘
                │                         │
                │ RLS enforced            │ service role, code-scoped
                ▼                         ▼
      ┌──────────────────────────────────────────────────┐
-     │        SUPABASE POSTGRES  (77 tables)            │
-     │  RLS on every tenant table · is_account_member() │
+     │        SUPABASE POSTGRES  (88 tables)            │
+     │  RLS on ALL 88 tables · is_account_member()      │
      │  pgvector for AI knowledge · audit_events        │
      └──────────────────────────────────────────────────┘
                ▲                         ▲
@@ -112,6 +112,18 @@ Each maps to a folder in `src/features/`.
 | **Public API** | Versioned `/api/v1` for customers, API keys, webhooks | `api_keys`, `webhook_endpoints` |
 | **Platform admin** | Cross-tenant operations, provider policy | `platform_settings`, `platform_provider_policies`, `platform_audit_log` |
 | **Observability** | Tenant-visible audit trail, notifications | `audit_events`, `notifications`, `notification_preferences` |
+| **Billing & quotas** | Plans, per-account limits, metered usage counters | `plans`, `account_billing`, `account_quotas`, `account_limit_overrides`, `usage_counters`, `quota_usage` |
+| **Alerts** | Threshold rules, delivery destinations, fired events | `alert_rules`, `alert_events`, `alert_destinations`, `alert_deliveries` |
+| **Assistant** | In-app agentic assistant sessions and turn history | `assistant_sessions`, `assistant_messages` |
+| **Affective layer** | Per-conversation sentiment/emotion signals (ADR-002) | `conversation_affective_events` |
+| **Module fields** | Per-account field visibility/labels driving configurable modules | `module_field_settings`, `user_dashboards` |
+
+Not in the table above but present: `account_members` and `account_email_settings`
+(auth/tenancy), `ai_bot_templates` (AI), `member_chat_prefs` and
+`team_conversation_prefs` (team chat), `oauth_connection_states` and
+`workflow_connections` (channels/flows). The generated
+`database-schema.md` is always the complete list — this table is a map of
+*ownership*, not an inventory.
 
 ---
 
@@ -226,6 +238,6 @@ Ranked, with fixes, in `roadmap.md`. Summary:
 | Add a page | `src/app/(dashboard)/…/page.tsx` + `src/features/<domain>/components/` |
 | Add a write endpoint | `src/app/api/<domain>/route.ts`, Zod-validate, scope by `account_id`, audit |
 | Add a read | `src/lib/data/<domain>/`, called from an RSC |
-| Change the schema | New file in `supabase/migrations/`, apply, update `database.md` + `database-schema.md` |
+| Change the schema | New `YYYYMMDDHHMMSS_*.sql` in `supabase/migrations/` → `pnpm db:push` → `pnpm db:doc` (regenerates `database-schema.md`) → update `database.md` prose by hand |
 | Add a provider | `src/features/channels/lib/` adapter + `channel_provider` enum + admin catalog entry |
 | Add an AI tool | AI feature module; scope every query by `account_id` |

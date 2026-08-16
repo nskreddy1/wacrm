@@ -12,14 +12,14 @@ system; read this when you are about to write code.
 src/
 ├── app/
 │   ├── (auth)/…                 sign-in, invite redemption
-│   ├── (dashboard)/             34 pages, tenant-facing
+│   ├── (dashboard)/             27 pages, tenant-facing
 │   │   ├── settings/…
 │   │   └── admin/
 │   │       ├── (console)/       route group: shares the tabbed shell
 │   │       │   ├── layout.tsx   super-admin gate + AdminNav
 │   │       │   ├── workspaces/  tickets/  channels/  ai-agent/  platform/
 │   │       └── providers/       standalone page, OWN layout + gate
-│   └── api/                     102 route handlers — ALL writes
+│   └── api/                     115 route handlers, 19 namespaces — ALL writes
 │       ├── v1/**                public, API-key authenticated
 │       ├── admin/**             super-admin only, service role
 │       ├── channels/webhooks/** provider ingest, signature-verified
@@ -33,7 +33,13 @@ src/
 │   ├── data/                    RSC read helpers
 │   ├── cache/keys.ts            SWR key builders
 │   ├── rate-limit.ts  audit-events.ts  utils.ts
-└── components/ui/               shadcn primitives
+├── contracts/api.ts             shared request/response contracts
+├── proxy.ts                     Next 16 middleware: session refresh + auth redirect
+└── components/
+    ├── ui/                      shadcn primitives
+    ├── tremor/                  chart primitives
+    ├── prompt-kit/              AI chat primitives
+    └── themed-toaster.tsx       the single sonner mount (see §8)
 ```
 
 **Layer rules**
@@ -141,6 +147,35 @@ inviteExpiresAt(…) · clampExpiryDays(days)
 
 Raw token is emailed; the DB stores only its hash. A leaked
 `account_invitations` row therefore cannot be redeemed.
+
+Three route handlers, in the order a user hits them:
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /api/invitations/[token]/peek` | none | workspace name + role for the confirmation screen |
+| `POST /api/invitations/[token]/check-email` | none | **pre-signup address guard** (below) |
+| `POST /api/invitations/[token]/redeem` | session | single-use; inserts membership, re-checks the address |
+
+**The check-email guard exists because signup is a point of no return.**
+`supabase.auth.signUp` runs the `handle_new_user` trigger *inside itself*.
+On an address that does not match `invited_email`, that trigger finds no
+invitation and **bootstraps a brand-new workspace**. The user then lands on
+`/join`, is told the email is wrong, and is stranded holding an account they
+never wanted and cannot use to accept.
+
+So whenever `/login` or `/signup` sees `?invite=<token>`, the form calls
+`check-email` **before** any Auth call. It compares server-side and returns
+only `{ matches, reason }` where reason is `'expired' | 'already_accepted' |
+null` — never the invited address, matching the existence-check discipline
+used elsewhere in auth.
+
+Two invariants:
+
+- **It fails open.** An unreadable or failed response proceeds to signup,
+  because redemption re-checks the address anyway (ADR-004 F1) and a network
+  blip must not lock a legitimate invitee out.
+- **It is never the boundary.** It only moves an unavoidable error earlier,
+  to where the user can still fix it. The real enforcement stays at redemption.
 
 ---
 
@@ -362,7 +397,7 @@ Client cache keys: `lib/cache/keys.ts` (unit-tested in `keys.test.ts`).
 
 ---
 
-## 7. Route inventory (102 handlers)
+## 7. Route inventory (115 handlers, 19 namespaces)
 
 | Group | Guard | Routes |
 |---|---|---|
@@ -394,6 +429,28 @@ Client cache keys: `lib/cache/keys.ts` (unit-tested in `keys.test.ts`).
 - **Enterprise density**: page shells use `p-4 md:p-6` with a
   `max-w-6xl` container. Titles carry the meaning; skip explanatory
   paragraphs on admin surfaces.
+
+**Transient feedback — toasts.** All success/failure feedback goes through
+**sonner**, mounted exactly once as `ThemedToaster` in the root layout
+(`position="top-right"`). Do not add a second `<Toaster>`.
+
+```tsx
+toast.error('Sign-up failed', { description: message });
+```
+
+Two rules that are easy to get wrong:
+
+- **Never render the same message inline as well.** Auth forms keep an
+  `error` state solely to drive `aria-invalid` on the offending fields; the
+  toast is the visible copy. `showLoginError` / `showSignupError` are the
+  per-form wrappers, so sign-in and sign-up report failures identically.
+- **`ThemedToaster` must force `fontFamily: 'inherit'` on the container.**
+  Sonner hard-codes its own `ui-sans-serif, system-ui, …` stack on
+  `[data-sonner-toaster]`, which never picks up the app's Inter. The
+  override has to sit on the container, not the toast — a toast set to
+  `inherit` would just inherit sonner's wrong stack from its parent. Without
+  it, toasts render in whatever generic face the platform resolves that list
+  to, which on some platforms is a mono-looking fallback.
 
 ---
 

@@ -4,6 +4,36 @@ Read this folder before doing any feature work. It is the handoff from
 previous build sessions. Keep it updated when you change architecture,
 routes, schema, or security posture.
 
+## Current shape (verified against the running system)
+
+Numbers drift, and stale numbers in prose are how agents end up "fixing"
+things that already exist. Trust this block over any count written inside
+the longer docs below; regenerate the schema reference with `pnpm db:doc`
+and re-verify these with the commands in the right-hand column.
+
+| Fact | Value | How to re-check |
+| --- | --- | --- |
+| Processes | **1** (Next.js 16.2.12) | there is no `server/`, no `/api/service`, no `concurrently` |
+| Feature modules | 27 | `ls src/features` |
+| API route handlers | 115 across 19 namespaces | `find src/app/api -name route.ts \| wc -l` |
+| Public API routes | 25 under `/api/v1` | stability contract — additive changes only |
+| Pages | 37 | `find src/app -name page.tsx \| wc -l` |
+| Migrations | 131 | `ls supabase/migrations/*.sql \| wc -l` |
+| Tables in `public` | 88, **RLS enabled on all 88** | `pnpm db:doc` prints this and warns on any gap |
+| DB functions | 193 | `.agents/context/database-schema.md` § Functions |
+| Tests | **913 passing, 99 files** | `pnpm test` |
+| Full gate | `pnpm check` | typecheck + lint + boundaries + test |
+
+Two corrections that outrank older prose in this folder:
+
+- **The Express API is gone.** Several docs still describe a second Express 5
+  process on port 4000 behind an `/api/service/[...path]` forwarder. Neither
+  exists. Everything is Next.js route handlers talking to Supabase.
+- **"No tests" is wrong.** `current-architecture-review.md` W5 and
+  `problems-100.md` predate the suite; there are now 913 tests. The accurate
+  residual gap is tenant-isolation/RLS coverage and the settings UI, not
+  absence of tests.
+
 ## Reading order
 
 **New to the project?** `hld.md` → `database.md` → `lld.md`.
@@ -13,8 +43,8 @@ routes, schema, or security posture.
 | File | What it covers |
 | --- | --- |
 | `hld.md` | **High-level design.** What the product is, the one architecture diagram, tenancy model, all 16 domains, the 3 critical data flows, tech-stack rationale, architectural weaknesses, and where to make a change |
-| `lld.md` | **Low-level design.** Layer rules, real method signatures (`getCurrentAccount`, `requireSuperAdmin`, `ChannelAdapter`, rate limit, audit, v1 helpers), the canonical route-handler order, full 102-route inventory, frontend + migration + test conventions |
-| `database-schema.md` | **Full DB reference.** All 77 tables with exact column types, nullability, defaults, FKs with ON DELETE, every index's `CREATE INDEX`, check constraints, and all RLS policy expressions |
+| `lld.md` | **Low-level design.** Layer rules, real method signatures (`getCurrentAccount`, `requireSuperAdmin`, `ChannelAdapter`, rate limit, audit, v1 helpers), the canonical route-handler order, full 115-route inventory, frontend + migration + test conventions |
+| `database-schema.md` | **Full DB reference — GENERATED, never hand-edit.** All 88 tables with exact column types, nullability, defaults, FKs with ON DELETE, every index's `CREATE INDEX`, check constraints, triggers, and all RLS policy expressions. Rebuild with `pnpm db:doc` after any migration |
 | `database.md` | Conceptual data model: schema domains, key tables, RLS model, migration conventions |
 | `system-design.md` | Tech stack, project structure, feature map, system design |
 | `api-routes.md` | Every API namespace, its auth gate, and conventions |
