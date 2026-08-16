@@ -29,6 +29,7 @@ import {
   PromptInputActions,
   PromptInputTextarea,
 } from '@/components/prompt-kit/prompt-input';
+import { ScrollButton } from '@/components/prompt-kit/scroll-button';
 import { PromptSuggestion } from '@/components/prompt-kit/prompt-suggestion';
 import { cn } from '@/lib/utils';
 import {

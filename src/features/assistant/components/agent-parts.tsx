@@ -178,10 +178,14 @@ export const ToolStep = memo(function ToolStep({
         // Base UI's Button merges into a child via `render`, so the real
         // Button styles and states apply to an actual Next.js <Link>
         // rather than being re-approximated with hand-written classes.
+        // nativeButton={false} acknowledges the element really is an
+        // <a>; without it Base UI warns that native button semantics
+        // were dropped. Navigation belongs in a link anyway.
         <Button
           size="sm"
           variant="outline"
           className="ml-6 w-fit rounded-full"
+          nativeButton={false}
           render={<Link href={openUrl} />}
         >
           Open workflow

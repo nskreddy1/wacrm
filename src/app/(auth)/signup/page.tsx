@@ -65,6 +65,46 @@ function SignupPageInner() {
     setLoading(true);
 
     try {
+      // When following an invite, verify the address BEFORE creating
+      // anything. Supabase's signUp is the point of no return: the
+      // handle_new_user trigger runs inside it, and on a mismatch it
+      // finds no invitation for the address and bootstraps a brand new
+      // workspace instead. The user then lands on /join, is told
+      // "Signed in with a different email", and is stuck holding an
+      // account they did not want and cannot use to accept.
+      //
+      // The server compares against the invited address and returns
+      // only yes/no, so the address is never exposed to the browser.
+      if (inviteToken) {
+        const res = await fetch(
+          `/api/invitations/${encodeURIComponent(inviteToken)}/check-email`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ email: normalizedEmail }),
+            cache: 'no-store',
+          }
+        );
+        const verdict = (await res.json().catch(() => null)) as {
+          matches?: boolean;
+          reason?: string | null;
+        } | null;
+
+        // Treat an unreadable response as "proceed": redeem still
+        // enforces the address later, so a network blip must not lock a
+        // legitimate invitee out of signing up entirely.
+        if (verdict && verdict.matches === false) {
+          setError(
+            verdict.reason === 'expired'
+              ? 'This invitation has expired. Ask your admin to send a new one.'
+              : verdict.reason === 'already_accepted'
+                ? 'This invitation has already been accepted. Sign in instead.'
+                : 'This invitation was sent to a different email address. Enter the address it was sent to, or sign up without the invitation link.'
+          );
+          return;
+        }
+      }
+
       const supabase = createClient();
       const emailRedirectTo = inviteToken
         ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
@@ -115,9 +155,17 @@ function SignupPageInner() {
               Verify your email to finish creating your Axon account.
             </p>
           </div>
+          {/* nativeButton={false} because `render` swaps in a Link,
+              i.e. an <a>. Base UI defaults to expecting a real
+              <button> and warns that replacing it drops native button
+              semantics — but this control genuinely IS navigation, so
+              an anchor is the correct element (middle-click, "open in
+              new tab", and the link's own keyboard behaviour all work).
+              The flag tells Base UI the substitution is intentional. */}
           <Button
             variant="outline"
             className="w-full"
+            nativeButton={false}
             render={<Link href={loginHref} />}
           >
             Back to sign in
