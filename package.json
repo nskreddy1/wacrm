@@ -74,6 +74,7 @@
     "marked": "^18.0.9",
     "mcp-handler": "^1.1.0",
     "motion": "^12.42.2",
+    "mysql2": "^3.23.3",
     "next": "16.2.12",
     "next-intl": "^4.13.1",
     "nodemailer": "^9.0.3",

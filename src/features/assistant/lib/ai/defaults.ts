@@ -234,6 +234,13 @@ export function buildPromptParts(args: {
    */
   crmContext?: string | null;
   /**
+   * The contact's records from the account's connected business systems
+   * (orders, fees, tickets). Sits beside `crmContext` in the volatile
+   * tail for the same reason: it changes per message, so keeping it out
+   * of the system prefix preserves the provider prompt cache.
+   */
+  integrationContext?: string | null;
+  /**
    * Situational guidance for this turn (e.g. the caretaker overlay used
    * while an escalated thread waits on a human).
    *
@@ -244,7 +251,14 @@ export function buildPromptParts(args: {
    */
   extraInstructions?: string | null;
 }): { systemBlocks: string[]; volatileContext: string | null } {
-  const { userPrompt, mode, knowledge, crmContext, extraInstructions } = args;
+  const {
+    userPrompt,
+    mode,
+    knowledge,
+    crmContext,
+    integrationContext,
+    extraInstructions,
+  } = args;
   const systemBlocks = [platformScaffold(mode).join('\n\n')];
   const biz = businessBlock(userPrompt);
   if (biz) systemBlocks.push(biz);
@@ -253,7 +267,10 @@ export function buildPromptParts(args: {
   }
 
   const kb = knowledgeBlock(knowledge, mode);
-  const volatileParts = [crmContext ?? null, kb].filter(
+  // Order matters: who they are, then their records, then the general
+  // knowledge base. The specific, customer-owned facts come before the
+  // generic excerpts so the model prefers them when both could answer.
+  const volatileParts = [crmContext ?? null, integrationContext ?? null, kb].filter(
     (p): p is string => typeof p === 'string' && p.length > 0
   );
   const volatileContext =

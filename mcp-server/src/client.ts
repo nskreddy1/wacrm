@@ -131,6 +131,16 @@ export class WacrmClient {
     return this.request('POST', '/messages', { body });
   }
 
+  // --- Integrations -------------------------------------------------
+
+  listIntegrationOperations(): Promise<Paginated<unknown>> {
+    return this.list('/integrations/operations', {});
+  }
+
+  runIntegrationOperation(body: unknown): Promise<{ data: unknown }> {
+    return this.request('POST', '/integrations/operations/run', { body });
+  }
+
   // --- Contacts -----------------------------------------------------
 
   listContacts(query: {
