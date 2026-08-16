@@ -2,7 +2,7 @@
 
 import { memo, useState } from 'react';
 import Link from 'next/link';
-import { Message, MessageContent } from '@/components/prompt-kit/message';
+import { MessageContent } from '@/components/prompt-kit/message';
 import {
   ArrowUpRight,
   Check,
@@ -17,12 +17,12 @@ import { cn } from '@/lib/utils';
 // ============================================================
 // Reusable agent-UI primitives for the helper widget.
 //
-// Design language (modern enterprise copilot — Intercom Fin /
-// Linear-style): assistant text renders flat on the panel
-// background, user messages get a compact primary bubble, tool
-// activity is a quiet left-rail step list, and write approvals
-// are structured cards with a readable field summary instead of
-// raw JSON.
+// Design language (modern enterprise copilot, following the
+// conventions assistant-ui established): assistant text renders
+// flat on the panel background, user messages get a compact muted
+// bubble aligned right by the parent grid, tool activity is a quiet
+// left-rail step list, and write approvals are structured cards with
+// a readable field summary instead of raw JSON.
 // ============================================================
 
 /** Human labels for every tool the agent can use. */
@@ -75,35 +75,41 @@ export const MessageText = memo(function MessageText({
   text: string;
 }) {
   if (role === 'user') {
-    // User turns get a compact primary bubble. `markdown` is
-    // deliberately off: the user's own literal text should never be
+    // A quiet `muted` bubble rather than a saturated brand fill. The
+    // user's own words don't need emphasising — right-alignment and
+    // shape already distinguish them — and a block of inverted text on a
+    // strong accent is the heaviest thing on screen in a panel this
+    // narrow. This matches how assistant-ui styles user turns.
+    //
+    // `markdown` is deliberately off: literal user text should never be
     // reinterpreted as markup, so asterisks and underscores they typed
     // stay visible instead of silently turning into emphasis.
+    //
+    // Note there is no `Message` flex wrapper: right-alignment is the
+    // parent grid's job (see assistant-widget). Nesting a shrink-to-fit
+    // flex row around a word-breaking bubble is exactly what collapsed
+    // short messages like "hi" to one character per line.
     return (
-      <Message className="justify-end">
-        <MessageContent
-          markdown={false}
-          className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap"
-        >
-          {text}
-        </MessageContent>
-      </Message>
+      <MessageContent
+        markdown={false}
+        className="bg-muted text-foreground w-fit max-w-full rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap"
+      >
+        {text}
+      </MessageContent>
     );
   }
 
   // Assistant: flat markdown on the panel background, no bubble — reads
   // like a person, not a bot. prompt-kit's Markdown parses into blocks
-  // with marked and memoizes each one, so the blocks already rendered
-  // don't re-parse on every streamed token.
+  // with marked and memoizes each one, so blocks already rendered don't
+  // re-parse on every streamed token.
   return (
-    <Message>
-      <MessageContent
-        markdown
-        className="text-foreground max-w-full min-w-0 bg-transparent p-0 text-sm leading-relaxed"
-      >
-        {text}
-      </MessageContent>
-    </Message>
+    <MessageContent
+      markdown
+      className="text-foreground max-w-full min-w-0 bg-transparent p-0 text-sm leading-relaxed"
+    >
+      {text}
+    </MessageContent>
   );
 });
 

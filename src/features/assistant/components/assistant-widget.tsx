@@ -184,8 +184,22 @@ export function AssistantWidget() {
                   <div
                     key={message.id}
                     className={cn(
-                      'flex flex-col gap-2.5',
-                      message.role === 'user' ? 'items-end' : 'items-start'
+                      // A two-column grid, not flex + items-end. Flex
+                      // alignment makes each child shrink-to-fit, so a
+                      // bubble that may break long words collapses to its
+                      // one-character min-content width. Here the track
+                      // sizing owns the alignment and the content column
+                      // keeps a sane width regardless.
+                      //
+                      // User: an empty gutter of at least 48px absorbs the
+                      // slack and the bubble sits right, capped at 85% so
+                      // long turns still read as a bubble rather than a
+                      // full-width block. Assistant: single full-width
+                      // column, flush left.
+                      'grid content-start gap-2.5',
+                      message.role === 'user'
+                        ? 'grid-cols-[minmax(48px,1fr)_auto] justify-items-end [&>*]:col-start-2 [&>*]:max-w-[85%]'
+                        : 'grid-cols-1 justify-items-start'
                     )}
                   >
                     {message.parts.map((part, i) => {
@@ -256,25 +270,38 @@ export function AssistantWidget() {
               </div>
             )}
 
-            {unconfigured ? (
-              <div className="border-border bg-muted/50 text-muted-foreground mt-3 rounded-lg border p-3 text-xs leading-relaxed">
-                The helper agent is not set up yet. A platform admin needs to
-                add an API key in the Admin console under Platform settings.
-              </div>
-            ) : error && !unconfigured ? (
-              <div className="border-destructive/30 bg-destructive/10 text-destructive mt-3 rounded-lg border p-3 text-xs leading-relaxed">
-                Something went wrong. Please try again.
-              </div>
-            ) : null}
               <ChatContainerScrollAnchor />
             </ChatContainerContent>
 
-            {/* Appears only when the user has scrolled away from the
-                latest turn; otherwise it fades and goes inert. */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
-              <ScrollButton className="pointer-events-auto size-8 shadow-md" />
+            {/* Pinned to the bottom of the scroll viewport — near the
+                composer rather than floating over the middle of the
+                transcript. It reads isAtBottom from use-stick-to-bottom's
+                context, so it must stay inside ChatContainerRoot; it
+                fades out and goes inert once the user is at the latest
+                turn. The wrapper is pointer-events-none so the invisible
+                state can't swallow clicks on the message beneath it. */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+              <ScrollButton
+                aria-label="Scroll to latest message"
+                className="pointer-events-auto size-8 shadow-md"
+              />
             </div>
           </ChatContainerRoot>
+
+          {/* Status notices live outside the scroll area: a persistent
+              condition ("not configured", "request failed") shouldn't
+              scroll out of sight while the user reads back through the
+              transcript. */}
+          {unconfigured ? (
+            <div className="border-border bg-muted/50 text-muted-foreground mx-3 mb-1 rounded-lg border p-3 text-xs leading-relaxed">
+              The helper agent is not set up yet. A platform admin needs to add
+              an API key in the Admin console under Platform settings.
+            </div>
+          ) : error ? (
+            <div className="border-destructive/30 bg-destructive/10 text-destructive mx-3 mb-1 rounded-lg border p-3 text-xs leading-relaxed">
+              Something went wrong. Please try again.
+            </div>
+          ) : null}
 
           {/* Composer — prompt-kit PromptInput. It owns the autosizing
               textarea (grows to maxHeight then scrolls), Enter-to-send

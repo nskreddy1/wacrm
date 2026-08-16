@@ -56,7 +56,17 @@ const MessageContent = ({
   ...props
 }: MessageContentProps) => {
   const classNames = cn(
-    "rounded-lg p-2 text-foreground bg-secondary prose break-words whitespace-normal",
+    // Upstream also lists `prose` here, but @tailwindcss/typography isn't
+    // installed in this project, so it styles nothing and only implies
+    // that it does. Markdown element spacing comes from markdown.tsx's
+    // own component map instead.
+    //
+    // `wrap-break-word` (overflow-wrap) rather than `break-words`: it only
+    // breaks words that genuinely can't fit, and — importantly — a
+    // long-word break-anywhere rule makes an element's min-content width
+    // one character, which lets it collapse into a vertical sliver in any
+    // shrink-to-fit parent.
+    "rounded-lg p-2 text-foreground bg-secondary wrap-break-word whitespace-normal",
     className
   )
 
