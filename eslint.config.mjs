@@ -14,6 +14,13 @@ const eslintConfig = defineConfig([
     'next-env.d.ts',
     // Vendored minified opus-recorder encoder worker (served statically).
     'public/opus/**',
+    // Agent skill packs and the memory system. These are vendored authoring
+    // tools (CommonJS helper scripts, p5.js templates) that never enter the
+    // app build. Linting them as app source produced ~40 spurious
+    // no-require-imports/no-unused-vars failures and made `pnpm check` red
+    // for reasons unrelated to the product.
+    '.agents/skills/**',
+    'v0_memories/**',
   ]),
   {
     rules: {

@@ -4,6 +4,12 @@ Read this folder before doing any feature work. It is the handoff from
 previous build sessions. Keep it updated when you change architecture,
 routes, schema, or security posture.
 
+> **This folder is the source of truth, and it is mirrored to
+> `docs/architecture/` for humans browsing `docs/`.** Edit here, never
+> there. `pnpm check` runs `check:docs`, which fails the build on drift;
+> `pnpm docs:sync` republishes the mirror. After a migration, run
+> `pnpm db:doc` then `pnpm docs:sync`.
+
 ## Current shape (verified against the running system)
 
 Numbers drift, and stale numbers in prose are how agents end up "fixing"
