@@ -16,7 +16,8 @@ import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-ta
 import { MembersTab } from '@/features/settings/components/members-tab';
 import { ActivityPanel } from '@/features/settings/components/activity-panel';
 import { UsagePanel } from '@/features/settings/components/usage-panel';
-import { IntegrationsPanel } from '@/features/settings/components/integrations-panel';
+// Restore with the deferred `integrations` panel entry below.
+// import { IntegrationsPanel } from '@/features/settings/components/integrations-panel';
 import { SupportTab } from '@/features/settings/components/support-tab';
 import {
   resolveSection,
@@ -27,7 +28,7 @@ import {
  * Stacks the panels of a merged section, separated by a rule.
  *
  * Several rail entries now host more than one panel (profile+appearance,
- * fields+currency, external sources+API keys). Each panel keeps its own
+ * fields+currency). Each panel keeps its own
  * `SettingsPanelHead`, which becomes a readable sub-heading — so nothing
  * had to be rewritten to merge them.
  */
@@ -100,7 +101,11 @@ export default function SettingsPage() {
     // property of the data model, so it is now the "Currency" tab inside
     // this panel rather than a second stacked panel with its own heading.
     fields: <FieldsAndTagsPanel />,
-    integrations: <IntegrationsPanel />,
+    // DEFERRED with the `integrations` rail entry — see the "Integrations
+    // is deferred" note in settings-sections.ts. This record is an
+    // exhaustive Record<SettingsSection, ReactNode>, so this line and the
+    // section list must be uncommented together.
+    // integrations: <IntegrationsPanel />,
     activity: <ActivityPanel />,
     // One panel for every channel: ChannelConnections renders its own
     // email / whatsapp / sms tab strip when `fixedChannel` is omitted,

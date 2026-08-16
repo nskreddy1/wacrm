@@ -46,6 +46,7 @@ import {
  *   any deal settings.
  * - External sources + API keys → `integrations`. Both are developer /
  *   data-plumbing surfaces that shared the old "Data Administration".
+ *   (This merged section is now DEFERRED — see the note below.)
  * - Appearance → `profile`. Appearance persists to localStorage only
  *   (device-scoped), exactly like the other personal display prefs.
  *
@@ -57,6 +58,32 @@ import {
  * the user half of two-way ticketing backed by `/api/support/tickets`,
  * and Settings is currently its only entry point. Dropping it from the
  * rail would orphan a live feature, and it costs one row with no heading.
+ *
+ * ## Integrations is deferred
+ *
+ * The `integrations` section (External sources + API keys) is commented
+ * out rather than deleted — it ships when a client actually needs it.
+ * The External sources half is a partly-built data-connection surface
+ * with no guided setup, so exposing it invited a dead end; API keys came
+ * along with it because the two share the one merged panel.
+ *
+ * Nothing was removed from disk. `integrations-panel.tsx`,
+ * `external-sources-settings.tsx`, `api-keys-settings.tsx`, the
+ * `/api/external-sources/*` and `/api/v1/integrations/*` routes, and the
+ * `integration_connections` / `integration_operations` tables are all
+ * untouched and still enforce their own auth — only the settings entry
+ * point is hidden.
+ *
+ * To restore, uncomment in this file: the SETTINGS_SECTIONS entry, the
+ * SECTION_META record, the `Database` icon import, and the
+ * resolveSection alias (replacing the DEFAULT_SECTION fallback) — then
+ * the `integrations` entry in the panel map in settings/page.tsx. The
+ * panel map is an exhaustive Record<SettingsSection, ReactNode>, so
+ * typecheck will fail until both files agree.
+ *
+ * Known consequence while deferred: there is no UI to mint a `/api/v1`
+ * key, since ApiKeysSettings was the only such surface. Keys already
+ * issued keep working — the routes that verify them are untouched.
  */
 export const SETTINGS_SECTIONS = [
   // Account — personal, device- or user-scoped.
