@@ -3,6 +3,8 @@ import { loadAgentConfig } from './agents';
 import { routeConversation } from './router';
 import { buildConversationContext } from './context';
 import { retrieveKnowledge } from './knowledge';
+import { buildIntegrationContext } from '@/features/integrations/lib/context';
+
 import { buildCrmContext } from './crm-context';
 import { generateReply } from './generate';
 import { buildPromptParts } from './defaults';
@@ -388,6 +390,13 @@ export async function dispatchInboundToAiReply(
       }
 
       const waited = waitingMinutes(conv);
+      // No integration grounding here, deliberately. This is the
+      // caretaker holding message for a thread already escalated to a
+      // human, and the overlay below constrains it to acknowledge
+      // WITHOUT resolving or quoting specifics. Feeding it order data
+      // would invite exactly the "re-promise resolution" behaviour the
+      // overlay exists to prevent, and would add seconds to the one
+      // reply whose value is arriving quickly.
       const [knowledge, crmContext] = await Promise.all([
         retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
         buildCrmContext(db, contactId),
@@ -456,11 +465,17 @@ export async function dispatchInboundToAiReply(
       return;
     }
 
-    // Ground the reply in the account's knowledge base and the
-    // contact's live CRM record (both best-effort, fetched in parallel).
-    const [knowledge, crmContext] = await Promise.all([
+    // Ground the reply in the account's knowledge base, the contact's
+    // live CRM record, and their records in the account's connected
+    // business systems (all best-effort, fetched in parallel).
+    //
+    // The integration lookup is read-only and identity-bound to this
+    // contact, so it is safe on this untrusted path: the customer's
+    // message selects nothing: see buildIntegrationContext.
+    const [knowledge, crmContext, integrationContext] = await Promise.all([
       retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
       buildCrmContext(db, contactId),
+      buildIntegrationContext(db, accountId, contactId),
     ]);
 
     // Cache-aligned prompt (the only path — benchmarked at ~70% fewer
@@ -486,6 +501,7 @@ export async function dispatchInboundToAiReply(
         mode: 'auto_reply',
         knowledge,
         crmContext,
+        integrationContext,
       }),
       cacheKey: conversationId,
     });

@@ -34,6 +34,44 @@ export function LoginForm({
     setLoading(true);
 
     try {
+      // Arriving from an invite: confirm the address is the invited one
+      // BEFORE signing in. A mismatch cannot be redeemed, so signing in
+      // anyway just swaps the visitor's session for an account that
+      // still can't accept — and if they were already signed in
+      // somewhere useful, it costs them that session for nothing.
+      //
+      // The server compares and answers only yes/no, so the invited
+      // address is never revealed to whoever holds the link.
+      if (inviteToken) {
+        const res = await fetch(
+          `/api/invitations/${encodeURIComponent(inviteToken)}/check-email`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.trim().toLowerCase() }),
+            cache: 'no-store',
+          }
+        );
+        const verdict = (await res.json().catch(() => null)) as {
+          matches?: boolean;
+          reason?: string | null;
+        } | null;
+
+        // An unreadable answer means "carry on": redeem re-checks the
+        // address server-side, so a transient failure must never block
+        // a legitimate invitee from signing in.
+        if (verdict && verdict.matches === false) {
+          showLoginError(
+            verdict.reason === 'expired'
+              ? 'This invitation has expired. Ask your admin to send a new one.'
+              : verdict.reason === 'already_accepted'
+                ? 'This invitation has already been accepted.'
+                : 'This invitation was sent to a different email address. Sign in with the address it was sent to.'
+          );
+          return;
+        }
+      }
+
       const hasSupabaseConfig = Boolean(
         process.env.NEXT_PUBLIC_SUPABASE_URL &&
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

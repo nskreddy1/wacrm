@@ -6,9 +6,10 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 
 import { useCan } from '@/features/auth/hooks/use-can';
-import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TagManager } from './tag-manager';
+import { DealsSettings } from './deals-settings';
+import { SettingsTabStrip } from './settings-tab-strip';
 import { EditFieldSheet, type EditFieldTarget } from './edit-field-sheet';
 import { EditContactFieldsSheet } from '@/features/contacts/components/edit-contact-fields-sheet';
 import {
@@ -666,12 +667,16 @@ function PipelineFieldsCard({
 /*  Panel                                                              */
 /* ------------------------------------------------------------------ */
 
-type PanelTab = 'modules' | 'pipelines' | 'tags';
+type PanelTab = 'modules' | 'pipelines' | 'tags' | 'currency';
 
-const TABS: { key: PanelTab; label: string }[] = [
+const TABS: readonly { key: PanelTab; label: string }[] = [
   { key: 'modules', label: 'Module Fields' },
   { key: 'pipelines', label: 'Pipeline Fields' },
   { key: 'tags', label: 'Tags' },
+  // Absorbed from the old top-level "Deals & currency" rail entry, which
+  // was a single default-currency select — a property of the data model,
+  // so it belongs beside fields and tags rather than owning a rail row.
+  { key: 'currency', label: 'Currency' },
 ];
 
 /**
@@ -698,28 +703,12 @@ export function FieldsAndTagsPanel() {
     <section className="animate-in fade-in-50 flex min-h-0 flex-1 flex-col gap-4 duration-200">
       <h2 className="sr-only">{t('title')}</h2>
 
-      <div
-        role="tablist"
-        aria-label={t('title')}
-        className="border-border flex gap-6 border-b"
-      >
-        {TABS.map((item) => (
-          <button
-            key={item.key}
-            role="tab"
-            aria-selected={tab === item.key}
-            onClick={() => setTab(item.key)}
-            className={cn(
-              '-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors',
-              tab === item.key
-                ? 'border-primary text-foreground'
-                : 'text-muted-foreground hover:text-foreground border-transparent'
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <SettingsTabStrip
+        tabs={TABS}
+        active={tab}
+        onSelect={setTab}
+        label={t('title')}
+      />
 
       {tab === 'modules' && (
         <div className="app-scrollbar flex min-h-0 flex-1 items-stretch gap-4 overflow-x-auto pb-1">
@@ -764,6 +753,8 @@ export function FieldsAndTagsPanel() {
           <TagManager />
         </div>
       )}
+
+      {tab === 'currency' && <DealsSettings embedded />}
     </section>
   );
 }

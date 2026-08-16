@@ -291,23 +291,20 @@ export function ChannelConnections({
 
   return (
     <section>
-      {!fixedChannel ? (
-        <>
-          <SettingsPanelHead
-            title="Channels"
-            description="Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — providers are configured, tested, and enabled per channel."
-          />
-          <Alert className="mb-5">
-            <ShieldCheck />
-            <AlertTitle>Provider-neutral and secret-safe</AlertTitle>
-            <AlertDescription>
-              Credentials are encrypted at rest and never returned to this
-              browser. Switching providers requires deliberate setup and a
-              successful health check.
-            </AlertDescription>
-          </Alert>
-        </>
-      ) : null}
+      {/* The rail now has a row per channel, so when `fixedChannel` is set
+          this panel is the whole page and still needs its own heading —
+          without one the content started abruptly under the page title.
+          The per-channel copy from CHANNEL_HEAD is more useful here than
+          the generic "Channels" blurb, which only makes sense when the
+          internal tab strip is visible. */}
+      <SettingsPanelHead
+        title={fixedChannel ? CHANNEL_HEAD[fixedChannel].title : 'Channels'}
+        description={
+          fixedChannel
+            ? CHANNEL_HEAD[fixedChannel].description
+            : 'Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — providers are configured, tested, and enabled per channel.'
+        }
+      />
 
       <Tabs
         value={channel}

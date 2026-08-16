@@ -64,6 +64,10 @@ export default function ForgotPasswordPage() {
           <Button
             variant="outline"
             className="w-full"
+            // Renders an <a>, not a <button>; see the note in
+            // signup/page.tsx. This control is navigation, so an
+            // anchor is the correct element.
+            nativeButton={false}
             render={<Link href="/login" />}
           >
             <ArrowLeft data-icon="inline-start" aria-hidden="true" /> Back to

@@ -1340,11 +1340,12 @@
       "templates": "Templates",
       "quick-replies": "Quick replies",
       "notifications": "Notifications",
-      "fields": "Fields",
+      "fields": "Fields & currency",
       "deals": "Deals & currency",
       "members": "Users and Controls",
       "usage": "Plan & usage",
       "activity": "Audit log",
+      "integrations": "Integrations",
       "api": "API keys",
       "external-sources": "External sources",
       "support": "Support"

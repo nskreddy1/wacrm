@@ -2,7 +2,7 @@
 
 import { memo, useState } from 'react';
 import Link from 'next/link';
-import { Streamdown } from 'streamdown';
+import { MessageContent } from '@/components/prompt-kit/message';
 import {
   ArrowUpRight,
   Check,
@@ -17,12 +17,12 @@ import { cn } from '@/lib/utils';
 // ============================================================
 // Reusable agent-UI primitives for the helper widget.
 //
-// Design language (modern enterprise copilot — Intercom Fin /
-// Linear-style): assistant text renders flat on the panel
-// background, user messages get a compact primary bubble, tool
-// activity is a quiet left-rail step list, and write approvals
-// are structured cards with a readable field summary instead of
-// raw JSON.
+// Design language (modern enterprise copilot, following the
+// conventions assistant-ui established): assistant text renders
+// flat on the panel background, user messages get a compact muted
+// bubble aligned right by the parent grid, tool activity is a quiet
+// left-rail step list, and write approvals are structured cards with
+// a readable field summary instead of raw JSON.
 // ============================================================
 
 /** Human labels for every tool the agent can use. */
@@ -75,19 +75,41 @@ export const MessageText = memo(function MessageText({
   text: string;
 }) {
   if (role === 'user') {
+    // A quiet `muted` bubble rather than a saturated brand fill. The
+    // user's own words don't need emphasising — right-alignment and
+    // shape already distinguish them — and a block of inverted text on a
+    // strong accent is the heaviest thing on screen in a panel this
+    // narrow. This matches how assistant-ui styles user turns.
+    //
+    // `markdown` is deliberately off: literal user text should never be
+    // reinterpreted as markup, so asterisks and underscores they typed
+    // stay visible instead of silently turning into emphasis.
+    //
+    // Note there is no `Message` flex wrapper: right-alignment is the
+    // parent grid's job (see assistant-widget). Nesting a shrink-to-fit
+    // flex row around a word-breaking bubble is exactly what collapsed
+    // short messages like "hi" to one character per line.
     return (
-      <div className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+      <MessageContent
+        markdown={false}
+        className="bg-muted text-foreground w-fit max-w-full rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap"
+      >
         {text}
-      </div>
+      </MessageContent>
     );
   }
-  // Assistant: flat markdown, no bubble — reads like a person, not a
-  // bot. Streamdown handles incomplete markdown gracefully while the
-  // response is still streaming (unterminated **bold**, lists, etc.).
+
+  // Assistant: flat markdown on the panel background, no bubble — reads
+  // like a person, not a bot. prompt-kit's Markdown parses into blocks
+  // with marked and memoizes each one, so blocks already rendered don't
+  // re-parse on every streamed token.
   return (
-    <div className="text-foreground max-w-full min-w-0 text-sm leading-relaxed [&_li]:my-0.5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5">
-      <Streamdown>{text}</Streamdown>
-    </div>
+    <MessageContent
+      markdown
+      className="text-foreground max-w-full min-w-0 bg-transparent p-0 text-sm leading-relaxed"
+    >
+      {text}
+    </MessageContent>
   );
 });
 
@@ -153,15 +175,22 @@ export const ToolStep = memo(function ToolStep({
         </span>
       </div>
       {openUrl ? (
-        // The project's Button doesn't support `asChild`, so style the
-        // Link directly with the same outline-button treatment.
-        <Link
-          href={openUrl}
-          className="border-border bg-background text-foreground hover:bg-muted ml-6 inline-flex h-7 w-fit items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors"
+        // Base UI's Button merges into a child via `render`, so the real
+        // Button styles and states apply to an actual Next.js <Link>
+        // rather than being re-approximated with hand-written classes.
+        // nativeButton={false} acknowledges the element really is an
+        // <a>; without it Base UI warns that native button semantics
+        // were dropped. Navigation belongs in a link anyway.
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-6 w-fit rounded-full"
+          nativeButton={false}
+          render={<Link href={openUrl} />}
         >
           Open workflow
-          <ArrowUpRight className="size-3" aria-hidden />
-        </Link>
+          <ArrowUpRight data-icon="inline-end" aria-hidden />
+        </Button>
       ) : null}
     </div>
   );

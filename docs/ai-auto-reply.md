@@ -9,13 +9,13 @@ the end of each implementation phase so this always matches shipped behavior.
 Inbound WhatsApp message
   └─ webhook (Meta /api/channels/webhooks/meta, Twilio /api/channels/webhooks/twilio,
               legacy /api/whatsapp/webhook)
-       └─ after(): dispatchInboundToAiReply()          src/lib/ai/auto-reply.ts
-            ├─ loadAiConfig()                          src/lib/ai/config.ts
+       └─ after(): dispatchInboundToAiReply()          src/features/assistant/lib/ai/auto-reply.ts
+            ├─ loadAiConfig()                          src/features/assistant/lib/ai/config.ts
             │    (per-account encrypted BYO key, or env GEMINI_API_KEY fallback)
             ├─ eligibility gates (flows win, human assigned, paused, cap, rate limit)
-            ├─ retrieveKnowledge()  — hybrid RAG       src/lib/ai/knowledge.ts
+            ├─ retrieveKnowledge()  — hybrid RAG       src/features/assistant/lib/ai/knowledge.ts
             │    (pgvector semantic + Postgres FTS)
-            ├─ generateReply()  — provider call        src/lib/ai/generate.ts
+            ├─ generateReply()  — provider call        src/features/assistant/lib/ai/generate.ts
             │    parses [[HANDOFF]] + [[META]] classification tail
             ├─ escalation? → pause bot, round-robin assign, notify
             └─ sendChannelMessage()  — channel-agnostic send
@@ -41,7 +41,7 @@ env-key spend is auditable per tenant.
 
 ## Scope guard
 
-The system prompt (`src/lib/ai/defaults.ts`) instructs the model to only
+The system prompt (`src/features/assistant/lib/ai/defaults.ts`) instructs the model to only
 answer questions about this business using the business context and knowledge
 excerpts, and to politely decline unrelated topics ("I can only help with
 questions about this business").
@@ -54,7 +54,7 @@ In auto-reply mode the model ends every reply with one trailing line:
 [[META]]{"sentiment":"angry|frustrated|neutral|happy","escalate":bool,"reason":"human_requested|angry_customer|out_of_scope|needs_account_data|purchase_ready|none"}
 ```
 
-`parseGeneration()` (src/lib/ai/generate.ts) strips and parses this tail.
+`parseGeneration()` (src/features/assistant/lib/ai/generate.ts) strips and parses this tail.
 Tolerant by design: missing/malformed meta → `{sentiment:'neutral',
 escalate:false, reason:null}`. The legacy bare `[[HANDOFF]]` sentinel still
 forces a handoff, so nothing breaks mid-deploy.

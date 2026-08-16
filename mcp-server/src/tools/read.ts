@@ -31,6 +31,52 @@ export function registerReadTools(
   );
 
   server.registerTool(
+    'list_integration_operations',
+    {
+      title: 'List integration operations',
+      description:
+        "List the named operations an admin has published against this account's connected business systems (for example an orders database or a fees API). Each entry shows its mode (read or write), the contact field its parameter binds to, and what it returns. Call this to discover what can be looked up before calling run_integration_operation.",
+      inputSchema: {},
+      annotations: { ...READ_ONLY, title: 'List integration operations' },
+    },
+    handle(async () => jsonResult(await client.listIntegrationOperations()))
+  );
+
+  server.registerTool(
+    'run_integration_operation',
+    {
+      title: 'Run integration operation',
+      description:
+        "Run a published integration operation for one contact and return the matching records from the account's own business system. You choose the operation by name and identify the contact; you do NOT supply the lookup value. The parameter is filled server-side from the stored contact record (for example their phone number), so this can only ever return rows belonging to that contact. Write-mode operations additionally require the integrations:write scope and will be rejected without it; pass dry_run to preview one without applying it.",
+      inputSchema: {
+        operation: z
+          .string()
+          .describe('Operation key from list_integration_operations.'),
+        contact_id: z
+          .string()
+          .describe('Id of the contact to run the operation for.'),
+        dry_run: z
+          .boolean()
+          .optional()
+          .describe(
+            'Validate and plan a write operation without applying it. Ignored for read operations.'
+          ),
+      },
+      annotations: {
+        // Not flagged read-only: the same endpoint serves write-mode
+        // operations when the key carries integrations:write, so clients
+        // should keep their confirmation affordance available.
+        readOnlyHint: false,
+        openWorldHint: true,
+        title: 'Run integration operation',
+      },
+    },
+    handle(async (args) =>
+      jsonResult(await client.runIntegrationOperation(args))
+    )
+  );
+
+  server.registerTool(
     'list_contacts',
     {
       title: 'List contacts',

@@ -28,7 +28,7 @@ import { SettingsPanelHead } from './settings-panel-head';
  * the `accounts_update` RLS policy (017) already restricts that to
  * admins+, so non-admins see a disabled, read-only control.
  */
-export function DealsSettings() {
+export function DealsSettings({ embedded = false }: { embedded?: boolean } = {}) {
   const supabase = createClient();
   const {
     accountId,
@@ -70,7 +70,13 @@ export function DealsSettings() {
 
   return (
     <section className="animate-in fade-in-50 max-w-2xl duration-200">
-      <SettingsPanelHead title={t('title')} description={t('description')} />
+      {/* As a tab inside "Fields & currency" the tab label already names
+          this panel, so its own heading would be a duplicate. */}
+      {embedded ? (
+        <h3 className="sr-only">{t('title')}</h3>
+      ) : (
+        <SettingsPanelHead title={t('title')} description={t('description')} />
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="text-foreground flex items-center gap-2">

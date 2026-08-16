@@ -84,6 +84,174 @@
   --color-channel-sms: var(--channel-sms);
   --color-channel-email: var(--channel-email);
   --color-positive: var(--positive);
+
+  /* ----------------------------------------------------------
+   * prompt-kit (github.com/ibelick/prompt-kit) loader keyframes.
+   *
+   * Copied verbatim from prompt-kit's own app/globals.css. Its
+   * Loader variants reference these by name via arbitrary
+   * animation utilities (e.g. animate-[pulse-dot_1.2s_...]),
+   * so they must exist here or every loader renders motionless.
+   *
+   * These are indefinite, looping animations. Reduced-motion is
+   * handled at the component level with Tailwind's motion-reduce:
+   * variant rather than here, because switching a loader off also
+   * means restoring whatever the motion was carrying — e.g. the
+   * shimmer loader has to regain a solid text color or it would
+   * stop as invisible gradient-clipped text.
+   * ---------------------------------------------------------- */
+  @keyframes typing {
+    0%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.5;
+    }
+    50% {
+      transform: translateY(-2px);
+      opacity: 1;
+    }
+  }
+
+  @keyframes loading-dots {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes wave {
+    0%,
+    100% {
+      transform: scaleY(1);
+    }
+    50% {
+      transform: scaleY(0.6);
+    }
+  }
+
+  @keyframes blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes text-blink {
+    0%,
+    100% {
+      color: var(--primary);
+    }
+    50% {
+      color: var(--muted-foreground);
+    }
+  }
+
+  @keyframes bounce-dots {
+    0%,
+    100% {
+      transform: scale(0.8);
+      opacity: 0.5;
+    }
+    50% {
+      transform: scale(1.2);
+      opacity: 1;
+    }
+  }
+
+  @keyframes thin-pulse {
+    0%,
+    100% {
+      transform: scale(0.95);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.05);
+      opacity: 0.4;
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.5);
+      opacity: 1;
+    }
+  }
+
+  @keyframes shimmer-text {
+    0% {
+      background-position: 150% center;
+    }
+    100% {
+      background-position: -150% center;
+    }
+  }
+
+  @keyframes wave-bars {
+    0%,
+    100% {
+      transform: scaleY(1);
+      opacity: 0.5;
+    }
+    50% {
+      transform: scaleY(0.6);
+      opacity: 1;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 50%;
+    }
+    100% {
+      background-position: -200% 50%;
+    }
+  }
+
+  @keyframes spinner-fade {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  /* prompt-kit's Tool component animates Collapsible open/close with
+   * these. Base UI exposes the panel's measured height as
+   * --collapsible-panel-height, so the expand is driven by the real
+   * content height instead of a hardcoded max-height. */
+  @keyframes collapsible-down {
+    from {
+      height: 0;
+      opacity: 0;
+    }
+    to {
+      height: var(--collapsible-panel-height);
+      opacity: 1;
+    }
+  }
+
+  @keyframes collapsible-up {
+    from {
+      height: var(--collapsible-panel-height);
+      opacity: 1;
+    }
+    to {
+      height: 0;
+      opacity: 0;
+    }
+  }
 }
 
 /* ============================================================
@@ -446,6 +614,74 @@ html[data-theme='rose'] {
 @media (prefers-reduced-motion: reduce) {
   .studio-switch {
     animation: none;
+  }
+}
+
+/*
+ * Mira copilot panel entrance.
+ *
+ * Scales from 0.98 rather than 0 — nothing in the physical world
+ * appears out of nothing, and a panel growing from a point reads as a
+ * gimmick. The origin is the bottom-right corner, where the launcher
+ * tab lives, so the panel visibly comes FROM its trigger instead of
+ * materialising in place.
+ *
+ * transform + opacity only, so it composites off the main thread and
+ * stays smooth while the first request is already in flight.
+ */
+@keyframes mira-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.mira-panel {
+  transform-origin: bottom right;
+  animation: mira-panel-in var(--duration-panel) var(--ease-out) both;
+}
+
+/*
+ * History drawer. Slides in from the left edge of the panel because it
+ * covers the transcript rather than replacing it — the direction tells
+ * the user the conversation is still there, underneath.
+ */
+@keyframes mira-history-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.mira-history {
+  animation: mira-history-in var(--duration-popover) var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * Reduced motion means gentler, not none: the opacity fade still
+   * explains that a new surface arrived, only the movement goes.
+   */
+  .mira-panel,
+  .mira-history {
+    animation: mira-panel-fade 120ms ease both;
+  }
+
+  @keyframes mira-panel-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
 

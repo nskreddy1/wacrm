@@ -53,7 +53,13 @@ export function SettingsRail({
       className={cn(
         'flex [scrollbar-width:none] gap-1 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden',
         'border-border border-b',
-        'lg:sticky lg:top-0 lg:flex-col lg:overflow-visible lg:border-b-0 lg:pb-0'
+        // Desktop: an independent scroll pane rather than a `sticky`
+        // block inside the page scroller. The old sticky rail was taller
+        // than the viewport, so its lower entries were only reachable by
+        // scrolling the *shared* scroller — which then left the content
+        // panel parked mid-page. Owning its own overflow means the rail
+        // can never drag the content pane around.
+        'lg:h-full lg:min-h-0 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:pb-0'
       )}
     >
       {/* Bigin-style rail: plain text items (no icons), sentence-case
@@ -68,7 +74,7 @@ export function SettingsRail({
             className="flex shrink-0 gap-1 lg:flex-col lg:gap-px"
           >
             {label ? (
-              <div className="text-foreground hidden px-3 pt-5 pb-2 text-[15px] font-bold lg:block">
+              <div className="text-foreground hidden px-3 pt-3 pb-1 text-[13px] font-semibold lg:block">
                 {t(`groups.${group}`)}
               </div>
             ) : null}
@@ -82,7 +88,7 @@ export function SettingsRail({
                   onClick={() => onSelect(s)}
                   aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors',
+                    'flex shrink-0 items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors',
                     'lg:w-full',
                     isActive
                       ? 'bg-primary-soft text-primary font-medium'

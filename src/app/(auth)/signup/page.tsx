@@ -4,12 +4,12 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, UsersRound } from 'lucide-react';
+import { toast } from 'sonner';
 import { GoogleAuthButton } from '@/features/auth/components/google-auth-button';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Field,
-  FieldError,
   FieldGroup,
   FieldLabel,
   FieldSeparator,
@@ -40,6 +40,19 @@ function SignupPageInner() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  /**
+   * Surface a failure as a toast, matching the sign-in form so both
+   * halves of the auth flow report problems the same way.
+   *
+   * `error` state is still tracked, but only to drive `aria-invalid` on
+   * the fields — the toast is the visible message. Rendering it inline
+   * as well would print the same sentence twice on one short form.
+   */
+  function showSignupError(message: string, title = 'Sign-up failed') {
+    setError(message);
+    toast.error(title, { description: message });
+  }
+
   const handleSignup = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -48,23 +61,68 @@ function SignupPageInner() {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (normalizedName.length < 2) {
-      setError('Enter your full name to continue.');
+      showSignupError('Enter your full name to continue.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      showSignupError('Passwords do not match.');
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      showSignupError('Password must be at least 6 characters.');
       return;
     }
 
     setLoading(true);
 
     try {
+      // When following an invite, verify the address BEFORE creating
+      // anything. Supabase's signUp is the point of no return: the
+      // handle_new_user trigger runs inside it, and on a mismatch it
+      // finds no invitation for the address and bootstraps a brand new
+      // workspace instead. The user then lands on /join, is told
+      // "Signed in with a different email", and is stuck holding an
+      // account they did not want and cannot use to accept.
+      //
+      // The server compares against the invited address and returns
+      // only yes/no, so the address is never exposed to the browser.
+      if (inviteToken) {
+        const res = await fetch(
+          `/api/invitations/${encodeURIComponent(inviteToken)}/check-email`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ email: normalizedEmail }),
+            cache: 'no-store',
+          }
+        );
+        const verdict = (await res.json().catch(() => null)) as {
+          matches?: boolean;
+          reason?: string | null;
+        } | null;
+
+        // Treat an unreadable response as "proceed": redeem still
+        // enforces the address later, so a network blip must not lock a
+        // legitimate invitee out of signing up entirely.
+        if (verdict && verdict.matches === false) {
+          showSignupError(
+            verdict.reason === 'expired'
+              ? 'This invitation has expired. Ask your admin to send a new one.'
+              : verdict.reason === 'already_accepted'
+                ? 'This invitation has already been accepted. Sign in instead.'
+                : 'This invitation was sent to a different email address. Enter the address it was sent to, or sign up without the invitation link.',
+            verdict.reason === 'expired'
+              ? 'Invitation expired'
+              : verdict.reason === 'already_accepted'
+                ? 'Invitation already used'
+                : "Email doesn't match the invitation"
+          );
+          return;
+        }
+      }
+
       const supabase = createClient();
       const emailRedirectTo = inviteToken
         ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
@@ -80,19 +138,21 @@ function SignupPageInner() {
       });
 
       if (signupError) {
-        setError(signupError.message);
+        showSignupError(signupError.message);
         return;
       }
 
       if (!data.user) {
-        setError('We could not create your account. Please try again.');
+        showSignupError('We could not create your account. Please try again.');
         return;
       }
 
       setEmail(normalizedEmail);
       setSuccess(true);
     } catch {
-      setError('Something went wrong while creating your account. Try again.');
+      showSignupError(
+        'Something went wrong while creating your account. Try again.'
+      );
     } finally {
       setLoading(false);
     }
@@ -115,9 +175,17 @@ function SignupPageInner() {
               Verify your email to finish creating your Axon account.
             </p>
           </div>
+          {/* nativeButton={false} because `render` swaps in a Link,
+              i.e. an <a>. Base UI defaults to expecting a real
+              <button> and warns that replacing it drops native button
+              semantics — but this control genuinely IS navigation, so
+              an anchor is the correct element (middle-click, "open in
+              new tab", and the link's own keyboard behaviour all work).
+              The flag tells Base UI the substitution is intentional. */}
           <Button
             variant="outline"
             className="w-full"
+            nativeButton={false}
             render={<Link href={loginHref} />}
           >
             Back to sign in
@@ -148,10 +216,23 @@ function SignupPageInner() {
               label="Continue with Google"
             />
 
+            {/* The email/password path is pre-verified against the
+                invitation before any account is created, but Google's
+                is not verifiable up front: the chosen address is only
+                known after the redirect, by which point the account
+                exists. So the one thing we can do here is make the
+                requirement explicit before they pick an account. */}
+            {inviteToken && (
+              <p className="text-muted-foreground text-center text-xs">
+                Choose the Google account for the address the invitation
+                was sent to.
+              </p>
+            )}
+
             <FieldSeparator>or</FieldSeparator>
 
             <form onSubmit={handleSignup} className="contents">
-              {error && <FieldError>{error}</FieldError>}
+
 
               <Field>
                 <FieldLabel htmlFor="fullName">Full name</FieldLabel>

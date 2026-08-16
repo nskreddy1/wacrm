@@ -21,6 +21,10 @@ export const API_SCOPES = [
   'conversations:read',
   'broadcasts:send',
   'webhooks:manage',
+  // Split read from write deliberately: a key can be allowed to look up
+  // a customer's order without also being able to change it.
+  'integrations:read',
+  'integrations:write',
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];
@@ -34,6 +38,10 @@ export const SCOPE_DESCRIPTIONS: Record<ApiScope, string> = {
   'conversations:read': 'List and read conversations',
   'broadcasts:send': 'Launch broadcast campaigns',
   'webhooks:manage': 'Register and manage outbound event webhooks',
+  'integrations:read':
+    'Look up a contact’s records in connected business systems',
+  'integrations:write':
+    'Run write-mode integration operations against connected systems',
 };
 
 /** Type-narrow an unknown value into a valid `ApiScope`. */

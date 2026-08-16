@@ -9,11 +9,19 @@ import { cn } from '@/lib/utils';
  */
 export function SettingsPanelHead({
   title,
+  srOnlyTitle = false,
   description,
   action,
   className,
 }: {
   title: string;
+  /**
+   * Render the title for assistive tech only. Used when the panel is a
+   * tab inside a merged section: the tab label is already the visible
+   * name, so a second visible heading reads as a duplicate — but the
+   * document still needs the heading in its outline.
+   */
+  srOnlyTitle?: boolean;
   description?: ReactNode;
   action?: ReactNode;
   className?: string;
@@ -26,7 +34,13 @@ export function SettingsPanelHead({
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-foreground text-lg font-semibold tracking-tight">
+        <h2
+          className={cn(
+            srOnlyTitle
+              ? 'sr-only'
+              : 'text-foreground text-lg font-semibold tracking-tight'
+          )}
+        >
           {title}
         </h2>
         {description ? (

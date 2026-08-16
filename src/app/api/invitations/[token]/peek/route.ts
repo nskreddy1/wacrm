@@ -83,5 +83,14 @@ export async function GET(
 
   // The RPC always returns a json object — either ok:true with
   // metadata or ok:false with a reason. Forward verbatim.
-  return NextResponse.json(data);
+  //
+  // no-store is load-bearing, not boilerplate. The payload now carries
+  // `invited_email_matches`, which is computed from the CALLER's own
+  // session, so two different visitors on the same token get different
+  // bodies. Anything that cached this by URL alone would serve one
+  // person's identity verdict to another — telling a stranger the link
+  // is "theirs", or telling the real recipient it is not.
+  return NextResponse.json(data, {
+    headers: { 'cache-control': 'no-store, private' },
+  });
 }
