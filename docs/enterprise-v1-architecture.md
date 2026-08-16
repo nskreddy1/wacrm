@@ -176,7 +176,11 @@ This catalog analyzes every meaningful source-controlled area. Closely related f
 
 ## 5. Route inventory
 
-The build exposes 29 page files and 60 route-handler files. Pages include four auth pages, 19 canonical feature/detail pages, one join route and six legacy account-prefixed variants. API families are account (8), AI (9), automations (5), flows (6), channel/settings (3), quick replies (2), public v1 (12), WhatsApp (10), invitations (2), demo (2), auth callback (1), and service BFF (1).
+The build exposes 29 page files and 60 route-handler files. Pages include four auth pages, 19 canonical feature/detail pages, one join route and six legacy account-prefixed variants. API families are account (8), AI (9), automations (5), flows (6), channel/settings (3), quick replies (2), public v1 (12), WhatsApp (10), invitations (3), demo (2), auth callback (1), and service BFF (1).
+
+The three invitation handlers are `peek` (unauthenticated preview of workspace
+name and role for the confirmation screen), `check-email` (pre-signup address
+guard, see §7) and `redeem` (the single-use POST that inserts membership).
 
 `src/proxy.ts` is the Next 16 request boundary. Public prefixes include auth callbacks, join/invitation paths, webhooks, public APIs and the service BFF; protected dashboard routes resolve users through Supabase. Canonical URLs do not expose account IDs, while legacy variants still do.
 
@@ -204,6 +208,20 @@ At the last integration inspection, the connected Supabase project exposed zero 
 ## 7. Domain architecture
 
 - **Auth/tenancy:** Supabase email/password Auth, account memberships and owner/admin/agent/viewer roles. Account scope must be enforced in every query and provider event.
+  - **Invite address guard (pre-signup).** When `/login` or `/signup` is reached
+    with `?invite=<token>`, the form calls
+    `POST /api/invitations/[token]/check-email` **before** touching Supabase
+    Auth. This exists because `supabase.auth.signUp` is a point of no return:
+    the `handle_new_user` trigger runs inside it, finds no invitation matching a
+    mismatched address, and bootstraps a brand-new workspace instead. The user
+    then lands on `/join` holding an account they never wanted and cannot use
+    to accept. The route compares server-side against `invited_email` and
+    returns only `{ matches, reason }` — `'expired' | 'already_accepted' | null`
+    — so the invited address is never disclosed to the browser. An unreadable
+    or failed response is treated as "proceed": redemption re-checks the
+    address anyway (ADR-004 F1), so a network blip must not lock a legitimate
+    invitee out of signing up. This is a UX guard in front of the real
+    boundary, never a replacement for it.
 - **Inbox/messages:** conversations, messages, assignments, notes, presence, media and quick replies. Current UI/data assumptions remain predominantly phone/WhatsApp-oriented.
 - **Contacts:** tags, custom fields, CSV workflows, dedupe and phone/email identity foundation.
 - **Pipelines/deals:** legacy and new workspace routes coexist; some workspace paths use SQLite/demo repositories and need production persistence convergence.
@@ -242,7 +260,7 @@ Express supplies request IDs, structured Pino HTTP logs, liveness/readiness prob
 The repository has broad colocated Vitest coverage. On this audit:
 
 - `pnpm exec vitest run src/lib/service-api-url.test.ts`: 4/4 passed.
-- `pnpm test`: passed, 653 tests across 71 files.
+- `pnpm test`: passed, 913 tests across 99 files.
 - `pnpm typecheck`: passed after the resolver type correction.
 - Changed-file ESLint: passed.
 - `pnpm build`: passed; 46 static-generation entries completed and routes compiled.
@@ -253,6 +271,26 @@ The repository has broad colocated Vitest coverage. On this audit:
 ### Accessibility and responsive design
 
 The UI uses semantic shadcn primitives and has responsive shells, but full keyboard, screen-reader and 941×681 dark-mode browser regression coverage is not established for every page. Provider/channel identity must always be conveyed in text, not color alone.
+
+#### Feedback surface: toasts
+
+Transient success/failure feedback goes through **sonner**, mounted once as
+`ThemedToaster` in the root layout (`position="top-right"`). Both auth forms use
+it, so sign-in and sign-up report failures identically: `showLoginError` and
+`showSignupError` wrap `toast.error(title, { description })`.
+
+Two conventions worth keeping:
+
+- **Do not render the same message inline as well.** The auth forms keep an
+  `error` state purely to drive `aria-invalid` on the affected fields; the toast
+  is the visible copy. Printing both duplicated one sentence on a short form.
+- **`ThemedToaster` must override `fontFamily`.** Sonner hard-codes its own
+  `ui-sans-serif, system-ui, …` stack on `[data-sonner-toaster]`, which does not
+  pick up the app's Inter. The override starts on the container — setting
+  `inherit` only on the toast would inherit that same wrong stack from the
+  parent — and toasts then inherit Inter from `<body>`. Left unset, toasts
+  render in whatever generic face the platform resolves that list to, which on
+  some platforms is a mono-looking fallback.
 
 ## 10. Current risks and technical debt
 

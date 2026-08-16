@@ -233,6 +233,23 @@ model. Findings **F1–F8** are binding on the implementation:
   legitimate ONLY on path 1, where the tenant's own credentials authenticate
   the send.
 
+- **F9 — Signup is a point of no return for invitees (implemented).** F1 makes
+  redemption safe, but it fires too late to protect the *invitee*.
+  `supabase.auth.signUp` runs the `handle_new_user` trigger inside itself; on an
+  address that does not match `invited_email` the trigger finds no invitation
+  and **bootstraps a brand-new workspace**. The user lands on `/join`, is told
+  the email does not match, and is stranded with an account they did not want
+  and cannot use to accept — indistinguishable from the Option A failure this
+  ADR exists to remove. Mitigation: `POST /api/invitations/[token]/check-email`
+  is called by `/login` and `/signup` **before** any Auth call whenever
+  `?invite=<token>` is present. It compares server-side and returns only
+  `{ matches, reason }` (`'expired' | 'already_accepted' | null`), never the
+  invited address — the same existence-check discipline as F4. Two rules bind:
+  the check **fails open** (an unreadable response proceeds, because F1 still
+  enforces the address at redemption and a network blip must not block a
+  legitimate invitee), and it is **never treated as the boundary** — it only
+  moves an unavoidable error earlier, where it is still correctable.
+
 Residual risk accepted: invite links still transit email; mitigated by expiry
 (existing `expires_at`), single-use (`accepted_at`), hashing at rest, and F1's
 email binding which makes an intercepted link useless to a non-invitee.
