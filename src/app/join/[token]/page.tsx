@@ -426,13 +426,30 @@ export default function JoinPage() {
   // too, but a date the invitee can do nothing about is noise at the
   // moment of accepting — an expired token already says so on its own
   // screen, which is where that fact is actionable.
+  // Existing workspaces can carry an email address as their name (the
+  // signup trigger used to fall back to it when no full name was given),
+  // and those rows are already out there. Presenting the local part
+  // instead — "admin's workspace" rather than "admin@gmail.com" — keeps
+  // the sentence sensible for that legacy data without pretending to
+  // know a name we don't have. Properly-named workspaces pass through
+  // untouched.
+  const workspaceLabel = peek.account_name.includes('@')
+    ? `${peek.account_name.split('@')[0]}'s workspace`
+    : peek.account_name;
+
   const inviteHeader = (
     <>
-      <TeamMark name={peek.account_name} />
+      <TeamMark name={workspaceLabel} />
       <div className="flex flex-col gap-2">
+        {/* "invited to join <workspace>", never "invited to <workspace>".
+            Without the verb the sentence reads as though the workspace
+            were the recipient — and because workspaces can be named
+            after an email address, it rendered as "You've been invited
+            to admin@gmail.com", i.e. invited *to a person*. The verb is
+            what makes the trailing noun unambiguously a destination. */}
         <h1 className="text-2xl font-semibold tracking-tight text-balance">
-          You&apos;ve been invited to{' '}
-          <span className="whitespace-nowrap">{peek.account_name}</span>
+          You&apos;ve been invited to join{' '}
+          <span className="font-semibold">{workspaceLabel}</span>
         </h1>
         <p className="text-muted-foreground text-sm">
           Joining as {ROLE_LABEL[peek.role]}
@@ -529,7 +546,7 @@ export default function JoinPage() {
                 be longer than the button. */}
             {canAccept ? (
               <Button
-                onClick={() => handleAccept(peek.account_name)}
+                onClick={() => handleAccept(workspaceLabel)}
                 disabled={accepting}
                 className="w-full"
               >
