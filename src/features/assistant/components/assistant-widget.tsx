@@ -161,36 +161,25 @@ export function AssistantWidget() {
   }, []);
 
   /**
-   * Ensure a thread exists before the first turn is sent.
+   * Send immediately. The thread id is minted locally, not fetched.
    *
-   * Created eagerly (rather than lazily server-side) so the id is known
-   * to both sides from turn one, and titled from the opening message so
-   * the history list never shows an untitled row.
+   * This used to `await` a POST to /api/assistant/sessions before
+   * calling `sendMessage`, which put a whole round trip — auth, two
+   * rate-limit checks, an INSERT — in front of the user's own message
+   * appearing. Until it resolved the panel was completely inert: no
+   * bubble, no loader, no sign the keystroke had registered. On a cold
+   * serverless route or a bad connection that dead air is most of the
+   * wait people describe, and it happened before a single token was
+   * even requested from the model.
+   *
+   * A v4 uuid is unique without asking anyone, so the client names the
+   * thread itself and sends in the same tick. The server creates the row
+   * on first save (see `saveAssistantTurn`), which also kills the
+   * opposite failure: a session created by the POST whose stream then
+   * never started, leaving an empty thread in history.
    */
-  async function ensureSession(firstMessage: string): Promise<string | null> {
-    if (sessionIdRef.current) return sessionIdRef.current;
-    try {
-      const res = await fetch('/api/assistant/sessions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ firstMessage }),
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as { session?: AssistantSessionSummary };
-      if (!data.session) return null;
-      setActiveSession(data.session.id);
-      setSessions((prev) => [data.session as AssistantSessionSummary, ...prev]);
-      return data.session.id;
-    } catch {
-      // Fall through unrecorded: failing to create a history row must
-      // not block the user from getting an answer.
-      return null;
-    }
-  }
-
-  /** Send, creating the thread first if this is the opening message. */
-  async function send(text: string) {
-    await ensureSession(text);
+  function send(text: string) {
+    if (!sessionIdRef.current) setActiveSession(crypto.randomUUID());
     void sendMessage({ text });
   }
 
@@ -198,7 +187,7 @@ export function AssistantWidget() {
     const text = input.trim();
     if (!text || busy) return;
     setInput('');
-    void send(text);
+    send(text);
   }
 
   /** Start a fresh thread: clear the transcript and drop the id. */
@@ -428,7 +417,7 @@ export function AssistantWidget() {
                         // Through `send`, not sendMessage directly, so a
                         // conversation started from a suggestion is
                         // recorded like any other.
-                        if (!busy) void send(s.label);
+                        if (!busy) send(s.label);
                       }}
                       className="bg-card hover:border-primary/40 hover:bg-muted/60 h-auto w-full justify-start gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-[13px] font-normal whitespace-normal"
                     >

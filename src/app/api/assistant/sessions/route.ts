@@ -3,10 +3,7 @@ import {
   getCurrentAccount,
   toErrorResponse,
 } from '@/features/auth/lib/account';
-import {
-  createAssistantSession,
-  listAssistantSessions,
-} from '@/features/assistant/lib/sessions';
+import { listAssistantSessions } from '@/features/assistant/lib/sessions';
 
 export const runtime = 'nodejs';
 
@@ -26,30 +23,11 @@ export async function GET() {
   }
 }
 
-/**
- * POST — start a new thread.
- *
- * Optionally seeds the title from the first message the user is about
- * to send, so the history list never shows an untitled row.
- */
-export async function POST(req: Request) {
-  try {
-    const ctx = await getCurrentAccount();
-
-    // A malformed/absent body is fine — the title is optional.
-    let firstMessage: string | undefined;
-    try {
-      const body = (await req.json()) as { firstMessage?: unknown };
-      if (typeof body.firstMessage === 'string') {
-        firstMessage = body.firstMessage;
-      }
-    } catch {
-      firstMessage = undefined;
-    }
-
-    const session = await createAssistantSession(ctx, firstMessage);
-    return NextResponse.json({ session }, { status: 201 });
-  } catch (err) {
-    return toErrorResponse(err);
-  }
-}
+// There is deliberately no POST here.
+//
+// Threads used to be created by an explicit POST that the widget had to
+// await before it could send the user's first message — a full round
+// trip of dead air before anything appeared on screen. The client now
+// mints the thread's uuid locally and the chat route creates the row on
+// first save, so a "create session" endpoint would only be a second,
+// untested way to make the same row (and a way to mint empty threads).

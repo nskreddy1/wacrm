@@ -202,7 +202,39 @@ export async function saveAssistantTurn(
   if (sessionError) {
     throw new Error(`Failed to save chat: ${sessionError.message}`);
   }
-  if (!session) return;
+
+  // Create the row on first use rather than requiring it to pre-exist.
+  //
+  // The id is minted by the client so it can send turn one with no
+  // round trip (see the widget's `send`). That means the first turn of
+  // a thread legitimately arrives before any row exists, and the old
+  // behaviour — bail out silently when the SELECT missed — would have
+  // dropped that turn from history entirely.
+  //
+  // A foreign or malformed id is still not a way in: `user_id` and
+  // `account_id` come from the server-side session, never the request,
+  // and the INSERT policy re-checks both. The worst a crafted id can do
+  // is create a thread the caller already owns.
+  if (!session) {
+    const firstUser = messages.find((m) => m.role === 'user');
+    const seedText = firstUser ? firstText(firstUser) : '';
+    const { error: createError } = await ctx.supabase
+      .from('assistant_sessions')
+      .insert({
+        id: sessionId,
+        account_id: ctx.accountId,
+        user_id: ctx.userId,
+        title: seedText ? titleFromText(seedText) : null,
+      });
+
+    // Two turns of the same new thread can race here (the route
+    // pre-persists without awaiting, then `onEnd` writes again). 23505
+    // is unique_violation, which means the row now exists — exactly the
+    // desired end state, so it is success, not an error.
+    if (createError && createError.code !== '23505') {
+      throw new Error(`Failed to save chat: ${createError.message}`);
+    }
+  }
 
   // Keep the tail: if a thread runs past the cap, the recent end is
   // what has any value. `seq` is the index within this window, so it
@@ -230,9 +262,10 @@ export async function saveAssistantTurn(
   }
 
   // Backfill the title if the session was created before the first
-  // user message existed.
+  // user message existed. `session` is null when we just inserted the
+  // row above, and that insert already titled it from the same source.
   const patch: Record<string, unknown> = { last_message_at: new Date().toISOString() };
-  if (!session.title) {
+  if (session && !session.title) {
     const firstUser = trimmed.find((m) => m.role === 'user');
     const text = firstUser ? firstText(firstUser) : '';
     if (text) patch.title = titleFromText(text);

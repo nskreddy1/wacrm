@@ -89,18 +89,29 @@ export async function POST(req: Request) {
     // (stops one seat holding down send / running a script) and per
     // account (stops N seats in one workspace collectively stampeding
     // the shared key while each stays under the per-user cap).
-    const userLimit = await checkRateLimit(
-      `assistant-chat:${ctx.userId}`,
-      RATE_LIMITS.assistantChat
-    );
+    //
+    // All three preflight calls go out together. They are independent —
+    // two Redis counters and a config read — but used to run in series,
+    // so their latencies stacked in front of every single turn before
+    // the model was even contacted. Concurrently the cost is the slowest
+    // one instead of the sum.
+    //
+    // Both counters are still evaluated even if the first would reject:
+    // INCR has already happened server-side regardless of the order we
+    // read the results in, so short-circuiting would not save the write,
+    // only hide it. Precedence below is unchanged (user, then account).
+    const [userLimit, accountLimit, config] = await Promise.all([
+      checkRateLimit(`assistant-chat:${ctx.userId}`, RATE_LIMITS.assistantChat),
+      checkRateLimit(
+        `assistant-chat-acct:${ctx.accountId}`,
+        RATE_LIMITS.assistantChatAccount
+      ),
+      loadAssistantConfig(),
+    ]);
+
     if (!userLimit.success) return rateLimitResponse(userLimit);
-    const accountLimit = await checkRateLimit(
-      `assistant-chat-acct:${ctx.accountId}`,
-      RATE_LIMITS.assistantChatAccount
-    );
     if (!accountLimit.success) return rateLimitResponse(accountLimit);
 
-    const config = await loadAssistantConfig();
     if (!config) {
       return NextResponse.json(
         {
