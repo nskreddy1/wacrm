@@ -226,19 +226,14 @@ export function AssistantWidget() {
           className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring focus-visible:ring-offset-background fixed top-1/2 right-0 z-40 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl py-4 pr-1.5 pl-2 shadow-lg transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           <Sparkles className="size-4 shrink-0" aria-hidden />
-          {/* Upright glyphs stacked vertically rather than rotated
-              text: at this size a rotated label is harder to read than
-              three stacked letters, and it needs no transform that
-              would fight the tab's own translate. */}
+          {/* The product name, set with real vertical writing-mode
+              rather than stacked letters, so the glyphs stay kerned as
+              one word and read cleanly down the right edge. */}
           <span
-            className="text-[11px] leading-[1.15] font-semibold tracking-wide"
+            className="text-xs font-semibold tracking-wide [writing-mode:vertical-rl]"
             aria-hidden
           >
-            {'ai'.split('').map((c, i) => (
-              <span key={i} className="block">
-                {c}
-              </span>
-            ))}
+            Mira
           </span>
         </button>
       ) : null}
