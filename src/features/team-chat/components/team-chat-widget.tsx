@@ -151,15 +151,27 @@ export function TeamChatWidget() {
 
   return (
     <>
-      {/* Launcher */}
+      {/* Launcher — a labelled pill rather than a bare circle. Mira now
+          owns the right edge as a vertical tab, so this is the only
+          bottom-corner control; naming it removes the guesswork two
+          identical icon circles used to create.
+
+          Unlike Mira's tab this stays mounted while open, because the
+          panel's list view has no close button of its own — this pill
+          is how the user dismisses it. */}
       <Button
         type="button"
-        size="icon"
         aria-label={open ? 'Close team chat' : 'Open team chat'}
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="fixed right-4 bottom-4 z-40 size-12 rounded-full shadow-lg"
+        className="fixed right-4 bottom-4 z-40 h-11 gap-2 rounded-full px-4 shadow-lg"
       >
-        {open ? <X className="size-5" /> : <MessageSquare className="size-5" />}
+        {open ? (
+          <X className="size-4" aria-hidden />
+        ) : (
+          <MessageSquare className="size-4" aria-hidden />
+        )}
+        <span className="text-sm font-semibold">Team chats</span>
         {!open && chat.totalUnread > 0 && (
           <span className="bg-destructive text-destructive-foreground absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-semibold">
             {chat.totalUnread > 99 ? '99+' : chat.totalUnread}
