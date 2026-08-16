@@ -23,7 +23,7 @@ re-derive with `find src/app/api/<ns> -name route.ts | wc -l`.
 | `/api/email/broadcast`, `/api/sms/broadcast`, `/api/whatsapp/*` | Channel sends, media, templates (submit/sync/twilio), reactions, webhook | account |
 | `/api/external-sources/*` | CSV/external recipient sources with preview | account |
 | `/api/flows/*` | Workflow CRUD, activate, runs, events ingest, cron tick, templates | account (cron: secret) |
-| `/api/invitations/[token]/{peek,redeem}` | Public invite flow | token |
+| `/api/invitations/[token]/{peek,check-email,redeem}` (3) | Public invite flow. `check-email` is the pre-signup address guard: fails open, returns only `{ matches, reason }`, never the security boundary — redemption re-checks the address (see `lld.md` §2.5) | token |
 | `/api/mcp/[transport]` | MCP server for external AI agents | api key |
 | `/api/settings/channels` (+`/twilio-connect`) | Workspace provider connection save/test/toggle; enforces `platform_provider_policies` | account admin |
 | `/api/support/tickets/*` | Tenant-side support tickets | account |
@@ -39,6 +39,14 @@ re-derive with `find src/app/api/<ns> -name route.ts | wc -l`.
   Supabase password grant server-side → attempt recorded with geo →
   cookies set) → client `POST /api/v1/security/devices` (registers
   device w/ geo). Never call `signInWithPassword` from the browser.
+- **Invite acceptance**: `/login?invite=<t>` or `/signup?invite=<t>` →
+  `GET .../peek` (workspace name + role for the confirmation screen) →
+  on submit `POST .../check-email` **before** any Supabase Auth call →
+  sign-in/sign-up → `POST .../redeem` inserts the membership.
+  The `check-email` hop exists because `signUp` runs `handle_new_user`
+  internally, and on a mismatched address that trigger bootstraps a new
+  workspace — stranding the invitee in an account they cannot use to
+  accept. Guarding after sign-up would be too late to undo.
 - **Sign out everywhere**: `PATCH /api/v1/security/devices`
   `{keepCurrent:false}` → RPC deletes all `auth.sessions` →
   `DELETE /api/v1/session` clears local cookies.

@@ -154,7 +154,8 @@ Agent context pack (`.agents/context/`) — read `README.md` there first:
 
 - `hld.md` / `lld.md` — high- and low-level design of the system as built.
 - `system-design.md` — topology, request flows, scaling and failure behaviour.
-- `architecture.md` — module structure and the import-boundary rules `check:boundaries` enforces.
+- `vertical-architecture.md` — feature-module structure and the import-boundary rules `check:boundaries` enforces.
+- `security.md` — tenancy, RLS and secret-handling rules.
 - `api-routes.md` — every route handler, grouped by namespace, with auth posture.
 - `database.md` — how to work with the database (access patterns, RLS helpers, migration workflow).
 - `database-schema.md` — **generated** exact reference (`pnpm db:doc`); never hand-edit.

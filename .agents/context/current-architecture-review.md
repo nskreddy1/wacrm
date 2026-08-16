@@ -1,9 +1,14 @@
 # Current Architecture — Three-Lens Review (Jul 2026)
 
-> Steelman → What-am-I-missing → 10x, applied to the EXISTING 25-module
+> Steelman → What-am-I-missing → 10x, applied to the EXISTING feature-module
 > codebase. Companion to `research-2026-07.md` (§ architecture analysis) and
 > `vertical-architecture.md` (which got the same treatment in its §8–§10).
 > Purpose: harden the current engine BEFORE layering vertical packs on it.
+>
+> **This is a point-in-time review, not a current-state reference.** It was
+> written when there were 25 feature modules and no test suite; there are now
+> **27 modules and 913 tests**. W5 has been re-scoped below. For verified
+> current counts see `README.md` § Current shape.
 
 ---
 
@@ -31,7 +36,7 @@
 | W2 | **Nothing is durable** — sync/broadcast run inside user HTTP requests; no queue, no retries, no idempotency keys | Large broadcast = timeout mid-send + double-send on retry. Scariest gap for a messaging product |
 | W3 | **Service-role key bypasses RLS in API routes** — tenant checks re-implemented manually per route | One forgotten check = cross-tenant data leak |
 | W4 | **Zero observability** — no Sentry, no structured logs, no per-tenant metering | Can't debug client failures; can't usage-bill later |
-| W5 | **No tests** — 60+ migrations, 25 modules, no regression protection | Every refactor is a leap of faith |
+| W5 | ~~**No tests**~~ — **stale as written.** 913 tests across 99 files now run in `pnpm check`. The real residual gap is narrower: only **4 of 115 route handlers** are tested, there is **no E2E suite**, and no automated tenant-isolation/RLS test exists | Domain logic in `features/*/lib` is well covered; the HTTP surface and cross-tenant leakage are not |
 | W6 | **Provider logic inline** — Twilio/Meta specifics at every call site | New channel/provider = shotgun surgery |
 
 ## 3. 10x — the upgrades that change the game (ordered)
