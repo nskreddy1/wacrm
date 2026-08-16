@@ -305,15 +305,6 @@ export function ChannelConnections({
             : 'Connect email, WhatsApp, and SMS providers without changing how conversations work. Each channel is independent — providers are configured, tested, and enabled per channel.'
         }
       />
-      <Alert className="mb-5">
-        <ShieldCheck />
-        <AlertTitle>Provider-neutral and secret-safe</AlertTitle>
-        <AlertDescription>
-          Credentials are encrypted at rest and never returned to this browser.
-          Switching providers requires deliberate setup and a successful health
-          check.
-        </AlertDescription>
-      </Alert>
 
       <Tabs
         value={channel}
