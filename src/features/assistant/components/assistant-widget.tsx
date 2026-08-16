@@ -1,19 +1,27 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from 'ai';
-import {
-  ArrowUp,
-  Loader2,
-  Sparkles,
-  Workflow,
-  X,
-} from 'lucide-react';
+import { ArrowUp, Sparkles, Workflow, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  ChatContainerContent,
+  ChatContainerRoot,
+  ChatContainerScrollAnchor,
+} from '@/components/prompt-kit/chat-container';
+import { TextShimmerLoader } from '@/components/prompt-kit/loader';
+import {
+  PromptInput,
+  PromptInputAction,
+  PromptInputActions,
+  PromptInputTextarea,
+} from '@/components/prompt-kit/prompt-input';
+import { PromptSuggestion } from '@/components/prompt-kit/prompt-suggestion';
+import { ScrollButton } from '@/components/prompt-kit/scroll-button';
 import { cn } from '@/lib/utils';
 import {
   ApprovalCard,
@@ -45,7 +53,6 @@ export function AssistantWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [unconfigured, setUnconfigured] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const { messages, sendMessage, status, addToolApprovalResponse, error } =
     useChat({
@@ -61,12 +68,12 @@ export function AssistantWidget() {
 
   const busy = status === 'submitted' || status === 'streaming';
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: 'smooth',
-    });
-  }, [messages, open]);
+  // Autoscroll is handled by ChatContainerRoot (prompt-kit wraps
+  // use-stick-to-bottom), which pins to the bottom only while the user
+  // is already there. The previous scrollTo-on-every-message effect
+  // yanked the view down mid-read whenever a token arrived — this
+  // sticks during streaming but releases the moment the user scrolls up
+  // to re-read something, and ScrollButton offers the way back.
 
   function submit() {
     const text = input.trim();
@@ -123,10 +130,8 @@ export function AssistantWidget() {
           </div>
 
           {/* Transcript */}
-          <div
-            ref={scrollRef}
-            className="app-scrollbar flex-1 overflow-y-auto px-4 py-4"
-          >
+          <ChatContainerRoot className="app-scrollbar relative min-h-0 flex-1">
+            <ChatContainerContent className="px-4 py-4">
             {messages.length === 0 ? (
               <div className="flex h-full flex-col justify-end gap-5 px-1 pb-2">
                 <div className="flex flex-col gap-2">
@@ -140,15 +145,22 @@ export function AssistantWidget() {
                     approval first.
                   </p>
                 </div>
+                {/* prompt-kit's PromptSuggestion in its plain (non-
+                    highlight) form: a real Button, so focus rings,
+                    disabled state and the press affordance all come from
+                    the project's own button variants rather than being
+                    re-approximated on a bare <button>. */}
                 <div className="flex flex-col gap-1.5">
                   {SUGGESTIONS.map((s) => (
-                    <button
+                    <PromptSuggestion
                       key={s.label}
-                      type="button"
+                      variant="outline"
+                      size="lg"
+                      disabled={busy}
                       onClick={() => {
                         if (!busy) void sendMessage({ text: s.label });
                       }}
-                      className="border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted/60 flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left text-[13px] transition-colors"
+                      className="bg-card hover:border-primary/40 hover:bg-muted/60 h-auto w-full justify-start gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-[13px] font-normal whitespace-normal"
                     >
                       {s.icon === 'workflow' ? (
                         <Workflow
@@ -162,7 +174,7 @@ export function AssistantWidget() {
                         />
                       )}
                       {s.label}
-                    </button>
+                    </PromptSuggestion>
                   ))}
                 </div>
               </div>
@@ -231,10 +243,14 @@ export function AssistantWidget() {
                     })}
                   </div>
                 ))}
+                {/* prompt-kit's shimmer loader. A sweeping gradient over
+                    the word itself reads as "working" without the
+                    spinner's implication that a single discrete request
+                    is pending — the agent may be several tool calls in.
+                    aria-live announces it once to screen readers. */}
                 {busy && messages[messages.length - 1]?.role !== 'assistant' ? (
-                  <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                    <Loader2 className="size-3 animate-spin" aria-hidden />
-                    Thinking…
+                  <div aria-live="polite" className="text-xs">
+                    <TextShimmerLoader text="Thinking" size="sm" />
                   </div>
                 ) : null}
               </div>
@@ -250,48 +266,48 @@ export function AssistantWidget() {
                 Something went wrong. Please try again.
               </div>
             ) : null}
-          </div>
+              <ChatContainerScrollAnchor />
+            </ChatContainerContent>
 
-          {/* Composer — pill input with inline send, copilot style */}
-          <form
-            className="px-3 pt-1 pb-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
-            }}
-          >
-            <div className="border-border bg-card focus-within:border-primary/50 flex items-end gap-1.5 rounded-2xl border px-3 py-2 transition-colors">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (
-                    e.key === 'Enter' &&
-                    !e.shiftKey &&
-                    !e.nativeEvent.isComposing &&
-                    e.keyCode !== 229
-                  ) {
-                    e.preventDefault();
-                    submit();
-                  }
-                }}
-                placeholder="Ask or build anything…"
-                aria-label="Message the helper agent"
-                rows={1}
-                className="text-foreground placeholder:text-muted-foreground max-h-28 min-h-6 flex-1 resize-none bg-transparent text-sm leading-6 outline-none"
-                disabled={busy && messages.length === 0}
-              />
-              <Button
-                type="submit"
-                size="icon"
-                aria-label="Send"
-                disabled={!input.trim() || busy}
-                className="size-7 shrink-0 rounded-full"
-              >
-                <ArrowUp className="size-3.5" />
-              </Button>
+            {/* Appears only when the user has scrolled away from the
+                latest turn; otherwise it fades and goes inert. */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
+              <ScrollButton className="pointer-events-auto size-8 shadow-md" />
             </div>
-          </form>
+          </ChatContainerRoot>
+
+          {/* Composer — prompt-kit PromptInput. It owns the autosizing
+              textarea (grows to maxHeight then scrolls), Enter-to-send
+              with Shift+Enter for newlines, and click-anywhere-to-focus
+              on the whole pill. */}
+          <PromptInput
+            value={input}
+            onValueChange={setInput}
+            onSubmit={submit}
+            isLoading={busy}
+            maxHeight={112}
+            className="border-border bg-card focus-within:border-primary/50 mx-3 mt-1 mb-3 rounded-2xl px-3 py-2 shadow-none transition-colors"
+          >
+            <PromptInputTextarea
+              placeholder="Ask or build anything…"
+              aria-label="Message the helper agent"
+              className="text-foreground placeholder:text-muted-foreground min-h-6 bg-transparent text-sm leading-6"
+            />
+            <PromptInputActions className="justify-end pt-1">
+              <PromptInputAction tooltip="Send message">
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  aria-label="Send"
+                  disabled={!input.trim() || busy}
+                  onClick={submit}
+                  className="rounded-full"
+                >
+                  <ArrowUp className="size-3.5" />
+                </Button>
+              </PromptInputAction>
+            </PromptInputActions>
+          </PromptInput>
         </div>
       ) : null}
     </>

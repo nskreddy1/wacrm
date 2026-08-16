@@ -414,6 +414,11 @@ export function TextShimmerLoader({
         "bg-[linear-gradient(to_right,var(--muted-foreground)_40%,var(--foreground)_60%,var(--muted-foreground)_80%)]",
         "bg-size-[200%_auto] bg-clip-text font-medium text-transparent",
         "animate-[shimmer_4s_infinite_linear]",
+        // Under reduced-motion the sweep must stop, but simply killing the
+        // animation would leave transparent text clipped to a gradient
+        // parked off-frame — i.e. an invisible label. Drop back to plain
+        // muted text so the status stays readable.
+        "motion-reduce:animate-none motion-reduce:bg-none motion-reduce:text-muted-foreground",
         textSizes[size],
         className
       )}

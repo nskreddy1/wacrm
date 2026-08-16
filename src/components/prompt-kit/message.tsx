@@ -23,7 +23,6 @@ export type MessageAvatarProps = {
   src: string
   alt: string
   fallback?: string
-  delayMs?: number
   className?: string
 }
 
@@ -31,15 +30,14 @@ const MessageAvatar = ({
   src,
   alt,
   fallback,
-  delayMs,
   className,
 }: MessageAvatarProps) => {
   return (
-    <Avatar className={cn("h-8 w-8 shrink-0", className)}>
+    <Avatar className={cn("size-8 shrink-0", className)}>
       <AvatarImage src={src} alt={alt} />
-      {fallback && (
-        <AvatarFallback delayMs={delayMs}>{fallback}</AvatarFallback>
-      )}
+      {/* Base UI's Avatar.Fallback exposes `delay`, not Radix's `delayMs`,
+          so the prop is dropped rather than leaking onto the DOM node. */}
+      {fallback && <AvatarFallback>{fallback}</AvatarFallback>}
     </Avatar>
   )
 }
@@ -108,7 +106,10 @@ const MessageAction = ({
   return (
     <TooltipProvider>
       <Tooltip {...props}>
-        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        {/* Base UI merges a trigger into its child via `render`, not `asChild`. */}
+        <TooltipTrigger
+          render={children as React.ReactElement<Record<string, unknown>>}
+        />
         <TooltipContent side={side} className={className}>
           {tooltip}
         </TooltipContent>

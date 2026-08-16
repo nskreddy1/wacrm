@@ -44,11 +44,22 @@ function Reasoning({
   onOpenChange,
   isStreaming,
 }: ReasoningProps) {
-  const [internalOpen, setInternalOpen] = useState(false)
-  const [wasAutoOpened, setWasAutoOpened] = useState(false)
+  // `null` = the user hasn't expressed a preference yet, so the panel
+  // simply follows `isStreaming` (open while the model reasons, closed
+  // once it's done). The first explicit toggle pins it to a real
+  // boolean and streaming stops overriding it.
+  //
+  // Upstream tracked this with a second `wasAutoOpened` state and an
+  // effect that called setState on every isStreaming flip, which
+  // triggered a cascading re-render each time and also clobbered a
+  // manual open the moment streaming ended. Deriving open-ness during
+  // render removes both the effect and that surprise.
+  const [internalOpen, setInternalOpen] = useState<boolean | null>(null)
 
   const isControlled = open !== undefined
-  const isOpen = isControlled ? open : internalOpen
+  const isOpen = isControlled
+    ? open
+    : (internalOpen ?? Boolean(isStreaming))
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!isControlled) {
@@ -56,18 +67,6 @@ function Reasoning({
     }
     onOpenChange?.(newOpen)
   }
-
-  useEffect(() => {
-    if (isStreaming && !wasAutoOpened) {
-      if (!isControlled) setInternalOpen(true)
-      setWasAutoOpened(true)
-    }
-
-    if (!isStreaming && wasAutoOpened) {
-      if (!isControlled) setInternalOpen(false)
-      setWasAutoOpened(false)
-    }
-  }, [isStreaming, wasAutoOpened, isControlled])
 
   return (
     <ReasoningContext.Provider
@@ -126,27 +125,34 @@ function ReasoningContent({
   markdown = false,
   ...props
 }: ReasoningContentProps) {
-  const contentRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
   const { isOpen } = useReasoningContext()
+  // The inner content's measured height, kept in state so the collapse
+  // animation is driven by a rendered value.
+  //
+  // Upstream read `contentRef.current?.scrollHeight` directly inside the
+  // style prop. On first render that ref is still null, so the panel got
+  // `max-height: undefined` and jumped open with no transition; and
+  // because a ref mutation doesn't re-render, later growth was only
+  // picked up by imperatively assigning .style in the observer, fighting
+  // the same inline style React owns. Measuring into state means one
+  // source of truth and a transition that always runs.
+  const [contentHeight, setContentHeight] = useState(0)
 
   useEffect(() => {
-    if (!contentRef.current || !innerRef.current) return
+    const inner = innerRef.current
+    if (!inner) return
 
-    const observer = new ResizeObserver(() => {
-      if (contentRef.current && innerRef.current && isOpen) {
-        contentRef.current.style.maxHeight = `${innerRef.current.scrollHeight}px`
-      }
-    })
+    // Measure regardless of open state: reasoning text streams in while
+    // the panel is open, and having a current height ready also means
+    // re-opening animates from the correct target immediately.
+    const measure = () => setContentHeight(inner.scrollHeight)
+    measure()
 
-    observer.observe(innerRef.current)
-
-    if (isOpen) {
-      contentRef.current.style.maxHeight = `${innerRef.current.scrollHeight}px`
-    }
-
+    const observer = new ResizeObserver(measure)
+    observer.observe(inner)
     return () => observer.disconnect()
-  }, [isOpen])
+  }, [])
 
   const content = markdown ? (
     <Markdown>{children as string}</Markdown>
@@ -156,14 +162,11 @@ function ReasoningContent({
 
   return (
     <div
-      ref={contentRef}
       className={cn(
         "overflow-hidden transition-[max-height] duration-150 ease-out",
         className
       )}
-      style={{
-        maxHeight: isOpen ? contentRef.current?.scrollHeight : "0px",
-      }}
+      style={{ maxHeight: isOpen ? contentHeight : 0 }}
       {...props}
     >
       <div

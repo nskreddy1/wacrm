@@ -2,7 +2,7 @@
 
 import { memo, useState } from 'react';
 import Link from 'next/link';
-import { Streamdown } from 'streamdown';
+import { Message, MessageContent } from '@/components/prompt-kit/message';
 import {
   ArrowUpRight,
   Check,
@@ -75,19 +75,35 @@ export const MessageText = memo(function MessageText({
   text: string;
 }) {
   if (role === 'user') {
+    // User turns get a compact primary bubble. `markdown` is
+    // deliberately off: the user's own literal text should never be
+    // reinterpreted as markup, so asterisks and underscores they typed
+    // stay visible instead of silently turning into emphasis.
     return (
-      <div className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap">
-        {text}
-      </div>
+      <Message className="justify-end">
+        <MessageContent
+          markdown={false}
+          className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap"
+        >
+          {text}
+        </MessageContent>
+      </Message>
     );
   }
-  // Assistant: flat markdown, no bubble — reads like a person, not a
-  // bot. Streamdown handles incomplete markdown gracefully while the
-  // response is still streaming (unterminated **bold**, lists, etc.).
+
+  // Assistant: flat markdown on the panel background, no bubble — reads
+  // like a person, not a bot. prompt-kit's Markdown parses into blocks
+  // with marked and memoizes each one, so the blocks already rendered
+  // don't re-parse on every streamed token.
   return (
-    <div className="text-foreground max-w-full min-w-0 text-sm leading-relaxed [&_li]:my-0.5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5">
-      <Streamdown>{text}</Streamdown>
-    </div>
+    <Message>
+      <MessageContent
+        markdown
+        className="text-foreground max-w-full min-w-0 bg-transparent p-0 text-sm leading-relaxed"
+      >
+        {text}
+      </MessageContent>
+    </Message>
   );
 });
 
@@ -153,15 +169,18 @@ export const ToolStep = memo(function ToolStep({
         </span>
       </div>
       {openUrl ? (
-        // The project's Button doesn't support `asChild`, so style the
-        // Link directly with the same outline-button treatment.
-        <Link
-          href={openUrl}
-          className="border-border bg-background text-foreground hover:bg-muted ml-6 inline-flex h-7 w-fit items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors"
+        // Base UI's Button merges into a child via `render`, so the real
+        // Button styles and states apply to an actual Next.js <Link>
+        // rather than being re-approximated with hand-written classes.
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-6 w-fit rounded-full"
+          render={<Link href={openUrl} />}
         >
           Open workflow
-          <ArrowUpRight className="size-3" aria-hidden />
-        </Link>
+          <ArrowUpRight data-icon="inline-end" aria-hidden />
+        </Button>
       ) : null}
     </div>
   );
