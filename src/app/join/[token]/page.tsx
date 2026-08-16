@@ -31,27 +31,13 @@
 // an invited user to sign up with a different email.
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
-import {
-  AlertTriangle,
-  CheckCircle,
-  Loader2,
-  MailX,
-  ShieldCheck,
-  UsersRound,
-} from 'lucide-react';
+import { AlertTriangle, Loader2, MailX } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/client';
 
 interface PeekOk {
@@ -152,6 +138,49 @@ const FAIL_COPY: Record<PeekFail['reason'], { title: string; body: string }> = {
   },
 };
 
+/**
+ * Shared shell for every state of this page.
+ *
+ * Deliberately not a Card. This is a single-decision page reached from
+ * an email — a bordered box floating on a background adds chrome around
+ * a page that has nothing to separate itself from. Dropping it lets the
+ * heading and the one button carry the whole screen, and keeps the
+ * layout identical across loading / error / accept so nothing shifts as
+ * the peek resolves.
+ */
+function JoinShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The workspace's mark: its initials, derived from the name.
+ *
+ * An identicon or generated art would be decoration standing in for
+ * identity. Initials are the actual identity, and they reassure the
+ * invitee that this is the workspace they were told to expect.
+ */
+function TeamMark({ name }: { name: string }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? '')
+    .join('');
+
+  return (
+    <span
+      aria-hidden
+      className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-full text-lg font-semibold tracking-tight"
+    >
+      {initials || '?'}
+    </span>
+  );
+}
+
 export default function JoinPage() {
   const params = useParams<{ token: string }>();
   const token = params?.token;
@@ -163,6 +192,11 @@ export default function JoinPage() {
   const [authedUserId, setAuthedUserId] = useState<string | null | undefined>(
     undefined // undefined = unknown / still loading; null = signed out
   );
+  // Shown on the accept button as "Continue as <email>". Naming the
+  // identity on the button is the whole safety story of this page: the
+  // invite is bound to one address, and someone signed in as the wrong
+  // person should see that before they click, not after a refusal.
+  const [authedEmail, setAuthedEmail] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
   // A refusal that the invitee cannot fix by retrying — they are signed
   // in as the wrong person, or their email is unverified. Shown inline
@@ -181,8 +215,6 @@ export default function JoinPage() {
   // can re-run the same logic without remounting the component.
   const loadPeekAndAuth = useCallback(async () => {
     if (!token) return;
-    setPeek(null);
-    setAuthedUserId(undefined);
     try {
       const [peekRes, authRes] = await Promise.all([
         fetch(`/api/invitations/${encodeURIComponent(token)}/peek`, {
@@ -193,43 +225,46 @@ export default function JoinPage() {
       const peekBody: unknown = await peekRes.json().catch(() => null);
       setPeek(normalizePeek(peekRes.status, peekBody));
       setAuthedUserId(authRes.data.user?.id ?? null);
+      setAuthedEmail(authRes.data.user?.email ?? null);
     } catch (err) {
       console.error('[join] peek error:', err);
       setPeek({ ok: false, reason: 'server_error' });
       setAuthedUserId(null);
+      setAuthedEmail(null);
     }
   }, [token]);
 
-  // Fetch peek + auth state on mount. The peek endpoint is
-  // rate-limited per-IP (30/min) so double-mounting in React 19
-  // strict mode dev is harmless. We also use the `cancelled` flag
-  // to drop setState calls if the component unmounts mid-fetch.
+  // Fetch peek + auth state on mount, through the same callback the
+  // "Try again" button uses. This used to be a second inlined copy of
+  // the same fetch pair, which is how the two drifted apart — only one
+  // of them recorded the signed-in email. One implementation, one
+  // behaviour. The peek endpoint is rate-limited per-IP (30/min), so
+  // React strict mode's double-mount in dev is harmless.
   useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [peekRes, authRes] = await Promise.all([
-          fetch(`/api/invitations/${encodeURIComponent(token)}/peek`, {
-            cache: 'no-store',
-          }),
-          createClient().auth.getUser(),
-        ]);
-        const peekBody: unknown = await peekRes.json().catch(() => null);
-        if (cancelled) return;
-        setPeek(normalizePeek(peekRes.status, peekBody));
-        setAuthedUserId(authRes.data.user?.id ?? null);
-      } catch (err) {
-        console.error('[join] peek error:', err);
-        if (cancelled) return;
-        setPeek({ ok: false, reason: 'server_error' });
-        setAuthedUserId(null);
-      }
+    // Wrapped in an async closure so every setState inside lands after
+    // an await — i.e. in a later task, not synchronously during the
+    // effect — which is both what React wants and what the compiler's
+    // set-state-in-effect rule checks for.
+    void (async () => {
+      await loadPeekAndAuth();
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  }, [loadPeekAndAuth]);
+
+  /**
+   * Re-run the check from a button, showing the skeleton while it runs.
+   *
+   * The state resets live here rather than inside `loadPeekAndAuth`
+   * because on mount they are no-ops that only re-render the page — and
+   * a synchronous setState inside an effect is exactly the cascading
+   * render the compiler's lint rule warns about. Retrying is the one
+   * path where clearing back to "checking…" is real feedback.
+   */
+  const retry = useCallback(() => {
+    setPeek(null);
+    setAuthedUserId(undefined);
+    setBlocker(null);
+    void loadPeekAndAuth();
+  }, [loadPeekAndAuth]);
 
   // `accountName` is passed in rather than read from `peek` so the
   // callback needs no `peek` dependency and cannot close over a stale
@@ -297,12 +332,17 @@ export default function JoinPage() {
   // ----- Loading state (peek pending OR auth not yet resolved) -----
   if (peek === null || authedUserId === undefined) {
     return (
-      <Card className="border-border bg-card w-full max-w-md">
-        <CardContent className="flex flex-col items-center gap-3 py-12">
-          <Loader2 className="text-primary size-6 animate-spin" />
-          <p className="text-muted-foreground text-sm">Verifying invitation…</p>
-        </CardContent>
-      </Card>
+      <JoinShell>
+        {/* Skeleton in the shape of the resolved state — a mark, a
+            heading line, a sub-line — so the page settles into place
+            instead of swapping a spinner for a different layout. */}
+        <span className="bg-muted size-14 animate-pulse rounded-full" />
+        <div className="flex w-full flex-col items-center gap-2.5">
+          <span className="bg-muted h-6 w-3/4 animate-pulse rounded-md" />
+          <span className="bg-muted h-4 w-1/2 animate-pulse rounded-md" />
+        </div>
+        <span className="bg-muted h-10 w-full animate-pulse rounded-md" />
+      </JoinShell>
     );
   }
 
@@ -310,19 +350,19 @@ export default function JoinPage() {
   if (!peek.ok) {
     const copy = FAIL_COPY[peek.reason];
     return (
-      <Card className="border-border bg-card w-full max-w-md">
-        <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10">
-            <MailX className="h-6 w-6 text-red-400" />
-          </div>
-          <CardTitle className="text-foreground text-xl">
+      <JoinShell>
+        <span className="bg-muted text-muted-foreground flex size-14 items-center justify-center rounded-full">
+          <MailX className="size-6" aria-hidden />
+        </span>
+        <div className="flex flex-col gap-2">
+          <h1 className="text-xl font-semibold tracking-tight text-balance">
             {copy.title}
-          </CardTitle>
-          <CardDescription className="text-muted-foreground">
+          </h1>
+          <p className="text-muted-foreground text-sm leading-relaxed">
             {copy.body}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-2">
           {/* For server_error the failure is transient — the network
               flapped or the peek endpoint hiccupped. Try-again is
               the right primary action; the "create account" /
@@ -332,68 +372,50 @@ export default function JoinPage() {
               signup/sign-in escape hatches. */}
           {peek.reason === 'server_error' ? (
             <>
-              <Button
-                onClick={loadPeekAndAuth}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 w-full"
-              >
+              <Button onClick={retry} className="w-full">
                 Try again
               </Button>
-              <Link href="/signup">
-                <Button
-                  variant="outline"
-                  className="border-border text-muted-foreground hover:bg-muted hover:text-foreground w-full"
-                >
+              <Link href="/signup" className="w-full">
+                <Button variant="ghost" className="w-full">
                   Create a new account instead
                 </Button>
               </Link>
             </>
           ) : (
             <>
-              <Link href="/signup">
-                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 w-full">
-                  Create a new account instead
-                </Button>
+              <Link href="/signup" className="w-full">
+                <Button className="w-full">Create a new account instead</Button>
               </Link>
-              <Link href="/login">
-                <Button
-                  variant="outline"
-                  className="border-border text-muted-foreground hover:bg-muted hover:text-foreground w-full"
-                >
+              <Link href="/login" className="w-full">
+                <Button variant="ghost" className="w-full">
                   Sign in
                 </Button>
               </Link>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </JoinShell>
     );
   }
 
   // ----- Peek OK -----
+  // Mark, one sentence, one qualifier. The expiry date used to sit here
+  // too, but a date the invitee can do nothing about is noise at the
+  // moment of accepting — an expired token already says so on its own
+  // screen, which is where that fact is actionable.
   const inviteHeader = (
-    <CardHeader className="items-center text-center">
-      <div className="bg-primary/10 mb-2 flex h-12 w-12 items-center justify-center rounded-xl">
-        <UsersRound className="text-primary h-6 w-6" />
+    <>
+      <TeamMark name={peek.account_name} />
+      <div className="flex flex-col gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight text-balance">
+          You&apos;ve been invited to{' '}
+          <span className="whitespace-nowrap">{peek.account_name}</span>
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          Joining as {ROLE_LABEL[peek.role]}
+        </p>
       </div>
-      <CardTitle className="text-foreground text-xl">
-        You&apos;re invited to{' '}
-        <span className="text-primary">{peek.account_name}</span>
-      </CardTitle>
-      <CardDescription className="text-muted-foreground">
-        You&apos;ll join as{' '}
-        <span className="text-foreground inline-flex items-center gap-1">
-          <ShieldCheck className="text-primary size-3.5" />
-          {ROLE_LABEL[peek.role]}
-        </span>
-        . Link valid until{' '}
-        {new Date(peek.expires_at).toLocaleDateString(undefined, {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        })}
-        .
-      </CardDescription>
-    </CardHeader>
+    </>
   );
 
   // ----- Authed: show Accept button -----
@@ -401,14 +423,13 @@ export default function JoinPage() {
     const blockerCopy = blocker ? BLOCKER_COPY[blocker.reason] : null;
 
     return (
-      <>
-        <Card className="border-border bg-card w-full max-w-md">
-          {inviteHeader}
-          <CardContent className="flex flex-col gap-3">
-            {blockerCopy ? (
+      <JoinShell>
+        {inviteHeader}
+        <div className="flex w-full flex-col gap-3">
+          {blockerCopy ? (
               <div
                 role="alert"
-                className="border-border bg-muted/40 flex flex-col gap-3 rounded-lg border p-4"
+                className="border-border bg-muted/40 flex flex-col gap-3 rounded-lg border p-4 text-left"
               >
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
@@ -439,7 +460,7 @@ export default function JoinPage() {
                   </Button>
                 ) : (
                   <Button
-                    onClick={loadPeekAndAuth}
+                    onClick={retry}
                     variant="outline"
                     className="border-border text-foreground hover:bg-muted w-full"
                   >
@@ -448,61 +469,52 @@ export default function JoinPage() {
                 )}
               </div>
             ) : null}
+            {/* Names the identity being used. "Accept invitation" hid
+                the one fact that decides whether this click works —
+                which account you are signed in as — behind a refusal
+                shown only afterwards. `truncate` because an email can
+                be longer than the button. */}
             <Button
               onClick={() => handleAccept(peek.account_name)}
               disabled={accepting}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 w-full"
+              className="w-full"
             >
               {accepting ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Accepting…
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Joining…
                 </>
               ) : (
-                <>
-                  <CheckCircle className="size-4" />
-                  Accept invitation
-                </>
+                <span className="truncate">
+                  {authedEmail ? `Continue as ${authedEmail}` : 'Continue'}
+                </span>
               )}
             </Button>
-            {/* Honest about what accepting does. The old copy promised
-                the user's "empty personal account will be cleaned up",
-                which was true when joining MOVED the account and
-                deleted the old one. Since ADR-004 Task 3 joining is
-                additive: nothing is deleted, and both workspaces stay
-                available in the switcher. */}
-            <p className="text-muted-foreground text-center text-xs">
-              You&apos;ll switch to{' '}
-              <span className="text-foreground">{peek.account_name}</span>. Any
-              workspace you already have stays yours — you can switch back
-              anytime.
-            </p>
-          </CardContent>
-        </Card>
-
-      </>
+        </div>
+      </JoinShell>
     );
   }
 
   // ----- Not authed: prompt to sign up or sign in -----
   return (
-    <Card className="border-border bg-card w-full max-w-md">
+    <JoinShell>
       {inviteHeader}
-      <CardContent className="flex flex-col gap-2">
-        <Link href={`/signup?invite=${encodeURIComponent(token!)}`}>
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90 w-full">
-            Create account &amp; join
-          </Button>
+      <div className="flex w-full flex-col gap-2">
+        <Link
+          href={`/signup?invite=${encodeURIComponent(token!)}`}
+          className="w-full"
+        >
+          <Button className="w-full">Continue</Button>
         </Link>
-        <Link href={`/login?invite=${encodeURIComponent(token!)}`}>
-          <Button
-            variant="outline"
-            className="border-border text-muted-foreground hover:bg-muted hover:text-foreground w-full"
-          >
+        <Link
+          href={`/login?invite=${encodeURIComponent(token!)}`}
+          className="w-full"
+        >
+          <Button variant="ghost" className="w-full">
             I already have an account
           </Button>
         </Link>
-      </CardContent>
-    </Card>
+      </div>
+    </JoinShell>
   );
 }

@@ -7,7 +7,14 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type UIMessage,
 } from 'ai';
-import { ArrowUp, History, Sparkles, Workflow, X } from 'lucide-react';
+import {
+  ArrowUp,
+  History,
+  MessageSquarePlus,
+  Sparkles,
+  Workflow,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ChatContainerContent,
@@ -327,17 +334,30 @@ export function AssistantWidget() {
             <span className="text-sm leading-none font-semibold tracking-tight">
               Mira
             </span>
-            {/* One history control, not a separate "new chat" icon
-                beside it — "New chat" lives at the top of the drawer
-                this opens. aria-expanded ties the button to the state
-                it controls. */}
+            {/* New chat sits in the header, not inside the history
+                drawer. Starting a fresh thread is a top-level action —
+                burying it one click inside "history" made the common
+                case depend on opening a list the user didn't ask for.
+                Disabled when the panel is already an unused blank
+                thread, so the control can't appear to do nothing. */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="New chat"
+              disabled={messages.length === 0 && !sessionId}
+              className="ml-auto size-7"
+              onClick={startNewChat}
+            >
+              <MessageSquarePlus className="size-4" />
+            </Button>
             <Button
               type="button"
               variant="ghost"
               size="icon"
               aria-label={showHistory ? 'Hide chat history' : 'Chat history'}
               aria-expanded={showHistory}
-              className={cn('ml-auto size-7', showHistory && 'bg-muted')}
+              className={cn('size-7', showHistory && 'bg-muted')}
               onClick={toggleHistory}
             >
               <History className="size-4" />
@@ -372,7 +392,6 @@ export function AssistantWidget() {
                 activeSessionId={sessionId}
                 loading={historyLoading}
                 onSelect={openSession}
-                onNewChat={startNewChat}
                 onDelete={removeSession}
               />
             ) : null}

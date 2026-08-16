@@ -1,6 +1,6 @@
 'use client';
 
-import { MessageSquarePlus, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AssistantSessionSummary } from '../lib/sessions';
@@ -9,11 +9,10 @@ import type { AssistantSessionSummary } from '../lib/sessions';
 // Chat history — slide-over list inside the copilot panel.
 //
 // A 400px panel has no room for a permanent sidebar, so history
-// covers the transcript while it's open and the header's single
-// history control toggles it. "New chat" lives at the top of this
-// list rather than as its own header icon: two adjacent icons that
-// both mean "leave this conversation" is the ambiguity worth
-// avoiding.
+// covers the transcript while it's open and the header's history
+// control toggles it. This list is only ever a list — "New chat"
+// lives in the panel header, so starting a thread never requires
+// opening history first.
 // ============================================================
 
 /** Relative day labels — absolute dates are noise for recent threads. */
@@ -49,7 +48,6 @@ interface AssistantHistoryProps {
   activeSessionId: string | null;
   loading: boolean;
   onSelect: (sessionId: string) => void;
-  onNewChat: () => void;
   onDelete: (sessionId: string) => void;
 }
 
@@ -58,7 +56,6 @@ export function AssistantHistory({
   activeSessionId,
   loading,
   onSelect,
-  onNewChat,
   onDelete,
 }: AssistantHistoryProps) {
   return (
@@ -66,19 +63,7 @@ export function AssistantHistory({
     // container, so it stays put while the transcript underneath keeps
     // its own scroll position. Only this list scrolls while it is open.
     <div className="bg-background mira-history absolute inset-0 z-20 flex flex-col">
-      <div className="flex flex-col gap-1 px-3 pt-3 pb-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onNewChat}
-          className="h-9 w-full justify-start gap-2 rounded-xl text-[13px] font-normal"
-        >
-          <MessageSquarePlus className="size-4" aria-hidden />
-          New chat
-        </Button>
-      </div>
-
-      <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+      <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {loading ? (
           // Skeleton rows rather than a spinner: the list's shape is
           // known, so the layout doesn't jump when data lands.
