@@ -13,6 +13,7 @@ import {
   listAppointments,
   listTasks,
 } from '@/lib/data/operations/supabase-repository';
+import { routes } from '@/lib/routing/routes';
 
 import type {
   ActivityEntry,
@@ -577,7 +578,7 @@ export async function getDashboardOverview(
         time: relativeTime(deal.updated_at),
         at: new Date(deal.updated_at).getTime(),
         type: 'deal' as const,
-        href: '/pipeline',
+        href: routes.app.pipelines,
       })),
     ...broadcasts.slice(0, 2).map((row) => ({
       id: `bc-${row.id}`,
@@ -655,7 +656,7 @@ export async function getDashboardOverview(
       key: 'stalled_deals',
       label: 'Deals stalled 14+ days',
       count: stalledDeals,
-      href: '/pipeline',
+      href: routes.app.pipelines,
     },
   ];
 

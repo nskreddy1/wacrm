@@ -201,6 +201,22 @@ export function ChannelConnections({
   const [busyToggle, setBusyToggle] = useState<string | null>(null);
   /** "Twilio already connected — reuse credentials?" prompt. */
   const [reusePromptOpen, setReusePromptOpen] = useState(false);
+  /**
+   * A setup sheet waiting for the overlay in front of it to finish
+   * closing. The reuse prompt and the guided-connect dialog both hand
+   * off to the setup sheet, and opening it straight from their button
+   * handlers put two modals in the DOM at once: Base UI holds
+   * `pointer-events: none` on <body> while a modal is mounted and only
+   * releases it when the closing overlay finishes its exit transition,
+   * so the sheet landed on a body that never regained pointer events and
+   * nothing inside it — starting with Provider — could be clicked.
+   * Queue the init here and open on `onOpenChangeComplete` instead.
+   * Wrapped in an object because `null` is itself a valid init (the
+   * "Custom" card passes it to mean "no provider preselected").
+   */
+  const [pendingSetup, setPendingSetup] = useState<{
+    init: ChannelSetupInit | null;
+  } | null>(null);
 
   const connections = useMemo(
     () => data?.connections.filter((item) => item.channel === channel) ?? [],
@@ -265,6 +281,19 @@ export function ChannelConnections({
   function openSetup(init: ChannelSetupInit | null) {
     setSetupInit(init);
     setSetupOpen(true);
+  }
+
+  /**
+   * Opens the setup sheet only once the overlay that queued it has
+   * finished closing — wired to each hand-off overlay's
+   * `onOpenChangeComplete`. See `pendingSetup` for why the hand-off
+   * cannot happen inside the button handler.
+   */
+  function flushPendingSetup(open: boolean) {
+    if (open || !pendingSetup) return;
+    const next = pendingSetup;
+    setPendingSetup(null);
+    openSetup(next.init);
   }
 
   /**
@@ -576,12 +605,15 @@ export function ChannelConnections({
                 }
               : null
           }
+          onOpenChangeComplete={flushPendingSetup}
           onContinue={({ accountSid, reuseFromId }) => {
-            openSetup({
-              ...(accountSid ? { accountSid } : {}),
-              ...(reuseFromId && reusableTwilio
-                ? { reuseFromId, reuseFromLabel: reusableTwilio.display_name }
-                : {}),
+            setPendingSetup({
+              init: {
+                ...(accountSid ? { accountSid } : {}),
+                ...(reuseFromId && reusableTwilio
+                  ? { reuseFromId, reuseFromLabel: reusableTwilio.display_name }
+                  : {}),
+              },
             });
           }}
         />
@@ -590,7 +622,11 @@ export function ChannelConnections({
       {/* Concise enterprise-style prompt (Slack/Stripe pattern): brand
           mark + one short sentence + two clear actions. Details about
           billing/credentials live in the setup sheet, not here. */}
-      <AlertDialog open={reusePromptOpen} onOpenChange={setReusePromptOpen}>
+      <AlertDialog
+        open={reusePromptOpen}
+        onOpenChange={setReusePromptOpen}
+        onOpenChangeComplete={flushPendingSetup}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <div className="border-border bg-card mb-1 flex size-10 items-center justify-center rounded-lg border">
@@ -607,18 +643,25 @@ export function ChannelConnections({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel
-              onClick={() => openSetup({ provider: 'twilio' })}
+              onClick={() => setPendingSetup({ init: { provider: 'twilio' } })}
             >
               Connect new account
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (reusableTwilio)
-                  openSetup({
+                if (!reusableTwilio) return;
+                setPendingSetup({
+                  init: {
                     provider: 'twilio',
                     reuseFromId: reusableTwilio.id,
                     reuseFromLabel: reusableTwilio.display_name,
-                  });
+                  },
+                });
+                // AlertDialogAction renders a plain Button, not a
+                // Close part, so it does not dismiss the prompt on its
+                // own — without this the prompt stayed mounted and kept
+                // trapping pointer events over the setup sheet.
+                setReusePromptOpen(false);
               }}
             >
               Use existing account
