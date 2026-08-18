@@ -366,11 +366,28 @@ function ChannelSetupSheetBody({
       </SheetHeader>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
-        {channel === 'email' ? (
-          <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3">
-            <span className="text-muted-foreground w-28 shrink-0 text-sm">
-              Provider
-            </span>
+        {/*
+          Provider choice is derived from the channel's registered
+          providers instead of being hardcoded per channel. Email was
+          already data-driven, WhatsApp hardcoded a Twilio/Meta pair,
+          and every remaining channel rendered a fixed, unselectable
+          "Twilio" label — which is why SMS appeared to have a stuck
+          provider control.
+
+          Deriving it also means adding a provider needs no change
+          here. When MSG91 or Gupshup are added for SMS/WhatsApp
+          (see PROVIDER_CHANNELS in the channels provider registry,
+          plus an `ALTER TYPE channel_provider ADD VALUE` migration in
+          the style of 040_channel_connection_providers.sql), the
+          control becomes a real dropdown on its own; channels that
+          still have exactly one provider keep rendering as static
+          text, so nothing regresses today.
+        */}
+        <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3">
+          <span className="text-muted-foreground w-28 shrink-0 text-sm">
+            Provider
+          </span>
+          {providers.length > 1 ? (
             <Select
               value={provider}
               onValueChange={(value) => {
@@ -391,41 +408,17 @@ function ChannelSetupSheetBody({
                 </SelectGroup>
               </SelectContent>
             </Select>
-          </div>
-        ) : channel === 'whatsapp' ? (
-          /* WhatsApp has two real paths: Twilio (BSP) or a direct
-               Meta Cloud API connection. */
-          <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3">
-            <span className="text-muted-foreground w-28 shrink-0 text-sm">
-              Provider
+          ) : (
+            // Falls back to the provider id only if the channel has no
+            // registered providers at all — the label normally comes from
+            // the registry via the API. Reading the registry directly
+            // here would add a settings -> channels edge to the feature
+            // graph, which isn't warranted for a fallback label.
+            <span className="text-foreground text-sm font-medium">
+              {providers[0]?.label ?? provider}
             </span>
-            <Select
-              value={provider}
-              onValueChange={(value) => {
-                if (value) setProvider(value as ChannelProvider);
-              }}
-            >
-              <SelectTrigger className="bg-card h-8 flex-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="twilio">Twilio</SelectItem>
-                  <SelectItem value="meta">
-                    WhatsApp Cloud API (Meta)
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3.5">
-            <span className="text-muted-foreground w-28 shrink-0 text-sm">
-              Provider
-            </span>
-            <span className="text-foreground text-sm font-medium">Twilio</span>
-          </div>
-        )}
+          )}
+        </div>
 
         {reusing ? (
           <div className="border-border bg-muted/40 flex items-center gap-4 rounded-md border px-4 py-3.5">
