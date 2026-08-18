@@ -39,6 +39,7 @@ import {
   toolNameFromPart,
 } from './agent-parts';
 import { AssistantHistory } from './assistant-history';
+import { resolveAssistantErrorNotice } from '../lib/chat-errors';
 import type { AssistantSessionSummary } from '../lib/sessions';
 
 // ============================================================
@@ -81,52 +82,6 @@ function rememberSession(id: string | null) {
     // Private-mode / storage-disabled: the chat still works for as long
     // as the panel stays mounted, it just won't survive a reload.
   }
-}
-
-/**
- * Turn a failed turn into a cause and a way out.
- *
- * "Something went wrong. Please try again." was the entire error UI. It
- * tells the user nothing they didn't already know and, worse, offers the
- * same advice for a problem retrying fixes (a dropped connection) and
- * one where retrying is precisely wrong (a rate limit — retrying
- * immediately just burns the next allowance too).
- *
- * Only causes this endpoint genuinely emits are matched. Inventing
- * richer-sounding classes we cannot actually detect — content filter,
- * context window — would mislabel unrelated failures, which is worse
- * than the generic string it replaces. Anything unrecognised keeps the
- * honest fallback.
- */
-function describeError(err: Error): { cause: string; recovery: string } {
-  const raw = err.message.toLowerCase();
-
-  // 429 from either the per-user or per-account cap.
-  if (raw.includes('rate limit') || raw.includes('429')) {
-    return {
-      cause: 'Too many requests in a short time.',
-      recovery: 'Wait about a minute, then send again.',
-    };
-  }
-
-  // Aborts surface here too, but the stream handler treats a
-  // user-initiated stop as success, so reaching this point means the
-  // connection itself dropped rather than the user pressing stop.
-  if (
-    raw.includes('fetch') ||
-    raw.includes('network') ||
-    raw.includes('load failed')
-  ) {
-    return {
-      cause: 'Lost connection to the server.',
-      recovery: 'Check your connection and resend.',
-    };
-  }
-
-  return {
-    cause: "Mira couldn't finish that reply.",
-    recovery: 'Resend the message to try again.',
-  };
 }
 
 export function AssistantWidget() {
@@ -175,7 +130,10 @@ export function AssistantWidget() {
   const busy = status === 'submitted' || status === 'streaming';
 
   // Classified once per render rather than per reference in the JSX.
-  const errorNotice = error ? describeError(error) : null;
+  // Resolves either an error code the route classified server-side or a
+  // purely client-side failure (dropped connection, local 429) into the
+  // same cause/recovery pair, so the notice can't contradict itself.
+  const errorNotice = error ? resolveAssistantErrorNotice(error) : null;
 
   // Autoscroll is handled by ChatContainerRoot (prompt-kit wraps
   // use-stick-to-bottom), which pins to the bottom only while the user

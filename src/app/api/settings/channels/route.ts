@@ -27,15 +27,17 @@ import {
 } from '@/features/channels/lib/provider-registry';
 import type { ChannelConnection, ChannelKind, ChannelProvider } from '@/types';
 
-const providers = [
-  'meta',
-  'twilio',
-  'google',
-  'microsoft',
-  'resend',
-  'smtp',
-  'mailtrap',
-] as const;
+// Derived from the provider registry so this route cannot drift from it.
+// This list previously repeated the provider names by hand, so adding a
+// provider (MSG91 or Gupshup for SMS/WhatsApp) and forgetting this file
+// would leave the registry offering a provider that the save validator
+// then rejected as invalid. Registering it in PROVIDER_CHANNELS — plus an
+// `ALTER TYPE channel_provider ADD VALUE` migration in the style of
+// 040_channel_connection_providers.sql — is now sufficient.
+const providers = Object.keys(PROVIDER_CHANNELS) as [
+  ChannelProvider,
+  ...ChannelProvider[],
+];
 const channels = ['whatsapp', 'sms', 'email'] as const;
 const safeColumns =
   'id,account_id,created_by_user_id,channel,provider,display_name,external_account_id,external_identity,configuration,status,is_enabled,is_primary,managed_by,client_can_toggle,platform_notice,last_connected_at,last_synced_at,last_error,created_at,updated_at';

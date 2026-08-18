@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -31,6 +32,13 @@ interface ConnectChannelDialogProps {
   channel: ChannelKind;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Fires after the dialog's open/close transition finishes. Callers
+   * that hand off to another overlay (the setup sheet) must open it
+   * here, not in `onContinue` — two modals mounted at once leaves
+   * `pointer-events: none` on <body> and the second one unclickable.
+   */
+  onOpenChangeComplete?: (open: boolean) => void;
   /** Twilio Connect authorize URL, when the Connect App is configured. */
   authorizeUrl: string | null;
   /** An existing Twilio connection on the other channel (dedup). */
@@ -63,6 +71,7 @@ export function ConnectChannelDialog({
   channel,
   open,
   onOpenChange,
+  onOpenChangeComplete,
   authorizeUrl,
   reusable,
   onContinue,
@@ -71,7 +80,11 @@ export function ConnectChannelDialog({
   // preselected method) in useState initializers and remounts fresh each
   // open cycle — no reset effect to keep in sync with the props.
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onOpenChangeComplete={onOpenChangeComplete}
+    >
       {open && (
         <ConnectChannelDialogBody
           channel={channel}
@@ -138,7 +151,15 @@ function ConnectChannelDialogBody({
         'twilio-connect-authorize',
         `width=${width},height=${height},left=${left},top=${top}`
       );
-      if (!popupRef.current) return;
+      if (!popupRef.current) {
+        // Blocked by the browser. Previously this returned silently and
+        // the button just appeared dead; say so and offer the manual
+        // path instead.
+        toast.error(
+          'Your browser blocked the Twilio sign-in popup. Allow popups for this site, or choose “enter credentials manually”.'
+        );
+        return;
+      }
       setWaiting(true);
       return;
     }

@@ -45,6 +45,35 @@ type ProviderInfo = {
   label: string;
   available: boolean;
 };
+
+/**
+ * Brand mark for a provider card. Providers without a bundled brand SVG
+ * fall back to a channel-appropriate lucide icon, so a newly registered
+ * provider renders correctly before its logo is added.
+ */
+const PROVIDER_ICON_SRC: Partial<Record<ChannelProvider, string>> = {
+  twilio: '/icons/brands/twilio.svg',
+  meta: '/icons/brands/whatsapp.svg',
+};
+
+function providerCardIcon(provider: ChannelProvider) {
+  const iconSrc = PROVIDER_ICON_SRC[provider];
+  return iconSrc ? { iconSrc } : { icon: Mail };
+}
+
+/**
+ * Short "what is this" line under a provider card. Falls back to a
+ * generic per-channel phrase so an unrecognised provider still reads
+ * sensibly instead of rendering an empty hint.
+ */
+function providerHint(provider: ChannelProvider, channel: ChannelKind): string {
+  if (provider === 'smtp') return 'Any SMTP mailbox';
+  if (provider === 'mailtrap') return 'Email API with sandbox testing';
+  if (provider === 'meta') return 'Direct Meta (Facebook) connection';
+  if (channel === 'email') return 'Transactional email API';
+  if (channel === 'whatsapp') return 'WhatsApp Business messaging';
+  return 'SMS messaging';
+}
 type Connection = ChannelConnection & {
   credentialsConfigured: boolean;
   providerLabel: string;
@@ -201,6 +230,22 @@ export function ChannelConnections({
   const [busyToggle, setBusyToggle] = useState<string | null>(null);
   /** "Twilio already connected — reuse credentials?" prompt. */
   const [reusePromptOpen, setReusePromptOpen] = useState(false);
+  /**
+   * A setup sheet waiting for the overlay in front of it to finish
+   * closing. The reuse prompt and the guided-connect dialog both hand
+   * off to the setup sheet, and opening it straight from their button
+   * handlers put two modals in the DOM at once: Base UI holds
+   * `pointer-events: none` on <body> while a modal is mounted and only
+   * releases it when the closing overlay finishes its exit transition,
+   * so the sheet landed on a body that never regained pointer events and
+   * nothing inside it — starting with Provider — could be clicked.
+   * Queue the init here and open on `onOpenChangeComplete` instead.
+   * Wrapped in an object because `null` is itself a valid init (the
+   * "Custom" card passes it to mean "no provider preselected").
+   */
+  const [pendingSetup, setPendingSetup] = useState<{
+    init: ChannelSetupInit | null;
+  } | null>(null);
 
   const connections = useMemo(
     () => data?.connections.filter((item) => item.channel === channel) ?? [],
@@ -265,6 +310,19 @@ export function ChannelConnections({
   function openSetup(init: ChannelSetupInit | null) {
     setSetupInit(init);
     setSetupOpen(true);
+  }
+
+  /**
+   * Opens the setup sheet only once the overlay that queued it has
+   * finished closing — wired to each hand-off overlay's
+   * `onOpenChangeComplete`. See `pendingSetup` for why the hand-off
+   * cannot happen inside the button handler.
+   */
+  function flushPendingSetup(open: boolean) {
+    if (open || !pendingSetup) return;
+    const next = pendingSetup;
+    setPendingSetup(null);
+    openSetup(next.init);
   }
 
   /**
@@ -383,52 +441,39 @@ export function ChannelConnections({
                         : `Popular ${tab === 'sms' ? 'SMS' : 'WhatsApp'} services:`}
                     </h3>
                     <div className="flex flex-wrap gap-4">
-                      {tab !== 'email' ? (
-                        <>
-                          {tab === 'whatsapp' ? (
-                            <ProviderCard
-                              label="WhatsApp Cloud API"
-                              hint="Direct Meta (Facebook) connection"
-                              iconSrc="/icons/brands/whatsapp.svg"
-                              onClick={() => openSetup({ provider: 'meta' })}
-                            />
-                          ) : null}
+                      {/*
+                        One card per provider the registry reports for
+                        this channel. WhatsApp and SMS used to hardcode
+                        their cards, so a newly registered provider
+                        (MSG91/Gupshup for SMS) would have been invisible
+                        here even once its adapter existed. Twilio keeps
+                        its dedicated entry point because it has a guided
+                        Connect flow and credential reuse; everything
+                        else goes to the manual setup sheet.
+                      */}
+                      {providers
+                        .filter((item) => item.available)
+                        .map((item) => (
                           <ProviderCard
-                            label="Twilio"
-                            hint={
-                              tab === 'whatsapp'
-                                ? 'WhatsApp Business via Twilio'
-                                : 'SMS via Twilio'
+                            key={item.provider}
+                            label={
+                              item.provider === 'meta'
+                                ? 'WhatsApp Cloud API'
+                                : item.label
                             }
-                            iconSrc="/icons/brands/twilio.svg"
-                            onClick={() => startTwilio()}
+                            hint={providerHint(item.provider, tab)}
+                            {...providerCardIcon(item.provider)}
+                            onClick={() =>
+                              item.provider === 'twilio'
+                                ? startTwilio()
+                                : openSetup({ provider: item.provider })
+                            }
                           />
-                        </>
-                      ) : (
-                        providers
-                          .filter((item) => item.available)
-                          .map((item) => (
-                            <ProviderCard
-                              key={item.provider}
-                              label={item.label}
-                              hint={
-                                item.provider === 'smtp'
-                                  ? 'Any SMTP mailbox'
-                                  : item.provider === 'mailtrap'
-                                    ? 'Email API with sandbox testing'
-                                    : 'Transactional email API'
-                              }
-                              icon={Mail}
-                              onClick={() =>
-                                openSetup({ provider: item.provider })
-                              }
-                            />
-                          ))
-                      )}
-                      {tab !== 'sms' ? (
-                        /* SMS has exactly one provider (Twilio), so a
-                           "Custom" card would open the same form —
-                           show it only where real alternatives exist. */
+                        ))}
+                      {providers.filter((item) => item.available).length > 1 ? (
+                        /* A "Custom" card only makes sense when the
+                           channel has more than one provider — with a
+                           single one it opens the identical form. */
                         <ProviderCard
                           label="Custom"
                           hint="Other providers & manual setup"
@@ -576,12 +621,15 @@ export function ChannelConnections({
                 }
               : null
           }
+          onOpenChangeComplete={flushPendingSetup}
           onContinue={({ accountSid, reuseFromId }) => {
-            openSetup({
-              ...(accountSid ? { accountSid } : {}),
-              ...(reuseFromId && reusableTwilio
-                ? { reuseFromId, reuseFromLabel: reusableTwilio.display_name }
-                : {}),
+            setPendingSetup({
+              init: {
+                ...(accountSid ? { accountSid } : {}),
+                ...(reuseFromId && reusableTwilio
+                  ? { reuseFromId, reuseFromLabel: reusableTwilio.display_name }
+                  : {}),
+              },
             });
           }}
         />
@@ -590,7 +638,11 @@ export function ChannelConnections({
       {/* Concise enterprise-style prompt (Slack/Stripe pattern): brand
           mark + one short sentence + two clear actions. Details about
           billing/credentials live in the setup sheet, not here. */}
-      <AlertDialog open={reusePromptOpen} onOpenChange={setReusePromptOpen}>
+      <AlertDialog
+        open={reusePromptOpen}
+        onOpenChange={setReusePromptOpen}
+        onOpenChangeComplete={flushPendingSetup}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <div className="border-border bg-card mb-1 flex size-10 items-center justify-center rounded-lg border">
@@ -607,18 +659,25 @@ export function ChannelConnections({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel
-              onClick={() => openSetup({ provider: 'twilio' })}
+              onClick={() => setPendingSetup({ init: { provider: 'twilio' } })}
             >
               Connect new account
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (reusableTwilio)
-                  openSetup({
+                if (!reusableTwilio) return;
+                setPendingSetup({
+                  init: {
                     provider: 'twilio',
                     reuseFromId: reusableTwilio.id,
                     reuseFromLabel: reusableTwilio.display_name,
-                  });
+                  },
+                });
+                // AlertDialogAction renders a plain Button, not a
+                // Close part, so it does not dismiss the prompt on its
+                // own — without this the prompt stayed mounted and kept
+                // trapping pointer events over the setup sheet.
+                setReusePromptOpen(false);
               }}
             >
               Use existing account

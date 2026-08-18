@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 import type { DashboardOverview } from '@/lib/data/dashboard/types';
+import { routes } from '@/lib/routing/routes';
 import {
   KPI_METRICS,
   TARGET_METRICS,
@@ -104,17 +105,20 @@ const METRIC_ICONS: Record<KpiMetric, ComponentType<{ className?: string }>> = {
   lostCount30d: TrendingDown,
 };
 
+// Built from the canonical route constants rather than string literals.
+// These pointed at `/pipeline`, which is not a route — the page is
+// `/pipelines` — so every pipeline KPI drilldown 404'd.
 const METRIC_HREFS: Record<KpiMetric, string> = {
-  openConversations: '/inbox',
-  unassigned: '/inbox',
-  newContacts30d: '/contacts',
-  pipelineValue: '/pipeline',
-  activeDeals: '/pipeline',
-  messages7d: '/inbox',
-  responseRatePct: '/inbox',
-  wonValue30d: '/pipeline',
-  wonCount30d: '/pipeline',
-  lostCount30d: '/pipeline',
+  openConversations: routes.app.inbox,
+  unassigned: routes.app.inbox,
+  newContacts30d: routes.app.contacts,
+  pipelineValue: routes.app.pipelines,
+  activeDeals: routes.app.pipelines,
+  messages7d: routes.app.inbox,
+  responseRatePct: routes.app.inbox,
+  wonValue30d: routes.app.pipelines,
+  wonCount30d: routes.app.pipelines,
+  lostCount30d: routes.app.pipelines,
 };
 
 // ------------------------------------------------------------
@@ -325,7 +329,7 @@ export function WidgetRenderer({
             <ChartCard
               title={title}
               caption="Total contact base over time"
-              href="/contacts"
+              href={routes.app.contacts}
               className="h-full"
             >
               <ContactsGrowth data={overview.contactsGrowth} />
@@ -336,7 +340,7 @@ export function WidgetRenderer({
             <ChartCard
               title={title}
               caption="Active deals by stage"
-              href="/pipeline"
+              href={routes.app.pipelines}
               className="h-full"
             >
               <PipelineFunnel
@@ -363,7 +367,7 @@ export function WidgetRenderer({
             <ChartCard
               title={title}
               caption="Delivery funnel across your latest campaigns"
-              href="/broadcasts"
+              href={routes.app.broadcasts}
               className="h-full"
             >
               <BroadcastFunnel
@@ -411,7 +415,7 @@ export function WidgetRenderer({
             <ChartCard
               title={title}
               caption="Latest campaigns with delivery stats"
-              href="/broadcasts"
+              href={routes.app.broadcasts}
               className="h-full"
             >
               <BroadcastFunnel

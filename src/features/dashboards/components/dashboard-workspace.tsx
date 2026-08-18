@@ -16,6 +16,7 @@ import {
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useDashboardOverview } from '@/features/dashboards/hooks/use-dashboard-overview';
 import { personDisplayName, workspaceDisplayName } from '@/lib/display-name';
+import { routes } from '@/lib/routing/routes';
 import { AnimatedNumber } from '@/components/ui/animated-number';
 import { Button } from '@/components/ui/button';
 import { ChannelBadge, channelColorVar } from '@/components/ui/channel-badge';
@@ -244,7 +245,7 @@ export function DashboardWorkspace() {
             format={money}
             detail={`${kpis.activeDeals} active deals`}
             icon={Briefcase}
-            href="/pipeline"
+            href={routes.app.pipelines}
           />
           <KpiCard
             label="Response rate"
@@ -342,7 +343,7 @@ export function DashboardWorkspace() {
               <ChartCard
                 title="Sales pipeline"
                 caption="Active deals by stage"
-                href="/pipeline"
+                href={routes.app.pipelines}
               >
                 <PipelineFunnel
                   stages={pipeline.stages}

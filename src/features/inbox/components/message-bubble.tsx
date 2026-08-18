@@ -65,11 +65,48 @@ function MediaUnavailable({
 }
 
 /**
- * Resolves a media URL to something an <img> can render. Proxy URLs
- * need an authenticated fetch converted to a blob URL; everything else
- * passes through. SWR owns the async state and caches blob URLs per
- * media URL, so scrolling a thread never refetches the same image
- * (blob URLs stay alive with the cache — deliberate, they're tiny).
+ * Provider-hosted media that the browser cannot fetch on its own.
+ *
+ * Twilio serves MMS/WhatsApp media from api.twilio.com behind HTTP Basic
+ * auth. Putting that URL in an <img>/<video>/<audio>/<a> makes the
+ * browser do the request, Twilio answers `401 WWW-Authenticate: Basic`,
+ * and Chrome throws up its native username/password dialog over the
+ * inbox. Credentials are encrypted server-side and must stay there, so
+ * these have to go through our authenticated proxy instead.
+ */
+function needsChannelProxy(url: string): boolean {
+  if (!/^https?:\/\//i.test(url)) return false;
+  try {
+    const { hostname } = new URL(url);
+    return (
+      hostname === 'api.twilio.com' ||
+      hostname === 'media.twiliocdn.com' ||
+      hostname.endsWith('.twiliocdn.com')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The URL to actually render for a message's media. Same-origin proxy
+ * routes carry the session cookie automatically, so <video>, <audio> and
+ * document links can point straight at them.
+ */
+function mediaSrcFor(message: Message): string | null {
+  const raw = message.media_url;
+  if (!raw) return null;
+  return needsChannelProxy(raw) ? `/api/channels/media/${message.id}` : raw;
+}
+
+/**
+ * Resolves a media URL to something an <img> can render. The Meta
+ * WhatsApp proxy needs an authenticated fetch converted to a blob URL;
+ * everything else — including our own channel media proxy, which is
+ * same-origin and streams bytes directly — passes through. SWR owns the
+ * async state and caches blob URLs per media URL, so scrolling a thread
+ * never refetches the same image (blob URLs stay alive with the cache —
+ * deliberate, they're tiny).
  */
 async function resolveMediaSrc(url: string): Promise<string> {
   if (url.startsWith('/api/whatsapp/media/')) {
@@ -129,6 +166,11 @@ function MessageContent({
   message: Message;
   t: ReturnType<typeof useTranslations>;
 }) {
+  // Provider-hosted media is rewritten onto the authenticated proxy so
+  // the browser never talks to api.twilio.com directly (which would
+  // trigger its native Basic-auth credential dialog).
+  const mediaSrc = mediaSrcFor(message);
+
   switch (message.content_type) {
     case 'text':
       return (
@@ -140,8 +182,8 @@ function MessageContent({
     case 'image':
       return (
         <div>
-          {message.media_url ? (
-            <MediaImage url={message.media_url} alt="Shared image" />
+          {mediaSrc ? (
+            <MediaImage url={mediaSrc} alt="Shared image" />
           ) : (
             <MediaUnavailable label={t('photo')} t={t} />
           )}
@@ -156,9 +198,9 @@ function MessageContent({
     case 'video':
       return (
         <div>
-          {message.media_url ? (
+          {mediaSrc ? (
             <video
-              src={message.media_url}
+              src={mediaSrc}
               controls
               className="max-h-64 max-w-60 rounded-lg"
             />
@@ -176,8 +218,8 @@ function MessageContent({
     case 'audio':
       return (
         <div>
-          {message.media_url ? (
-            <audio src={message.media_url} controls className="max-w-60" />
+          {mediaSrc ? (
+            <audio src={mediaSrc} controls className="max-w-60" />
           ) : (
             <MediaUnavailable label={t('audio')} t={t} />
           )}
@@ -185,7 +227,7 @@ function MessageContent({
       );
 
     case 'document':
-      if (!message.media_url) {
+      if (!mediaSrc) {
         return (
           <MediaUnavailable
             label={message.content_text || t('document')}
@@ -195,7 +237,7 @@ function MessageContent({
       }
       return (
         <a
-          href={message.media_url}
+          href={mediaSrc}
           target="_blank"
           rel="noopener noreferrer"
           className="bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-2 text-sm"

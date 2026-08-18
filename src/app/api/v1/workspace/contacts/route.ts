@@ -10,6 +10,7 @@ import {
   deleteSupabaseContactFields,
   deleteSupabaseContacts,
   getSupabaseContactWorkspace,
+  importSupabaseContacts,
   updateSupabaseContact,
   updateSupabaseContactField,
 } from '@/lib/data/contacts/supabase-repository';
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
       kind?: string;
       values?: Record<string, ContactValue>;
       source?: string;
+      rows?: { row?: number; values?: Record<string, ContactValue> }[];
       field?: {
         label: string;
         type: FieldType;
@@ -79,6 +81,24 @@ export async function POST(request: Request) {
       return response(
         await createSupabaseContactField(await getCurrentAccount(), body.field),
         201
+      );
+    }
+    // Bulk CSV import. Handled server-side in one request so duplicates
+    // are resolved before writing, instead of the client discovering each
+    // one through a failed per-row POST. Quota is enforced inside
+    // `importSupabaseContacts` against the real insert count.
+    if (body.kind === 'import') {
+      if (!Array.isArray(body.rows) || !body.rows.length)
+        throw new Error('Import rows are required');
+      const importRows = body.rows.map((entry, index) => ({
+        // Fall back to a 1-based spreadsheet row (header occupies row 1)
+        // so error reporting stays meaningful if `row` is omitted.
+        row: typeof entry.row === 'number' ? entry.row : index + 2,
+        values: entry.values ?? {},
+      }));
+      return response(
+        await importSupabaseContacts(await getCurrentAccount(), importRows),
+        200
       );
     }
     if (!body.values) throw new Error('Contact values are required');
