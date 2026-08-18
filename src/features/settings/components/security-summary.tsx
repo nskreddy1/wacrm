@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { useTranslations, useFormatter } from 'next-intl';
+import { useTranslations, useFormatter, useNow } from 'next-intl';
 import {
   MonitorSmartphone,
   Clock3,
@@ -39,6 +39,10 @@ const fetcher = async <T,>(url: string): Promise<T[]> => {
 export function SecuritySummary() {
   const t = useTranslations('Settings.security');
   const format = useFormatter();
+  // Seeded from the request-level `now` (src/i18n/request.ts) so the "last
+  // sign-in" tile renders identically on the server and on hydration, then
+  // refreshes each minute rather than freezing at page load.
+  const now = useNow({ updateInterval: 60_000 });
 
   const { data: devices } = useSWR(
     '/api/v1/security/devices',
@@ -51,7 +55,12 @@ export function SecuritySummary() {
     { revalidateOnFocus: false }
   );
 
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  // Derived from the same `now` the relative-time label uses, rather than a
+  // fresh `Date.now()`. Reading the clock during render is impure — the React
+  // Compiler flags it, and it also meant the "failed attempts (7 days)" window
+  // and the "last sign-in" label could be measured from two different
+  // instants on the same paint.
+  const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
   const failed7d =
     attempts?.filter(
       (a) => !a.success && new Date(a.created_at).getTime() >= weekAgo
@@ -69,7 +78,7 @@ export function SecuritySummary() {
       icon: Clock3,
       label: t('summaryLastLogin'),
       value: lastSuccess
-        ? format.relativeTime(new Date(lastSuccess.created_at))
+        ? format.relativeTime(new Date(lastSuccess.created_at), now)
         : '—',
       tone: 'neutral' as const,
     },

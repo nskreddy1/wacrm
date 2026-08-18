@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { useTranslations, useFormatter } from 'next-intl';
+import { useTranslations, useFormatter, useNow } from 'next-intl';
 import { CheckCircle2, History, XCircle } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -33,6 +33,11 @@ const fetcher = async (url: string): Promise<AttemptRow[]> => {
 export function LoginActivityCard() {
   const t = useTranslations('Settings.security');
   const format = useFormatter();
+  // Explicit reference point for the "x minutes ago" labels below. It is
+  // seeded from the request-level `now` (see src/i18n/request.ts), so the
+  // first client render matches the server's markup, then ticks every
+  // minute — which is the granularity these labels actually show.
+  const now = useNow({ updateInterval: 60_000 });
   const { data, isLoading } = useSWR(
     '/api/v1/security/login-activity',
     fetcher,
@@ -105,7 +110,7 @@ export function LoginActivityCard() {
                       </p>
                       <p className="text-muted-foreground truncate text-xs">
                         {attempt.ip_address ?? '—'} ·{' '}
-                        {format.relativeTime(new Date(attempt.created_at))}
+                        {format.relativeTime(new Date(attempt.created_at), now)}
                       </p>
                     </div>
                   </li>

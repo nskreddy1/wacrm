@@ -12,6 +12,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { isWriteTool, toolLabel } from '../lib/tool-catalog';
 import { cn } from '@/lib/utils';
 
 // ============================================================
@@ -25,39 +26,12 @@ import { cn } from '@/lib/utils';
 // a readable field summary instead of raw JSON.
 // ============================================================
 
-/** Human labels for every tool the agent can use. */
-export const TOOL_LABELS: Record<string, string> = {
-  get_workspace_overview: 'Reading workspace overview',
-  list_contacts: 'Listing contacts',
-  get_contact_details: 'Reading contact details',
-  search_contacts: 'Searching contacts',
-  get_pipeline_summary: 'Reading pipeline summary',
-  list_deals: 'Reading deals',
-  list_recent_conversations: 'Reading recent conversations',
-  get_conversation_messages: 'Reading conversation messages',
-  list_upcoming_appointments: 'Reading appointments',
-  list_broadcasts: 'Reading broadcasts',
-  list_templates: 'Reading templates',
-  list_automations: 'Reading workflows',
-  list_tasks: 'Reading tasks',
-  list_support_tickets: 'Reading support tickets',
-  get_ai_agent_status: 'Checking AI agent status',
-  create_contact: 'Create a contact',
-  create_task: 'Create a task',
-  create_support_ticket: 'Create a support ticket',
-  add_contact_note: 'Add a contact note',
-  create_workflow: 'Create a workflow',
-  activate_workflow: 'Activate a workflow',
-};
-
-export const WRITE_TOOLS = new Set([
-  'create_contact',
-  'create_task',
-  'create_support_ticket',
-  'add_contact_note',
-  'create_workflow',
-  'activate_workflow',
-]);
+// Labels and write classification come from the shared tool catalog —
+// see `lib/tool-catalog.ts`. They were previously duplicated here and had
+// drifted out of sync with the server registry: six tools rendered as raw
+// snake_case names, and three approval-gated writes were not recognised as
+// writes, so their steps never showed "awaiting approval".
+export { TOOL_LABELS, WRITE_TOOLS } from '../lib/tool-catalog';
 
 export function toolNameFromPart(type: string): string | null {
   return type.startsWith('tool-') ? type.slice(5) : null;
@@ -126,8 +100,8 @@ export const ToolStep = memo(function ToolStep({
   state: string;
   output?: unknown;
 }) {
-  const label = TOOL_LABELS[toolName] ?? toolName;
-  const isWrite = WRITE_TOOLS.has(toolName);
+  const label = toolLabel(toolName);
+  const isWrite = isWriteTool(toolName);
   const running =
     state === 'input-streaming' ||
     state === 'input-available' ||
@@ -231,7 +205,7 @@ export function ApprovalCard({
   onRespond: (approved: boolean) => void;
 }) {
   const [showRaw, setShowRaw] = useState(false);
-  const label = TOOL_LABELS[toolName] ?? toolName;
+  const label = toolLabel(toolName);
   const rows = summarizeInput(input);
 
   return (

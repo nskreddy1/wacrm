@@ -1344,39 +1344,14 @@ export function buildAssistantTools(ctx: AssistantToolContext) {
   };
 }
 
-/** Tool names that mutate data — approval-gated in the chat route. */
-export const WRITE_TOOL_NAMES = [
-  'create_contact',
-  'create_task',
-  'add_contact_note',
-  'create_catalog_item',
-  'update_catalog_item',
-  'create_workflow',
-  'activate_workflow',
-  'create_support_ticket',
-  // Writes into the customer's OWN system of record, so it belongs in
-  // the approval gate alongside the CRM writes.
-  'run_integration_write_operation',
-] as const;
-
-/** Read-only tool names — safe to expose on the MCP server without approval. */
-export const READ_TOOL_NAMES = [
-  'get_workspace_overview',
-  'list_contacts',
-  'get_contact_details',
-  'search_contacts',
-  'get_pipeline_summary',
-  'list_deals',
-  'list_recent_conversations',
-  'get_conversation_messages',
-  'list_upcoming_appointments',
-  'list_catalog_items',
-  'list_broadcasts',
-  'list_templates',
-  'list_automations',
-  'list_tasks',
-  'list_support_tickets',
-  'get_ai_agent_status',
-  'list_integration_operations',
-  'lookup_integration_records',
-] as const;
+// The access lists used to be maintained here, by hand, and separately
+// retyped in the widget — which is how six tools ended up with no UI
+// label and three approval-gated writes ended up missing from the
+// client's write set. Both now derive from `tool-catalog.ts`, which is
+// pure data and therefore importable from a client component; this file
+// re-exports them so the chat route and MCP server keep their existing
+// import path.
+export {
+  READ_TOOL_NAMES,
+  WRITE_TOOL_NAMES,
+} from './tool-catalog';
