@@ -25,6 +25,7 @@ import {
   encodeAssistantErrorCode,
 } from '@/features/assistant/lib/chat-errors';
 import { saveAssistantTurn } from '@/features/assistant/lib/sessions';
+import { prepareModelTranscript } from '@/features/assistant/lib/transcript';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -33,57 +34,6 @@ import {
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
-
-/**
- * How many messages the model sees. Every turn re-sends the whole
- * transcript, so this is the single biggest lever on time-to-first-token
- * once threads are persisted and reopened.
- */
-const MODEL_HISTORY_MESSAGES = 12;
-
-/**
- * Cap on a single stored tool result before it is summarised.
- *
- * Read tools return real workspace data — a contact list or pipeline
- * dump is easily tens of kilobytes of JSON. Replaying those verbatim on
- * every subsequent turn is what made long threads crawl: the prompt
- * grew without bound while adding nothing, because the model had
- * already used the data in the answer the user can see.
- */
-const MAX_TOOL_OUTPUT_CHARS = 1_200;
-
-/**
- * Shrink the transcript before it goes to the model.
- *
- * Keeps the last two messages byte-exact — that is the turn actually
- * being reasoned about, including any tool output the next step depends
- * on — and truncates oversized tool results in everything older. The
- * text of past turns is untouched, so the conversation still reads
- * continuously; only the bulky machine payloads shrink.
- */
-function compactForModel(messages: UIMessage[]): UIMessage[] {
-  const recent = messages.slice(-MODEL_HISTORY_MESSAGES);
-  const keepIntactFrom = recent.length - 2;
-
-  return recent.map((message, index) => {
-    if (index >= keepIntactFrom) return message;
-
-    const parts = message.parts.map((part) => {
-      if (!('output' in part) || part.output === undefined) return part;
-      const serialized =
-        typeof part.output === 'string'
-          ? part.output
-          : JSON.stringify(part.output);
-      if (serialized.length <= MAX_TOOL_OUTPUT_CHARS) return part;
-      return {
-        ...part,
-        output: `${serialized.slice(0, MAX_TOOL_OUTPUT_CHARS)}… [older result truncated — call the tool again for current data]`,
-      };
-    });
-
-    return { ...message, parts: parts as UIMessage['parts'] };
-  });
-}
 
 export async function POST(req: Request) {
   try {
@@ -158,11 +108,32 @@ export async function POST(req: Request) {
       });
     }
 
+    // Built once and shared: `convertToModelMessages` needs the same
+    // set to serialise stored tool results the way each tool declares
+    // (a tool may define its own model-facing output shape), so
+    // building it twice would risk the prompt and the live call
+    // disagreeing about the tools in play.
+    const tools = buildAssistantTools(ctx);
+
     const result = streamText({
       model: resolveAssistantModel(config),
       system: resolveAssistantSystemPrompt(config),
-      messages: await convertToModelMessages(compactForModel(messages)),
-      tools: buildAssistantTools(ctx),
+      // `prepareModelTranscript` budgets the thread AND removes tool
+      // calls that never resolved — without that repair a single
+      // interrupted stream leaves a tool call with no result, which
+      // every provider rejects, so the thread stays broken for every
+      // later message rather than just the one that failed.
+      //
+      // `ignoreIncompleteToolCalls` is the SDK's own narrower version of
+      // the same guard (it covers `input-streaming`/`input-available`
+      // only). Kept as a second line of defence: it costs nothing and a
+      // future part state we haven't accounted for still can't poison a
+      // conversation.
+      messages: await convertToModelMessages(prepareModelTranscript(messages), {
+        tools,
+        ignoreIncompleteToolCalls: true,
+      }),
+      tools,
       // Read tools run freely; every write tool pauses the loop and
       // asks the user for permission in the chat (user requirement:
       // read access always, write only after the user grants it).
