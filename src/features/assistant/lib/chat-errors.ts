@@ -24,6 +24,7 @@ export const ASSISTANT_ERROR_CODES = [
   'quota_exhausted',
   'rate_limited',
   'context_too_long',
+  'conversation_out_of_sync',
   'model_unavailable',
   'provider_timeout',
   'unknown',
@@ -55,6 +56,10 @@ export const ASSISTANT_ERROR_NOTICES: Record<
   },
   context_too_long: {
     cause: 'This conversation is too long for the model.',
+    recovery: 'Start a new chat to carry on.',
+  },
+  conversation_out_of_sync: {
+    cause: 'An earlier step in this chat was interrupted.',
     recovery: 'Start a new chat to carry on.',
   },
   model_unavailable: {
@@ -105,6 +110,17 @@ export function classifyAssistantError(error: unknown): AssistantErrorCode {
     )
   )
     return 'context_too_long';
+  // A tool call the provider can't pair with a result. `transcript.ts`
+  // repairs the common causes before sending, so reaching this means an
+  // unrepaired shape got through — the thread cannot recover on a retry,
+  // and telling the user to "resend" would loop them forever. Checked
+  // before the generic 400/404 rules, which would otherwise swallow it.
+  if (
+    /tool_call_id|tool_calls|tool_use|tool_result|tool messages|invalid.*tool.*(call|approval)/.test(
+      text
+    )
+  )
+    return 'conversation_out_of_sync';
   if (/model.*(not found|unavailable|does not exist|deprecated)/.test(text))
     return 'model_unavailable';
   if (status === 404) return 'model_unavailable';

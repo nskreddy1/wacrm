@@ -46,6 +46,24 @@ describe('assistant chat errors', () => {
     expect(ASSISTANT_ERROR_NOTICES.rate_limited.recovery).toMatch(/wait/i);
   });
 
+  it('tells the user to start over when a tool call lost its result', () => {
+    // The real provider wording for a dangling tool call. Retrying can
+    // never fix it — the broken turn is replayed every time — so this
+    // must not be classified as anything whose advice is "resend".
+    const messages = [
+      "An assistant message with 'tool_calls' must be followed by tool messages responding to each tool_call_id",
+      'tool_use ids were found without tool_result blocks immediately after',
+    ];
+    for (const message of messages) {
+      expect(classifyAssistantError(new Error(message)), message).toBe(
+        'conversation_out_of_sync'
+      );
+    }
+    expect(ASSISTANT_ERROR_NOTICES.conversation_out_of_sync.recovery).toMatch(
+      /new chat/i
+    );
+  });
+
   it('classifies by HTTP status when there is no useful message', () => {
     expect(classifyAssistantError({ status: 401 })).toBe('invalid_key');
     expect(classifyAssistantError({ status: 429 })).toBe('rate_limited');
