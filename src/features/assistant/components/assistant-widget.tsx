@@ -39,6 +39,7 @@ import {
   toolNameFromPart,
 } from './agent-parts';
 import { AssistantHistory } from './assistant-history';
+import { resolveAssistantErrorNotice } from '../lib/chat-errors';
 import type { AssistantSessionSummary } from '../lib/sessions';
 
 // ============================================================
@@ -129,7 +130,10 @@ export function AssistantWidget() {
   const busy = status === 'submitted' || status === 'streaming';
 
   // Classified once per render rather than per reference in the JSX.
-  const errorNotice = error ? describeError(error) : null;
+  // Resolves either an error code the route classified server-side or a
+  // purely client-side failure (dropped connection, local 429) into the
+  // same cause/recovery pair, so the notice can't contradict itself.
+  const errorNotice = error ? resolveAssistantErrorNotice(error) : null;
 
   // Autoscroll is handled by ChatContainerRoot (prompt-kit wraps
   // use-stick-to-bottom), which pins to the bottom only while the user
