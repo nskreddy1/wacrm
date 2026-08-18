@@ -45,6 +45,12 @@ import en from 'react-phone-number-input/locale/en.json';
 
 const IGNORE = '__ignore__';
 const CREATE_PREFIX = '__create__:';
+/**
+ * Rows sent per bulk-import request. Small enough to stay well under
+ * request body and serverless execution limits on a wide CSV, large
+ * enough that a typical file is one or two round trips.
+ */
+const IMPORT_CHUNK_SIZE = 250;
 const aliases: Record<string, string[]> = {
   name: ['name', 'fullname', 'contactname', 'customername', 'person'],
   phone: [
@@ -323,30 +329,59 @@ export function ImportModal({
     let imported = 0,
       skipped = 0;
     const importErrors: ImportError[] = [];
-    for (let index = 0; index < csv.rows.length; index++) {
-      const response = await fetch('/api/v1/workspace/contacts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          values: valuesForRow(csv.rows[index]),
-          source: 'import',
-        }),
-      });
-      const payload = await response.json();
-      if (response.ok) imported++;
-      else if (
-        String(payload.error?.message ?? '')
-          .toLowerCase()
-          .includes('already exists')
-      )
-        skipped++;
-      else
-        importErrors.push({
-          row: index + 2,
-          message: payload.error?.message ?? 'Import failed',
-          source: csv.rows[index],
+    try {
+      // Sent in chunks to one bulk endpoint rather than one request per
+      // row. The old per-row loop surfaced every already-existing contact
+      // as a failed HTTP request, so importing a file of known contacts
+      // filled the console with 400s; the server now resolves duplicates
+      // before writing and reports them as skips. Chunking keeps any
+      // single request well inside body-size and timeout limits while
+      // still letting the progress bar advance.
+      for (let start = 0; start < csv.rows.length; start += IMPORT_CHUNK_SIZE) {
+        const chunk = csv.rows.slice(start, start + IMPORT_CHUNK_SIZE);
+        const response = await fetch('/api/v1/workspace/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            kind: 'import',
+            rows: chunk.map((row, offset) => ({
+              // +2 maps back to the spreadsheet line the user sees:
+              // 1-based, with the header on row 1.
+              row: start + offset + 2,
+              values: valuesForRow(row),
+            })),
+          }),
         });
-      setProgress(Math.round(((index + 1) / csv.rows.length) * 100));
+        const payload = await response.json();
+        if (!response.ok)
+          throw new Error(payload.error?.message ?? 'Import failed');
+        imported += payload.data.imported ?? 0;
+        skipped += (payload.data.skipped ?? []).length;
+        for (const failure of payload.data.errors ?? []) {
+          importErrors.push({
+            row: failure.row,
+            message: failure.message,
+            source: csv.rows[failure.row - 2] ?? [],
+          });
+        }
+        setProgress(
+          Math.round(
+            (Math.min(start + IMPORT_CHUNK_SIZE, csv.rows.length) /
+              csv.rows.length) *
+              100
+          )
+        );
+      }
+    } catch (error) {
+      // A whole chunk failed (network drop, auth expiry, oversized body).
+      // Report it against the file rather than silently showing 0 rows.
+      setImporting(false);
+      toast.error(
+        error instanceof Error ? error.message : 'Unable to import contacts'
+      );
+      // Earlier chunks may already have committed, so refresh the table.
+      if (imported) onImported();
+      return;
     }
     setResult({ imported, skipped, errors: importErrors });
     setImporting(false);

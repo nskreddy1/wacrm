@@ -9,6 +9,7 @@ import type {
   FieldType,
   WorkspaceContact,
 } from './types';
+import { canAddResource } from '@/lib/quotas';
 import {
   validateContactIdentity,
   validateContactValue,
@@ -306,6 +307,161 @@ export async function getSupabaseContactWorkspace(
     })),
     currentUserId: ctx.userId,
   };
+}
+
+/** Largest CSV import accepted in a single request. */
+export const CONTACT_IMPORT_MAX_ROWS = 5000;
+
+/**
+ * Digits-only form of a phone number, matching the generated
+ * `contacts.phone_normalized` column that backs the unique index
+ * `idx_contacts_account_phone_normalized (account_id, phone_normalized)`.
+ * Duplicate detection has to use exactly this shape, or "+1 (415)
+ * 555-0123" and "14155550123" would look like different contacts here
+ * while colliding in the database.
+ */
+function normalizePhoneDigits(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+export type ContactImportOutcome = {
+  imported: number;
+  /** Rows intentionally not inserted, with the reason to show the user. */
+  skipped: { row: number; reason: string }[];
+  errors: { row: number; message: string }[];
+};
+
+/**
+ * Imports many contacts in one request.
+ *
+ * The import UI used to POST one contact per row. Every row that already
+ * existed came back as an HTTP 400 that the browser logged as a failed
+ * request — an 11-row file with 11 known contacts produced 11 console
+ * errors — and a duplicate repeated *within* the same file failed the
+ * same way. It also ran one quota check per row, so a large file did
+ * hundreds of redundant checks and could drift past its cap mid-run.
+ *
+ * Here duplicates are resolved before anything is written: existing
+ * phone numbers are read once, then each row is checked against the
+ * database and against earlier rows in the same file. Rows that cannot
+ * be imported are reported as `skipped` with a reason instead of being
+ * raised as errors, so an expected duplicate is no longer indistinguishable
+ * from a real failure.
+ *
+ * Rows are inserted individually so one bad row cannot void the whole
+ * file, and partial progress is reported rather than lost. Note this is
+ * NOT atomic: `imported` counts rows already committed when a later row
+ * fails. That is deliberate — a half-finished import that tells you
+ * exactly which rows landed beats discarding a mostly-good file.
+ */
+export async function importSupabaseContacts(
+  ctx: AccountContext,
+  rows: { row: number; values: Record<string, ContactValue> }[]
+): Promise<ContactImportOutcome> {
+  const outcome: ContactImportOutcome = {
+    imported: 0,
+    skipped: [],
+    errors: [],
+  };
+  if (!rows.length) return outcome;
+  if (rows.length > CONTACT_IMPORT_MAX_ROWS)
+    throw new Error(
+      `Imports are limited to ${CONTACT_IMPORT_MAX_ROWS.toLocaleString()} rows per file`
+    );
+
+  // Validate first so malformed rows never consume quota or a write.
+  const candidates: {
+    row: number;
+    values: Record<string, ContactValue>;
+    phoneKey: string;
+  }[] = [];
+  for (const entry of rows) {
+    try {
+      const { ownerId: _ownerId, ...rest } = entry.values;
+      const identity = validateContactIdentity(rest);
+      candidates.push({
+        row: entry.row,
+        values: entry.values,
+        phoneKey: normalizePhoneDigits(identity.phone),
+      });
+    } catch (error) {
+      outcome.errors.push({
+        row: entry.row,
+        message: error instanceof Error ? error.message : 'Invalid row',
+      });
+    }
+  }
+  if (!candidates.length) return outcome;
+
+  // One read of the account's existing phone keys, instead of letting
+  // each row discover its own duplicate via a failed insert.
+  const { data: existingRows, error: existingError } = await ctx.supabase
+    .from('contacts')
+    .select('phone_normalized')
+    .eq('account_id', ctx.accountId)
+    .neq('phone_normalized', '');
+  if (existingError) throw new Error(existingError.message);
+  const seenPhones = new Set(
+    (existingRows ?? [])
+      .map((item) => String(item.phone_normalized ?? ''))
+      .filter(Boolean)
+  );
+
+  const insertable: { row: number; values: Record<string, ContactValue> }[] =
+    [];
+  for (const candidate of candidates) {
+    if (candidate.phoneKey && seenPhones.has(candidate.phoneKey)) {
+      outcome.skipped.push({
+        row: candidate.row,
+        reason: 'A contact with this phone number already exists',
+      });
+      continue;
+    }
+    // Claim the number so a later row in the same file collides here
+    // rather than against the unique index.
+    if (candidate.phoneKey) seenPhones.add(candidate.phoneKey);
+    insertable.push({ row: candidate.row, values: candidate.values });
+  }
+  if (!insertable.length) return outcome;
+
+  // Single quota check against the real insert count.
+  const quota = await canAddResource(
+    ctx.accountId,
+    'max_contacts',
+    insertable.length
+  );
+  if (!quota.allowed) {
+    // `limit === null` means unlimited, which is always allowed, so this
+    // branch implies a numeric limit. Coalesce anyway rather than assert,
+    // so an unexpected shape degrades to "import nothing, report why"
+    // instead of throwing on arithmetic with null.
+    const allowance = Math.max(0, (quota.limit ?? 0) - quota.used);
+    // Import what fits and report the rest, rather than failing outright.
+    for (const entry of insertable.slice(allowance)) {
+      outcome.skipped.push({
+        row: entry.row,
+        reason: 'Contact limit reached for your plan',
+      });
+    }
+    insertable.length = allowance;
+  }
+
+  for (const entry of insertable) {
+    try {
+      await createSupabaseContact(ctx, entry.values, 'import');
+      outcome.imported++;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not import row';
+      // A duplicate can still surface here if a concurrent import or an
+      // inbound webhook claimed the number between the read above and
+      // this insert. That is an expected race, not a failure to report.
+      if (/already exists|already uses/i.test(message))
+        outcome.skipped.push({ row: entry.row, reason: message });
+      else outcome.errors.push({ row: entry.row, message });
+    }
+  }
+  return outcome;
 }
 
 export async function createSupabaseContact(

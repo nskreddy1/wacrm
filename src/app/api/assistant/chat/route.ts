@@ -20,6 +20,10 @@ import {
   buildAssistantTools,
   WRITE_TOOL_NAMES,
 } from '@/features/assistant/lib/tools';
+import {
+  classifyAssistantError,
+  encodeAssistantErrorCode,
+} from '@/features/assistant/lib/chat-errors';
 import { saveAssistantTurn } from '@/features/assistant/lib/sessions';
 import {
   checkRateLimit,
@@ -172,6 +176,18 @@ export async function POST(req: Request) {
       maxOutputTokens: config.maxOutputTokens,
       // Allow tool calls + a follow-up answer (default is one step).
       stopWhen: stepCountIs(5),
+      // Server-side record of anything that breaks mid-stream, including
+      // a tool that throws. Without this the failure is swallowed by the
+      // stream and the only signal is a generic message in the browser.
+      onError: ({ error }) => {
+        console.error('[assistant] stream error', {
+          accountId: ctx.accountId,
+          userId: ctx.userId,
+          sessionId,
+          model: config.model,
+          error,
+        });
+      },
     });
 
     return createUIMessageStreamResponse({
@@ -184,6 +200,12 @@ export async function POST(req: Request) {
         // persisting the trimmed view would silently drop the older
         // half of a long thread from history.
         originalMessages: messages,
+        // Replaces the SDK's default masked "An error occurred." with a
+        // classified code. Only the code crosses the wire — the widget
+        // turns it into copy — so the user learns whether to retry or
+        // call an admin without any provider text being exposed.
+        onError: (error) =>
+          encodeAssistantErrorCode(classifyAssistantError(error)),
         onEnd: async ({ messages: finalMessages, isAborted }) => {
           // An aborted stream leaves a half-formed assistant message.
           // Storing it would mean reopening the thread replays a

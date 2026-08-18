@@ -83,52 +83,6 @@ function rememberSession(id: string | null) {
   }
 }
 
-/**
- * Turn a failed turn into a cause and a way out.
- *
- * "Something went wrong. Please try again." was the entire error UI. It
- * tells the user nothing they didn't already know and, worse, offers the
- * same advice for a problem retrying fixes (a dropped connection) and
- * one where retrying is precisely wrong (a rate limit — retrying
- * immediately just burns the next allowance too).
- *
- * Only causes this endpoint genuinely emits are matched. Inventing
- * richer-sounding classes we cannot actually detect — content filter,
- * context window — would mislabel unrelated failures, which is worse
- * than the generic string it replaces. Anything unrecognised keeps the
- * honest fallback.
- */
-function describeError(err: Error): { cause: string; recovery: string } {
-  const raw = err.message.toLowerCase();
-
-  // 429 from either the per-user or per-account cap.
-  if (raw.includes('rate limit') || raw.includes('429')) {
-    return {
-      cause: 'Too many requests in a short time.',
-      recovery: 'Wait about a minute, then send again.',
-    };
-  }
-
-  // Aborts surface here too, but the stream handler treats a
-  // user-initiated stop as success, so reaching this point means the
-  // connection itself dropped rather than the user pressing stop.
-  if (
-    raw.includes('fetch') ||
-    raw.includes('network') ||
-    raw.includes('load failed')
-  ) {
-    return {
-      cause: 'Lost connection to the server.',
-      recovery: 'Check your connection and resend.',
-    };
-  }
-
-  return {
-    cause: "Mira couldn't finish that reply.",
-    recovery: 'Resend the message to try again.',
-  };
-}
-
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
