@@ -1,10 +1,13 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import useSWR from 'swr';
-import { Plus, Trash2 } from 'lucide-react';
+import { Package, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { RecordLookup } from '@/components/shared/record-sheet';
+import { routes } from '@/lib/routing/routes';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 
 export type DraftDealItem = {
@@ -51,24 +54,26 @@ export function DealItemsTable({
   onChange: (items: DraftDealItem[]) => void;
 }) {
   const [expanded, setExpanded] = useState(items.length > 0);
-  const [search, setSearch] = useState('');
-  const searchId = useId();
   const { data: catalog, isLoading } = useSWR(
     expanded ? '/api/v1/workspace/catalog' : null,
     catalogFetcher
   );
   const symbol = getCurrencySymbol(currency);
 
-  const matches = useMemo(() => {
-    if (!catalog) return [];
-    const query = search.trim().toLowerCase();
+  // Every unused catalog item is offered up front — the picker is a browsable
+  // dropdown, not a type-to-find box. The old version rendered results only
+  // while the query was non-empty, so a user who did not already know an item
+  // name had no way to discover what the Catalog module contained.
+  const options = useMemo(() => {
     const used = new Set(items.map((item) => item.catalogItemId));
-    const pool = catalog.filter((entry) => !used.has(entry.id));
-    if (!query) return pool.slice(0, 6);
-    return pool
-      .filter((entry) => entry.name.toLowerCase().includes(query))
-      .slice(0, 6);
-  }, [catalog, search, items]);
+    return (catalog ?? [])
+      .filter((entry) => !used.has(entry.id))
+      .map((entry) => ({
+        id: entry.id,
+        label: entry.category ? `${entry.name} · ${entry.category}` : entry.name,
+        hint: formatCurrency(entry.price, currency),
+      }));
+  }, [catalog, items, currency]);
 
   const grandTotal = items.reduce((sum, item) => sum + itemTotal(item), 0);
 
@@ -78,7 +83,9 @@ export function DealItemsTable({
     );
   }
 
-  function add(entry: CatalogItem) {
+  function add(catalogItemId: string | null) {
+    const entry = (catalog ?? []).find((row) => row.id === catalogItemId);
+    if (!entry) return;
     onChange([
       ...items,
       {
@@ -90,7 +97,6 @@ export function DealItemsTable({
         discountPct: 0,
       },
     ]);
-    setSearch('');
   }
 
   if (!expanded && items.length === 0) {
@@ -102,7 +108,7 @@ export function DealItemsTable({
           className="bg-muted/50 text-primary hover:bg-muted flex w-full items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors"
         >
           <Plus className="size-4" aria-hidden="true" />
-          Catalog
+          Add products or services
         </button>
       </div>
     );
@@ -113,9 +119,17 @@ export function DealItemsTable({
       className="flex flex-col gap-3 border-t pt-6"
       aria-labelledby="deal-items-heading"
     >
-      <h2 id="deal-items-heading" className="text-lg font-semibold">
-        Associated Products
-      </h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="deal-items-heading" className="text-lg font-semibold">
+          Products &amp; Services
+        </h2>
+        <Link
+          href={routes.app.catalog}
+          className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
+        >
+          Manage catalog
+        </Link>
+      </div>
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[36rem] text-sm">
           <thead>
@@ -213,46 +227,16 @@ export function DealItemsTable({
                 </td>
               </tr>
             ))}
-            <tr>
-              <td colSpan={6} className="px-3 py-2">
-                <div className="relative">
-                  <Input
-                    id={searchId}
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder={
-                      isLoading ? 'Loading catalog…' : 'Search Catalog'
-                    }
-                    className="h-8 max-w-64"
-                    aria-label="Search catalog items to add"
-                  />
-                  {matches.length > 0 && search.trim().length > 0 && (
-                    <ul
-                      className="bg-popover absolute top-9 left-0 z-10 w-72 overflow-hidden rounded-md border shadow-md"
-                      role="listbox"
-                      aria-label="Catalog matches"
-                    >
-                      {matches.map((entry) => (
-                        <li key={entry.id}>
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected="false"
-                            className="hover:bg-muted flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm"
-                            onClick={() => add(entry)}
-                          >
-                            <span className="truncate">{entry.name}</span>
-                            <span className="text-muted-foreground shrink-0 text-xs">
-                              {formatCurrency(entry.price, currency)}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </td>
-            </tr>
+            {items.length === 0 && (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="text-muted-foreground px-3 py-6 text-center text-sm"
+                >
+                  No products added yet. Pick one from the catalog below.
+                </td>
+              </tr>
+            )}
           </tbody>
           {items.length > 0 && (
             <tfoot>
@@ -271,6 +255,48 @@ export function DealItemsTable({
             </tfoot>
           )}
         </table>
+      </div>
+
+      {/* Browsable dropdown: opens on click with the whole catalog listed and
+          narrows as you type, so items are discoverable without knowing a
+          name. Selecting appends a line and the picker resets itself. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-56 flex-1 sm:max-w-sm">
+          <RecordLookup
+            id="deal-catalog-picker"
+            value={null}
+            options={options}
+            placeholder={
+              isLoading
+                ? 'Loading catalog…'
+                : options.length > 0
+                  ? 'Select from catalog'
+                  : (catalog?.length ?? 0) > 0
+                    ? 'Every catalog item is already added'
+                    : 'No catalog items yet'
+            }
+            disabled={isLoading || options.length === 0}
+            icon={
+              <Package
+                className="text-muted-foreground size-4 shrink-0"
+                aria-hidden="true"
+              />
+            }
+            onSelect={add}
+          />
+        </div>
+        {!isLoading && (catalog?.length ?? 0) === 0 && (
+          <p className="text-muted-foreground text-xs">
+            Your catalog is empty —{' '}
+            <Link
+              href={routes.app.catalog}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              add products or services
+            </Link>{' '}
+            first.
+          </p>
+        )}
       </div>
     </section>
   );
