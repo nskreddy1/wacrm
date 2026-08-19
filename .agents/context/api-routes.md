@@ -15,8 +15,8 @@ re-derive with `find src/app/api/<ns> -name route.ts | wc -l`.
 | Namespace | Purpose | Gate |
 | --- | --- | --- |
 | `/api/account/*` | Workspace mgmt: members, invitations, profiles, api-keys, domains, email-settings, transfer-ownership, activity | account role |
-| `/api/admin/*` | Platform console: workspaces, tickets, channels (provisioning), providers (catalog/fleet/activity), ai-config, platform-settings, audit | super admin |
-| `/api/ai/*` | Agents CRUD, autoreply, draft, knowledge (+reindex), playground, runs, usage, config | account |
+| `/api/admin/*` | Platform console: workspaces, tickets, channels (provisioning), providers (catalog/fleet/activity), ai-config, `ai-models` (GET/POST model listing for a target workspace), platform-settings, audit | super admin |
+| `/api/ai/*` | Agents CRUD, autoreply, draft, knowledge (+reindex), playground, runs, usage, config, `models` (GET stored-key listing / POST draft-key listing, admin) | account |
 | `/api/alerts/*` (2) | `destinations` (alert delivery targets), `dispatch` (fires due alerts) | admin for destinations; `CRON_SECRET` for dispatch |
 | `/api/assistant/*` (3) | In-app AI assistant: `chat`, `sessions`, `sessions/[id]` | account |
 | `/api/channels/webhooks/{meta,twilio}` | Inbound provider webhooks — MUST verify signatures (Meta HMAC, `X-Twilio-Signature`) | signature |
@@ -52,6 +52,20 @@ re-derive with `find src/app/api/<ns> -name route.ts | wc -l`.
   `DELETE /api/v1/session` clears local cookies.
 - **Provider connection save**: zod → adapter exists? → platform
   policy enabled? → encrypt credentials → upsert → test.
+- **Model listing (ADR-005)**: `GET` lists with the account's *stored*
+  key; `POST` lists with a key the operator is still *typing*, so
+  first-run setup shows a provider-verified list before anything is
+  saved. Both verbs on `/api/ai/models` (`requireRole('admin')`) and
+  `/api/admin/ai-models` (`requireSuperAdmin()` + explicit body
+  `account_id`) delegate to one shared `handleListModels()` in
+  `src/features/assistant/lib/ai/list-models.ts` — the guard lives once
+  so it cannot drift between verbs (ADR-005 F2). The draft key travels
+  in the JSON body only: never a query string, never logged, never in a
+  response, and the client's SWR cache key holds only a
+  `length:last4` fingerprint (F1). Both verbs share one rate-limit
+  budget. Provider failures answer `200 { models, needsKey, error?,
+  code? }` — never a 500 — and only `code === 'invalid_key'` blocks the
+  setup wizard; every other code warns and lets the operator continue.
 - **Admin providers page**: `GET /api/admin/providers` returns
   `{catalog, fleet, activity}` (activity = 14-day message counts by
   channel from `admin_provider_activity` RPC, counts only, no content).

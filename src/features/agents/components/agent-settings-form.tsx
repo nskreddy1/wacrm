@@ -233,25 +233,10 @@ export function AgentSettingsForm({
             </div>
           </fieldset>
 
+          {/* Key BEFORE model (ADR-005 D1): the model list is only real
+              once a key exists, so asking for the model first would offer
+              a list the provider never vouched for. */}
           <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="cfg-model"
-                className="text-foreground mb-1 block text-sm font-medium"
-              >
-                Model
-              </label>
-              {/* Live list from the provider, still typeable — see
-                  ModelPicker: a model released this morning must not be
-                  unreachable because our bundle predates it. */}
-              <ModelPicker
-                id="cfg-model"
-                provider={provider as AiProvider}
-                value={model}
-                onChange={setModel}
-                baseUrl={baseUrl}
-              />
-            </div>
             {!preset?.keyOptional ? (
               <div>
                 <label
@@ -275,6 +260,27 @@ export function AgentSettingsForm({
                 />
               </div>
             ) : null}
+            <div>
+              <label
+                htmlFor="cfg-model"
+                className="text-foreground mb-1 block text-sm font-medium"
+              >
+                Model
+              </label>
+              {/* Live list from the provider, still typeable — see
+                  ModelPicker: a model released this morning must not be
+                  unreachable because our bundle predates it. The
+                  in-progress key is handed over so switching provider and
+                  pasting a new key lists models BEFORE save (D5). */}
+              <ModelPicker
+                id="cfg-model"
+                provider={provider as AiProvider}
+                value={model}
+                onChange={setModel}
+                baseUrl={baseUrl}
+                draftApiKey={apiKey}
+              />
+            </div>
           </div>
 
           {preset?.needsBaseUrl || provider === 'ollama' ? (

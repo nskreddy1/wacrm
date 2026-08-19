@@ -62,6 +62,73 @@ const STEP_MODEL = 1;
 const STEP_PERSONALITY = 2;
 const STEP_REVIEW = 3;
 
+/**
+ * Inline result of the live model listing, which IS the key check (D3).
+ *
+ * The severity split is the D4 rule made visible: `invalid_key` is the
+ * only outcome where the provider actually told us the key is wrong, so
+ * it alone reads as an error and blocks Continue. Everything else —
+ * timeout, network_error, rate_limited, not_supported, bad_response,
+ * provider_error — is OUR side or the provider's availability, not a
+ * verdict on the key, so it warns and explicitly tells the operator they
+ * can carry on. Rendering those as failures is what would make the agent
+ * unconfigurable during a provider incident.
+ */
+function KeyVerificationNotice({ state }: { state: ModelListState }) {
+  // Nothing verified yet: stay silent rather than pre-emptively
+  // colouring a field the operator hasn't finished filling in.
+  if (state.status === 'idle') return null;
+
+  if (state.status === 'loading') {
+    return (
+      <p
+        className="text-muted-foreground flex items-center gap-2 text-xs"
+        role="status"
+      >
+        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        Checking this key with the provider…
+      </p>
+    );
+  }
+
+  if (state.status === 'ok') {
+    return (
+      <p
+        className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-500"
+        role="status"
+      >
+        <CheckCircle2 className="size-3.5" aria-hidden />
+        Key verified
+        {typeof state.count === 'number' && state.count > 0
+          ? ` — ${state.count} model${state.count === 1 ? '' : 's'} available`
+          : null}
+      </p>
+    );
+  }
+
+  const rejected = state.code === 'invalid_key';
+
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-2 rounded-md border p-2.5 text-xs leading-relaxed',
+        rejected
+          ? 'border-destructive/30 bg-destructive/10 text-destructive'
+          : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-500'
+      )}
+      role="alert"
+    >
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+      <span>
+        {rejected
+          ? (state.message ??
+            'The provider rejected this key. Check it and paste it again.')
+          : `${state.message ?? "We couldn't reach the provider to list models."} You can continue and pick your model by hand.`}
+      </span>
+    </div>
+  );
+}
+
 interface AgentSetupWizardProps {
   onCreated: (agent: ClientAgent) => void;
   onCancel?: () => void;

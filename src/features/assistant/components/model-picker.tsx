@@ -135,18 +135,23 @@ export function ModelPicker({
   // as N in an autofill/typing flow; either way only the settled value
   // is allowed to become an upstream request.
   const [settledKey, setSettledKey] = useState('');
+  const draft = draftApiKey?.trim() ?? '';
+  const draftListable = isListableDraftKey(draft);
   useEffect(() => {
-    const draft = draftApiKey?.trim() ?? '';
-    if (!isListableDraftKey(draft)) {
-      setSettledKey('');
-      return;
-    }
-    const timer = setTimeout(
-      () => setSettledKey(draft),
-      DRAFT_KEY_DEBOUNCE_MS
-    );
+    // Only ever SCHEDULE a settle here. Clearing was previously done by
+    // calling setState synchronously in this effect body, which triggers
+    // a cascading render on every keystroke; staleness is instead
+    // handled by the derived value below, which needs no extra state.
+    if (!isListableDraftKey(draft)) return;
+    const timer = setTimeout(() => setSettledKey(draft), DRAFT_KEY_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [draftApiKey]);
+  }, [draft]);
+
+  // A settled key counts only while it still matches what is in the
+  // field. Shortening or clearing the input therefore falls back to the
+  // stored-key `GET` path on the very next render — no request can be
+  // made with a key the operator has already edited away.
+  const effectiveDraftKey = draftListable && settledKey === draft ? draft : '';
 
   const usableBaseUrl =
     provider === 'custom' || provider === 'ollama'
@@ -154,7 +159,7 @@ export function ModelPicker({
       : '';
   // `custom` cannot be listed without an endpoint, so don't even ask.
   const shouldFetch = !disabled && !(provider === 'custom' && !usableBaseUrl);
-  const useDraftKey = settledKey.length > 0;
+  const useDraftKey = effectiveDraftKey.length > 0;
 
   const params = new URLSearchParams({ provider });
   if (accountId) params.set('account_id', accountId);
@@ -170,14 +175,14 @@ export function ModelPicker({
               provider,
               baseUrl: usableBaseUrl,
               accountId,
-              draftApiKey: settledKey,
+              draftApiKey: effectiveDraftKey,
             })
           : `${endpoint}?${params.toString()}`,
       useDraftKey
         ? () =>
             postModels(endpoint, {
               provider,
-              api_key: settledKey,
+              api_key: effectiveDraftKey,
               base_url: usableBaseUrl || null,
               account_id: accountId ?? null,
             })
@@ -185,7 +190,9 @@ export function ModelPicker({
       { revalidateOnFocus: false, keepPreviousData: false }
     );
 
-  const models = data?.models ?? [];
+  // Memoised so the identity is stable across renders — a fresh `[]`
+  // every render would defeat the `shown` memo below.
+  const models = useMemo(() => data?.models ?? [], [data]);
   // While the field is untouched the list is unfiltered; typing filters
   // it, so the control reads as a text input that happens to suggest.
   const filter = (query ?? '').trim().toLowerCase();
@@ -211,7 +218,11 @@ export function ModelPicker({
   // Kept in a ref so a caller passing an inline arrow — every caller —
   // does not re-run this effect on every render.
   const onListStateRef = useRef(onListState);
-  onListStateRef.current = onListState;
+  // Synced in an effect, not during render: a ref write while rendering
+  // is not a safe commit point (React may discard the render).
+  useEffect(() => {
+    onListStateRef.current = onListState;
+  }, [onListState]);
   useEffect(() => {
     const report = onListStateRef.current;
     if (!report) return;
