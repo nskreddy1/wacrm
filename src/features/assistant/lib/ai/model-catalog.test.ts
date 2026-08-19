@@ -426,7 +426,12 @@ describe('listProviderModels — cache', () => {
   });
 
   it('coalesces concurrent identical listings into one upstream call', async () => {
-    let release: (() => void) | null = null;
+    // Definite-assignment assertion, not `| null`: TypeScript's control
+    // flow analysis only sees the assignment inside the executor closure,
+    // so a nullable declaration narrows to `never` at the call site below.
+    // The executor runs synchronously on the first fetch, so by the time
+    // we release, this is always assigned.
+    let release!: () => void;
     fetchMock.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -449,7 +454,7 @@ describe('listProviderModels — cache', () => {
     });
     // Both are in flight before any response lands.
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    release?.();
+    release();
 
     expect(await a).toEqual(await b);
     expect(fetchMock).toHaveBeenCalledTimes(1);

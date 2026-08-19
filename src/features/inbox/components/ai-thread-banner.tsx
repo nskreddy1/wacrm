@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import type { ClientAgent } from '@/features/agents/lib/agent-meta';
+import { isAutoReplyLive } from '@/features/agents/lib/agent-meta';
 
 // ------------------------------------------------------------
 // Account AI status is the same for every conversation, so cache it per
@@ -32,19 +34,12 @@ async function fetchAiAccountStatus(
   try {
     const res = await fetch('/api/ai/agents', { cache: 'no-store' });
     if (!res.ok) return { autoReplyOn: false }; // don't cache a transient failure
-    const j = await res.json();
-    const agent = j?.agent;
+    const j = (await res.json()) as { agent?: ClientAgent | null };
     const status = {
-      // The single default agent's auto-reply capability: master switch
-      // AND the capability's own column, AND a usable provider config —
-      // mirrors loadAgentConfig's gating on the server.
-      autoReplyOn: !!(
-        agent?.isEnabled &&
-        agent?.autoreplyEnabled &&
-        agent?.provider &&
-        agent?.model &&
-        (agent?.hasApiKey || agent?.provider === 'ollama')
-      ),
+      // ADR-005 D8: derived from the ONE shared definition rather than
+      // recomputed here. This was the fourth copy of "is auto-reply
+      // live" and the copies had already drifted.
+      autoReplyOn: isAutoReplyLive(j?.agent),
     };
     statusCache.set(accountId, status);
     return status;

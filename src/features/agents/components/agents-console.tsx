@@ -15,6 +15,7 @@ import {
   CAPABILITY_META,
   CAPABILITY_ORDER,
   DEFAULT_AGENT_NAME,
+  isAgentConfigured,
   providerLabel,
   swrJson,
   type AgentCapability,
@@ -85,7 +86,11 @@ export function AgentsConsole() {
       ? (specialists.find((s) => s.id === selection.id) ?? null)
       : null;
 
-  const configured = Boolean(agent?.provider && agent?.model);
+  // ADR-005 D8: ONE definition of "configured". This site used to omit
+  // the API-key check the Playground applied, so an agent with a
+  // provider and model but no key was mislabelled "Paused" instead of
+  // "Not configured".
+  const configured = isAgentConfigured(agent);
   const running = Boolean(
     agent &&
       agent.isEnabled &&
@@ -422,9 +427,11 @@ function AgentRailCard({
   const enabledCaps = CAPABILITY_ORDER.filter(
     (c) => agent[CAPABILITY_META[c].field]
   );
+  // Specialists inherit the default agent's connection, so the
+  // key-aware check (ADR-005 D8) only applies to the default agent.
   const subtitle = isSpecialist
     ? agent.routeDescription || 'Specialist'
-    : agent.provider && agent.model
+    : isAgentConfigured(agent)
       ? enabledCaps.length > 0
         ? enabledCaps.map((c) => CAPABILITY_META[c].name).join(' · ')
         : 'All capabilities off'
@@ -474,7 +481,10 @@ function OverviewTab({
   busyToggle: string | null;
   onToggleCapability: (cap: AgentCapability, next: boolean) => void;
 }) {
-  const configured = Boolean(agent.provider && agent.model);
+  // ADR-005 D8: same single definition as the console header — the
+  // capability switches stay disabled until the agent can actually
+  // generate, which requires a key and not just a provider and model.
+  const configured = isAgentConfigured(agent);
 
   return (
     <div className="flex flex-col gap-4">

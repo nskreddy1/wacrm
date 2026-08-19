@@ -13,6 +13,12 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import type { ClientAgent } from '@/features/agents/lib/agent-meta';
+import {
+  isAgentConfigured,
+  isAutoReplyLive,
+  swrJson,
+} from '@/features/agents/lib/agent-meta';
 
 interface Turn {
   role: 'user' | 'assistant';
@@ -23,33 +29,6 @@ interface Turn {
   routedTo?: string | null;
 }
 
-/** The subset of GET /api/ai/agents the playground cares about. */
-interface AgentStatus {
-  configured: boolean;
-  autoReplyLive: boolean;
-}
-
-const fetchAgentStatus = async (url: string): Promise<AgentStatus> => {
-  const res = await fetch(url);
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error ?? 'Could not load AI status');
-  const agent = payload?.agent;
-  return {
-    configured: Boolean(
-      agent?.provider &&
-        agent?.model &&
-        (agent?.hasApiKey || agent?.provider === 'ollama')
-    ),
-    autoReplyLive: Boolean(
-      agent?.isEnabled &&
-        agent?.autoreplyEnabled &&
-        agent?.provider &&
-        agent?.model &&
-        (agent?.hasApiKey || agent?.provider === 'ollama')
-    ),
-  };
-};
-
 export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
@@ -57,12 +36,22 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Status-aware empty state: "Go to Setup" only shows when the agent
   // genuinely isn't set up, instead of unconditionally.
-  const { data: config } = useSWR<AgentStatus>(
+  //
+  // ADR-005 D9: the SAME key AND the SAME fetcher as the console. SWR
+  // keys its cache by the key alone, so a second fetcher on this literal
+  // string used to make the console's `{ agent, specialists }` payload
+  // land here and read as `configured: undefined` — a fully configured
+  // agent rendered "isn't set up yet". Sharing the fetcher makes the
+  // shared cache entry correct rather than accidental, and the tab costs
+  // no extra fetch. Status itself comes from the D8 helpers so this
+  // surface cannot drift from the console rail again.
+  const { data: config } = useSWR<{ agent: ClientAgent | null }>(
     '/api/ai/agents',
-    fetchAgentStatus,
+    swrJson,
     { revalidateOnFocus: true }
   );
-  const isSetUp = Boolean(config?.configured);
+  const isSetUp = isAgentConfigured(config?.agent);
+  const autoReplyLive = isAutoReplyLive(config?.agent);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -187,7 +176,7 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
                 <p
                   className={cn(
                     'mt-2 flex items-center gap-1.5 text-xs',
-                    config.autoReplyLive
+                    autoReplyLive
                       ? 'text-emerald-600 dark:text-emerald-500'
                       : 'text-muted-foreground'
                   )}
@@ -195,12 +184,12 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
                   <span
                     className={cn(
                       'inline-block size-1.5 rounded-full',
-                      config.autoReplyLive
+                      autoReplyLive
                         ? 'bg-emerald-500'
                         : 'bg-muted-foreground/50'
                     )}
                   />
-                  {config.autoReplyLive
+                  {autoReplyLive
                     ? 'Auto-reply is live — customers get these answers automatically.'
                     : 'Auto-reply is off — replies here are test-only until you enable it.'}
                 </p>
