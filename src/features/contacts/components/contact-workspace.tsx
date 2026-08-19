@@ -16,15 +16,14 @@ import {
   List,
   MoreHorizontal,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
   SheetIcon,
   SlidersHorizontal,
   Trash2,
   Upload,
-  UserPlus,
   Users,
-  X,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -71,6 +70,12 @@ import { cn } from '@/lib/utils';
 import { BulkActionBar } from '@/components/shared/bulk-action-bar';
 import { RecordTitleButton } from '@/components/shared/record-title-button';
 import { sheetTable } from '@/components/shared/sheet-table';
+import {
+  WorkspaceToolbar,
+  WorkspaceToolbarActions,
+  WorkspaceToolbarSearch,
+  WorkspaceToolbarSeparator,
+} from '@/components/shared/workspace-toolbar';
 import {
   contactsPath,
   type ContactViewMode,
@@ -386,37 +391,20 @@ export function ContactWorkspace({
           document outline to orient by (WCAG 1.3.1). Visually hidden
           because the surrounding chrome already names the page. */}
       <h1 className="sr-only">Contacts</h1>
-      <div className="bg-card flex flex-wrap items-center gap-2 border-b px-3 py-2">
-        <div className="relative min-w-56 flex-1 sm:max-w-sm">
-          <Search
-            className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
-            aria-hidden="true"
-          />
-          <Input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(0);
-            }}
-            placeholder="Search contacts"
-            aria-label="Search contacts"
-            className="pr-8 pl-8"
-          />
-          {query && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className="absolute top-1/2 right-1.5 -translate-y-1/2"
-              onClick={() => {
-                setQuery('');
-                setPage(0);
-              }}
-              aria-label="Clear contact search"
-            >
-              <X />
-            </Button>
-          )}
-        </div>
+      {/* Shared WorkspaceToolbar, the same bar Catalog and Appointments use, so
+          every module's header reads identically: search on the left, filters
+          next to it, then view/columns/overflow and one primary "New …" action
+          anchored to the right edge. */}
+      <WorkspaceToolbar>
+        <WorkspaceToolbarSearch
+          value={query}
+          onValueChange={(value) => {
+            setQuery(value);
+            setPage(0);
+          }}
+          placeholder="Search name, phone, email"
+          label="Search contacts"
+        />
         <Button
           variant={countRules(filters) ? 'secondary' : 'outline'}
           size="sm"
@@ -427,9 +415,18 @@ export function ContactWorkspace({
             <Badge variant="secondary">{countRules(filters)}</Badge>
           )}
         </Button>
-        <Tabs
-          value={view}
-          onValueChange={(value) =>
+        {/* aria-live so filtering announces the new total, matching Catalog. */}
+        <span
+          className="text-muted-foreground text-xs tabular-nums"
+          aria-live="polite"
+        >
+          {filtered.length}
+        </span>
+
+        <WorkspaceToolbarActions>
+          <Tabs
+            value={view}
+            onValueChange={(value) =>
             router.replace(
               contactsPath(undefined, {
                 mode: value as View,
@@ -556,14 +553,16 @@ export function ContactWorkspace({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button
-          size="sm"
-          className="ml-auto shadow-xs sm:ml-0"
-          onClick={() => setContactSheet({ mode: 'create' })}
-        >
-          <UserPlus data-icon="inline-start" /> Create contact
-        </Button>
-      </div>
+          <WorkspaceToolbarSeparator />
+          <Button
+            size="sm"
+            className="shadow-xs"
+            onClick={() => setContactSheet({ mode: 'create' })}
+          >
+            <Plus data-icon="inline-start" /> New contact
+          </Button>
+        </WorkspaceToolbarActions>
+      </WorkspaceToolbar>
 
       {countRules(filters) > 0 && (
         <div className="bg-muted/40 flex flex-wrap items-center gap-2 border-b px-3 py-2">
@@ -863,7 +862,7 @@ export function ContactWorkspace({
               action={{
                 label: hasRefinements
                   ? 'Clear search and filters'
-                  : 'Create contact',
+                  : 'New contact',
                 onClick: () => {
                   if (hasRefinements) {
                     setQuery('');
