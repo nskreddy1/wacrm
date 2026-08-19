@@ -1,7 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { decrypt } from '@/lib/crypto/secrets';
-import type { AiConfig, AiProvider, AutoReplyLimitMode } from './types';
-import { isAiProvider, isAutoReplyLimitMode } from './types';
+import type {
+  AiConfig,
+  AiProvider,
+  AutoReplyLimitMode,
+  ReasoningMode,
+} from './types';
+import {
+  DEFAULT_REASONING_MODE,
+  isAiProvider,
+  isAutoReplyLimitMode,
+  isReasoningMode,
+} from './types';
 import { isWithinAutoReplySchedule } from './schedule';
 
 // ============================================================
@@ -51,6 +61,11 @@ export interface AgentSettings {
   /** Custom agents only — Tier-1 router triggers. Any keyword found in
    *  the customer's message routes here instantly, no LLM call. */
   triggerKeywords?: string[];
+  /** How much internal reasoning the model may do before replying.
+   *  Applies to BOTH capabilities (suggestions and auto-reply) — they
+   *  share one provider connection, so they share this too. Absent =
+   *  'off', the safe pre-toggle behaviour. */
+  reasoning?: ReasoningMode;
 }
 
 /** Agent row kinds: one 'default' generalist per account, plus any
@@ -129,6 +144,11 @@ function readSettings(raw: Record<string, unknown>): Required<
         ? raw.embeddingsApiKey
         : null,
     triggerKeywords: readTriggerKeywords(raw.triggerKeywords),
+    // Unset, or garbage from an older/hand-edited row, reads as 'off' —
+    // the behaviour every account had before the toggle existed.
+    reasoning: isReasoningMode(raw.reasoning)
+      ? raw.reasoning
+      : DEFAULT_REASONING_MODE,
   };
 }
 

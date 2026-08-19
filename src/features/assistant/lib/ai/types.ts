@@ -71,6 +71,38 @@ export function isAutoReplyLimitMode(
 }
 
 /**
+ * How much internal reasoning ("thinking", chain-of-thought) the model
+ * is allowed to do before writing the reply.
+ *
+ *  - `off`  — ask the provider not to reason at all. The DEFAULT, and
+ *             the right answer for almost every account: `MAX_OUTPUT_TOKENS`
+ *             is a budget shared by the scratchpad AND the reply, so a
+ *             model that thinks past the cap returns half a thought and
+ *             no answer.
+ *  - `auto` — send no reasoning flags; whatever the model does by
+ *             default is what happens.
+ *  - `on`   — ask for reasoning, and ask for it to stay hidden. Costs
+ *             more tokens and adds latency; only worth it for genuinely
+ *             multi-step questions.
+ *
+ * `on` NEVER means "show the thinking to the customer". Reasoning is an
+ * internal step: every mode still routes through the `reasoning.ts`
+ * text guards, so a scratchpad can't reach a WhatsApp thread.
+ */
+export type ReasoningMode = 'off' | 'auto' | 'on';
+
+export const REASONING_MODES: readonly ReasoningMode[] = ['off', 'auto', 'on'];
+
+/** Safe default for every account, new or existing. */
+export const DEFAULT_REASONING_MODE: ReasoningMode = 'off';
+
+export function isReasoningMode(value: unknown): value is ReasoningMode {
+  return (
+    typeof value === 'string' && REASONING_MODES.includes(value as ReasoningMode)
+  );
+}
+
+/**
  * Account AI setup, decrypted and ready to use. Produced by
  * `loadAiConfig` — `apiKey` is the plaintext BYO provider key
  * (stored AES-256-GCM-encrypted at rest).
@@ -110,6 +142,11 @@ export interface AiConfig {
    *  knowledge base is embedded and semantic retrieval turns on; when
    *  null, retrieval falls back to lexical full-text search. */
   embeddingsApiKey: string | null;
+  /** How much internal reasoning the model may do. Optional so that
+   *  older callers and the legacy `ai_configs` path stay valid —
+   *  everything resolves an absent value to `DEFAULT_REASONING_MODE`
+   *  ('off'), which is the pre-toggle behaviour. */
+  reasoningMode?: ReasoningMode;
   /** Which key pays for the call: the account's own BYO key, or the
    *  shared `process.env.GEMINI_API_KEY` fallback. Logged to
    *  `ai_usage_log.key_source` so shared-key spend is auditable. */
