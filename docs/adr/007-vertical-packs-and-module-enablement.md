@@ -1,13 +1,33 @@
-# ADR-007: Module enablement, progressive disclosure, and Mira's capability scope
+# ADR-007: Vertical packs and module enablement — showing a workspace only what it needs
 
 **Status:** Proposed
 **Date:** 2026-08-20
-**Deciders:** Owner/product (packaging + default-off policy), backend (RPC + resolver), AI (Mira tool registry)
-**Relates to:** ADR-004 (invites and membership), ADR-005 (AI agent configuration flow), ADR-006 (outbound send window), ADR-008 (onboarding split and cost positioning — the product surface built on this mechanism)
+**Deciders:** Owner/product (pack contents + default-off policy), backend (RPC + resolver), AI (Mira tool registry)
+**Relates to:** `.agents/context/vertical-architecture.md` (§2 pack layers, §3 flags-not-apps, §5 data model, §7 build order, §8 gates — **this ADR implements §5 and defers the rest**), ADR-004 (invites and membership), ADR-005 (AI agent configuration flow), ADR-006 (outbound send window), ADR-008 (the onboarding surface built on this mechanism)
 
 ---
 
 ## Context
+
+**The goal is not packaging. It is that the user is never shown a feature they
+do not need.** A freelancer needs contacts, a pipeline, and a way to reply. A
+support desk needs an inbox, tickets, and templates. A real-estate agent needs
+property fields and a site-visit stage. A sales team needs deals and forecasting.
+These are *different products* to their users, and the value of this one is that
+it can be all of them without any of them seeing the others' surface area.
+"Advanced features for everyone" is the anti-goal.
+
+`.agents/context/vertical-architecture.md` already settled the shape of the
+answer: **one horizontal core (~80%) plus Vertical Packs (~20%, pure config).**
+§3 states feature scope is "enabled-module sets, one binary — same codebase
+renders the right surface", and §5 prescribes exactly three additions to the
+workspace: `vertical`, `compliance_profile`, `enabled_modules`. **None of the
+three exist yet** — `accounts` today is `id, name, owner_user_id, created_at,
+updated_at, default_currency, plan_id, onboarding_completed_at,
+record_visibility_mode`. This ADR is the decision record for building that
+missing axis; it is not a new direction.
+
+The gap in the running code:
 
 The product is an enterprise-shaped CRM with 27 feature modules. Every tenant
 currently gets all of it, all at once:
@@ -47,10 +67,29 @@ machinery:
 | May this member perform this action? | Permission (per-user) | profiles + `has_permission()` ✅ |
 | **Does this workspace use this module at all?** | **Enablement (per-account, opt-in)** | **none** ❌ |
 
-The missing axis is the one the request is about: a workspace that does not want
-appointments should not see appointments, and **Mira must not be able to reach
-appointments** — until the user turns it on. Mira may *explain* the module and
-*ask* for it, and enabling requires human approval.
+The missing axis is the one this ADR is about: a workspace that does not do
+appointments should not see appointments anywhere — nav, routes, API, or Mira —
+until someone turns it on.
+
+**And a fourth question sits above all three:** *what does this kind of business
+need in the first place?* A freelancer should not have to discover, evaluate and
+individually switch on eleven optional modules; that is the same complexity
+problem wearing a different hat. The answer must be a **starting set chosen once,
+at onboarding, from the workspace's industry and shape** — the Vertical Pack of
+`vertical-architecture.md` §2. Enablement is the mechanism; the pack is the
+default it starts from; ADR-008 is the moment the pack is chosen.
+
+Two competitor data points frame the target. **Zoho Bigin** wins the
+freelancer/small-team segment precisely by shipping 20+ industry presets
+(including a real-estate pipeline of enquiry → site visit → closing) and
+refusing enterprise surface area. **HubSpot** branches onboarding immediately on
+"what brings you here" and uses progressive disclosure so a user sees only tasks
+relevant to their goal. Neither is a technology advantage we lack — both are
+config plus a first-run question, which is all §2 claims a pack is.
+
+Mira matters here, but as a **consumer of this axis, not the reason for it**: its
+tool registry is one more surface that must be derived from the resolver, and it
+is the one surface where a mis-scoped capability is also an injection target.
 
 Forces at play:
 
@@ -65,6 +104,17 @@ Forces at play:
    capability exists.
 4. V1 is one account per user, but V2 adds multi-account membership. Whatever
    we store must be `account_id`-scoped so V2 needs no destructive migration.
+5. **`vertical-architecture.md` §7 forbids designing the pack abstraction
+   upfront** — it was revised after review to say: ship for one vertical,
+   hardcoded where necessary, *then extract* the loader from what works. §8/G4
+   adds that a vertical needing real custom *logic* becomes a flagged core
+   module, never pack-embedded code. This ADR must therefore deliver the
+   enablement axis **without** building the `vertical_packs` table, the loader,
+   or the marketplace those gates defer.
+6. §8 also fixes the migration semantics in advance: pack switches are
+   **additive-only**, terminology is a label map over untouched data, and
+   removed-module data is retained and hidden, never dropped. D7 below already
+   matches this; it is now a cited constraint rather than a coincidence.
 
 ---
 
@@ -72,7 +122,13 @@ Forces at play:
 
 Introduce **module enablement** as an explicit third axis, resolved
 server-side, and derive every surface — navigation, route guards, API writes,
-Mira's tool registry, and MCP exposure — from one resolver.
+Mira's tool registry, and MCP exposure — from one resolver. Seed that axis from a
+**vertical preset chosen at onboarding**, shipped as code rather than as the
+§5 `vertical_packs` table, so §7's extract-don't-design rule holds.
+
+The pack is **not a fourth factor in the equation** — it is the *initial value*
+of the second one. Once applied, the workspace's enabled set is its own; the pack
+never re-asserts itself behind the user's back.
 
 **The capability equation.** A capability is available iff all three hold:
 
@@ -199,6 +255,60 @@ Numbered decisions:
     permissions are for. Two overlapping per-user hiding mechanisms would make
     "why can't I see X?" unanswerable without a debugger.
 
+15. **D15 — Vertical presets ship as code, not as the `vertical_packs` table.**
+    New `src/lib/modules/presets.ts`, a static map from vertical key to
+    `{ label, description, modules: ModuleKey[], labelOverrides, pipelineStages,
+    fieldHints }`. §5 asks for a `vertical_packs` table; §7 forbids designing the
+    abstraction before one vertical works in anger. Presets-as-code satisfies
+    both: it is the same *data*, in the cheapest possible container, reviewed in
+    PRs, typed against the D1 registry so a preset naming a nonexistent module
+    fails `pnpm typecheck` rather than at runtime. When a real design partner
+    hits its limits, the table is a migration away and the seed content already
+    exists — **that is the extraction §7 asks for**, and it is why this decision
+    is a deferral, not a rejection.
+
+16. **D16 — Two columns on `accounts` now: `vertical` and `compliance_profile`;
+    the third (`enabled_modules`) is the `account_modules` table of D3, not
+    jsonb.** §5 proposed `enabled_modules jsonb`. A table is chosen instead
+    because enablement carries per-module state that jsonb models badly:
+    `pending_approval` with `requested_by`/`requested_reason`/`enabled_by`/
+    `enabled_at` (D3, F6) is a row, not a flag, and D5's RPC needs to write one
+    module without read-modify-writing the whole document (lost-update under
+    concurrent admins). `vertical` and `compliance_profile` stay scalar columns
+    on `accounts` exactly as §5 specifies. `compliance_profile` is added
+    **as a column with a default only** — no enforcement, no tier sold — because
+    §9/G3 forbids selling "Elevated" before the vendor-chain audit; adding the
+    column now is what makes that audit non-blocking later.
+
+17. **D17 — Applying a preset is an ordinary sequence of D5 RPC calls, and it
+    happens exactly once.** `applyVerticalPreset(vertical)` loops the preset's
+    modules through `set_account_module`, so every entitlement check, dependency
+    check, audit row and cache invalidation from D5/D6 applies unchanged. There
+    is no second privileged write path, and no preset can enable something the
+    plan does not entitle. It is idempotent, and it **never runs again** after
+    onboarding: re-running it would silently re-enable modules a user had
+    deliberately switched off, which is the §8 additive-only rule read
+    backwards. Changing vertical later is D18.
+
+18. **D18 — Changing vertical is additive-only and never disables.** Per §8's
+    migration story: switching from `freelancer` to `agency` enables the
+    difference, remaps terminology (a label map — data untouched), and
+    **disables nothing**. Anything the user no longer wants, they switch off
+    themselves through the D5 path, deliberately. Every switch writes an audit
+    event with a before/after module set. This makes vertical changes safe by
+    construction rather than by careful implementation.
+
+19. **D19 — Terminology is a label map resolved with capabilities, not a
+    rename.** "Lead" vs "Patient" vs "Buyer" vs "Client" is the cheapest and
+    most convincing part of a pack, and §2 already scopes it as data. The
+    resolver returns the active `labelOverrides`; UI reads labels through it;
+    **no column, table, route or permission slug is ever renamed** — those stay
+    canonical, so the public API (`/api/v1`) and MCP contracts are untouched, per
+    ADR-006's stability rule. Out of scope for this ADR: per-vertical dashboard
+    widgets, starter templates and starter flows (§2's remaining pack layers).
+    They need the same preset container and no new mechanism, and bundling them
+    here would make this ADR unshippable.
+
 ---
 
 ## Options considered
@@ -212,6 +322,22 @@ Numbered decisions:
 | **C. Client-side "layout" preference (localStorage / user setting)** | Poor — hides nav only. API, MCP and Mira all still reach the module. | Very low | **Rejected** — `AGENTS.md`: a disabled control is not a boundary. |
 | **D. Registry + `account_modules` + one resolver (chosen)** | Expresses all three axes independently; one derivation point for nav, routes, API, Mira, MCP. | Moderate — one table, one RPC, one resolver, one registry | **Chosen.** |
 | **E. Per-module RLS predicates on domain tables** | Total enforcement, but disabling silently voids historical reads and every query pays for the join. | High | **Rejected** — turns a packaging toggle into data loss (D7). |
+
+### Where vertical presets live
+
+| Option | §7 compliance | Cost to add a vertical | Verdict |
+| --- | --- | --- | --- |
+| **A. `vertical_packs` table + loader now (§5 as written)** | **Violates §7** — designs the abstraction before one vertical has run in anger; §8/G2 also defers pack authoring tooling | Low once built, but the build is the risk | **Deferred**, not rejected — this is the extraction target |
+| **B. Presets as typed code (chosen)** | Complies — "hardcoded where necessary", extractable later, and the seed data survives the extraction | One PR, type-checked against the registry | **Chosen** (D15) |
+| **C. No presets; user toggles modules individually** | Complies trivially | Zero | **Rejected** — pushes the eleven-module evaluation onto a first-time user; recreates the complexity this ADR exists to remove |
+| **D. AI-generated packs from "describe your business" (§10.1)** | Premature — §10 lists it as a *candidate pull-forward*, and it presumes the pack container it would populate | — | **Rejected for now**; D15's preset shape is deliberately the shape such a generator would emit, so this stays open |
+
+### How the enabled set is seeded vs. maintained
+
+| Option | Failure mode | Verdict |
+| --- | --- | --- |
+| **A. Pack is live config — workspace always reflects its vertical** | A user's deliberate opt-out is silently reverted whenever the pack definition changes; users cannot trust their own settings | **Rejected** |
+| **B. Pack seeds once, workspace owns state thereafter (chosen)** | Pack improvements do not reach existing tenants automatically — accepted, and honest: it is their workspace | **Chosen** (D17, D18) |
 
 ### How Mira handles a disabled module
 
@@ -245,6 +371,19 @@ Numbered decisions:
   are the first thing an incident review asks for.
 - **F7 — 404, not 403, for disabled modules** (D9) — do not enumerate surfaces
   the tenant has not enabled.
+- **F8 — Preset application must not be its own privileged path.** It loops the
+  D5 RPC (D17). A bulk "apply pack" function that writes rows directly would
+  bypass the entitlement, dependency and audit checks the rest of this ADR rests
+  on, and would be the obvious way to grant a free workspace paid modules.
+- **F9 — `vertical` is tenant-supplied input; treat it as an enum, not a label.**
+  It is written by the onboarding form. Constrain it in SQL (CHECK or enum) and
+  resolve presets through a lookup keyed on known values — never interpolate it
+  into a query, a path, or an AI prompt.
+- **F10 — `compliance_profile` must not imply enforcement it does not have.**
+  Per §9/G3 the column ships inert. Do not surface it in tenant-facing UI, and do
+  not let Mira describe the workspace as compliant with anything, until the
+  vendor-chain audit and DPDP mechanics exist. A half-promised security tier is
+  worse than none.
 
 ---
 
@@ -305,4 +444,17 @@ Numbered decisions:
    nothing; disable→re-enable preserves rows (D7)
 9. [ ] Settings → Modules screen (owner/`settings:manage`): enable, disable,
    pending requests, plan-locked modules with upgrade copy
-10. [ ] `pnpm db:doc`, `pnpm docs:sync`, `pnpm check`
+10. [ ] `src/lib/modules/presets.ts` — vertical presets typed against the D1
+   registry; start with the four ADR-008 needs (freelancer, sales, support,
+   real estate) plus `general` (D15)
+11. [ ] Migration: `accounts.vertical` (constrained enum, nullable until
+   onboarding) and `accounts.compliance_profile` (default `baseline`, inert);
+   `applyVerticalPreset()` looping the D5 RPC; audit event on vertical change
+   (D16, D17, D18, F8, F9, F10)
+12. [ ] Label map in the resolver + a `useLabels()`/`labelsFor()` accessor;
+   migrate hardcoded "Lead"/"Deal" strings in module-owned UI only (D19)
+13. [ ] Tests: preset application is idempotent and never enables a
+   plan-locked module; vertical change is additive and disables nothing;
+   preset keys type-check against the registry; label overrides never alter
+   API/MCP payload keys
+14. [ ] `pnpm db:doc`, `pnpm docs:sync`, `pnpm check`
