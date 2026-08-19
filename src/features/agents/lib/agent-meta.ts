@@ -108,6 +108,48 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   defaultModel: AI_PROVIDER_DEFAULT_MODEL[p.id as AiProvider],
 })) as ProviderPreset[];
 
+// ============================================================
+// Agent status — ONE definition (ADR-005 D8).
+//
+// "Is this agent usable" used to be recomputed in four places and had
+// already drifted: the Playground required a key, the console rail did
+// not, so a key-less agent read as "Paused" instead of "Not
+// configured". Both helpers below are the single source every surface
+// (console rail, Configuration header, Playground banner, inbox
+// auto-reply banner) derives from, so they cannot disagree again.
+//
+// The definition is deliberately the STRICTEST of the four: a provider
+// and a model are not enough, because generation fails without a key.
+// Ollama is the one provider that needs none.
+// ============================================================
+
+/** Has this agent everything it needs to produce a reply at all? */
+export function isAgentConfigured(
+  agent: ClientAgent | null | undefined
+): boolean {
+  return Boolean(
+    agent?.provider &&
+      agent?.model &&
+      (agent?.hasApiKey || agent?.provider === 'ollama')
+  );
+}
+
+/**
+ * Is auto-reply actually answering customers right now? Configured,
+ * plus the master switch, plus the capability's own column — the same
+ * gating `loadAgentConfig` applies on the server.
+ *
+ * Per-conversation state (a paused thread, an active human) is NOT part
+ * of this: that is a property of the conversation, not the agent.
+ */
+export function isAutoReplyLive(
+  agent: ClientAgent | null | undefined
+): boolean {
+  return Boolean(
+    isAgentConfigured(agent) && agent?.isEnabled && agent?.autoreplyEnabled
+  );
+}
+
 export function providerLabel(id: string | null): string {
   return PROVIDER_PRESETS.find((p) => p.id === id)?.label ?? id ?? '—';
 }
