@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { decrypt, encrypt, isLegacyFormat } from './encryption';
+import { decrypt, encrypt, isLegacyFormat } from './secrets';
 
 const KEY_HEX = process.env.ENCRYPTION_KEY!;
 

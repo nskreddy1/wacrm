@@ -9,7 +9,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
-import { encrypt, decrypt } from '@/features/whatsapp/lib/encryption';
+import { encrypt, decrypt } from '@/lib/crypto/secrets';
 import { validateAiCredentials } from '@/features/assistant/lib/ai/validate';
 import { embedTexts } from '@/features/assistant/lib/ai/embeddings';
 import {

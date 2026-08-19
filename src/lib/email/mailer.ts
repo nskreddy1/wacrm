@@ -17,7 +17,7 @@
 
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { decrypt, encrypt } from '@/features/whatsapp/lib/encryption';
+import { decrypt, encrypt } from '@/lib/crypto/secrets';
 
 export type EmailProvider = 'smtp' | 'resend' | 'msg91' | 'mailtrap';
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { encrypt } from '@/features/whatsapp/lib/encryption';
+import { encrypt } from '@/lib/crypto/secrets';
 import { validateAiCredentials } from '@/features/assistant/lib/ai/validate';
 import { embedTexts } from '@/features/assistant/lib/ai/embeddings';
 import {

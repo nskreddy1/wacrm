@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // decrypt is identity in tests so we don't depend on real ciphertext.
-vi.mock('@/features/whatsapp/lib/encryption', () => ({
+vi.mock('@/lib/crypto/secrets', () => ({
   decrypt: (v: string) => `plain:${v}`,
 }));
 

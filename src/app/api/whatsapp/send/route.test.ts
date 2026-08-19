@@ -148,7 +148,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-vi.mock('@/features/whatsapp/lib/encryption', () => ({
+vi.mock('@/lib/crypto/secrets', () => ({
   decrypt: vi.fn(() => 'plaintext-token'),
   encrypt: vi.fn(() => 'enc-token'),
   isLegacyFormat: vi.fn(() => false),

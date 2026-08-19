@@ -18,7 +18,7 @@ const ENC_KEY = '0'.repeat(64);
 
 // Deterministic "encryption" so fixtures stay readable: the real
 // AES-256-GCM helper is exercised by its own test suite.
-vi.mock('@/features/whatsapp/lib/encryption', () => ({
+vi.mock('@/lib/crypto/secrets', () => ({
   encrypt: (v: string) => `enc:${v}`,
   decrypt: (v: string) =>
     v.startsWith('enc:') ? v.slice(4) : (() => { throw new Error('bad'); })(),

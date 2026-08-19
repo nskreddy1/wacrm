@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { decrypt } from '@/features/whatsapp/lib/encryption';
+import { decrypt } from '@/lib/crypto/secrets';
 import { normalizeStatus } from '@/features/whatsapp/lib/template-status-normalize';
 import type { TemplateButton, TemplateSampleValues } from '@/types';
 

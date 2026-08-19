@@ -9,7 +9,7 @@
 
 import { requireApiKey } from '@/features/auth/lib/api-context';
 import { ok, okList, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
-import { encrypt } from '@/features/whatsapp/lib/encryption';
+import { encrypt } from '@/lib/crypto/secrets';
 import { normalizeEvents } from '@/features/webhooks/lib/events';
 import {
   WEBHOOK_PUBLIC_COLUMNS,

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
 import { toErrorResponse } from '@/features/auth/lib/account';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { encrypt } from '@/features/whatsapp/lib/encryption';
+import { encrypt } from '@/lib/crypto/secrets';
 import {
   ASSISTANT_DEFAULT_MAX_OUTPUT_TOKENS,
   ASSISTANT_DEFAULT_MODEL,

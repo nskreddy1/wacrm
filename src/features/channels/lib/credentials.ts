@@ -1,4 +1,4 @@
-import { decrypt, encrypt } from '@/features/whatsapp/lib/encryption';
+import { decrypt, encrypt } from '@/lib/crypto/secrets';
 import type { ChannelConnection } from '@/types';
 
 export interface TwilioCredentials {

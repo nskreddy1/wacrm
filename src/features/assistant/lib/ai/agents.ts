@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { decrypt } from '@/features/whatsapp/lib/encryption';
+import { decrypt } from '@/lib/crypto/secrets';
 import type { AiConfig, AiProvider, AutoReplyLimitMode } from './types';
 import { isAiProvider, isAutoReplyLimitMode } from './types';
 import { isWithinAutoReplySchedule } from './schedule';
