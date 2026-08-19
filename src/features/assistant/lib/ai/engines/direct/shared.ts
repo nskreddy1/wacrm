@@ -24,6 +24,17 @@ export interface ProviderArgs {
 export interface ProviderResult {
   text: string;
   usage: AiUsage | null;
+  /**
+   * The provider stopped because the output-token cap was hit, not
+   * because the model finished (`finish_reason: 'length'` /
+   * `finishReason: 'MAX_TOKENS'`).
+   *
+   * Load-bearing for reasoning models: when thinking eats the budget
+   * the response contains a half-written scratchpad and no reply, and
+   * the dispatch layer has to be able to tell that apart from "the
+   * model genuinely returned nothing".
+   */
+  truncated?: boolean;
 }
 
 /**
