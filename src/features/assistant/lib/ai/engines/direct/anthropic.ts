@@ -67,23 +67,47 @@ export async function generateAnthropic(
         }))
       : systemPrompt;
 
-  let res: Response;
-  try {
-    res = await fetch(ANTHROPIC_URL, {
+  const body = (thinking: object | null) =>
+    JSON.stringify({
+      model,
+      system,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      messages: normalizeForAnthropic(messages),
+      ...(thinking ? { thinking } : {}),
+    });
+
+  const call = (payload: string) =>
+    fetch(ANTHROPIC_URL, {
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
         'anthropic-version': ANTHROPIC_VERSION,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        system,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        messages: normalizeForAnthropic(messages),
-      }),
+      body: payload,
       signal: AbortSignal.timeout(timeoutMs),
     });
+
+  let res: Response;
+  try {
+    /*
+     * Thinking OFF, explicitly.
+     *
+     * Extended thinking is opt-in on Claude 3.7/4.x, so omitting the
+     * field would already be correct — but Claude 4.6 added adaptive
+     * thinking that engages on its own, and `max_tokens` covers the
+     * scratchpad AND the reply, so an adaptive turn can burn the budget
+     * and return no message. Saying `disabled` out loud costs nothing
+     * and removes the ambiguity.
+     */
+    res = await call(body({ type: 'disabled' }));
+
+    // Older API revisions (and any model that predates the field)
+    // reject `thinking` with a 400 — fall back to the plain request,
+    // where thinking is off by default anyway.
+    if (res.status === 400) {
+      res = await call(body(null));
+    }
   } catch (err) {
     throw toNetworkError(err);
   }

@@ -6,6 +6,7 @@ import {
   resolveOllamaBaseUrl,
 } from '../../defaults';
 import { providerLabel } from '../../errors';
+import { reasoningSuppressionFor } from '../../reasoning-controls';
 import { generateOpenAi } from './openai';
 import { generateAnthropic } from './anthropic';
 import { generateGemini } from './gemini';
@@ -44,6 +45,18 @@ export async function generateReplyDirect(
 ): Promise<ProviderResult> {
   const { config, systemPrompt, messages, systemBlocks, cacheKey } = args;
   const timeoutMs = aiRequestTimeoutMs();
+  /*
+   * Ask the provider not to reason. Reasoning is always off for
+   * customer-facing generation: the scratchpad competes with the reply
+   * for the same output budget, and a model that thinks past the cap
+   * returns half a thought and no answer. Spelling differs per
+   * provider, so the mapping (and the "which providers can actually
+   * honour this" table) lives in `reasoning-controls.ts`.
+   */
+  const { params: reasoningParams } = reasoningSuppressionFor(
+    config.provider,
+    config.model
+  );
   const providerArgs = {
     apiKey: config.apiKey,
     model: config.model,
@@ -56,7 +69,7 @@ export async function generateReplyDirect(
 
   switch (config.provider) {
     case 'openai':
-      return generateOpenAi(providerArgs);
+      return generateOpenAi(providerArgs, { reasoningParams });
     case 'anthropic':
       return generateAnthropic(providerArgs);
     case 'gemini':
@@ -72,6 +85,7 @@ export async function generateReplyDirect(
         {
           baseUrl: resolveOllamaBaseUrl(config.baseUrl),
           providerLabel: providerLabel('ollama'),
+          reasoningParams,
         }
       );
     }
@@ -102,6 +116,7 @@ export async function generateReplyDirect(
       return generateOpenAi(providerArgs, {
         baseUrl,
         providerLabel: providerLabel(config.provider),
+        reasoningParams,
       });
     }
   }

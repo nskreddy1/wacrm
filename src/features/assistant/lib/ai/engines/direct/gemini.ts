@@ -95,13 +95,17 @@ export async function generateGemini(
     );
 
     /*
-     * Not every model lets thinking be disabled — Gemini 3 uses
-     * `thinkingLevel` and the Pro tiers enforce a minimum budget, both
-     * of which reject `thinkingBudget: 0` with a 400. A BYO-key tenant
-     * can type any model id into settings, so falling back to the
-     * plain request keeps those models working; the `thought` filter
-     * below is what protects the customer either way.
+     * Not every model lets thinking be disabled — Gemini 3 replaced the
+     * numeric budget with `thinkingLevel` and has no "off", and the Pro
+     * tiers enforce a minimum budget; both reject `thinkingBudget: 0`
+     * with a 400. A BYO-key tenant can type any model id into settings,
+     * so step down instead of failing: lowest thinking level, then the
+     * plain request. The `thought` filter below protects the customer in
+     * every case.
      */
+    if (res.status === 400) {
+      res = await call(body({ thinkingLevel: 'low', includeThoughts: false }));
+    }
     if (res.status === 400) {
       res = await call(body(null));
     }

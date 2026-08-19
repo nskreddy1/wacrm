@@ -46,6 +46,12 @@ export interface OpenAiCompatOptions {
   baseUrl?: string;
   /** Human-readable provider name for error messages ("NVIDIA", "Groq"…). */
   providerLabel?: string;
+  /**
+   * Provider-specific "do not reason" fields, from
+   * `reasoningSuppressionFor`. Merged into the request body and dropped
+   * on a 400 — see the retry below. Empty object = send nothing.
+   */
+  reasoningParams?: Record<string, unknown>;
 }
 
 /**
@@ -65,34 +71,57 @@ export async function generateOpenAi(
   const label = opts.providerLabel ?? 'OpenAI';
   const isOpenAiProper = baseUrl === OPENAI_BASE_URL;
 
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl}/chat/completions`, {
+  const reasoningParams = opts.reasoningParams ?? {};
+
+  const body = (reasoning: Record<string, unknown>) =>
+    JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...mergeConsecutive(messages),
+      ],
+      // OpenAI's newer models reject the legacy `max_tokens` param, while
+      // many compatible providers haven't adopted `max_completion_tokens`
+      // yet — send whichever the endpoint understands.
+      ...(isOpenAiProper
+        ? { max_completion_tokens: MAX_OUTPUT_TOKENS }
+        : { max_tokens: MAX_OUTPUT_TOKENS }),
+      // Cache-routing hint (conversation id): OpenAI uses it to route
+      // requests to the machine holding this conversation's cached
+      // prefix, raising hit rates. Only OpenAI proper understands it —
+      // compatible gateways may reject unknown params, so gate it.
+      ...(isOpenAiProper && cacheKey ? { prompt_cache_key: cacheKey } : {}),
+      // Reasoning off (`reasoning_effort`, `reasoning_format`,
+      // `chat_template_kwargs`, … — whatever this provider understands).
+      ...reasoning,
+    });
+
+  const call = (payload: string) =>
+    fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...mergeConsecutive(messages),
-        ],
-        // OpenAI's newer models reject the legacy `max_tokens` param, while
-        // many compatible providers haven't adopted `max_completion_tokens`
-        // yet — send whichever the endpoint understands.
-        ...(isOpenAiProper
-          ? { max_completion_tokens: MAX_OUTPUT_TOKENS }
-          : { max_tokens: MAX_OUTPUT_TOKENS }),
-        // Cache-routing hint (conversation id): OpenAI uses it to route
-        // requests to the machine holding this conversation's cached
-        // prefix, raising hit rates. Only OpenAI proper understands it —
-        // compatible gateways may reject unknown params, so gate it.
-        ...(isOpenAiProper && cacheKey ? { prompt_cache_key: cacheKey } : {}),
-      }),
+      body: payload,
       signal: AbortSignal.timeout(timeoutMs),
     });
+
+  let res: Response;
+  try {
+    res = await call(body(reasoningParams));
+
+    /*
+     * Reasoning knobs are model-specific, and this is a BYO-key product
+     * where the operator types the model id in by hand — so a param
+     * that is right for `qwen3` is a 400 on the next model they try.
+     * Rather than guess perfectly, retry once without the knobs: the
+     * reply still goes out, and `stripThoughtBlocks` in the dispatch
+     * layer catches any scratchpad that comes back as a result.
+     */
+    if (res.status === 400 && Object.keys(reasoningParams).length > 0) {
+      res = await call(body({}));
+    }
   } catch (err) {
     throw toNetworkError(err);
   }
