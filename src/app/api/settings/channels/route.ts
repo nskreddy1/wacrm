@@ -97,13 +97,33 @@ function enrich(connection: Record<string, unknown>) {
 export async function GET() {
   try {
     const { accountId } = await requireRole('viewer');
-    const { data, error } = await channelAdmin()
-      .from('channel_connections')
-      .select(safeColumns)
-      .eq('account_id', accountId)
-      .order('channel')
-      .order('created_at');
+    const admin = channelAdmin();
+    const [connectionsResult, policiesResult] = await Promise.all([
+      admin
+        .from('channel_connections')
+        .select(safeColumns)
+        .eq('account_id', accountId)
+        .order('channel')
+        .order('created_at'),
+      // Platform catalog: an operator can withdraw a provider from the
+      // whole platform (/admin/providers → Catalog). POST already
+      // refuses to save a withdrawn provider, but the offerings list
+      // used to ignore the policy — so Settings kept advertising
+      // provider cards that were guaranteed to fail on save. No policy
+      // row means offered by default.
+      admin
+        .from('platform_provider_policies')
+        .select('provider, channel, is_enabled'),
+    ]);
+    const { data, error } = connectionsResult;
     if (error) throw error;
+    // A policy read failure must not blank out the catalog: fall back to
+    // "offered" and let POST be the authoritative gate.
+    const withdrawn = new Set(
+      (policiesResult.data ?? [])
+        .filter((row) => row.is_enabled === false)
+        .map((row) => `${row.provider}|${row.channel}`)
+    );
     // One offering per provider+channel pair — multi-channel providers
     // (Twilio: WhatsApp + SMS) appear once per channel they serve.
     const offerings = providers.flatMap((provider) =>
@@ -113,6 +133,8 @@ export async function GET() {
         label: PROVIDER_LABEL[provider],
         capabilities: getProviderCapabilities(provider, channel),
         available: Boolean(createChannelAdapter(provider, channel)),
+        /** Platform-wide availability. False = operator withdrew it. */
+        offered: !withdrawn.has(`${provider}|${channel}`),
       }))
     );
     // Guided one-click connect availability. Twilio Connect needs a

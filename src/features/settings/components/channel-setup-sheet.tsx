@@ -84,6 +84,18 @@ const defaults = {
  * Validate & Pick discovery flow, and saving. The page itself stays
  * clean: no inline advanced form.
  */
+/**
+ * A provider row as offered to this workspace. `available` means an
+ * adapter exists; `offered` means the platform operator still lists it
+ * in the catalog (/admin/providers). Both must hold for setup to work.
+ */
+type SetupProvider = {
+  provider: ChannelProvider;
+  label: string;
+  available: boolean;
+  offered?: boolean;
+};
+
 export function ChannelSetupSheet({
   channel,
   open,
@@ -95,7 +107,7 @@ export function ChannelSetupSheet({
   channel: ChannelKind;
   open: boolean;
   init: ChannelSetupInit | null;
-  providers: { provider: ChannelProvider; label: string; available: boolean }[];
+  providers: SetupProvider[];
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
@@ -126,7 +138,7 @@ function ChannelSetupSheetBody({
 }: {
   channel: ChannelKind;
   init: ChannelSetupInit | null;
-  providers: { provider: ChannelProvider; label: string; available: boolean }[];
+  providers: SetupProvider[];
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
@@ -332,8 +344,19 @@ function ChannelSetupSheetBody({
   }
 
   const label = CHANNEL_LABEL[channel];
-  const available =
-    providers.find((item) => item.provider === provider)?.available ?? false;
+  const entry = providers.find((item) => item.provider === provider);
+  const implemented = entry?.available ?? false;
+  const offered = entry?.offered !== false;
+  const available = implemented && offered;
+  /**
+   * Choices in the dropdown: everything the platform still offers, plus
+   * whatever is currently selected (a withdrawn provider stays visible
+   * while editing its existing connection, so the control never renders
+   * an empty value).
+   */
+  const choices = providers.filter(
+    (item) => item.offered !== false || item.provider === provider
+  );
   const senderOptions = discovery
     ? channel === 'whatsapp' && discovery.whatsappSenders.length > 0
       ? discovery.whatsappSenders.map((num) => ({ value: num, label: num }))
@@ -387,7 +410,7 @@ function ChannelSetupSheetBody({
           <span className="text-muted-foreground w-28 shrink-0 text-sm">
             Provider
           </span>
-          {providers.length > 1 ? (
+          {choices.length > 1 ? (
             <Select
               value={provider}
               onValueChange={(value) => {
@@ -399,10 +422,14 @@ function ChannelSetupSheetBody({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {providers.map((item) => (
+                  {choices.map((item) => (
                     <SelectItem key={item.provider} value={item.provider}>
                       {item.label}
-                      {item.available ? '' : ' — coming later'}
+                      {item.offered === false
+                        ? ' — unavailable'
+                        : item.available
+                          ? ''
+                          : ' — coming later'}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -415,7 +442,7 @@ function ChannelSetupSheetBody({
             // here would add a settings -> channels edge to the feature
             // graph, which isn't warranted for a fallback label.
             <span className="text-foreground text-sm font-medium">
-              {providers[0]?.label ?? provider}
+              {choices[0]?.label ?? provider}
             </span>
           )}
         </div>
@@ -435,11 +462,15 @@ function ChannelSetupSheetBody({
 
         {!available ? (
           <Alert>
-            <AlertTitle>Not available yet</AlertTitle>
+            <AlertTitle>
+              {implemented && !offered
+                ? 'Not available on this platform'
+                : 'Not available yet'}
+            </AlertTitle>
             <AlertDescription>
-              This provider remains selectable in the architecture, but setup is
-              disabled until its real authentication flow is implemented and
-              tested.
+              {implemented && !offered
+                ? 'This provider is not currently offered. Existing connections keep working — contact support to enable new ones.'
+                : 'This provider remains selectable in the architecture, but setup is disabled until its real authentication flow is implemented and tested.'}
             </AlertDescription>
           </Alert>
         ) : (

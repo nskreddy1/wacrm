@@ -32,8 +32,15 @@ export default async function ProvidersLayout({
   return (
     <div className="flex h-0 min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
       {/* Page shell: consistent breathing room on every edge and a
-          readable max width, matching the rest of the dashboard. */}
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-4 md:p-6">
+          readable max width, matching the rest of the dashboard.
+
+          @container/console: the page content sizes itself with
+          `@lg/console` / `@3xl/console` variants (KPI strip, catalog
+          grid) — the same contract the admin console layout provides.
+          Without the container declared here none of them ever matched,
+          so the catalog collapsed to a single column and the page grew
+          a needless scroll while two thirds of the width sat empty. */}
+      <div className="@container/console mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-5 p-4 md:p-6">
         <header className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">Providers</h1>
         </header>
