@@ -357,3 +357,121 @@ export function reasoningPlanFor(
 export function outputTokensFor(plan: ReasoningPlan): number {
   return Math.max(MAX_OUTPUT_TOKENS, plan.minOutputTokens ?? 0);
 }
+
+/* ---------------------------------------------------------- */
+/* Capability detection — the UI half.                         */
+/* ---------------------------------------------------------- */
+
+/**
+ * Which models on each provider actually have a reasoning knob.
+ *
+ * `reasoningPlanFor` above answers "what do I send"; this answers the
+ * different question "should an operator even be offered the choice".
+ * They are deliberately separate: the plan is allowed to be optimistic
+ * (a stray param that 400s is retried away by every adapter), but a
+ * *switch* that silently does nothing is a lie to the operator — the
+ * whole reason a `gpt-4o` account could flip "Think before replying"
+ * and see no difference whatsoever.
+ *
+ * Matched against the lowercased model id, so both `gpt-5.1` and
+ * `openai/gpt-5.1` (OpenRouter-style) hit the same rule.
+ */
+const REASONING_MODELS: Partial<Record<AiProvider, RegExp>> = {
+  // gpt-5 line + the o-series. gpt-4o / gpt-4.1 reject the field.
+  openai: /gpt-5|(?:^|\/)o[1-4](?:-|$)/,
+  // Extended thinking arrived in 3.7 and is standard from 4.x on;
+  // claude-3-5-* and older have no `thinking` field at all.
+  anthropic: /claude-(?:3[-.]7|(?:sonnet|opus|haiku)-[4-9]|[4-9])/,
+  // Thinking budgets exist on 2.5 and later. The `-latest` aliases
+  // resolve to current (thinking-capable) models.
+  gemini: /gemini-(?:2\.5|[3-9])|(?:flash|pro)-latest|thinking/,
+  // Groq's reasoning catalogue: Qwen, gpt-oss, DeepSeek distills, QwQ.
+  groq: /qwen|gpt-oss|deepseek|qwq|r1/,
+  // DeepSeek: only the reasoner line thinks; `deepseek-chat` never does.
+  deepseek: /reasoner|r1/,
+  // Only the small Grok models expose the knob — grok-4+ always reason
+  // and reject `reasoning_effort`, so there is nothing to toggle.
+  xai: /mini|fast/,
+};
+
+/**
+ * Providers where the knob is model-independent.
+ *
+ *  - `openrouter` normalizes `reasoning` across every upstream it
+ *    proxies, and answers for models we've never heard of.
+ *  - `ollama` serves whatever the operator pulled locally; we cannot
+ *    enumerate it, and Ollama turns thinking ON by default on a
+ *    thinking-capable model, so hiding the switch would be worse.
+ */
+const ALWAYS_TOGGLEABLE: readonly AiProvider[] = ['openrouter', 'ollama'];
+
+/** Does this provider + model pair have a real reasoning knob? */
+function modelCanReason(provider: AiProvider, model: string): boolean {
+  if (ALWAYS_TOGGLEABLE.includes(provider)) return true;
+  // vLLM-backed catalogues gate on the chat template, not the vendor.
+  if (provider === 'nvidia' || provider === 'together') {
+    return isHybridThinker(model);
+  }
+  const pattern = REASONING_MODELS[provider];
+  return pattern ? pattern.test(lower(model)) : false;
+}
+
+/**
+ * What the reasoning switch should look like for a given model.
+ *
+ * Consumed by the agent settings forms (tenant + super-admin console)
+ * so the control is rendered only where flipping it changes something.
+ */
+export interface ReasoningSupport {
+  /** Render the switch at all. False = no knob exists on this model. */
+  supported: boolean;
+  /** How completely we can honour 'on'. */
+  onControl: ReasoningControl;
+  /** How completely we can honour 'off' — `reduced` means the model
+   *  keeps thinking a little no matter what we send. */
+  offControl: ReasoningControl;
+  /** Operator-facing caveat, or null when the switch is exact. */
+  note: string | null;
+}
+
+/**
+ * Resolve the reasoning capability of a provider + model pair.
+ *
+ * Never throws and never needs a network call — it is safe to run in a
+ * client component on every keystroke of the model field.
+ */
+export function reasoningSupport(
+  provider: AiProvider,
+  model: string
+): ReasoningSupport {
+  const trimmed = model.trim();
+  if (!trimmed || !modelCanReason(provider, trimmed)) {
+    return {
+      supported: false,
+      onControl: 'none',
+      offControl: 'none',
+      note: null,
+    };
+  }
+
+  const onControl = reasoningOn(provider, trimmed).control;
+  const offControl = reasoningPlanFor(provider, trimmed, 'off').control;
+
+  if (onControl === 'none') {
+    return { supported: false, onControl, offControl, note: null };
+  }
+
+  let note: string | null = null;
+  if (offControl === 'reduced') {
+    note =
+      'This model always reasons to some degree — turning the switch off clamps it to its lowest setting rather than disabling it.';
+  } else if (offControl === 'none') {
+    note =
+      'This model has no off switch on the provider side; replies are still scrubbed of any visible reasoning before they are sent.';
+  } else if (provider === 'ollama') {
+    note =
+      'Applies only if the model you pulled locally supports thinking — Ollama ignores the setting otherwise.';
+  }
+
+  return { supported: true, onControl, offControl, note };
+}
