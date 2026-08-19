@@ -196,13 +196,36 @@ any agent, with nothing in the system disagreeing.
    characters they are about to lose. The server check stays absolute at 24 h;
    the client is deliberately stricter, never laxer.
 
-10. **D10 — No provider change.** Meta Cloud API stays the primary WhatsApp
-    path, Twilio stays SMS plus the WhatsApp fallback for tenants who arrive
-    owning a Twilio WABA, exactly as `docs/outbound-messaging.md` §3
-    recommends. The window is a **Meta policy, not a provider feature**, so it
-    binds identically on both adapters — which is why D1 places it above them.
-    SMS has no window and no template regime, so the check is gated on
-    `channel === 'whatsapp'` and SMS is unaffected.
+10. **D10 — No provider change; Twilio is the *development* path.** The window
+    is a **Meta policy, not a provider feature**, so it binds identically on
+    both adapters — which is why D1 places it above them. SMS has no window and
+    no template regime, so the check is gated on `channel === 'whatsapp'` and
+    SMS is unaffected.
+
+    **Amended after the original draft.** The earlier wording made Meta Cloud
+    API the primary path and Twilio the fallback. That inverts the actual
+    constraint: Meta Cloud API requires a verified Meta Business (a registered
+    legal entity), which this project does not have, and the only WhatsApp
+    credential available today is a **Twilio free trial**. So:
+
+    - **Adapter precedence is unchanged in code** — `channel_connections`
+      already selects the provider per tenant, and both adapters sit under the
+      same guard. Nothing in this ADR depends on which provider is "primary".
+    - **Development and all tests run on the Twilio WhatsApp Sandbox.** The
+      sandbox requires the recipient to send `join <two-words>` and expires
+      that opt-in after 72 h, which is *stricter* than the 24-hour window this
+      ADR enforces — so a guard that is correct under the sandbox is correct in
+      production, never the reverse.
+    - **A trial account cannot be a tenant sender.** Trial accounts may only
+      message verified numbers and cannot host a production WABA; the sandbox
+      number is shared, so it can never be a per-tenant sender. Production
+      WhatsApp therefore stays blocked on an upgraded Twilio account plus a
+      Meta-verified WABA — a **business/procurement blocker, not an
+      architectural one**, and explicitly outside this ADR.
+    - **Consequence for the acceptance tests (action item 9):** they must run
+      against the sandbox or a stubbed adapter, because a real cold-start
+      template send to an arbitrary number is not possible on trial. The guard
+      itself is provider-agnostic and unit-testable without any provider call.
 
 11. **D11 — One migration.** `conversations.last_inbound_at` (+ backfill),
     `contacts.whatsapp_opted_out` / `_at` (+ partial index). Idempotent,
