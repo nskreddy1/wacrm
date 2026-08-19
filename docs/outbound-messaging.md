@@ -78,7 +78,73 @@ approved yet. It is the wrong channel for rich conversational support.
 
 ---
 
-## 2. Provider choice: Meta Cloud API vs Twilio
+## 2. Sending one message vs. sending many
+
+**"Can we only send bulk messages?" No.** One-to-one sending from the inbox is
+fully built and is the *primary* send path — `broadcasts` is the batch case
+layered on top of it. The confusion is understandable, though, because the
+constraint that shapes broadcasts (template-only) is the *same* constraint that
+applies to a single send once the window shuts. Bulk vs single is not the axis
+that matters. **Window open vs window closed is.**
+
+| | Window OPEN (customer wrote < 24 h ago) | Window CLOSED |
+| --- | --- | --- |
+| **Single, from inbox** | Free-form text, media, interactive — type and send | Approved template only, via the template picker |
+| **Bulk, via broadcast** | Template (broadcasts always use templates) | Template only |
+| **AI** | Replies autonomously | Cannot send at all |
+
+So a broadcast is not "the bulk feature" as opposed to a single-send feature —
+it is **a fan-out of the closed-window template send**, which is why
+`broadcast-core.ts` hard-requires `template_name`. Reaching 500 people whose
+windows are shut and reaching 1 person whose window is shut are the same
+operation at different N.
+
+### The single-send path, end to end
+
+```
+inbox composer (message-thread.tsx)
+  └─ POST /api/whatsapp/send          ← dashboard, RLS-scoped user client
+       └─ sendMessageToConversation()  ← shared core, senderType: 'agent'
+            └─ sendChannelMessage()    ← orchestrator: connection, send, persist
+                 └─ meta.ts | twilio.ts adapter
+
+POST /api/v1/messages                  ← public API, service-role client
+  └─ resolveConversationByPhone()      ← finds/creates contact + conversation
+       └─ sendMessageToConversation()   ← same core
+```
+
+Both routes converge on one core, so a message sent by a human in the inbox and
+one sent by an external automation are persisted and delivered identically.
+`message_type` selects the mode: `text` (free-form), `image` / `video` /
+`document` / `audio` (media, free-form), `interactive` (buttons or list,
+free-form), or `template` (legal any time).
+
+Note the asymmetry between the two entry points: the dashboard route always
+has a `conversation_id` because the agent is looking at a thread. The public
+API only knows a phone number, so `resolveConversationByPhone` finds-or-creates
+the contact and conversation first — which means **the public API can start a
+thread with someone who has never written to us.** That send is legal only if
+it is a template, and nothing currently checks that (see §5.1).
+
+### What the inbox already does correctly
+
+`message-thread.tsx` computes the window client-side (`sessionInfo`) from the
+newest message with `sender_type === 'customer'`, and `message-composer.tsx`
+acts on it properly: the textarea is `disabled`, `handleSend` early-returns,
+media is blocked on the same flag (`inputsDisabled`), the placeholder changes,
+and an amber banner offers the template picker as the way forward. A thread
+with no inbound message at all is treated as closed — failing safe in the
+right direction.
+
+Two caveats on that timer. It reads only the messages currently loaded in the
+thread, so a long conversation whose last inbound falls outside the loaded page
+reads as closed (safe, but can confuse an agent). And `differenceInHours`
+truncates, so "1h remaining" can mean 61 minutes or 2 — fine as a hint, not as
+an enforcement boundary. Which is the point: it *is* only a hint. See §5.1.
+
+---
+
+## 3. Provider choice: Meta Cloud API vs Twilio
 
 Both are already implemented — `src/features/channels/lib/adapters/meta.ts`,
 `twilio.ts` (WhatsApp), and `twilio-sms.ts` — selected per account through
@@ -107,7 +173,7 @@ tenants, a bad one at volume.
 
 ---
 
-## 3. What this codebase already gets right
+## 4. What this codebase already gets right
 
 - **Inbound is the front door.** `src/app/api/whatsapp/webhook/route.ts`
   verifies the Meta HMAC and fails closed when `META_APP_SECRET` is unset,
@@ -135,19 +201,37 @@ tenants, a bad one at volume.
 
 ---
 
-## 4. Gaps to close (ordered by risk)
+## 5. Gaps to close (ordered by risk)
 
-### 4.1 Nothing enforces the 24-hour window on 1:1 sends — highest risk
+### 5.1 The 24-hour window is enforced in the UI only — highest risk
 
-`sendMessageToConversation` validates message *shape* (type, required
-content, caption length) but never checks **when the customer last wrote**.
-An agent can type free-form text into a thread that went quiet three days
-ago and we will hand it to Meta. Meta rejects or silently drops it, and
-because our `messages` row defaults to `status: 'sent'`, the dashboard shows a
-delivered-looking message the customer never received. That is a support
-incident that looks like a product lie.
+The composer blocks a closed-window free-form send correctly (§2), but
+`sendMessageToConversation` validates message *shape* only — type, required
+content, caption length — and never checks **when the customer last wrote**.
+The window is therefore enforced by a disabled textarea, which
+`AGENTS.md` names explicitly as not a boundary: *"The UI disabling a button is
+never the security boundary."*
 
-Fix: a shared window check in the outbound orchestrator.
+Three ways past it today, none exotic:
+
+- **`POST /api/v1/messages`** has no composer in front of it. An external
+  automation can send `message_type: 'text'` to a contact who has never
+  written to us, and `resolveConversationByPhone` will happily create the
+  contact and conversation to hold it.
+- **A stale thread.** The client timer reads loaded messages; the server
+  trusts the client's conclusion.
+- **The window closing mid-compose.** The timer is a `useMemo` over
+  `messages`, so it re-derives on new messages — not on a clock tick. An agent
+  who opens a thread at 23h55m and types for ten minutes sends into a window
+  that shut while they were typing.
+
+In all three, Meta rejects or silently drops the message, but our `messages`
+row was already inserted and reads `status: 'sent'` — so the dashboard shows a
+delivered-looking message the customer never received. A phantom send is worse
+than a refused one: nobody follows up on a message they believe arrived.
+
+Fix: move the check server-side, into the outbound orchestrator, so every
+caller inherits it.
 
 - Derive the window from the **latest inbound** message:
   `sender_type = 'customer'` in `messages`, newest `created_at`.
@@ -156,15 +240,20 @@ Fix: a shared window check in the outbound orchestrator.
   precisely the wrong answer.
 - Denormalise it as `conversations.last_inbound_at` (set on the inbound path)
   so the check is one column read, not a subquery per send.
-- Outside the window, reject free-form with a typed
-  `SendMessageError('window_closed', …, 409)` and let the UI offer the
-  template picker instead. Failing loudly beats a phantom send.
+- Outside the window, reject free-form (`text`, media, `interactive`) with a
+  typed `SendMessageError('window_closed', …, 409)`. Never reject
+  `message_type: 'template'` — that is the one mode that is always legal, and
+  it is the caller's way out.
+- The composer already handles that answer gracefully: map 409 onto the
+  existing amber banner so the agent is pushed to the template picker rather
+  than shown a generic failure. The client check stays as fast feedback; the
+  server check becomes the boundary.
 
-Belt and braces: surface remaining window time in the composer (`message-thread.tsx`)
-so the agent sees "window closes in 3 h" before they type, and disable the
-free-form composer when it is shut.
+Once that lands, tighten the client timer too: drive it off a
+`conversations.last_inbound_at` field and a periodic tick rather than only the
+loaded message page, so the displayed countdown and the server's verdict agree.
 
-### 4.2 WhatsApp opt-out is untracked
+### 5.2 WhatsApp opt-out is untracked
 
 `contacts` has `sms_opted_out` and `email_opted_out` — but no WhatsApp
 equivalent. Meta requires WhatsApp-specific opt-in, honoured separately from
@@ -178,13 +267,13 @@ Longer term, a first-class consent record — channel, consent type
 TCPA or GDPR challenge. A boolean proves the current state but not that
 consent was ever given.
 
-### 4.3 Marketing vs utility template category is not modelled in cost terms
+### 5.3 Marketing vs utility template category is not modelled in cost terms
 
 Category drives both approval odds and price, and utility inside an open
 window is free. Showing the tenant which category a template is (and what it
 will cost this send) turns an invisible bill into an informed choice.
 
-### 4.4 Broadcasts do not check quiet hours or per-country rates
+### 5.4 Broadcasts do not check quiet hours or per-country rates
 
 Broadcast planning has no notion of recipient time zone (TCPA quiet hours are
 8am–9pm local, and Twilio/Meta enforce none of it for us) or of
