@@ -1,6 +1,6 @@
 # ADR-005: AI agent configuration order (provider → key → model) and single-source agent status
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-08-19
 **Deciders:** Project owner
 **Relates to:** ADR-001 (workspace modules — `ai:manage` gating), ADR-004 (F7/F8 secret-handling discipline), `AGENTS.md` (channel/AI conventions; secrets AES-256-GCM at rest)
@@ -180,7 +180,7 @@ provider and model but no key reads as "Paused" rather than "Not configured".
 
 ## Security review
 
-Findings **F1–F5** are binding on the implementation.
+Findings **F1–F6** are binding on the implementation.
 
 - **F1 — The key must not leak into a URL, a log, or a client-side cache map
   (High).** D2 keeps it out of the query string. Two further rules: the route
@@ -214,6 +214,24 @@ Findings **F1–F5** are binding on the implementation.
   disabled button is never the security boundary. `POST /api/ai/agents` still
   verifies the key server-side before encrypting and storing it, so a wizard
   gate bypassed by a crafted request changes nothing about what can be saved.
+- **F6 — The rate-limit budget F2/F3 lean on is Redis-backed, with a
+  bounded degradation mode.** Verified in `src/lib/rate-limit.ts`: when
+  `KV_REST_API_URL`/`KV_REST_API_TOKEN` are present (Upstash), the 30/min
+  `adminAction` budget is enforced **globally** across all serverless
+  instances via atomic `INCR`. When Redis is unconfigured, errors, or the
+  free-tier command quota is exhausted, a circuit breaker (60s cooldown)
+  degrades enforcement to per-process in-memory — limits stay enforced per
+  instance, requests never fail because the limiter's backend is down, and
+  no unbounded Upstash spend is possible (the breaker stops calling Redis
+  entirely while tripped). Under degradation, F3's amplification bound
+  weakens from 30/min globally to 30/min **per instance**; this residual
+  risk is accepted because (a) the endpoint requires an authenticated
+  admin, (b) `model-catalog.ts`'s negative cache and in-flight coalescing
+  bound upstream calls per process regardless of the limiter, and (c) at
+  current scale (zero production tenants) the free tier is not approached.
+  Decision on record: keep Upstash as the limiter backend; the cost
+  concern at scale is answered by the breaker (fail-degraded, never
+  fail-expensive), and revisit a paid tier only when real traffic exists.
 
 Residual risk accepted: the in-progress key transits one additional
 application request (the listing `POST`) before it is stored. This is the same
