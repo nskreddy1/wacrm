@@ -11,6 +11,11 @@ import {
 } from './types';
 import { HANDOFF_SENTINEL, META_SENTINEL } from './defaults';
 import { providerLabel } from './errors';
+import {
+  leaksPrompt,
+  looksLikeReasoning,
+  stripThoughtBlocks,
+} from './reasoning';
 import { getAiEngine } from './engine-flag';
 import { generateReplyDirect } from './engines/direct/generate';
 import { generateReplyLangChain } from './engines/langchain/generate';
@@ -141,17 +146,55 @@ export async function generateReply(
           cacheKey: promptParts ? cacheKey : undefined,
         });
 
-  const text = raw.text.trim();
+  const label = providerLabel(config.provider);
+
+  // Reasoning containment, before ANY parsing. `<think>` blocks are
+  // scratchpad the customer must never see, and an unterminated one
+  // means the token budget was spent thinking — there is no reply in
+  // there at all. See ./reasoning.ts for why this runs on every
+  // provider rather than only the ones we know reason.
+  const text = stripThoughtBlocks(raw.text);
   if (!text) {
     throw new AiError(
-      `${providerLabel(config.provider)} returned an empty response.`,
-      {
-        code: 'empty_response',
-      }
+      raw.truncated
+        ? `${label} ran out of output tokens before writing a reply (the model spent its budget on internal reasoning). Pick a non-reasoning model, or one whose thinking can be switched off.`
+        : `${label} returned an empty response.`,
+      { code: raw.truncated ? 'reasoning_only_response' : 'empty_response' }
     );
   }
 
-  return parseGeneration(text, raw.usage);
+  const parsed = parseGeneration(text, raw.usage);
+
+  /*
+   * Untagged scratchpad — the shape that reached a real customer.
+   *
+   * A model can leak chain-of-thought with no delimiter at all, and a
+   * truncated one never emits the trailing [[META]] line it was told
+   * to end with. Missing meta on its own is normal (a model that
+   * ignored the instruction), and a reasoning-shaped opening on its
+   * own is nearly impossible in a genuine reply — but together they
+   * are conclusive, so that is the pair we refuse on. Failing here
+   * leaves the inbound in the inbox for a teammate, which is
+   * recoverable; sending the scratchpad is not.
+   */
+  const emittedMeta = raw.text.includes(META_SENTINEL);
+  if (!emittedMeta && (looksLikeReasoning(parsed.text) || leaksPrompt(parsed.text))) {
+    throw new AiError(
+      `${label} returned its internal reasoning instead of a reply.`,
+      { code: 'reasoning_leak' }
+    );
+  }
+
+  // A bare [[HANDOFF]] with no prose is legitimate: the model asked for
+  // a human and the caller decides what the customer sees. Only an
+  // empty response with no signal at all is a failure.
+  if (!parsed.text && !parsed.handoff) {
+    throw new AiError(`${label} returned an empty response.`, {
+      code: 'empty_response',
+    });
+  }
+
+  return parsed;
 }
 
 const SENTIMENTS: readonly AiSentiment[] = [

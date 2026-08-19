@@ -70,7 +70,7 @@ function contentToText(content: unknown): string {
  */
 export async function generateReplyLangChain(
   args: LangChainGenerateArgs
-): Promise<{ text: string; usage: AiUsage | null }> {
+): Promise<{ text: string; usage: AiUsage | null; truncated?: boolean }> {
   const { config, systemPrompt, turns } = args;
   const label = providerLabel(config.provider);
 
@@ -89,8 +89,18 @@ export async function generateReplyLangChain(
     throw toAiError(err, label);
   }
 
+  // Provider-agnostic truncation signal. LangChain surfaces the raw
+  // stop reason under differently-named keys per provider, so check
+  // both; the dispatch layer uses it to tell "spent the budget
+  // thinking" apart from "returned nothing".
+  const meta = (response.response_metadata ?? {}) as Record<string, unknown>;
+  const stop = String(
+    meta.finish_reason ?? meta.stop_reason ?? meta.finishReason ?? ''
+  ).toLowerCase();
+
   return {
     text: contentToText(response.content).trim(),
     usage: normalizeLcUsage(response.usage_metadata),
+    truncated: stop === 'length' || stop === 'max_tokens',
   };
 }

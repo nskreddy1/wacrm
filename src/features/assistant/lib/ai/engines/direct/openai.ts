@@ -12,7 +12,24 @@ import {
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
 interface OpenAiResponse {
-  choices?: { message?: { content?: string } }[];
+  choices?: {
+    message?: {
+      content?: string;
+      /**
+       * Reasoning models behind the OpenAI-compatible protocol
+       * (DeepSeek-R1, Qwen/QwQ on Groq/OpenRouter/Together) return
+       * their scratchpad on a SEPARATE field. Typed here purely to
+       * document that it is read deliberately and never sent: only
+       * `content` is customer-facing. Models that inline the
+       * scratchpad into `content` as `<think>…</think>` instead are
+       * handled by `stripThoughtBlocks` in the dispatch layer.
+       */
+      reasoning_content?: string;
+      reasoning?: string;
+    };
+    /** 'length' when the output-token cap cut the response short. */
+    finish_reason?: string;
+  }[];
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -85,11 +102,26 @@ export async function generateOpenAi(
   }
 
   const data = (await res.json().catch(() => null)) as OpenAiResponse | null;
-  const text = data?.choices?.[0]?.message?.content;
+  const choice = data?.choices?.[0];
+  const truncated = choice?.finish_reason === 'length';
+  const text = choice?.message?.content;
   if (!text || typeof text !== 'string' || !text.trim()) {
-    throw new AiError(`${label} returned an empty response.`, {
-      code: 'empty_response',
-    });
+    // A reasoning model that spent the whole cap thinking returns an
+    // empty `content` with the scratchpad on `reasoning_content` — a
+    // distinct failure from "the provider returned nothing", and one
+    // the operator fixes by changing the model, not the key.
+    const reasoned = Boolean(
+      choice?.message?.reasoning_content || choice?.message?.reasoning
+    );
+    throw new AiError(
+      truncated || reasoned
+        ? `${label} spent its entire output budget on internal reasoning and returned no reply. Configure a non-reasoning model for auto-replies.`
+        : `${label} returned an empty response.`,
+      {
+        code:
+          truncated || reasoned ? 'reasoning_only_response' : 'empty_response',
+      }
+    );
   }
   const usage = normalizeUsage({
     prompt: data?.usage?.prompt_tokens,
@@ -97,7 +129,7 @@ export async function generateOpenAi(
     total: data?.usage?.total_tokens,
     cached: data?.usage?.prompt_tokens_details?.cached_tokens,
   });
-  return { text, usage };
+  return { text, usage, truncated };
 }
 
 // ============================================================
