@@ -1,25 +1,34 @@
 // ============================================================
 // /api/admin/ai-config — per-tenant AI agent provisioning for the
 // super-admin console. This is how a new customer's bot gets set
-// up FOR them: provider, model, key, system prompt, auto-reply.
+// up FOR them: provider, model, key, persona, behaviour.
 //
-//   GET  ?account_id=…  — the workspace's ai_configs row (safe
-//                         fields + has_key flags, NEVER the key)
-//                         plus the member roster for the handoff
-//                         picker.
-//   PUT                 — upsert the workspace's AI config. The
-//                         key is validated against the provider
-//                         first, then AES-256-GCM encrypted with
-//                         the same ENCRYPTION_KEY the workspace-
-//                         level /api/ai/config route uses, so the
-//                         bot runtime (loadAiConfig) reads it
+//   GET  ?account_id=…  — the workspace's `ai_agents` default row
+//                         (safe fields + has_key flags, NEVER the
+//                         key) plus the member roster for the
+//                         handoff picker.
+//   PUT                 — upsert the workspace's kind='default'
+//                         agent. The key is validated against the
+//                         provider first, then AES-256-GCM
+//                         encrypted with the same ENCRYPTION_KEY
+//                         the tenant's own routes use, so the bot
+//                         runtime (loadAgentConfig) reads it
 //                         identically.
-//   DELETE ?account_id=… — remove the config (bot off, key
+//   DELETE ?account_id=… — remove the agent (bot off, key
 //                         forgotten). Also the recovery path for
 //                         a corrupted key.
 //
+// WHY ai_agents AND NOT ai_configs: every runtime path — the
+// auto-reply engine, the inbox draft route, the playground — loads
+// its config through `loadAgentConfig`, which reads `ai_agents`.
+// While this route wrote `ai_configs`, provisioning a workspace here
+// produced a complete, correct row that NOTHING consumed: the bot
+// stayed silent and the console reported success. Migration
+// 20260819120000 carries the rows written before this fix across.
+//
 // Every mutation writes platform_audit_log — never any secret
-// material, only shape flags (has_key) and non-secret fields.
+// material, only shape flags (has_key, has_tuning) and non-secret
+// fields.
 // ============================================================
 
 import { NextResponse } from 'next/server';
@@ -31,21 +40,37 @@ import { platformAdmin } from '@/lib/supabase/admin';
 import { encrypt, decrypt } from '@/lib/crypto/secrets';
 import { validateAiCredentials } from '@/features/assistant/lib/ai/validate';
 import { OLLAMA_PLACEHOLDER_KEY } from '@/features/assistant/lib/ai/defaults';
+import { fetchAgentRow } from '@/features/assistant/lib/ai/agents';
 import {
   AiError,
   AI_PROVIDERS,
+  DEFAULT_REASONING_MODE,
   isAiProvider,
+  isAutoReplyLimitMode,
+  isReasoningMode,
+  normalizeTuning,
   type AiProvider,
+  type AutoReplyLimitMode,
+  type GenerationTuning,
+  type ReasoningMode,
 } from '@/features/assistant/lib/ai/types';
 
 function bad(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
 }
 
-/** Everything the console form needs — the two key columns are
- *  selected only to derive has_* flags and stripped before responding. */
-const FORM_COLUMNS =
-  'provider, model, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key';
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** Display name for a workspace the platform provisions on the
+ *  customer's behalf. The tenant can rename it afterwards. */
+const PROVISIONED_AGENT_NAME = 'AI Assistant';
+
+/** Postgres/JSON 'HH:MM:SS' or 'HH:MM' → 'HH:MM' | null. Mirrors the
+ *  reader in agents.ts so the console shows what the engine evaluates. */
+function toHhMm(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return null;
+  const m = /^(\d{2}:\d{2})/.exec(value);
+  return m ? m[1] : null;
+}
 
 export async function GET(request: Request) {
   try {
@@ -55,12 +80,8 @@ export async function GET(request: Request) {
     const accountId = new URL(request.url).searchParams.get('account_id');
     if (!accountId) return bad('account_id is required');
 
-    const [configRes, membersRes] = await Promise.all([
-      admin
-        .from('ai_configs')
-        .select(FORM_COLUMNS)
-        .eq('account_id', accountId)
-        .maybeSingle(),
+    const [agent, membersRes] = await Promise.all([
+      fetchAgentRow(admin, accountId),
       admin
         .from('profiles')
         .select('user_id, full_name, email, account_role')
@@ -68,27 +89,51 @@ export async function GET(request: Request) {
         .order('created_at', { ascending: true }),
     ]);
 
-    if (configRes.error) {
-      console.error('[GET /api/admin/ai-config] fetch error:', configRes.error);
-      return NextResponse.json(
-        { error: 'Failed to load AI configuration' },
-        { status: 500 }
-      );
-    }
-
     const members = membersRes.data ?? [];
+    if (!agent) return NextResponse.json({ configured: false, members });
 
-    if (!configRes.data) {
-      return NextResponse.json({ configured: false, members });
-    }
+    const settings = (agent.settings ?? {}) as Record<string, unknown>;
+    const cap = Number(settings.replyCap);
 
-    const { api_key, embeddings_api_key, ...safe } = configRes.data;
     return NextResponse.json({
       configured: true,
-      has_key: !!api_key,
-      has_embeddings_key: !!embeddings_api_key,
+      // The key itself NEVER leaves the server after save — the console
+      // only learns whether one is stored.
+      has_key: !!agent.api_key,
+      has_embeddings_key:
+        typeof settings.embeddingsApiKey === 'string' &&
+        settings.embeddingsApiKey.length > 0,
       members,
-      ...safe,
+      provider: agent.provider,
+      model: agent.model,
+      base_url: agent.base_url,
+      system_prompt: agent.system_prompt,
+      // Master switch + the two independent capability columns, exactly
+      // as the runtime reads them.
+      is_active: agent.is_enabled,
+      suggestions_enabled: agent.suggestions_enabled,
+      auto_reply_enabled: agent.autoreply_enabled,
+      auto_reply_max_per_conversation:
+        Number.isFinite(cap) && cap >= 1 ? Math.floor(cap) : 3,
+      auto_reply_limit_mode: isAutoReplyLimitMode(settings.limitMode)
+        ? settings.limitMode
+        : 'per_conversation',
+      auto_reply_schedule_start: toHhMm(settings.scheduleStart),
+      auto_reply_schedule_end: toHhMm(settings.scheduleEnd),
+      auto_reply_timezone:
+        typeof settings.timezone === 'string' && settings.timezone
+          ? settings.timezone
+          : null,
+      handoff_agent_id:
+        typeof settings.handoffAgentId === 'string' && settings.handoffAgentId
+          ? settings.handoffAgentId
+          : null,
+      reasoning: isReasoningMode(settings.reasoning)
+        ? settings.reasoning
+        : DEFAULT_REASONING_MODE,
+      // Clamped on read as well as write, so a hand-edited row shows the
+      // console the same values generation will actually send.
+      tuning: normalizeTuning(settings.tuning),
     });
   } catch (err) {
     return toErrorResponse(err);
@@ -114,7 +159,7 @@ export async function PUT(request: Request) {
     const model = typeof body.model === 'string' ? body.model.trim() : '';
     if (!model) return bad('model is required');
 
-    // Base URL rules mirror the workspace-level route exactly: required
+    // Base URL rules mirror the tenant routes exactly: required
     // + https-only for `custom`; optional (http allowed) for `ollama`.
     let baseUrl: string | null = null;
     if (provider === 'custom' || provider === 'ollama') {
@@ -146,12 +191,79 @@ export async function PUT(request: Request) {
       typeof body.system_prompt === 'string' && body.system_prompt.trim()
         ? body.system_prompt.trim()
         : null;
+    if (systemPrompt && systemPrompt.length > 8000) {
+      return bad('system_prompt is too long (max 8000 characters)');
+    }
+
     const isActive = body.is_active === true;
+    // Drafts default ON with the master switch: an older console build
+    // that doesn't send the field must not silently disable them.
+    const suggestionsEnabled =
+      typeof body.suggestions_enabled === 'boolean'
+        ? body.suggestions_enabled
+        : isActive;
     const autoReplyEnabled = body.auto_reply_enabled === true;
 
     let maxPer = Number(body.auto_reply_max_per_conversation);
     if (!Number.isFinite(maxPer)) maxPer = 3;
     maxPer = Math.min(20, Math.max(1, Math.floor(maxPer)));
+
+    const limitMode: AutoReplyLimitMode = isAutoReplyLimitMode(
+      body.auto_reply_limit_mode
+    )
+      ? body.auto_reply_limit_mode
+      : 'per_conversation';
+
+    // Reply hours: both bounds or neither (always on). Half-open input
+    // reads as "always on", same rule as the tenant parser.
+    const rawStart =
+      typeof body.auto_reply_schedule_start === 'string'
+        ? body.auto_reply_schedule_start.trim()
+        : '';
+    const rawEnd =
+      typeof body.auto_reply_schedule_end === 'string'
+        ? body.auto_reply_schedule_end.trim()
+        : '';
+    let scheduleStart: string | null = null;
+    let scheduleEnd: string | null = null;
+    if (rawStart && rawEnd) {
+      if (!HHMM.test(rawStart) || !HHMM.test(rawEnd)) {
+        return bad('schedule times must be HH:MM (24-hour)');
+      }
+      scheduleStart = rawStart;
+      scheduleEnd = rawEnd;
+    }
+
+    const rawTz =
+      typeof body.auto_reply_timezone === 'string'
+        ? body.auto_reply_timezone.trim()
+        : '';
+    let timezone: string | null = null;
+    if (rawTz && scheduleStart) {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: rawTz });
+        timezone = rawTz;
+      } catch {
+        return bad('timezone must be a valid IANA timezone');
+      }
+    }
+
+    // Rejected rather than coerced: reasoning costs real tokens and can
+    // truncate a customer's reply, so a typo must not read back as a
+    // mode the operator never chose.
+    let reasoning: ReasoningMode = DEFAULT_REASONING_MODE;
+    if ('reasoning' in body) {
+      if (!isReasoningMode(body.reasoning)) {
+        return bad('reasoning must be one of: off, auto, on');
+      }
+      reasoning = body.reasoning;
+    }
+
+    // Expert sampling knobs — super-admin-only surface. Explicit null
+    // wipes them back to "send no sampling params" instead of leaving a
+    // stale temperature behind.
+    const tuning: GenerationTuning =
+      body.tuning === null ? {} : normalizeTuning(body.tuning);
 
     // Handoff target must belong to the TARGET workspace — the whole
     // point of this console is acting on another tenant's behalf, so
@@ -177,14 +289,19 @@ export async function PUT(request: Request) {
     let rawKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
 
     // Reuse the stored key when the form didn't send a fresh one.
-    const { data: existing } = await admin
-      .from('ai_configs')
-      .select('id, provider, model, api_key, base_url')
-      .eq('account_id', accountId)
-      .maybeSingle();
+    let existing: Awaited<ReturnType<typeof fetchAgentRow>> = null;
+    try {
+      existing = await fetchAgentRow(admin, accountId);
+    } catch (e) {
+      console.error('[PUT /api/admin/ai-config] fetch error:', e);
+      return NextResponse.json(
+        { error: 'Failed to load the workspace agent' },
+        { status: 500 }
+      );
+    }
 
     // Ollama ignores auth — persist the harmless placeholder so the row
-    // counts as "configured" (same rule as the workspace-level route).
+    // counts as "configured" (same rule as the tenant routes).
     if (!rawKey && provider === 'ollama' && !existing?.api_key) {
       rawKey = OLLAMA_PLACEHOLDER_KEY;
     }
@@ -223,7 +340,7 @@ export async function PUT(request: Request) {
           isActive,
           autoReplyEnabled,
           autoReplyMaxPerConversation: maxPer,
-          autoReplyLimitMode: 'per_conversation',
+          autoReplyLimitMode: limitMode,
           autoReplyScheduleStart: null,
           autoReplyScheduleEnd: null,
           autoReplyTimezone: null,
@@ -243,24 +360,39 @@ export async function PUT(request: Request) {
       }
     }
 
+    // Shallow-merge the settings jsonb — same rule as the tenant PATCH:
+    // keys this console doesn't own (personaConfig, triggerKeywords, the
+    // encrypted embeddings key) must survive a platform save.
+    const settings: Record<string, unknown> = {
+      ...((existing?.settings ?? {}) as Record<string, unknown>),
+      replyCap: maxPer,
+      limitMode,
+      scheduleStart: scheduleStart,
+      scheduleEnd: scheduleEnd,
+      timezone,
+      handoffAgentId,
+      reasoning,
+      tuning,
+    };
+
     const shared: Record<string, unknown> = {
       provider,
       model,
       base_url: baseUrl,
       system_prompt: systemPrompt,
-      is_active: isActive,
-      auto_reply_enabled: autoReplyEnabled,
-      auto_reply_max_per_conversation: maxPer,
-      handoff_agent_id: handoffAgentId,
+      is_enabled: isActive,
+      suggestions_enabled: suggestionsEnabled,
+      autoreply_enabled: autoReplyEnabled,
+      settings,
     };
 
     const encryptedKey = rawKey ? encrypt(rawKey) : null;
 
     if (existing) {
       const { error: upErr } = await admin
-        .from('ai_configs')
+        .from('ai_agents')
         .update(encryptedKey ? { ...shared, api_key: encryptedKey } : shared)
-        .eq('account_id', accountId);
+        .eq('id', existing.id);
       if (upErr) {
         console.error('[PUT /api/admin/ai-config] update error:', upErr);
         return NextResponse.json(
@@ -269,9 +401,11 @@ export async function PUT(request: Request) {
         );
       }
     } else {
-      const { error: insErr } = await admin.from('ai_configs').insert({
+      const { error: insErr } = await admin.from('ai_agents').insert({
         account_id: accountId,
         created_by: ctx.userId,
+        kind: 'default',
+        display_name: PROVISIONED_AGENT_NAME,
         api_key: encryptedKey, // non-null: rawKey required when no existing row
         ...shared,
       });
@@ -288,7 +422,7 @@ export async function PUT(request: Request) {
       actorId: ctx.userId,
       accountId,
       action: existing ? 'ai_agent.updated' : 'ai_agent.provisioned',
-      entity: `ai_config:${accountId}`,
+      entity: `ai_agent:${accountId}`,
       before: existing
         ? {
             provider: existing.provider,
@@ -301,7 +435,11 @@ export async function PUT(request: Request) {
         model,
         has_key: true,
         is_active: isActive,
+        suggestions_enabled: suggestionsEnabled,
         auto_reply_enabled: autoReplyEnabled,
+        // Shape flags only — never a secret, never a prompt.
+        reasoning,
+        has_tuning: Object.keys(tuning).length > 0,
       },
     });
 
@@ -319,16 +457,12 @@ export async function DELETE(request: Request) {
     const accountId = new URL(request.url).searchParams.get('account_id');
     if (!accountId) return bad('account_id is required');
 
-    const { data: existing } = await admin
-      .from('ai_configs')
-      .select('provider, model')
-      .eq('account_id', accountId)
-      .maybeSingle();
-
-    const { error } = await admin
-      .from('ai_configs')
+    const { data, error } = await admin
+      .from('ai_agents')
       .delete()
-      .eq('account_id', accountId);
+      .eq('account_id', accountId)
+      .eq('kind', 'default')
+      .select('provider, model');
     if (error) {
       console.error('[DELETE /api/admin/ai-config] error:', error);
       return NextResponse.json(
@@ -337,13 +471,14 @@ export async function DELETE(request: Request) {
       );
     }
 
-    if (existing) {
+    const removed = data?.[0];
+    if (removed) {
       await logPlatformAudit(admin, {
         actorId: ctx.userId,
         accountId,
         action: 'ai_agent.removed',
-        entity: `ai_config:${accountId}`,
-        before: { provider: existing.provider, model: existing.model },
+        entity: `ai_agent:${accountId}`,
+        before: { provider: removed.provider, model: removed.model },
         after: null,
       });
     }
