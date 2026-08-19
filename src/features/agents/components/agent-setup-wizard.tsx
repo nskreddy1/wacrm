@@ -2,9 +2,22 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Bot, Check, Loader2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Bot,
+  Check,
+  CheckCircle2,
+  Loader2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import {
+  ModelPicker,
+  type ModelListState,
+} from '@/features/assistant/components/model-picker';
+import type { AiProvider } from '@/features/assistant/lib/ai/types';
 import {
   CAPABILITY_META,
   CAPABILITY_ORDER,
@@ -17,15 +30,37 @@ import {
 import { emptyPersonaDraft, PersonaBuilder } from './persona-builder';
 
 // ============================================================
-// Guided 3-step setup for the account's single AI agent:
-// 1) provider + key + model, 2) personality + which capabilities to
-// switch on (AI suggestions / Auto-reply — separate columns, both
-// powered by this one config), 3) review & create. The API validates
-// the key live against the provider before anything is stored, so a
-// typo'd key fails HERE — not at 2am in a customer chat.
+// Guided 4-step setup for the account's single AI agent:
+// 1) provider + key (+ base URL), 2) model, 3) personality + which
+// capabilities to switch on (AI suggestions / Auto-reply — separate
+// columns, both powered by this one config), 4) review & create. The
+// API validates the key live against the provider before anything is
+// stored, so a typo'd key fails HERE — not at 2am in a customer chat.
+//
+// ADR-005 D6: the key comes BEFORE the model because the key is an
+// input to enumerating models. The previous 3-step flow asked for the
+// model first and, having no saved key to list with, could only offer a
+// bare text box seeded from a hardcoded default — so first-run setup
+// required the operator to recall a model id from memory, and a
+// plausible-but-wrong id was only caught at the provider on first real
+// use (i.e. against a live customer conversation).
+//
+// D3: loading the list IS the key verification — there is no separate
+// verify call. D4: a failed listing must never become a gate on
+// configuration, so ONLY `invalid_key` (the provider actually rejected
+// the key) blocks Continue. A timeout, an outage or an unsupported
+// listing endpoint warns and lets the operator proceed, because the
+// alternative is a product that cannot be configured during a provider
+// incident.
 // ============================================================
 
-const STEPS = ['Provider', 'Personality', 'Review'] as const;
+const STEPS = ['Provider', 'Model', 'Personality', 'Review'] as const;
+
+/** Index of each step, so the guards below read as intent. */
+const STEP_PROVIDER = 0;
+const STEP_MODEL = 1;
+const STEP_PERSONALITY = 2;
+const STEP_REVIEW = 3;
 
 interface AgentSetupWizardProps {
   onCreated: (agent: ClientAgent) => void;
@@ -36,13 +71,19 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  // Step 1 — provider.
+  // Step 1 — provider + key. Step 2 — model.
   const [provider, setProvider] = useState<string>('openai');
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState(
-    PROVIDER_PRESETS.find((p) => p.id === 'openai')?.defaultModel ?? ''
-  );
+  // Starts EMPTY (D7): a preset default is only pre-selected once the
+  // provider's own list confirms the id exists, which ModelPicker does.
+  // Seeding it blind is the mechanism by which a stale hardcoded id
+  // silently becomes a saved, dead model.
+  const [model, setModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  // Outcome of the live listing, which doubles as key verification (D3).
+  const [listState, setListState] = useState<ModelListState>({
+    status: 'idle',
+  });
 
   // Step 2 — personality + capabilities. Guided is the default: new
   // clients answer plain questions and WE compose the enterprise
@@ -64,19 +105,27 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
 
   const pickProvider = (id: string) => {
     setProvider(id);
-    const next = PROVIDER_PRESETS.find((p) => p.id === id);
-    // Swap in the new provider's default model unless the user typed
-    // their own.
-    if (next && (!model || PROVIDER_PRESETS.some((p) => p.defaultModel === model))) {
-      setModel(next.defaultModel);
-    }
+    // D7: a model id from the previous provider is never valid on the
+    // new one, so clear it rather than carrying it forward. The picker
+    // re-offers this provider's default only if its list contains it.
+    setModel('');
+    setListState({ status: 'idle' });
   };
 
-  const step1Valid =
+  // Step 1 asks only for what is needed to TALK to the provider — the
+  // model moved to step 2, where the list can be fetched with this key.
+  const providerStepValid =
     Boolean(provider) &&
-    Boolean(model.trim()) &&
     (preset?.keyOptional || apiKey.trim().length > 0) &&
     (!preset?.needsBaseUrl || baseUrl.trim().length > 0);
+
+  // D4, binding: the ONLY listing outcome that blocks configuration is
+  // the provider explicitly rejecting the key. Every other code
+  // (timeout, network_error, rate_limited, not_supported, bad_response,
+  // provider_error) warns and still allows Continue.
+  const keyRejected =
+    listState.status === 'error' && listState.code === 'invalid_key';
+  const modelStepValid = Boolean(model.trim());
 
   // Guided answers only count once the one required field is filled;
   // otherwise fall back to the expert prompt so create never sends an
@@ -252,6 +301,15 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
             </div>
           ) : null}
 
+          {/* Inline verification state (D3/D6). The listing on step 2 is
+              what actually checks the key, so this reflects the last
+              known outcome and stays quiet until there is one. */}
+          <KeyVerificationNotice state={listState} />
+        </div>
+      ) : null}
+
+      {step === STEP_MODEL ? (
+        <div className="flex flex-col gap-4">
           <div>
             <label
               htmlFor="wiz-model"
@@ -259,22 +317,24 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
             >
               Model
             </label>
-            <input
+            {/* The list is fetched with the key just entered, via POST —
+                the key never reaches a query string (F1). The field
+                stays typeable in every state (D4). */}
+            <ModelPicker
               id="wiz-model"
-              type="text"
+              provider={provider as AiProvider}
               value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 font-mono text-sm"
+              onChange={setModel}
+              baseUrl={baseUrl || null}
+              draftApiKey={apiKey}
+              onListState={setListState}
             />
-            <p className="text-muted-foreground mt-1 text-xs">
-              We picked a sensible default — change it if you prefer another
-              model.
-            </p>
           </div>
+          <KeyVerificationNotice state={listState} />
         </div>
       ) : null}
 
-      {step === 1 ? (
+      {step === STEP_PERSONALITY ? (
         <div className="flex flex-col gap-4">
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -439,7 +499,7 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
         </div>
       ) : null}
 
-      {step === 2 ? (
+      {step === STEP_REVIEW ? (
         <dl className="border-border divide-border divide-y rounded-md border text-sm">
           {[
             ['Provider', providerLabel(provider)],
@@ -481,10 +541,14 @@ export function AgentSetupWizard({ onCreated, onCancel }: AgentSetupWizardProps)
             </Button>
           ) : null}
         </div>
-        {step < 2 ? (
+        {step < STEP_REVIEW ? (
           <Button
             onClick={() => setStep((s) => s + 1)}
-            disabled={step === 0 && !step1Valid}
+            disabled={
+              (step === STEP_PROVIDER && !providerStepValid) ||
+              // D4: only an outright rejected key blocks progress.
+              (step === STEP_MODEL && (!modelStepValid || keyRejected))
+            }
           >
             Continue
             <ArrowRight className="size-4" aria-hidden />

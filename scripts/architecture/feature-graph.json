@@ -44,6 +44,7 @@
     "flows -> automations",
     "flows -> webhooks",
     "flows -> whatsapp",
+    "inbox -> agents",
     "inbox -> auth",
     "inbox -> interactive",
     "inbox -> presence",
