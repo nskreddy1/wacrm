@@ -8,6 +8,9 @@ import {
   AI_PROVIDERS,
   isAiProvider,
   isAutoReplyLimitMode,
+  isReasoningMode,
+  normalizeTuning,
+  DEFAULT_REASONING_MODE,
   type AiProvider,
 } from '@/features/assistant/lib/ai/types';
 import { OLLAMA_PLACEHOLDER_KEY } from '@/features/assistant/lib/ai/defaults';
@@ -251,6 +254,31 @@ export async function parseAgentPayload(
         settings.handoffAgentId = null;
       }
     }
+  }
+
+  // Reasoning mode — how much internal "thinking" the provider is
+  // allowed to do before writing the reply. Rejected rather than
+  // silently coerced on an unknown value: this one costs real tokens
+  // and can truncate a customer's reply, so a typo'd mode must not
+  // read back as something the operator didn't choose. Absent on
+  // create = 'off', the behaviour every account had before the toggle.
+  if ('reasoning' in rawSettings) {
+    if (!isReasoningMode(rawSettings.reasoning)) {
+      return err('reasoning must be one of: off, auto, on');
+    }
+    settings.reasoning = rawSettings.reasoning;
+  } else if (!partial) {
+    settings.reasoning = DEFAULT_REASONING_MODE;
+  }
+
+  // Sampling knobs. EXPERT SURFACE — no tenant-facing form sends
+  // these; they exist so a super-admin can tune a workspace on the
+  // customer's behalf. Clamped into legal provider ranges field by
+  // field, and explicit null wipes them back to "send no sampling
+  // params" rather than leaving a stale temperature behind.
+  if ('tuning' in rawSettings) {
+    settings.tuning =
+      rawSettings.tuning === null ? {} : normalizeTuning(rawSettings.tuning);
   }
 
   // Trigger keywords (custom agents) — Tier-1 router triggers. The
