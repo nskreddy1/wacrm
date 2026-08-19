@@ -22,8 +22,13 @@
 // Every provider here serves a list endpoint:
 //   OpenAI / compat presets  GET {base}/models          Bearer
 //   Anthropic                GET /v1/models             x-api-key
-//   Gemini                   GET /v1beta/models?key=…    query key
+//   Gemini                   GET /v1beta/models         x-goog-api-key
 //   Ollama                   GET {base}/models          no auth
+//
+// A key NEVER travels in a query string — URLs are the one part of a
+// request that routinely lands in access logs, proxy logs and error
+// reporters. Gemini accepts `x-goog-api-key`, which is what
+// `engines/direct/gemini.ts` already uses for generation.
 //
 // Failures are never fatal to setup: callers surface the message and
 // keep the free-text field usable, so a provider outage or a locked
@@ -52,27 +57,77 @@ export interface CatalogModel {
  *  of weeks; an operator opening the form twice should not pay two
  *  provider round-trips. */
 const CACHE_TTL_MS = 10 * 60 * 1000;
+/**
+ * How long a FAILURE stays warm. Short, because a revoked key gets
+ * re-pasted within seconds — but non-zero, because the alternative is
+ * amplification: this endpoint is refetched on provider switches and
+ * refresh clicks, and a workspace whose key 401s would otherwise send
+ * one upstream request per interaction, on every instance, forever.
+ */
+const NEGATIVE_TTL_MS = 60 * 1000;
+/**
+ * Hard bound on the map. The cache key includes the tenant's key
+ * fingerprint, so on a long-lived instance serving many workspaces an
+ * unbounded map is a slow leak. Oldest-first eviction (Map preserves
+ * insertion order) is the right policy here: entries are cheap to
+ * rebuild and a listing nobody has asked for in a while is exactly the
+ * one to drop.
+ */
+const MAX_CACHE_ENTRIES = 500;
 const LIST_TIMEOUT_MS = 12_000;
+/** Gemini pages its listing. Five pages at 200/page is ~1000 models —
+ *  far past any real catalogue, and a guard against a paging bug on the
+ *  provider side turning into an infinite loop on ours. */
+const MAX_LIST_PAGES = 5;
 
-interface CacheEntry {
-  models: CatalogModel[];
-  expiresAt: number;
-}
+type CacheEntry =
+  | { ok: true; models: CatalogModel[]; expiresAt: number }
+  | { ok: false; error: AiError; expiresAt: number };
 
 /**
  * Process-local cache, keyed by provider + base URL + a fingerprint of
  * the key. The key is part of the cache key because two tenants on the
- * same provider legitimately see different catalogues; it is hashed
- * down to a short prefix/suffix so no secret material sits in a map
- * that might end up in a heap dump.
+ * same provider legitimately see different catalogues; it is reduced to
+ * a short prefix/suffix + length so no usable secret material sits in a
+ * map that might end up in a heap dump.
  */
 const cache = new Map<string, CacheEntry>();
+
+/**
+ * Listings currently in flight, so N concurrent identical requests
+ * (two admins on the same workspace, or one form remounting) make ONE
+ * upstream call instead of N.
+ */
+const inFlight = new Map<string, Promise<CatalogModel[]>>();
 
 function cacheKey(provider: string, baseUrl: string, apiKey: string): string {
   const fingerprint = apiKey
     ? `${apiKey.slice(0, 4)}…${apiKey.slice(-4)}:${apiKey.length}`
     : 'nokey';
   return `${provider}|${baseUrl}|${fingerprint}`;
+}
+
+/** Store an outcome, evicting the oldest entries past the bound. */
+function remember(key: string, entry: CacheEntry): void {
+  // Delete first so a refreshed key moves to the END of the insertion
+  // order — otherwise a hot entry would still be evicted as "oldest".
+  cache.delete(key);
+  cache.set(key, entry);
+  while (cache.size > MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next();
+    if (oldest.done) break;
+    cache.delete(oldest.value);
+  }
+}
+
+/**
+ * Drop all cached listings. Test-only seam — nothing in the product
+ * calls this, because a stale listing is corrected by the TTL and by
+ * the Refresh button the picker renders.
+ */
+export function resetModelCatalogCache(): void {
+  cache.clear();
+  inFlight.clear();
 }
 
 /* ---------------------------------------------------------- */
@@ -93,15 +148,27 @@ interface GeminiListResponse {
     displayName?: unknown;
     supportedGenerationMethods?: unknown;
   }>;
+  nextPageToken?: unknown;
 }
 
 /**
  * Model ids that speak a different protocol than chat/completions —
- * embeddings, speech, image and moderation endpoints. OpenAI's
- * `/models` returns the account's entire inventory, so without this
- * filter an operator is offered `whisper-1` as a reply model.
+ * embeddings, speech, image, video, moderation, realtime and legacy
+ * text-completion endpoints. OpenAI's `/models` returns the account's
+ * entire inventory, so without this filter an operator is offered
+ * `whisper-1`, `sora-2` or `gpt-4o-realtime-preview` as a reply model.
+ *
+ * NOTE the deliberate absence of a bare `instruct`: on OpenAI that
+ * marks the legacy completions model, but on NVIDIA/Together half the
+ * catalogue is `…-70b-instruct` chat models — including our own default
+ * NVIDIA model. So the legacy completion families are matched by name
+ * (`gpt-3.5-turbo-instruct`, `davinci`, `babbage`, `curie`, `ada`)
+ * instead of by that substring.
  */
-const NON_CHAT = /(embedding|whisper|tts|audio|dall-e|moderation|image|rerank|guard|transcribe|speech|clip|codestral-embed)/i;
+const NON_CHAT =
+  // `embed` (not `embedding`) so NVIDIA's `…-nv-embedqa-…` is caught too,
+  // plus the bge / gte / e5 embedding families, whose ids never say so.
+  /(embed|whisper|tts|audio|dall-e|moderation|image|video|rerank|guard|transcribe|speech|clip|sora|realtime|computer-use|gpt-3\.5-turbo-instruct|davinci|babbage|curie-|text-ada|(?:^|\/)(?:bge|gte|e5)-)/i;
 
 /* ---------------------------------------------------------- */
 /* HTTP                                                        */
@@ -197,11 +264,50 @@ export async function listProviderModels(
 
   const key = cacheKey(provider, baseUrl, apiKey);
   const hit = cache.get(key);
-  if (hit && hit.expiresAt > Date.now()) return hit.models;
+  if (hit && hit.expiresAt > Date.now()) {
+    if (hit.ok) return hit.models;
+    // Replay the cached failure verbatim: the caller's error handling
+    // must not be able to tell a fresh 401 from a remembered one.
+    throw hit.error;
+  }
+  if (hit) cache.delete(key);
 
-  const models = annotate(provider, await fetchIds(provider, baseUrl, apiKey));
-  cache.set(key, { models, expiresAt: Date.now() + CACHE_TTL_MS });
-  return models;
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+
+  const started = (async () => {
+    try {
+      const models = annotate(
+        provider,
+        await fetchIds(provider, baseUrl, apiKey)
+      );
+      remember(key, {
+        ok: true,
+        models,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      });
+      return models;
+    } catch (e) {
+      const error =
+        e instanceof AiError
+          ? e
+          : new AiError('The provider could not list its models.', {
+              code: 'provider_error',
+              status: 502,
+            });
+      remember(key, {
+        ok: false,
+        error,
+        expiresAt: Date.now() + NEGATIVE_TTL_MS,
+      });
+      throw error;
+    } finally {
+      inFlight.delete(key);
+    }
+  })();
+
+  inFlight.set(key, started);
+  return started;
 }
 
 /** Where this provider's listing lives. */
@@ -255,32 +361,59 @@ async function fetchIds(
   }
 
   if (provider === 'gemini') {
-    const body = (await getJson(
-      `${baseUrl}/models?pageSize=200&key=${encodeURIComponent(apiKey)}`,
-      {}
-    )) as GeminiListResponse;
-    return (body.models ?? []).flatMap((m) => {
-      const raw = typeof m.name === 'string' ? m.name : '';
-      if (!raw) return [];
-      // Only models that can actually answer a chat turn.
-      const methods = Array.isArray(m.supportedGenerationMethods)
-        ? m.supportedGenerationMethods
-        : [];
-      if (methods.length > 0 && !methods.includes('generateContent')) return [];
-      // The API returns 'models/gemini-2.5-flash'; we store the bare id.
-      const id = raw.replace(/^models\//, '');
-      const label = typeof m.displayName === 'string' ? m.displayName : id;
-      return [{ id, label }];
-    });
+    const out: Array<{ id: string; label: string }> = [];
+    let pageToken: string | null = null;
+    // Gemini pages its listing, and a first page of 200 is NOT the whole
+    // catalogue on a key with preview models — the missing ones were
+    // simply unselectable before.
+    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+      const url = new URL(`${baseUrl}/models`);
+      url.searchParams.set('pageSize', '200');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const body = (await getJson(url.toString(), {
+        // Header auth, never `?key=` — see the file header.
+        'x-goog-api-key': apiKey,
+      })) as GeminiListResponse;
+
+      for (const m of body.models ?? []) {
+        const raw = typeof m.name === 'string' ? m.name : '';
+        if (!raw) continue;
+        // Only models that can actually answer a chat turn.
+        const methods = Array.isArray(m.supportedGenerationMethods)
+          ? m.supportedGenerationMethods
+          : [];
+        if (methods.length > 0 && !methods.includes('generateContent')) {
+          continue;
+        }
+        // The API returns 'models/gemini-2.5-flash'; we store the bare id.
+        const id = raw.replace(/^models\//, '');
+        const label = typeof m.displayName === 'string' ? m.displayName : id;
+        out.push({ id, label });
+      }
+
+      pageToken =
+        typeof body.nextPageToken === 'string' && body.nextPageToken
+          ? body.nextPageToken
+          : null;
+      if (!pageToken) break;
+    }
+    return out;
   }
 
   // OpenAI and every OpenAI-compatible preset (plus Ollama's /v1 shim,
   // which ignores the Authorization header).
-  const body = (await getJson(`${baseUrl}/models`, {
+  const body = await getJson(`${baseUrl}/models`, {
     Authorization: `Bearer ${apiKey || 'ollama'}`,
-  })) as OpenAiListResponse;
-  return (body.data ?? []).flatMap((m) => {
-    const id = typeof m.id === 'string' ? m.id : '';
+  });
+  // Most compat providers answer `{ data: [...] }`, but some (Together
+  // among them) return a bare JSON array. Reading only `.data` turned
+  // that into a silent "0 models available" — indistinguishable from a
+  // locked-down key.
+  const entries: OpenAiListResponse['data'] = Array.isArray(body)
+    ? (body as NonNullable<OpenAiListResponse['data']>)
+    : ((body as OpenAiListResponse)?.data ?? []);
+  return (entries ?? []).flatMap((m) => {
+    const id = typeof m?.id === 'string' ? m.id : '';
     if (!id) return [];
     const label = typeof m.name === 'string' && m.name ? m.name : id;
     return [{ id, label }];

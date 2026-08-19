@@ -55,9 +55,18 @@ import {
 
 import {
   AI_PROVIDERS,
+  AUTO_REPLY_LIMIT_MODES,
+  DEFAULT_REASONING_MODE,
+  DEFAULT_TUNING,
+  isReasoningMode,
   type AiProvider,
+  type AutoReplyLimitMode,
+  type GenerationTuning,
+  type ReasoningMode,
 } from '@/features/assistant/lib/ai/types';
 import { AI_PROVIDER_DEFAULT_MODEL } from '@/features/assistant/lib/ai/defaults';
+import { reasoningSupport } from '@/features/assistant/lib/ai/reasoning-controls';
+import { ModelPicker } from '@/features/assistant/components/model-picker';
 
 const PROVIDER_LABEL: Record<AiProvider, string> = {
   openai: 'OpenAI',
@@ -81,23 +90,68 @@ interface MemberOption {
   account_role: string;
 }
 
+/** GET /api/admin/ai-config — the workspace's `ai_agents` default row,
+ *  minus every secret (keys reduce to has_* booleans). */
 interface AiConfigResponse {
   configured: boolean;
   has_key?: boolean;
+  has_embeddings_key?: boolean;
   members: MemberOption[];
   provider?: AiProvider;
   model?: string;
   base_url?: string | null;
   system_prompt?: string | null;
   is_active?: boolean;
+  suggestions_enabled?: boolean;
   auto_reply_enabled?: boolean;
   auto_reply_max_per_conversation?: number;
+  auto_reply_limit_mode?: AutoReplyLimitMode;
+  auto_reply_schedule_start?: string | null;
+  auto_reply_schedule_end?: string | null;
+  auto_reply_timezone?: string | null;
   handoff_agent_id?: string | null;
+  reasoning?: ReasoningMode;
+  tuning?: GenerationTuning;
 }
+
+const LIMIT_MODE_LABEL: Record<AutoReplyLimitMode, string> = {
+  per_conversation: 'Per conversation (lifetime)',
+  per_day: 'Per day (resets at midnight)',
+  never: 'No limit',
+};
 
 interface WorkspaceOption {
   id: string;
   name: string;
+}
+
+/** Stored number → form text. `undefined` (field not set) becomes an
+ *  empty input rather than a 0 the operator never chose. */
+function numText(value: number | undefined): string {
+  return value === undefined || value === null ? '' : String(value);
+}
+
+/**
+ * Form text → the `tuning` payload. Empty fields are OMITTED, which the
+ * API reads as "send no sampling param for this knob" — the behaviour
+ * every workspace had before these controls existed. An all-empty group
+ * therefore posts `{}` and wipes any previous tuning, which is exactly
+ * what clearing the fields should mean.
+ */
+function readTuning(
+  raw: Record<keyof GenerationTuning, string>
+): GenerationTuning {
+  const out: GenerationTuning = {};
+  for (const [key, text] of Object.entries(raw) as Array<
+    [keyof GenerationTuning, string]
+  >) {
+    const trimmed = text.trim();
+    if (!trimmed) continue;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n)) continue;
+    out[key] = n;
+  }
+  return out;
 }
 
 const jsonFetcher = async (url: string) => {
@@ -324,15 +378,42 @@ function AgentForm({
   const [isActive, setIsActive] = useState(
     config.configured ? (config.is_active ?? false) : true
   );
+  const [suggestions, setSuggestions] = useState(
+    config.configured ? (config.suggestions_enabled ?? false) : true
+  );
   const [autoReply, setAutoReply] = useState(
     config.configured ? (config.auto_reply_enabled ?? false) : true
   );
   const [maxPer, setMaxPer] = useState(
     String(config.auto_reply_max_per_conversation ?? 3)
   );
+  const [limitMode, setLimitMode] = useState<AutoReplyLimitMode>(
+    config.auto_reply_limit_mode ?? 'per_conversation'
+  );
+  const [scheduleStart, setScheduleStart] = useState(
+    config.auto_reply_schedule_start ?? ''
+  );
+  const [scheduleEnd, setScheduleEnd] = useState(
+    config.auto_reply_schedule_end ?? ''
+  );
+  const [timezone, setTimezone] = useState(config.auto_reply_timezone ?? '');
   const [handoff, setHandoff] = useState<string>(
     config.handoff_agent_id ?? 'unassigned'
   );
+  const [reasoning, setReasoning] = useState<ReasoningMode>(
+    isReasoningMode(config.reasoning) ? config.reasoning : DEFAULT_REASONING_MODE
+  );
+  // Expert knobs. Kept as STRINGS, and an empty string means "don't send
+  // this field" — distinct from 0, which is a legal temperature. The
+  // stored value is whatever the API clamped, so round-tripping the form
+  // never invents a number the operator didn't type.
+  const [tuning, setTuning] = useState<Record<keyof GenerationTuning, string>>({
+    temperature: numText(config.tuning?.temperature),
+    topP: numText(config.tuning?.topP),
+    presencePenalty: numText(config.tuning?.presencePenalty),
+    frequencyPenalty: numText(config.tuning?.frequencyPenalty),
+    maxOutputTokens: numText(config.tuning?.maxOutputTokens),
+  });
   const [saving, setSaving] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -353,6 +434,10 @@ function AgentForm({
 
   const needsBaseUrl = provider === 'custom' || provider === 'ollama';
   const keyOptional = provider === 'ollama';
+  // Pure table lookup — safe to recompute on every keystroke of the
+  // model field. Decides whether the reasoning switch exists at all.
+  const reasoningCap = reasoningSupport(provider, model);
+  const unlimited = limitMode === 'never';
 
   async function submit() {
     setSaving(true);
@@ -368,9 +453,18 @@ function AgentForm({
           base_url: needsBaseUrl ? baseUrl : null,
           system_prompt: systemPrompt,
           is_active: isActive,
+          suggestions_enabled: suggestions,
           auto_reply_enabled: autoReply,
           auto_reply_max_per_conversation: Number(maxPer),
+          auto_reply_limit_mode: limitMode,
+          auto_reply_schedule_start: scheduleStart || null,
+          auto_reply_schedule_end: scheduleEnd || null,
+          auto_reply_timezone: scheduleStart ? timezone || null : null,
           handoff_agent_id: handoff === 'unassigned' ? '' : handoff,
+          // A model with no knob saves as 'off' rather than keeping a
+          // stale 'on' from a previous model.
+          reasoning: reasoningCap.supported ? reasoning : 'off',
+          tuning: readTuning(tuning),
         }),
       });
       const body = await res.json().catch(() => null);
@@ -450,13 +544,17 @@ function AgentForm({
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="agent-model">Model</Label>
-              <Input
+              {/* Live list read with the WORKSPACE's stored key, so the
+                  platform picks from what that customer can actually
+                  call — still free text for a model we've never heard of. */}
+              <ModelPicker
                 id="agent-model"
+                provider={provider}
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
-                autoComplete="off"
-                className="font-mono text-sm"
-                required
+                onChange={setModel}
+                endpoint="/api/admin/ai-models"
+                accountId={accountId}
+                baseUrl={needsBaseUrl ? baseUrl : null}
               />
             </div>
           </div>

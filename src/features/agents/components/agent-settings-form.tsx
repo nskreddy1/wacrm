@@ -241,12 +241,15 @@ export function AgentSettingsForm({
               >
                 Model
               </label>
-              <input
+              {/* Live list from the provider, still typeable — see
+                  ModelPicker: a model released this morning must not be
+                  unreachable because our bundle predates it. */}
+              <ModelPicker
                 id="cfg-model"
-                type="text"
+                provider={provider as AiProvider}
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="border-border bg-background text-foreground w-full rounded-md border px-3 py-2 font-mono text-sm"
+                onChange={setModel}
+                baseUrl={baseUrl}
               />
             </div>
             {!preset?.keyOptional ? (
@@ -301,27 +304,40 @@ export function AgentSettingsForm({
               page. 'auto' (send no instruction at all) stays reachable
               through the API for support, but an operator only ever needs
               the on/off decision — and an untouched 'auto' config is
-              preserved on save because state starts from the stored value. */}
-          <div className="border-border flex items-center justify-between gap-4 rounded-lg border p-3.5">
-            <label
-              htmlFor="cfg-reasoning"
-              className="flex flex-col gap-0.5 text-sm leading-tight"
-            >
-              <span className="text-foreground font-medium">
-                Think before replying
-              </span>
-              <span className="text-muted-foreground text-xs">
-                The model reasons privately before answering. Better on
-                multi-step questions; slower and costs more tokens.
-              </span>
-            </label>
-            <Switch
-              id="cfg-reasoning"
-              checked={reasoning === 'on'}
-              onCheckedChange={(next) => setReasoning(next ? 'on' : 'off')}
-              aria-label="Think before replying"
-            />
-          </div>
+              preserved on save because state starts from the stored value.
+
+              Rendered ONLY where the chosen model has a real knob: on
+              gpt-4o the reasoning field is a 400, so a switch there
+              promised a change the model can never make. */}
+          {reasoningCap.supported ? (
+            <div className="border-border flex flex-col gap-2 rounded-lg border p-3.5">
+              <div className="flex items-center justify-between gap-4">
+                <label
+                  htmlFor="cfg-reasoning"
+                  className="flex flex-col gap-0.5 text-sm leading-tight"
+                >
+                  <span className="text-foreground font-medium">
+                    Think before replying
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    The model reasons privately before answering. Better on
+                    multi-step questions; slower and costs more tokens.
+                  </span>
+                </label>
+                <Switch
+                  id="cfg-reasoning"
+                  checked={reasoning === 'on'}
+                  onCheckedChange={(next) => setReasoning(next ? 'on' : 'off')}
+                  aria-label="Think before replying"
+                />
+              </div>
+              {reasoningCap.note ? (
+                <p className="text-muted-foreground border-border border-t pt-2 text-xs leading-relaxed">
+                  {reasoningCap.note}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
 
