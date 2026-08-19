@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // ============================================================
 // Platform-wide invite delivery mode.

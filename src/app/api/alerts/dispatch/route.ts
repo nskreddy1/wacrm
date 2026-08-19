@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { authorizeCronRequest } from '@/features/flows/lib/cron-auth';
 import { dispatchPendingAlerts } from '@/features/alerts/lib/dispatcher';
 

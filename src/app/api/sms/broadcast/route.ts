@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@/lib/supabase/server';
-import { channelAdmin } from '@/features/channels/lib/admin-client';
+import { channelAdmin } from '@/lib/supabase/admin';
 import { TwilioSmsAdapter } from '@/features/channels/lib/adapters/twilio-sms';
 import {
   isValidE164,

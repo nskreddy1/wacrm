@@ -20,7 +20,7 @@ const { upsert, maybeSingle, encryptEmailCredentials, decrypt } = vi.hoisted(
 );
 
 // A chainable stub shaped like the postgrest builder the module uses.
-vi.mock('@/features/assistant/lib/ai/admin-client', () => ({
+vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => ({
       select: () => ({ eq: () => ({ maybeSingle }) }),

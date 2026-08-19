@@ -19,7 +19,7 @@ import {
   getCurrentAccount,
   toErrorResponse,
 } from '@/features/auth/lib/account';
-import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
+import { platformAdmin } from '@/lib/supabase/admin';
 import {
   BODY_MAX,
   SUBJECT_MAX,

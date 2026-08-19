@@ -135,7 +135,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => supabaseMock),
 }));
 
-vi.mock('@/features/flows/lib/admin-client', () => ({
+vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => {
       const b: Record<string, unknown> = {};

@@ -12,7 +12,7 @@ import { generateReply } from '@/features/assistant/lib/ai/generate';
 import { buildPromptParts } from '@/features/assistant/lib/ai/defaults';
 import { latestUserMessage } from '@/features/assistant/lib/ai/query';
 import { logAiUsage } from '@/features/assistant/lib/ai/usage';
-import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { AiError } from '@/features/assistant/lib/ai/types';
 
 /**

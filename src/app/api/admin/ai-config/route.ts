@@ -27,7 +27,7 @@ import { NextResponse } from 'next/server';
 import { toErrorResponse } from '@/features/auth/lib/account';
 import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
 import { logPlatformAudit } from '@/features/admin/lib/platform/audit';
-import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
+import { platformAdmin } from '@/lib/supabase/admin';
 import { encrypt, decrypt } from '@/features/whatsapp/lib/encryption';
 import { validateAiCredentials } from '@/features/assistant/lib/ai/validate';
 import { OLLAMA_PLACEHOLDER_KEY } from '@/features/assistant/lib/ai/defaults';

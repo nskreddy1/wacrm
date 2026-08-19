@@ -29,7 +29,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   findActiveKeyByHash,
   touchLastUsed,

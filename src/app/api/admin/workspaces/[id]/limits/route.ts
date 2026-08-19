@@ -14,7 +14,7 @@ import { NextResponse } from 'next/server';
 
 import { toErrorResponse } from '@/features/auth/lib/account';
 import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
-import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
+import { platformAdmin } from '@/lib/supabase/admin';
 import { logPlatformAudit } from '@/features/admin/lib/platform/audit';
 
 /** Override columns a super admin may set (mirrors the table). */

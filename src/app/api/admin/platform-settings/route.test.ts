@@ -23,7 +23,7 @@ vi.mock('@/features/auth/lib/super-admin', () => ({
   }),
 }));
 
-vi.mock('@/features/assistant/lib/ai/admin-client', () => ({
+vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => ({
       upsert: async (rows: unknown) => {

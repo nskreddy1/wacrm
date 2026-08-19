@@ -32,7 +32,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 // Seat-quota lookup uses the service role; keep it out of the way.
-vi.mock('@/features/flows/lib/admin-client', () => ({
+vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => ({
       select: () => ({
