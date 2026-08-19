@@ -19,13 +19,27 @@
 //     because it decides whether the "Think before replying" switch
 //     below is even rendered. Picking `gpt-4o` and wondering where the
 //     switch went is the confusion this badge prevents.
+//
+// ADR-005 D2 adds a third: the list can be fetched with a key that is
+// still being TYPED (`draftApiKey`), which is the only way first-run
+// setup — and a provider switch — can ever show a real list. That path
+// POSTs, because the key must not travel in a URL, is debounced so a
+// paste costs one provider call, and its SWR key carries only a
+// FINGERPRINT of the key (F1). `onListState` reports the outcome so the
+// wizard can gate on `invalid_key` alone (D4).
 // ============================================================
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Brain, ChevronsUpDown, Loader2, RefreshCw } from 'lucide-react';
 
 import type { CatalogModel } from '@/features/assistant/lib/ai/model-catalog';
+import { AI_PROVIDER_DEFAULT_MODEL } from '@/features/assistant/lib/ai/defaults';
+import {
+  draftModelsSwrKey,
+  DRAFT_KEY_DEBOUNCE_MS,
+  isListableDraftKey,
+} from '@/features/assistant/lib/ai/model-list-key';
 import type { AiProvider } from '@/features/assistant/lib/ai/types';
 
 interface ModelsResponse {
@@ -35,6 +49,17 @@ interface ModelsResponse {
   code?: string;
 }
 
+/** Outcome of the listing, for callers that gate on it (D4). */
+export interface ModelListState {
+  status: 'idle' | 'loading' | 'ok' | 'error';
+  /** `AiError.code`, propagated verbatim by the route. Only
+   *  `invalid_key` means the provider actually rejected the key. */
+  code?: string;
+  message?: string;
+  /** Models returned, when `status === 'ok'`. */
+  count?: number;
+}
+
 const fetcher = async (url: string): Promise<ModelsResponse> => {
   const res = await fetch(url);
   const body = await res.json().catch(() => null);
@@ -42,6 +67,28 @@ const fetcher = async (url: string): Promise<ModelsResponse> => {
     throw new Error(body?.error ?? 'Could not load models');
   }
   return body as ModelsResponse;
+};
+
+/** Draft-key listing. The key lives in the BODY and nowhere else. */
+const postModels = async (
+  endpoint: string,
+  body: {
+    provider: string;
+    api_key: string;
+    base_url?: string | null;
+    account_id?: string | null;
+  }
+): Promise<ModelsResponse> => {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(payload?.error ?? 'Could not load models');
+  }
+  return payload as ModelsResponse;
 };
 
 interface ModelPickerProps {
@@ -56,6 +103,14 @@ interface ModelPickerProps {
   accountId?: string;
   /** In-progress base URL for custom / ollama endpoints. */
   baseUrl?: string | null;
+  /**
+   * Key the operator is typing right now, before any save. Present and
+   * long enough → the list is fetched with it (debounced, via POST).
+   * Absent → the stored-key GET path, unchanged.
+   */
+  draftApiKey?: string;
+  /** Listing outcome, for a caller that shows verification state. */
+  onListState?: (state: ModelListState) => void;
   disabled?: boolean;
 }
 
@@ -67,25 +122,66 @@ export function ModelPicker({
   endpoint = '/api/ai/models',
   accountId,
   baseUrl,
+  draftApiKey,
+  onListState,
   disabled,
 }: ModelPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState<string | null>(null);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ---- Debounced draft key (F3) --------------------------------
+  // A 40-character paste arrives as one change event in a browser but
+  // as N in an autofill/typing flow; either way only the settled value
+  // is allowed to become an upstream request.
+  const [settledKey, setSettledKey] = useState('');
+  useEffect(() => {
+    const draft = draftApiKey?.trim() ?? '';
+    if (!isListableDraftKey(draft)) {
+      setSettledKey('');
+      return;
+    }
+    const timer = setTimeout(
+      () => setSettledKey(draft),
+      DRAFT_KEY_DEBOUNCE_MS
+    );
+    return () => clearTimeout(timer);
+  }, [draftApiKey]);
+
+  const usableBaseUrl =
+    provider === 'custom' || provider === 'ollama'
+      ? (baseUrl?.trim() ?? '')
+      : '';
+  // `custom` cannot be listed without an endpoint, so don't even ask.
+  const shouldFetch = !disabled && !(provider === 'custom' && !usableBaseUrl);
+  const useDraftKey = settledKey.length > 0;
+
   const params = new URLSearchParams({ provider });
   if (accountId) params.set('account_id', accountId);
-  if (baseUrl && (provider === 'custom' || provider === 'ollama')) {
-    params.set('base_url', baseUrl);
-  }
-  // `custom` cannot be listed without an endpoint, so don't even ask.
-  const shouldFetch =
-    !disabled && !(provider === 'custom' && !baseUrl?.trim());
+  if (usableBaseUrl) params.set('base_url', usableBaseUrl);
 
   const { data, error, isLoading, isValidating, mutate } =
     useSWR<ModelsResponse>(
-      shouldFetch ? `${endpoint}?${params.toString()}` : null,
-      fetcher,
+      !shouldFetch
+        ? null
+        : useDraftKey
+          ? draftModelsSwrKey({
+              endpoint,
+              provider,
+              baseUrl: usableBaseUrl,
+              accountId,
+              draftApiKey: settledKey,
+            })
+          : `${endpoint}?${params.toString()}`,
+      useDraftKey
+        ? () =>
+            postModels(endpoint, {
+              provider,
+              api_key: settledKey,
+              base_url: usableBaseUrl || null,
+              account_id: accountId ?? null,
+            })
+        : fetcher,
       { revalidateOnFocus: false, keepPreviousData: false }
     );
 
@@ -106,6 +202,64 @@ export function ModelPicker({
 
   const selected = models.find((m) => m.id === value);
   const listboxId = `${id}-listbox`;
+
+  const loadErrorMessage =
+    error instanceof Error ? error.message : (data?.error ?? null);
+  const loadErrorCode = data?.code;
+
+  // ---- Report the outcome upwards (D3/D4) ----------------------
+  // Kept in a ref so a caller passing an inline arrow — every caller —
+  // does not re-run this effect on every render.
+  const onListStateRef = useRef(onListState);
+  onListStateRef.current = onListState;
+  useEffect(() => {
+    const report = onListStateRef.current;
+    if (!report) return;
+    if (!shouldFetch || (!useDraftKey && !data && !loadErrorMessage)) {
+      report({ status: 'idle' });
+      return;
+    }
+    if (isLoading) {
+      report({ status: 'loading' });
+      return;
+    }
+    if (loadErrorMessage) {
+      report({
+        status: 'error',
+        code: loadErrorCode,
+        message: loadErrorMessage,
+      });
+      return;
+    }
+    if (data?.needsKey) {
+      report({ status: 'idle' });
+      return;
+    }
+    report({ status: 'ok' });
+  }, [
+    shouldFetch,
+    useDraftKey,
+    isLoading,
+    data,
+    loadErrorMessage,
+    loadErrorCode,
+  ]);
+
+  // ---- Pre-select the provider default, but only if it is real (D7)
+  // A blind preset default is how a stale hardcoded id silently becomes
+  // a saved, dead model. So it is only offered when the provider's own
+  // list confirms it exists, and only when nothing is chosen yet — a
+  // model the operator typed is never overwritten.
+  useEffect(() => {
+    if (value.trim()) return;
+    const preferred = AI_PROVIDER_DEFAULT_MODEL[provider];
+    if (preferred && models.some((m) => m.id === preferred)) {
+      onChange(preferred);
+    }
+    // `onChange` is a fresh closure on every parent render; depending on
+    // it would re-run this on each keystroke elsewhere in the form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [models, provider, value]);
 
   const commit = (next: string) => {
     onChange(next);
@@ -236,9 +390,8 @@ export function ModelPicker({
         needsKey={data?.needsKey ?? false}
         count={models.length}
         selected={selected}
-        loadError={
-          error instanceof Error ? error.message : (data?.error ?? null)
-        }
+        loadError={loadErrorMessage}
+        loadErrorCode={loadErrorCode}
         refreshing={isValidating && !isLoading}
         onRefresh={shouldFetch ? () => void mutate() : null}
       />
@@ -254,6 +407,7 @@ function ModelHint({
   count,
   selected,
   loadError,
+  loadErrorCode,
   refreshing,
   onRefresh,
 }: {
@@ -262,6 +416,7 @@ function ModelHint({
   count: number;
   selected?: CatalogModel;
   loadError: string | null;
+  loadErrorCode?: string;
   refreshing: boolean;
   onRefresh: (() => void) | null;
 }) {
@@ -269,8 +424,13 @@ function ModelHint({
   if (needsKey) {
     message =
       provider === 'custom'
-        ? 'Enter the endpoint and key, then save — the model list loads from the endpoint afterwards.'
-        : 'Save an API key for this provider to load its model list. You can type the model id in the meantime.';
+        ? 'Enter the endpoint and key — the model list loads as soon as both are filled in.'
+        : 'Paste an API key for this provider to load its model list. You can type the model id in the meantime.';
+  } else if (loadErrorCode === 'invalid_key') {
+    // The one failure that is the operator's to fix, and the only one
+    // the wizard blocks on (ADR-005 D4) — so say what to do about it.
+    message =
+      'This key was rejected by the provider. Check you pasted the whole key, and that it belongs to this provider.';
   } else if (loadError) {
     message = `${loadError} You can still type the model id.`;
   } else if (count > 0) {
