@@ -42,6 +42,41 @@ import {
 import { reasoningSupport } from './reasoning-controls';
 import { AiError, type AiProvider } from './types';
 
+/**
+ * Providers whose `/models` endpoint serves the catalogue to anyone —
+ * no key, and (verified) not even a valid-looking one: NVIDIA and
+ * OpenRouter both answer 200 with the full list when sent
+ * `Authorization: Bearer <garbage>`, because their listing is public
+ * product data rather than account data.
+ *
+ * This matters because it is the difference between "pick from 102
+ * models before you have a key" and "type an id from memory to get a
+ * key working". Ollama is here for a different reason — it is a local
+ * daemon with no concept of an API key at all.
+ *
+ * Do NOT add a provider here on the strength of its docs. The gate is
+ * an observed 200 on an unauthenticated request; everything else 401s
+ * (OpenAI, Anthropic, Groq, Together, DeepSeek, xAI, Mistral) or 403s
+ * (Gemini), and listing those genuinely requires the tenant's key.
+ */
+const KEYLESS_LISTING: ReadonlySet<AiProvider> = new Set<AiProvider>([
+  'ollama',
+  'nvidia',
+  'openrouter',
+]);
+
+/**
+ * Whether listing this provider's models requires a key at all.
+ *
+ * Exported because the route handlers gate on it BEFORE they bother
+ * loading and decrypting a stored key — and because a route that
+ * guessed differently to the catalogue would answer `needsKey: true`
+ * for a provider this module would have happily listed.
+ */
+export function listingNeedsKey(provider: AiProvider): boolean {
+  return !KEYLESS_LISTING.has(provider);
+}
+
 /** One selectable model, as offered to the operator. */
 export interface CatalogModel {
   /** Exact id to store in `ai_agents.model`. */
