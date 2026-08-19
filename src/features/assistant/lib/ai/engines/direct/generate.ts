@@ -1,4 +1,10 @@
-import { AiError, type AiConfig, type ChatMessage } from '../../types';
+import {
+  AiError,
+  DEFAULT_REASONING_MODE,
+  type AiConfig,
+  type ChatMessage,
+} from '../../types';
+import { reasoningPlanFor } from '../../reasoning-controls';
 import {
   OPENAI_COMPAT_BASE_URL,
   OLLAMA_PLACEHOLDER_KEY,
@@ -44,6 +50,14 @@ export async function generateReplyDirect(
 ): Promise<ProviderResult> {
   const { config, systemPrompt, messages, systemBlocks, cacheKey } = args;
   const timeoutMs = aiRequestTimeoutMs();
+  // Resolve the reasoning request fields ONCE here, so every adapter
+  // (and every OpenAI-compatible preset below) gets the same treatment
+  // without each branch remembering to ask.
+  const reasoning = reasoningPlanFor(
+    config.provider,
+    config.model,
+    config.reasoningMode ?? DEFAULT_REASONING_MODE
+  );
   const providerArgs = {
     apiKey: config.apiKey,
     model: config.model,
@@ -52,6 +66,8 @@ export async function generateReplyDirect(
     timeoutMs,
     systemBlocks,
     cacheKey,
+    reasoning,
+    tuning: config.tuning,
   };
 
   switch (config.provider) {

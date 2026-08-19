@@ -1,7 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { decrypt } from '@/lib/crypto/secrets';
-import type { AiConfig, AiProvider, AutoReplyLimitMode } from './types';
-import { isAiProvider, isAutoReplyLimitMode } from './types';
+import type {
+  AiConfig,
+  AiProvider,
+  AutoReplyLimitMode,
+  GenerationTuning,
+  ReasoningMode,
+} from './types';
+import {
+  DEFAULT_REASONING_MODE,
+  isAiProvider,
+  isAutoReplyLimitMode,
+  isReasoningMode,
+  normalizeTuning,
+} from './types';
 import { isWithinAutoReplySchedule } from './schedule';
 
 // ============================================================
@@ -51,6 +63,16 @@ export interface AgentSettings {
   /** Custom agents only — Tier-1 router triggers. Any keyword found in
    *  the customer's message routes here instantly, no LLM call. */
   triggerKeywords?: string[];
+  /** How much internal reasoning the model may do before replying.
+   *  Applies to BOTH capabilities (suggestions and auto-reply) — they
+   *  share one provider connection, so they share this too. Absent =
+   *  'off', the safe pre-toggle behaviour. */
+  reasoning?: ReasoningMode;
+  /** Expert sampling knobs (temperature, penalties, output cap).
+   *  SUPER-ADMIN ONLY — the tenant's own AI agents page never renders
+   *  these, because a bad temperature silently degrades every customer
+   *  reply. Absent = send no sampling params. */
+  tuning?: GenerationTuning;
 }
 
 /** Agent row kinds: one 'default' generalist per account, plus any
@@ -129,6 +151,14 @@ function readSettings(raw: Record<string, unknown>): Required<
         ? raw.embeddingsApiKey
         : null,
     triggerKeywords: readTriggerKeywords(raw.triggerKeywords),
+    // Unset, or garbage from an older/hand-edited row, reads as 'off' —
+    // the behaviour every account had before the toggle existed.
+    reasoning: isReasoningMode(raw.reasoning)
+      ? raw.reasoning
+      : DEFAULT_REASONING_MODE,
+    // Clamped to legal provider ranges; unparseable values drop out
+    // field-by-field rather than failing the whole agent.
+    tuning: normalizeTuning(raw.tuning),
   };
 }
 
@@ -260,6 +290,10 @@ export async function loadAgentConfig(
       settings.embeddingsApiKey,
       accountId
     ),
+    // One setting, both capabilities — suggestions and auto-reply share
+    // a provider connection, so they share the reasoning mode too.
+    reasoningMode: settings.reasoning,
+    tuning: settings.tuning,
     keySource: 'account',
   };
 }

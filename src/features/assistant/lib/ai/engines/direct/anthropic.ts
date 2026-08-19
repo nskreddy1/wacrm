@@ -50,8 +50,16 @@ function normalizeForAnthropic(messages: ChatMessage[]): ChatMessage[] {
 export async function generateAnthropic(
   args: ProviderArgs
 ): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs, systemBlocks } =
-    args;
+  const {
+    apiKey,
+    model,
+    systemPrompt,
+    messages,
+    timeoutMs,
+    systemBlocks,
+    reasoning,
+    tuning,
+  } = args;
 
   // Cache-aligned path: send the system prompt as an array of blocks,
   // each ending in a `cache_control` breakpoint — block 0 (platform
@@ -67,9 +75,31 @@ export async function generateAnthropic(
         }))
       : systemPrompt;
 
-  let res: Response;
-  try {
-    res = await fetch(ANTHROPIC_URL, {
+  const reasoningParams = reasoning?.params ?? {};
+  const thinkingOn =
+    (reasoningParams.thinking as { type?: string } | undefined)?.type ===
+    'enabled';
+
+  // Anthropic requires max_tokens > budget_tokens whenever extended
+  // thinking is enabled, so the reasoning plan's larger floor is not
+  // optional here — it's a hard API constraint.
+  const maxOut =
+    tuning?.maxOutputTokens ??
+    Math.max(MAX_OUTPUT_TOKENS, reasoning?.minOutputTokens ?? 0);
+
+  const samplingParams: Record<string, unknown> = {};
+  // Extended thinking forbids temperature/top_p — sending them 400s.
+  if (!thinkingOn) {
+    if (tuning?.temperature !== undefined) {
+      samplingParams.temperature = tuning.temperature;
+    }
+    if (tuning?.topP !== undefined) samplingParams.top_p = tuning.topP;
+  }
+  // Anthropic has no presence/frequency penalty — those are silently
+  // dropped rather than sent and rejected.
+
+  const send = (extra: Record<string, unknown>) =>
+    fetch(ANTHROPIC_URL, {
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
@@ -79,13 +109,29 @@ export async function generateAnthropic(
       body: JSON.stringify({
         model,
         system,
-        max_tokens: MAX_OUTPUT_TOKENS,
+        max_tokens: maxOut,
         messages: normalizeForAnthropic(messages),
+        ...extra,
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
+
+  let res: Response;
+  try {
+    res = await send({ ...reasoningParams, ...samplingParams });
   } catch (err) {
     throw toNetworkError(err);
+  }
+
+  // Older API revisions and non-thinking models reject the `thinking`
+  // field outright. Retry once without it so a Claude 3.5 account keeps
+  // working after this change.
+  if (res.status === 400 && Object.keys(reasoningParams).length > 0) {
+    try {
+      res = await send(samplingParams);
+    } catch (err) {
+      throw toNetworkError(err);
+    }
   }
 
   if (!res.ok) {
