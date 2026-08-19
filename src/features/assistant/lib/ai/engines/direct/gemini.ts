@@ -51,7 +51,21 @@ interface GeminiResponse {
 export async function generateGemini(
   args: ProviderArgs
 ): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs } = args;
+  const { apiKey, model, systemPrompt, messages, timeoutMs, reasoning, tuning } =
+    args;
+
+  // 'auto' (or no plan) means "send no thinkingConfig at all".
+  const mode: 'off' | 'auto' | 'on' = !reasoning
+    ? 'off'
+    : reasoning.minOutputTokens !== undefined
+      ? 'on'
+      : reasoning.control === 'none'
+        ? 'auto'
+        : 'off';
+
+  const maxOut =
+    tuning?.maxOutputTokens ??
+    Math.max(MAX_OUTPUT_TOKENS, reasoning?.minOutputTokens ?? 0);
 
   const body = (thinkingConfig: object | null) =>
     JSON.stringify({
@@ -61,7 +75,17 @@ export async function generateGemini(
         parts: [{ text: m.content }],
       })),
       generationConfig: {
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        maxOutputTokens: maxOut,
+        ...(tuning?.temperature !== undefined
+          ? { temperature: tuning.temperature }
+          : {}),
+        ...(tuning?.topP !== undefined ? { topP: tuning.topP } : {}),
+        ...(tuning?.presencePenalty !== undefined
+          ? { presencePenalty: tuning.presencePenalty }
+          : {}),
+        ...(tuning?.frequencyPenalty !== undefined
+          ? { frequencyPenalty: tuning.frequencyPenalty }
+          : {}),
         ...(thinkingConfig ? { thinkingConfig } : {}),
       },
     });
@@ -79,31 +103,50 @@ export async function generateGemini(
 
   let res: Response;
   try {
-    /*
-     * Thinking OFF, explicitly.
-     *
-     * The default model here is `gemini-flash-latest`, which thinks by
-     * default — and `maxOutputTokens` is a budget for thinking AND the
-     * answer together. A 1024-token cap plus a long CRM/knowledge
-     * prompt meant the model regularly spent the entire budget
-     * reasoning and returned a truncated scratchpad with no reply. A
-     * one-line WhatsApp answer needs no reasoning, so we turn it off
-     * and get the whole budget for the message.
-     */
-    res = await call(
-      body({ thinkingBudget: 0, includeThoughts: false })
-    );
-
-    /*
-     * Not every model lets thinking be disabled — Gemini 3 uses
-     * `thinkingLevel` and the Pro tiers enforce a minimum budget, both
-     * of which reject `thinkingBudget: 0` with a 400. A BYO-key tenant
-     * can type any model id into settings, so falling back to the
-     * plain request keeps those models working; the `thought` filter
-     * below is what protects the customer either way.
-     */
-    if (res.status === 400) {
+    if (mode === 'auto') {
+      // No thinkingConfig — whatever the model does by default. The
+      // `thought` filter below is the only protection in this mode.
       res = await call(body(null));
+    } else if (mode === 'on') {
+      /*
+       * Thinking ON, but never shown. `includeThoughts: false` keeps
+       * the scratchpad out of `parts` entirely, and the enlarged
+       * `maxOutputTokens` means the reply still has room after the
+       * model finishes reasoning.
+       */
+      res = await call(body({ includeThoughts: false }));
+    } else {
+      /*
+       * Thinking OFF, explicitly — the default.
+       *
+       * The default model here is `gemini-flash-latest`, which thinks
+       * by default — and `maxOutputTokens` is a budget for thinking AND
+       * the answer together. A 1024-token cap plus a long CRM/knowledge
+       * prompt meant the model regularly spent the entire budget
+       * reasoning and returned a truncated scratchpad with no reply. A
+       * one-line WhatsApp answer needs no reasoning, so we turn it off
+       * and get the whole budget for the message.
+       */
+      res = await call(body({ thinkingBudget: 0, includeThoughts: false }));
+
+      /*
+       * Gemini 3 replaced `thinkingBudget` with `thinkingLevel` and
+       * rejects a 0 budget, so step down to the lowest level it does
+       * accept before giving up on suppression entirely.
+       */
+      if (res.status === 400) {
+        res = await call(body({ thinkingLevel: 'low', includeThoughts: false }));
+      }
+
+      /*
+       * Still 400 — the Pro tiers enforce a minimum thinking budget and
+       * accept neither knob. A BYO-key tenant can type any model id
+       * into settings, so fall back to the plain request; the `thought`
+       * filter below is what protects the customer either way.
+       */
+      if (res.status === 400) {
+        res = await call(body(null));
+      }
     }
   } catch (err) {
     throw toNetworkError(err);

@@ -103,6 +103,81 @@ export function isReasoningMode(value: unknown): value is ReasoningMode {
 }
 
 /**
+ * Sampling / verbosity knobs — the "how does it sound" half of agent
+ * tuning, as opposed to `systemPrompt` which is the "what does it
+ * know" half.
+ *
+ * EXPERT SURFACE. These are deliberately NOT exposed on the customer's
+ * own AI agents page: a tenant who drags temperature to 2.0 gets a bot
+ * that invents prices for real customers, and the failure is silent
+ * until someone reads a transcript weeks later. Only the super-admin
+ * console sets these, per workspace, on the customer's behalf.
+ *
+ * Every field is optional and omitted fields are simply not sent, so an
+ * empty object reproduces today's behaviour exactly (the adapters
+ * currently send no sampling params at all).
+ */
+export interface GenerationTuning {
+  /** 0–2. Randomness. Low is the right answer for customer replies: a
+   *  support bot should be boring and repeatable, not creative. */
+  temperature?: number;
+  /** 0–1. Nucleus sampling. Tune this OR temperature, not both —
+   *  providers document them as interchangeable. */
+  topP?: number;
+  /** -2–2. Positive values push the model off topics it already
+   *  covered, which stops it re-greeting in every message of a long
+   *  thread. */
+  presencePenalty?: number;
+  /** -2–2. Positive values discourage verbatim token repetition. */
+  frequencyPenalty?: number;
+  /** Hard ceiling on reply length. Defaults to `MAX_OUTPUT_TOKENS`;
+   *  raised automatically when reasoning is enabled. */
+  maxOutputTokens?: number;
+}
+
+/**
+ * Conservative, warm-but-factual defaults for customer conversations.
+ * Low temperature because a CRM bot quoting a made-up delivery date is
+ * worse than a dull one; a small presence penalty because the most
+ * common complaint about these bots is that every reply opens with the
+ * same greeting.
+ */
+export const DEFAULT_TUNING: GenerationTuning = {
+  temperature: 0.3,
+  presencePenalty: 0.1,
+};
+
+/**
+ * Clamp a raw tuning object into legal provider ranges, dropping
+ * anything unparseable. Never throws — a malformed stored value
+ * degrades to "field not sent" rather than breaking generation.
+ */
+export function normalizeTuning(raw: unknown): GenerationTuning {
+  if (!raw || typeof raw !== 'object') return {};
+  const src = raw as Record<string, unknown>;
+  const num = (v: unknown, min: number, max: number): number | undefined => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return undefined;
+    return Math.min(max, Math.max(min, n));
+  };
+  const out: GenerationTuning = {};
+  const temperature = num(src.temperature, 0, 2);
+  if (temperature !== undefined) out.temperature = temperature;
+  const topP = num(src.topP, 0, 1);
+  if (topP !== undefined) out.topP = topP;
+  const presencePenalty = num(src.presencePenalty, -2, 2);
+  if (presencePenalty !== undefined) out.presencePenalty = presencePenalty;
+  const frequencyPenalty = num(src.frequencyPenalty, -2, 2);
+  if (frequencyPenalty !== undefined) out.frequencyPenalty = frequencyPenalty;
+  const maxOutputTokens = num(src.maxOutputTokens, 128, 8192);
+  if (maxOutputTokens !== undefined) {
+    out.maxOutputTokens = Math.floor(maxOutputTokens);
+  }
+  return out;
+}
+
+/**
  * Account AI setup, decrypted and ready to use. Produced by
  * `loadAiConfig` — `apiKey` is the plaintext BYO provider key
  * (stored AES-256-GCM-encrypted at rest).
@@ -147,6 +222,9 @@ export interface AiConfig {
    *  everything resolves an absent value to `DEFAULT_REASONING_MODE`
    *  ('off'), which is the pre-toggle behaviour. */
   reasoningMode?: ReasoningMode;
+  /** Expert sampling knobs, super-admin-managed. Absent = send no
+   *  sampling params (today's behaviour). */
+  tuning?: GenerationTuning;
   /** Which key pays for the call: the account's own BYO key, or the
    *  shared `process.env.GEMINI_API_KEY` fallback. Logged to
    *  `ai_usage_log.key_source` so shared-key spend is auditable. */

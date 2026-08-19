@@ -1,4 +1,10 @@
-import { AiError, type AiUsage, type ChatMessage } from '../../types';
+import {
+  AiError,
+  type AiUsage,
+  type ChatMessage,
+  type GenerationTuning,
+} from '../../types';
+import type { ReasoningPlan } from '../../reasoning-controls';
 
 // ============================================================
 // Bits shared by the direct (hand-rolled fetch) provider adapters.
@@ -18,6 +24,12 @@ export interface ProviderArgs {
   systemBlocks?: string[];
   /** Per-conversation cache-routing hint (OpenAI `prompt_cache_key`). */
   cacheKey?: string;
+  /** Resolved reasoning request fields for this provider + model +
+   *  mode. Absent means "no reasoning flags" — same as mode 'auto'. */
+  reasoning?: ReasoningPlan;
+  /** Sampling / verbosity knobs. Absent fields are simply not sent, so
+   *  the provider's own default applies. */
+  tuning?: GenerationTuning;
 }
 
 /** Raw text + usage a provider adapter returns before handoff parsing. */

@@ -4,6 +4,7 @@ import type {
   AiConfig,
   AiProvider,
   AutoReplyLimitMode,
+  GenerationTuning,
   ReasoningMode,
 } from './types';
 import {
@@ -11,6 +12,7 @@ import {
   isAiProvider,
   isAutoReplyLimitMode,
   isReasoningMode,
+  normalizeTuning,
 } from './types';
 import { isWithinAutoReplySchedule } from './schedule';
 
@@ -66,6 +68,11 @@ export interface AgentSettings {
    *  share one provider connection, so they share this too. Absent =
    *  'off', the safe pre-toggle behaviour. */
   reasoning?: ReasoningMode;
+  /** Expert sampling knobs (temperature, penalties, output cap).
+   *  SUPER-ADMIN ONLY — the tenant's own AI agents page never renders
+   *  these, because a bad temperature silently degrades every customer
+   *  reply. Absent = send no sampling params. */
+  tuning?: GenerationTuning;
 }
 
 /** Agent row kinds: one 'default' generalist per account, plus any
@@ -149,6 +156,9 @@ function readSettings(raw: Record<string, unknown>): Required<
     reasoning: isReasoningMode(raw.reasoning)
       ? raw.reasoning
       : DEFAULT_REASONING_MODE,
+    // Clamped to legal provider ranges; unparseable values drop out
+    // field-by-field rather than failing the whole agent.
+    tuning: normalizeTuning(raw.tuning),
   };
 }
 
@@ -280,6 +290,10 @@ export async function loadAgentConfig(
       settings.embeddingsApiKey,
       accountId
     ),
+    // One setting, both capabilities — suggestions and auto-reply share
+    // a provider connection, so they share the reasoning mode too.
+    reasoningMode: settings.reasoning,
+    tuning: settings.tuning,
     keySource: 'account',
   };
 }

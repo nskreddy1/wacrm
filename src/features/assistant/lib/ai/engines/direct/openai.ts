@@ -60,41 +60,100 @@ export async function generateOpenAi(
   args: ProviderArgs,
   opts: OpenAiCompatOptions = {}
 ): Promise<ProviderResult> {
-  const { apiKey, model, systemPrompt, messages, timeoutMs, cacheKey } = args;
+  const {
+    apiKey,
+    model,
+    systemPrompt,
+    messages,
+    timeoutMs,
+    cacheKey,
+    reasoning,
+    tuning,
+  } = args;
   const baseUrl = (opts.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '');
   const label = opts.providerLabel ?? 'OpenAI';
   const isOpenAiProper = baseUrl === OPENAI_BASE_URL;
 
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl}/chat/completions`, {
+  const reasoningParams = reasoning?.params ?? {};
+  const maxOut =
+    tuning?.maxOutputTokens ??
+    Math.max(MAX_OUTPUT_TOKENS, reasoning?.minOutputTokens ?? 0);
+
+  // Sampling knobs. Omitted fields are never sent, so an empty `tuning`
+  // reproduces the original plain request byte for byte.
+  const samplingParams: Record<string, unknown> = {};
+  if (tuning?.temperature !== undefined) {
+    samplingParams.temperature = tuning.temperature;
+  }
+  if (tuning?.topP !== undefined) samplingParams.top_p = tuning.topP;
+  if (tuning?.presencePenalty !== undefined) {
+    samplingParams.presence_penalty = tuning.presencePenalty;
+  }
+  if (tuning?.frequencyPenalty !== undefined) {
+    samplingParams.frequency_penalty = tuning.frequencyPenalty;
+  }
+
+  const buildBody = (extra: Record<string, unknown>) =>
+    JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...mergeConsecutive(messages),
+      ],
+      // OpenAI's newer models reject the legacy `max_tokens` param, while
+      // many compatible providers haven't adopted `max_completion_tokens`
+      // yet — send whichever the endpoint understands.
+      ...(isOpenAiProper
+        ? { max_completion_tokens: maxOut }
+        : { max_tokens: maxOut }),
+      // Cache-routing hint (conversation id): OpenAI uses it to route
+      // requests to the machine holding this conversation's cached
+      // prefix, raising hit rates. Only OpenAI proper understands it —
+      // compatible gateways may reject unknown params, so gate it.
+      ...(isOpenAiProper && cacheKey ? { prompt_cache_key: cacheKey } : {}),
+      ...extra,
+    });
+
+  const send = (extra: Record<string, unknown>) =>
+    fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...mergeConsecutive(messages),
-        ],
-        // OpenAI's newer models reject the legacy `max_tokens` param, while
-        // many compatible providers haven't adopted `max_completion_tokens`
-        // yet — send whichever the endpoint understands.
-        ...(isOpenAiProper
-          ? { max_completion_tokens: MAX_OUTPUT_TOKENS }
-          : { max_tokens: MAX_OUTPUT_TOKENS }),
-        // Cache-routing hint (conversation id): OpenAI uses it to route
-        // requests to the machine holding this conversation's cached
-        // prefix, raising hit rates. Only OpenAI proper understands it —
-        // compatible gateways may reject unknown params, so gate it.
-        ...(isOpenAiProper && cacheKey ? { prompt_cache_key: cacheKey } : {}),
-      }),
+      body: buildBody(extra),
       signal: AbortSignal.timeout(timeoutMs),
     });
+
+  let res: Response;
+  try {
+    res = await send({ ...reasoningParams, ...samplingParams });
   } catch (err) {
     throw toNetworkError(err);
+  }
+
+  // A 400 with reasoning/sampling params almost always means "this model
+  // doesn't accept that field" — the catalogue moves faster than our
+  // mapping table. Retry once with the plain request rather than failing
+  // the customer's reply over an optional tuning knob. Only reasoning
+  // params are dropped first because they are the newest and least
+  // portable; sampling params are kept since nearly every model takes
+  // them.
+  if (res.status === 400 && Object.keys(reasoningParams).length > 0) {
+    try {
+      res = await send(samplingParams);
+    } catch (err) {
+      throw toNetworkError(err);
+    }
+  }
+  // Still 400 → drop sampling too (DeepSeek-reasoner rejects
+  // `temperature` outright while thinking is on).
+  if (res.status === 400 && Object.keys(samplingParams).length > 0) {
+    try {
+      res = await send({});
+    } catch (err) {
+      throw toNetworkError(err);
+    }
   }
 
   if (!res.ok) {
