@@ -53,13 +53,15 @@ export function SettingsRail({
       className={cn(
         'flex [scrollbar-width:none] gap-1 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden',
         'border-border border-b',
-        // Desktop: an independent scroll pane rather than a `sticky`
-        // block inside the page scroller. The old sticky rail was taller
-        // than the viewport, so its lower entries were only reachable by
-        // scrolling the *shared* scroller — which then left the content
-        // panel parked mid-page. Owning its own overflow means the rail
-        // can never drag the content pane around.
-        'lg:h-full lg:min-h-0 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:pb-0'
+        // Desktop: the rail sticks while the PAGE scrolls — the page
+        // scroller is the app's single scroll owner, so the rail must not
+        // compete with it. `max-h` + `overflow-y-auto` is a safety valve
+        // for short viewports only: when the rail fits (the normal case)
+        // no scroller materialises, and when it doesn't, its lower
+        // entries stay reachable instead of being clipped off-screen.
+        // Scrollbar chrome is hidden by the base classes above, so this
+        // never reads as a second scrollbar.
+        'lg:sticky lg:top-4 lg:max-h-[calc(100svh-6rem)] lg:flex-col lg:self-start lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:pb-0'
       )}
     >
       {/* Bigin-style rail: plain text items (no icons), sentence-case
