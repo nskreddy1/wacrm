@@ -367,6 +367,13 @@ export async function POST(request: Request) {
     if (autoreplyPromptProvided) {
       shared.autoreply_system_prompt = autoreplySystemPrompt;
     }
+    // ...and for the Copilot's prompt, which until now followed no rule at
+    // all: `system_prompt` was parsed off the body and used for credential
+    // validation, but never added to the row, so every save from the
+    // Copilot form silently discarded whatever the admin had written.
+    if (systemPromptProvided) {
+      shared.system_prompt = systemPrompt;
+    }
     if (rawEmbeddingsKey) {
       shared.embeddings_api_key = encrypt(rawEmbeddingsKey);
     } else if (clearEmbeddingsKey) {

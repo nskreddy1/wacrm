@@ -11,7 +11,7 @@ import {
   submitTwilioApproval,
   validateWhatsAppTemplateBody,
 } from '@/features/whatsapp/lib/twilio-content';
-import type { ChannelConnection, TemplateButton } from '@/types';
+import type { TemplateButton } from '@/types';
 
 // Tolerant by design: the studio's saveBody() serializes empty
 // optional fields as null (matching the DB row shape), and the

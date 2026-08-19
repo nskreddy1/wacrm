@@ -28,8 +28,6 @@ const OVERRIDE_COLUMNS = [
   'monthly_ai_replies',
 ] as const;
 
-type OverrideColumn = (typeof OVERRIDE_COLUMNS)[number];
-
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
