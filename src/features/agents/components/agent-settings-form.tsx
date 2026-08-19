@@ -10,9 +10,12 @@ import {
   isAutoReplyLimitMode,
   isReasoningMode,
   DEFAULT_REASONING_MODE,
+  type AiProvider,
   type AutoReplyLimitMode,
   type ReasoningMode,
 } from '@/features/assistant/lib/ai/types';
+import { reasoningSupport } from '@/features/assistant/lib/ai/reasoning-controls';
+import { ModelPicker } from '@/features/assistant/components/model-picker';
 import { fetchAccountMembers, memberLabel } from '@/lib/account/members';
 import type { AccountMember } from '@/types';
 import {
@@ -104,6 +107,13 @@ export function AgentSettingsForm({
 
   const preset = PROVIDER_PRESETS.find((p) => p.id === provider);
 
+  // Does this provider + model pair actually have a thinking knob? The
+  // switch is hidden when it doesn't: `gpt-4o` rejects the reasoning
+  // field outright, so rendering the control there promised a change
+  // the model can never make. Recomputed on every keystroke — it is a
+  // pure table lookup, no network call.
+  const reasoningCap = reasoningSupport(provider as AiProvider, model);
+
   // Team members for the escalation handoff picker.
   const { data: membersData } = useSWR<AccountMember[]>(
     canManage ? 'account-members' : null,
@@ -152,7 +162,10 @@ export function AgentSettingsForm({
         scheduleEnd: scheduleEnd || null,
         timezone: scheduleStart ? timezone : null,
         handoffAgentId: handoff || null,
-        reasoning,
+        // A model with no knob is stored as 'off' rather than keeping a
+        // stale 'on' from a previous model — otherwise switching back
+        // to a reasoning model would silently re-enable thinking.
+        reasoning: reasoningCap.supported ? reasoning : 'off',
       };
 
       const res = await fetch(`/api/ai/agents/${agent.id}`, {
