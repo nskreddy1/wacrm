@@ -4,7 +4,7 @@ import {
   decrypt,
   encrypt,
   isLegacyFormat,
-} from '@/features/whatsapp/lib/encryption';
+} from '@/lib/crypto/secrets';
 import { getMediaUrl } from '@/features/whatsapp/lib/meta-api';
 import { normalizePhone } from '@/features/whatsapp/lib/phone-utils';
 import { toE164 } from '@/lib/phone/e164';

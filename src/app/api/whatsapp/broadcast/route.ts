@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendTemplateMessage } from '@/features/whatsapp/lib/meta-api';
-import { decrypt } from '@/features/whatsapp/lib/encryption';
+import { decrypt } from '@/lib/crypto/secrets';
 import type { SendTimeParams } from '@/features/whatsapp/lib/template-send-builder';
 import { isMessageTemplate } from '@/features/whatsapp/lib/template-row-guard';
 import {

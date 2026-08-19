@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-vi.mock('@/features/whatsapp/lib/encryption', () => ({ decrypt }));
+vi.mock('@/lib/crypto/secrets', () => ({ decrypt }));
 vi.mock('./mailer', () => ({ encryptEmailCredentials }));
 
 import {

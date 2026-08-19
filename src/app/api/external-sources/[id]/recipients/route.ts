@@ -17,7 +17,7 @@ import {
   getCurrentAccount,
   toErrorResponse,
 } from '@/features/auth/lib/account';
-import { decrypt } from '@/features/whatsapp/lib/encryption';
+import { decrypt } from '@/lib/crypto/secrets';
 import {
   ExternalSourceError,
   fetchRecipients,

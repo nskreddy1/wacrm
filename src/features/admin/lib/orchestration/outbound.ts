@@ -5,7 +5,7 @@ import {
 } from '@/features/channels/lib/adapters/meta';
 import { channelAdmin } from '@/lib/supabase/admin';
 import type { OutboundMessagePayload } from '@/features/channels/lib/contracts';
-import { decrypt } from '@/features/whatsapp/lib/encryption';
+import { decrypt } from '@/lib/crypto/secrets';
 import {
   isRecipientNotAllowedError,
   isValidE164,

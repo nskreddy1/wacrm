@@ -1,7 +1,19 @@
 import crypto from 'crypto';
 
 /**
- * WhatsApp token encryption.
+ * Symmetric encryption for secrets held at rest.
+ *
+ * Used for every third-party credential the app stores: WhatsApp and
+ * Twilio tokens, AI provider keys, agent configs, external-source
+ * credentials, outbound webhook signing secrets and SMTP passwords.
+ *
+ * This lived at `src/features/whatsapp/lib/encryption.ts` until it was
+ * moved here. Nothing in it was ever WhatsApp-specific — only the old
+ * doc comment implied otherwise — and of the ~38 call sites exactly one
+ * was WhatsApp. Everything else (email transport, AI config, webhooks)
+ * had to reach into a feature module for core crypto, which inverted the
+ * dependency direction the architecture check enforces: shared
+ * infrastructure must not depend on a feature.
  *
  * Format — GCM (current):
  *   `<iv-hex>:<ciphertext-hex>:<authTag-hex>`      (three colons)

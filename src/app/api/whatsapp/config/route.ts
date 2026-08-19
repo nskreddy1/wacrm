@@ -11,7 +11,7 @@ import {
   subscribeWabaToApp,
   verifyPhoneNumber,
 } from '@/features/whatsapp/lib/meta-api';
-import { encrypt, decrypt } from '@/features/whatsapp/lib/encryption';
+import { encrypt, decrypt } from '@/lib/crypto/secrets';
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here

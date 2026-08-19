@@ -10,7 +10,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
-import { encrypt } from '@/features/whatsapp/lib/encryption';
+import { encrypt } from '@/lib/crypto/secrets';
 import {
   AGENT_COLUMNS,
   fetchAllAgentRows,

@@ -48,7 +48,7 @@ supabase/migrations/   ordered SQL; applied via scripts/push-supabase-schema.mjs
 3. **Channel abstraction**: `createChannelAdapter(provider, channel)`
    in `src/features/channels/` — one adapter per provider×channel.
    Connections live in `channel_connections` (credentials encrypted
-   AES-256-GCM via `src/features/whatsapp/lib/encryption.ts`).
+   AES-256-GCM via `src/lib/crypto/secrets.ts`).
 4. **Provider policy layer**: `platform_provider_policies` — platform
    operators can withdraw a provider from the catalog; enforced at
    connection-save time in `/api/settings/channels`.

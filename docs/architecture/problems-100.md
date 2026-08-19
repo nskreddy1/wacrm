@@ -38,7 +38,7 @@ Cross-reference `roadmap.md` for fix order of the top items.
 21. **S2** v1 API keys have no scopes — a key for reading contacts can send messages
 22. **S2** v1 API keys never expire; no rotation reminder surface
 23. **S2** No CSP headers configured — XSS blast radius larger than needed
-24. **S2** Service-role usage audit: ~30 routes use `channelAdmin()`; each is hand-checked for account_id scoping with no lint rule enforcing it
+24. **S2** Service-role usage audit: **35 route handlers** (of 115) import a service-role `admin-client`, spread across four per-feature modules (`admin/lib/platform/`, `assistant/lib/ai/`, `channels/lib/`, `flows/lib/`) plus `lib/quotas/`; `src/app/api/whatsapp/{config,webhook}/route.ts` read `SUPABASE_SERVICE_ROLE_KEY` directly. Every one bypasses RLS and is hand-checked for `account_id` scoping with no lint rule enforcing it — this is the single largest tenant-isolation risk surface
 25. **S2** Invitation tokens don't expire aggressively (7 days) and survive inviter's permission downgrade
 26. **S2** No anomaly alerts (new-country login triggers no email to the user)
 27. **S3** Audit events table has no immutability guarantee (service role could UPDATE; no trigger blocking it)
@@ -105,6 +105,31 @@ Cross-reference `roadmap.md` for fix order of the top items.
 76. ~~**S3** No CI gate for `pnpm exec tsc --noEmit` + vitest on PRs~~ **[STALE — RESOLVED]** `.github/workflows/ci.yml` now runs format, lint, `typecheck`, `check:boundaries`, `test` and `build`; `pnpm check` is the local equivalent
 77. **S4** No accessibility audit run (keyboard nav through inbox untested)
 78. **S4** Seed script drifts from schema (manual fixes needed after migrations)
+
+### Gate status as of the last audit pass
+
+`pnpm check` is currently **red** on two pre-existing issues. Both predate
+the documentation pass and are unrelated to it, but they mean the gate
+cannot be cited as green until they are fixed:
+
+- **5 React Compiler errors** (`pnpm lint`): `setState` synchronously inside
+  an effect in `admin/components/workspace-limits-panel.tsx:89` and
+  `templates/components/template-studio.tsx:190`; refs accessed during
+  render in `assistant/components/assistant-widget.tsx:157`; an impure call
+  during render in `settings/components/security-summary.tsx:54`
+  (`Date.now()` in the render body); and a mutation of a frozen value in
+  `settings/components/devices-card.tsx:131`. The two `setState`-in-effect
+  cases are SWR-hydration patterns that should derive state instead.
+- **2 import-boundary violations** (`pnpm check:boundaries`):
+  `src/lib/email/mailer.ts` and `src/lib/email/platform-invite-transport.ts`
+  import from `@/features`, inverting the shared→feature dependency rule.
+  Either move the feature-specific pieces down into `src/lib/email/` or
+  baseline them explicitly in `feature-graph.json`.
+
+Lint previously also reported ~40 failures from `.agents/skills/**` and
+`v0_memories/**`. Those are vendored agent authoring scripts that never
+enter the app build; they are now in `globalIgnores`, so the remaining
+9 problems are all real product code.
 
 ## Observability & ops (79–86)
 

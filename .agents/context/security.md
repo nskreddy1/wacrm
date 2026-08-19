@@ -20,7 +20,7 @@ diff that touches auth, tenancy, credentials, webhooks, or AI prompts.
    granted to service_role only). Access tokens die at JWT expiry
    (~1h max window after revoke).
 4. **Credential storage**: provider credentials AES-256-GCM encrypted
-   (`src/features/whatsapp/lib/encryption.ts`, `ENCRYPTION_KEY` env).
+   (`src/lib/crypto/secrets.ts`, `ENCRYPTION_KEY` env).
    Never log, return to client, or embed in prompts. UI shows masked
    identities only.
 5. **Webhooks**: Meta HMAC + Twilio `X-Twilio-Signature` verification

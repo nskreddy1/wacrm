@@ -22,7 +22,7 @@
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { decrypt } from '@/features/whatsapp/lib/encryption';
+import { decrypt } from '@/lib/crypto/secrets';
 import { executeOperation } from './execute';
 import {
   IntegrationError,

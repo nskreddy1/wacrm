@@ -15,7 +15,7 @@
 import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
-import { encrypt } from '@/features/whatsapp/lib/encryption';
+import { encrypt } from '@/lib/crypto/secrets';
 import {
   isSourceType,
   validateConfig,

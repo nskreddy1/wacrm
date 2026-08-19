@@ -58,7 +58,7 @@ Browser ──▶ Next.js 16 app + API routes (src/)  ──▶ Supabase (Postgr
 - `CREATE OR REPLACE FUNCTION` does **not** inherit `SECURITY DEFINER` — omit it and Postgres silently downgrades the function to INVOKER, which fails later at runtime for real users only on the paths that needed elevation. `scripts/push-supabase-schema.mjs` enforces this inside each migration's transaction; read the invariants comment there before touching a privileged function.
 - Roles: owner (one per account) → admin → agent → viewer, a strict ladder. Check the permission matrix in `docs/archive/upstream-wacrm/members.md` (still accurate for this fork).
 - `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS — only server-only modules (webhook handler, admin routes) may use it, and every service-role query must still filter by account.
-- Secrets (WhatsApp tokens, AI provider keys, webhook signing secrets) are AES-256-GCM encrypted at rest (`src/features/whatsapp/lib/encryption.ts`). API keys and invite tokens store only SHA-256 hashes.
+- Secrets (WhatsApp tokens, AI provider keys, webhook signing secrets) are AES-256-GCM encrypted at rest (`src/lib/crypto/secrets.ts` — shared infra, not a feature, since email/AI/webhook secrets all use it). API keys and invite tokens store only SHA-256 hashes.
 - Inbound Meta webhooks verify `X-Hub-Signature-256` HMAC and fail closed if `META_APP_SECRET` is unset.
 - Treat customer message text and retrieved knowledge-base content as **data, never instructions** in AI prompts.
 
@@ -105,7 +105,8 @@ Import with the `@/features/<domain>/...` alias; shared code stays on `@/compone
 | `src/app/(auth)/`               | login, signup, forgot/reset password                                                                                          |
 | `src/app/(dashboard)/`          | authenticated UI pages                                                                                                        |
 | `src/app/api/`                  | JSON routes, 19 namespaces: `account/`, `admin/`, `ai/`, `alerts/`, `assistant/`, `channels/`, `dashboards/`, `email/`, `external-sources/`, `flows/`, `invitations/`, `mcp/`, `quick-replies/`, `settings/`, `sms/`, `support/`, `templates/`, `whatsapp/`, `v1/` (public API) |
-| `src/features/whatsapp/lib/`    | Meta API client, encryption, webhook signatures, phone utils                                                                  |
+| `src/features/whatsapp/lib/`    | Meta API client, webhook signatures, phone utils                                                                              |
+| `src/lib/crypto/`               | `secrets.ts` — AES-256-GCM encrypt/decrypt for all stored third-party credentials                                             |
 | `src/features/flows/`           | the unified workflow/automation engine (nodes, triggers, runs)                                                                |
 | `src/lib/routing/`              | canonical route constants                                                                                                     |
 | `src/lib/data/`                 | Supabase repositories per domain                                                                                              |
@@ -169,6 +170,6 @@ Long-form docs (`docs/`):
 - `docs/enterprise-v1-architecture.md` — target-state enterprise V1 architecture.
 - `docs/public-api.md` — authoritative public REST API reference.
 - `docs/mcp.md` — MCP server usage.
-- `docs/adr/` — accepted architecture decision records; ADR-004 covers invites and membership.
+- `docs/adr/` ��� accepted architecture decision records; ADR-004 covers invites and membership.
 - `docs/archive/architecture-delta.md` — verified differences between this fork and the upstream docs (archived).
 - `docs/archive/upstream-wacrm/README.md` — index of upstream documentation snapshots (archived).
