@@ -15,6 +15,21 @@ import { cn } from '@/lib/utils';
  *
  * Rhythm: p-4 sm:p-6 lg:p-8 padding with a flex column gap-6 between
  * page header and content sections.
+ *
+ * SINGLE SCROLL OWNER — this container is the page's only scroller.
+ * Children MUST NOT set `overflow-y-auto`/`overflow-y-scroll` on a
+ * full-height pane inside it. Two nested scrollers means this one has
+ * nothing left to move, so the wheel silently drives the inner pane
+ * instead of the page: the page header and any sibling column freeze
+ * while content slides under them, and the scrollbar appears mid-layout
+ * rather than at the viewport edge. (This was the Settings bug — its
+ * rail and content panel each owned their overflow.)
+ *
+ * To keep a sibling column visible while the page scrolls, use
+ * `sticky top-*` + `self-start` — NOT a nested scroll pane. Genuinely
+ * virtualised or independently-paged regions (inbox thread lists,
+ * pipeline columns) belong in full-bleed workspaces that skip this
+ * container entirely.
  */
 type PageWidth = 'default' | 'narrow' | 'full';
 

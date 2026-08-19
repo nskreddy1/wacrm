@@ -70,10 +70,9 @@ export default function SettingsPage() {
   // `scroll: false` above stops Next from jumping on a same-page
   // navigation, but it also means a stale offset survives the switch:
   // scroll down inside a long panel (Audit log), pick another section,
-  // and the new panel opens mid-page. The desktop content pane resets
-  // itself (it is keyed by section, so it remounts at scrollTop 0);
-  // below `lg` the shared PageContainer scroller is the one that moved,
-  // so reset it explicitly. `.app-scrollbar` is PageContainer's marker.
+  // and the new panel opens mid-page. PageContainer is the page's only
+  // scroller at every breakpoint now, so resetting it is the whole job.
+  // `.app-scrollbar` is PageContainer's marker.
   useEffect(() => {
     const scroller = rootRef.current?.closest('.app-scrollbar');
     if (scroller instanceof HTMLElement) scroller.scrollTop = 0;
@@ -123,7 +122,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col gap-4">
+    <div ref={rootRef} className="flex flex-col gap-4">
       {/* The page had no visible title at all — only an `sr-only` h1 — so
           the first thing on screen was the rail's "Account" group label. */}
       <header className="bg-background sticky top-0 z-10 -mx-4 shrink-0 px-4 pb-3 sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:px-0 lg:pb-0">
@@ -132,20 +131,17 @@ export default function SettingsPage() {
         </h1>
       </header>
 
-      {/* Two independent scroll panes below `lg` collapse to one column.
-          `items-start` is gone: both panes must stretch so each can own
-          its overflow instead of growing the page scroller. */}
-      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[236px_minmax(0,1fr)]">
+      {/* ONE scroll owner: PageContainer. Neither pane sets `overflow`, so
+          content grows the page scroller instead of trapping the wheel in
+          a nested pane. `lg:items-start` lets the rail collapse to its own
+          height so it can stick (below) rather than stretch. */}
+      <div className="grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
         <SettingsRail active={section} onSelect={go} hints={hints} />
         {/* Keyed by section so each panel mounts fresh. Several sections
             render the SAME component in this slot, and without a key React
             reuses that instance — every open sheet, selected row, and draft
-            form from the previous section survived the switch. Remounting
-            also guarantees this pane starts at scrollTop 0. */}
-        <div
-          key={section}
-          className="app-scrollbar flex min-w-0 flex-col lg:min-h-0 lg:overflow-y-auto lg:pr-1"
-        >
+            form from the previous section survived the switch. */}
+        <div key={section} className="flex min-w-0 flex-col">
           {panel[section]}
         </div>
       </div>
