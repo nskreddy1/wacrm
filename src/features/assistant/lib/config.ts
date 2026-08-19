@@ -3,7 +3,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import type { LanguageModel } from 'ai';
 import { decrypt } from '@/features/whatsapp/lib/encryption';
-import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // ============================================================
 // Platform assistant config — the in-app helper agent.

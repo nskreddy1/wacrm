@@ -8,7 +8,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
-import { channelAdmin } from '@/features/channels/lib/admin-client';
+import { channelAdmin } from '@/lib/supabase/admin';
 import { createChannelAdapter } from '@/features/channels/lib/adapters';
 import {
   buildProviderCredentials,

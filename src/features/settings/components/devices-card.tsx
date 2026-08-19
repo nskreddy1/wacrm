@@ -128,7 +128,10 @@ export function DevicesCard() {
       toast.success(t('deviceRevoked'));
       if (device.is_current) {
         // Revoked own session — refresh token is dead; go to login.
-        window.location.href = '/login';
+        // `assign` rather than writing `location.href`: same navigation,
+        // but a method call instead of a mutation of a global the React
+        // compiler (rightly) treats as immutable from a component.
+        window.location.assign('/login');
         return;
       }
       await mutate();

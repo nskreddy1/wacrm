@@ -91,7 +91,7 @@ vi.mock('@/lib/rate-limit', () => ({
   RATE_LIMITS: { adminAction: { limit: 30, windowMs: 60_000 } },
 }));
 
-const { getCurrentAccount } = await import('./account');
+const { getCurrentAccount } = await import('@/features/auth/lib/account');
 const { POST } = await import('@/app/api/account/switch/route');
 
 function req(body: unknown, raw?: string) {

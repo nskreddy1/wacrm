@@ -31,7 +31,7 @@
 // ============================================================
 
 import 'server-only';
-import { supabaseAdmin } from '@/features/assistant/lib/ai/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { decrypt } from '@/features/whatsapp/lib/encryption';
 import {
   encryptEmailCredentials,

@@ -1,4 +1,4 @@
-import type { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import type { supabaseAdmin } from '@/lib/supabase/admin';
 import { enqueueAlertDeliveries } from '@/features/alerts/lib/enqueue';
 
 /**

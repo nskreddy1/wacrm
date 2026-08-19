@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
-import { channelAdmin } from '@/features/channels/lib/admin-client';
+import { channelAdmin } from '@/lib/supabase/admin';
 import { resolveTwilioCredentials } from '@/features/channels/lib/twilio-account';
 import {
   createTwilioContent,
@@ -11,7 +11,7 @@ import {
   submitTwilioApproval,
   validateWhatsAppTemplateBody,
 } from '@/features/whatsapp/lib/twilio-content';
-import type { ChannelConnection, TemplateButton } from '@/types';
+import type { TemplateButton } from '@/types';
 
 // Tolerant by design: the studio's saveBody() serializes empty
 // optional fields as null (matching the DB row shape), and the

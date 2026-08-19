@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ============================================================
 
 const maybeSingle = vi.fn();
-vi.mock('@/features/assistant/lib/ai/admin-client', () => ({
+vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => ({
       select: () => ({ eq: () => ({ maybeSingle }) }),

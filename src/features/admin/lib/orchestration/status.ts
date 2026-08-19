@@ -1,4 +1,4 @@
-import { channelAdmin } from '@/features/channels/lib/admin-client';
+import { channelAdmin } from '@/lib/supabase/admin';
 import { dispatchWebhookEvent } from '@/features/webhooks/lib/deliver';
 
 // ============================================================

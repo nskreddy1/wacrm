@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
 import { toErrorResponse } from '@/features/auth/lib/account';
-import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
+import { platformAdmin } from '@/lib/supabase/admin';
 import { logPlatformAudit } from '@/features/admin/lib/platform/audit';
 import { sanitizePlanPatch } from '@/features/admin/lib/platform/plan-validation';
 

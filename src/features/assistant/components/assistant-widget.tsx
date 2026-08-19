@@ -74,7 +74,19 @@ const SUGGESTIONS: { label: string; icon?: 'workflow' }[] = [
  */
 const ACTIVE_SESSION_KEY = 'mira:active-session';
 
+/**
+ * In-memory mirror of the active thread id.
+ *
+ * The transport below has to learn the id at send time and lives outside
+ * the component, so it cannot read a React ref. sessionStorage is the
+ * durable copy; this object is the fallback for the one case where
+ * storage throws (cookies fully disabled), so a turn is still attributed
+ * to the right thread for as long as the tab stays open.
+ */
+const activeSession = { id: null as string | null };
+
 function rememberSession(id: string | null) {
+  activeSession.id = id;
   try {
     if (id) sessionStorage.setItem(ACTIVE_SESSION_KEY, id);
     else sessionStorage.removeItem(ACTIVE_SESSION_KEY);
@@ -83,6 +95,31 @@ function rememberSession(id: string | null) {
     // as the panel stays mounted, it just won't survive a reload.
   }
 }
+
+function readSession(): string | null {
+  try {
+    return sessionStorage.getItem(ACTIVE_SESSION_KEY) ?? activeSession.id;
+  } catch {
+    return activeSession.id;
+  }
+}
+
+/**
+ * One transport for the module, not one per render.
+ *
+ * It was previously constructed inline in the hook call, minting a new
+ * instance on every keystroke-driven re-render even though `useChat` only
+ * ever reads the first one. The thread id is looked up at send time
+ * instead of being closed over: the follow-up turn after a tool approval
+ * is dispatched by `useChat` itself, so a per-call `body` override would
+ * miss it and the server would open a second thread mid-conversation.
+ */
+const assistantTransport = new DefaultChatTransport({
+  api: '/api/assistant/chat',
+  prepareSendMessagesRequest: ({ body, messages }) => ({
+    body: { ...body, messages, sessionId: readSession() },
+  }),
+});
 
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
@@ -109,16 +146,7 @@ export function AssistantWidget() {
     addToolApprovalResponse,
     error,
   } = useChat({
-    transport: new DefaultChatTransport({
-      api: '/api/assistant/chat',
-      // Attach the thread id to every outgoing turn so the server knows
-      // where to persist it. `prepareSendMessagesRequest` reads the ref
-      // at send time — a captured value would be stale for the very
-      // first message of a brand-new thread.
-      prepareSendMessagesRequest: ({ body, messages: outgoing }) => ({
-        body: { ...body, messages: outgoing, sessionId: sessionIdRef.current },
-      }),
-    }),
+    transport: assistantTransport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onError: (err) => {
       if (err.message.includes('assistant_not_configured')) {

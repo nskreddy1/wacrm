@@ -1,5 +1,5 @@
 import { getSessionPayload } from '@/features/auth/lib/session-payload';
-import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { OnboardingWizard } from '@/features/onboarding/components/onboarding-wizard';
 
 // The layout has already verified: authenticated, owner, not yet

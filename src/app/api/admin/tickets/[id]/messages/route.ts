@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server';
 import { toErrorResponse } from '@/features/auth/lib/account';
 import { requireSuperAdmin } from '@/features/auth/lib/super-admin';
 import { logPlatformAudit } from '@/features/admin/lib/platform/audit';
-import { platformAdmin } from '@/features/admin/lib/platform/admin-client';
+import { platformAdmin } from '@/lib/supabase/admin';
 import { BODY_MAX, isTicketStatus } from '@/features/support/lib/tickets';
 import {
   checkRateLimit,

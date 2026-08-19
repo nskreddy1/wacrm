@@ -35,7 +35,7 @@ import {
   RATE_LIMITS,
 } from '@/lib/rate-limit';
 import { createClient } from '@/lib/supabase/server';
-import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { canAddResource } from '@/lib/quotas';
 import { quotaExceededResponse } from '@/lib/quotas/response';
 

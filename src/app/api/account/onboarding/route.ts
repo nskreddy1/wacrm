@@ -16,7 +16,7 @@
 
 import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/features/auth/lib/account';
-import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logAuditEvent } from '@/lib/audit-events';
 import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from '@/lib/rate-limit';
 

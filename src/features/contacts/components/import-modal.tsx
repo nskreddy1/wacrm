@@ -152,7 +152,10 @@ export function ImportModal({
   const { data } = useSWR<Store>(
     open ? '/api/v1/workspace/contacts?import=1' : null
   );
-  const fields = data?.data.fields ?? [];
+  // Memoised so the `?? []` fallback doesn't mint a new array identity on
+  // every render — that identity is a dependency of the auto-mapping effect
+  // below, which would otherwise re-run on every keystroke in the modal.
+  const fields = useMemo(() => data?.data.fields ?? [], [data]);
   const [step, setStep] = useState(0);
   const [fileName, setFileName] = useState('');
   const [csv, setCsv] = useState<CsvData>({ headers: [], rows: [] });

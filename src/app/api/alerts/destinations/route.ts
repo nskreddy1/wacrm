@@ -6,7 +6,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
-import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /**
  * Notification destinations management.

@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   AlertAdapter,

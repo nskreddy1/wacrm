@@ -1,4 +1,4 @@
-import { channelAdmin } from '@/features/channels/lib/admin-client';
+import { channelAdmin } from '@/lib/supabase/admin';
 import {
   decryptProviderCredentials,
   type TwilioCredentials,

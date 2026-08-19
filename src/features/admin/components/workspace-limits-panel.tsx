@@ -11,7 +11,7 @@
  *   column = N >= 0       -> hard per-account cap
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 
@@ -72,30 +72,6 @@ export function WorkspaceLimitsPanel({ workspaceId }: { workspaceId: string }) {
     jsonFetcher
   );
 
-  const [planId, setPlanId] = useState('');
-  const [unlimitedAll, setUnlimitedAll] = useState(false);
-  // Seeded with every key present (null = "use plan value") so the number
-  // inputs are controlled from their very first render — an initially
-  // `undefined` value would flip them uncontrolled -> controlled.
-  const [values, setValues] = useState<Record<LimitKey, number | null>>(() =>
-    emptyValues()
-  );
-  const [reason, setReason] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  // Hydrate the form whenever fresh server state arrives.
-  useEffect(() => {
-    if (!data) return;
-    setPlanId(data.account.plan_id);
-    setUnlimitedAll(data.override?.unlimited_all ?? false);
-    setReason(data.override?.reason ?? '');
-    const next = emptyValues();
-    for (const row of LIMIT_ROWS) {
-      next[row.key] = data.override?.[row.key] ?? null;
-    }
-    setValues(next);
-  }, [data]);
-
   if (isLoading || !data) {
     return (
       <div className="flex flex-col gap-2">
@@ -104,6 +80,50 @@ export function WorkspaceLimitsPanel({ workspaceId }: { workspaceId: string }) {
       </div>
     );
   }
+
+  // The form is a separate component seeded from props, keyed by account.
+  //
+  // It used to live here and copy `data` into state from an effect on every
+  // change of `data`. SWR revalidates on focus and after a save, so that
+  // effect silently threw away whatever the admin had typed the moment the
+  // window regained focus. Mounting the form once per account instead means
+  // its initial state is read exactly once, from the first payload, and
+  // edits survive every background revalidation.
+  return (
+    <LimitsForm
+      key={data.account.id}
+      workspaceId={workspaceId}
+      data={data}
+      onSaved={mutate}
+    />
+  );
+}
+
+function LimitsForm({
+  workspaceId,
+  data,
+  onSaved,
+}: {
+  workspaceId: string;
+  data: LimitsPayload;
+  onSaved: () => void;
+}) {
+  const [planId, setPlanId] = useState(data.account.plan_id);
+  const [unlimitedAll, setUnlimitedAll] = useState(
+    data.override?.unlimited_all ?? false
+  );
+  // Seeded with every key present (null = "use plan value") so the number
+  // inputs are controlled from their very first render — an initially
+  // `undefined` value would flip them uncontrolled -> controlled.
+  const [values, setValues] = useState<Record<LimitKey, number | null>>(() => {
+    const next = emptyValues();
+    for (const row of LIMIT_ROWS) {
+      next[row.key] = data.override?.[row.key] ?? null;
+    }
+    return next;
+  });
+  const [reason, setReason] = useState(data.override?.reason ?? '');
+  const [saving, setSaving] = useState(false);
 
   async function save() {
     setSaving(true);
@@ -123,7 +143,7 @@ export function WorkspaceLimitsPanel({ workspaceId }: { workspaceId: string }) {
         throw new Error(body?.error ?? 'Save failed');
       }
       toast.success('Limits updated');
-      mutate();
+      onSaved();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Save failed');
     } finally {

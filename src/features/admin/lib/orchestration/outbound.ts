@@ -3,7 +3,7 @@ import {
   sendMetaPayload,
   type MetaSendContext,
 } from '@/features/channels/lib/adapters/meta';
-import { channelAdmin } from '@/features/channels/lib/admin-client';
+import { channelAdmin } from '@/lib/supabase/admin';
 import type { OutboundMessagePayload } from '@/features/channels/lib/contracts';
 import { decrypt } from '@/features/whatsapp/lib/encryption';
 import {

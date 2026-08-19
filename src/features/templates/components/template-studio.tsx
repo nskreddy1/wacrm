@@ -15,7 +15,7 @@
 // and merged over server rows until saved.
 // ============================================================
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 
 import {
   ChevronsRight,
@@ -155,6 +155,104 @@ const STUDIO_CHANNELS: {
 /** localStorage key for the channel panel pin preference (pure UI state). */
 const CHANNEL_PANEL_PREF_KEY = 'wacrm.templates.channel-panel';
 
+interface ChannelPanelPref {
+  pinned: boolean;
+  hover: boolean;
+}
+
+const DEFAULT_CHANNEL_PANEL_PREF: ChannelPanelPref = { pinned: false, hover: true };
+
+/**
+ * The stored panel preference, read as an external store rather than
+ * copied into state from an effect.
+ *
+ * The effect version rendered the defaults, then immediately called
+ * setState with the stored value — a second render on every mount, and the
+ * panel visibly snapped from collapsed to pinned. `useSyncExternalStore`
+ * has a server snapshot, so the markup React produces on the server and
+ * during hydration is the default, and the stored value is picked up in
+ * the same commit as hydration instead of one render later.
+ *
+ * The cache exists so `getSnapshot` returns a stable object identity —
+ * parsing fresh JSON on every call would return a new object each time and
+ * spin React forever.
+ */
+const panelPrefCache: { hydrated: boolean; value: ChannelPanelPref } = {
+  hydrated: false,
+  value: DEFAULT_CHANNEL_PANEL_PREF,
+};
+
+const panelPrefListeners = new Set<() => void>();
+
+function parseChannelPanelPref(raw: string | null): ChannelPanelPref {
+  if (!raw) return DEFAULT_CHANNEL_PANEL_PREF;
+  try {
+    const pref = JSON.parse(raw) as { pinned?: unknown; hover?: unknown };
+    return {
+      pinned:
+        typeof pref.pinned === 'boolean'
+          ? pref.pinned
+          : DEFAULT_CHANNEL_PANEL_PREF.pinned,
+      hover:
+        typeof pref.hover === 'boolean'
+          ? pref.hover
+          : DEFAULT_CHANNEL_PANEL_PREF.hover,
+    };
+  } catch {
+    // Corrupted pref — keep defaults.
+    return DEFAULT_CHANNEL_PANEL_PREF;
+  }
+}
+
+function readChannelPanelPref(): ChannelPanelPref {
+  if (!panelPrefCache.hydrated) {
+    panelPrefCache.hydrated = true;
+    try {
+      panelPrefCache.value = parseChannelPanelPref(
+        localStorage.getItem(CHANNEL_PANEL_PREF_KEY)
+      );
+    } catch {
+      // Storage unavailable — the in-memory value is the whole truth.
+    }
+  }
+  return panelPrefCache.value;
+}
+
+function subscribeChannelPanelPref(onChange: () => void) {
+  // Another tab changing the pref invalidates the cache; the next
+  // getSnapshot re-reads storage.
+  const onStorage = (event: StorageEvent) => {
+    if (event.key && event.key !== CHANNEL_PANEL_PREF_KEY) return;
+    panelPrefCache.hydrated = false;
+    onChange();
+  };
+  panelPrefListeners.add(onChange);
+  window.addEventListener('storage', onStorage);
+  return () => {
+    panelPrefListeners.delete(onChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+function writeChannelPanelPref(pref: ChannelPanelPref) {
+  panelPrefCache.hydrated = true;
+  panelPrefCache.value = pref;
+  try {
+    localStorage.setItem(CHANNEL_PANEL_PREF_KEY, JSON.stringify(pref));
+  } catch {
+    // Storage unavailable — the preference just won't persist.
+  }
+  for (const listener of panelPrefListeners) listener();
+}
+
+function useChannelPanelPref(): ChannelPanelPref {
+  return useSyncExternalStore(
+    subscribeChannelPanelPref,
+    readChannelPanelPref,
+    () => DEFAULT_CHANNEL_PANEL_PREF
+  );
+}
+
 /**
  * Zoho Bigin-style channel panel docked flush against the app
  * sidebar. Two modes:
@@ -177,30 +275,11 @@ function ChannelRail({
   counts: Record<TemplateChannel, number>;
   onSelect: (channel: TemplateChannel) => void;
 }) {
-  const [pinned, setPinned] = useState(false);
-  const [hoverEnabled, setHoverEnabled] = useState(true);
+  // Persisted UI preference (not data — plain localStorage is fine). The
+  // store is the single source of truth, so writing it *is* the state
+  // update; there is no local copy that can drift out of sync with it.
+  const { pinned, hover: hoverEnabled } = useChannelPanelPref();
   const [peeking, setPeeking] = useState(false);
-
-  // Restore UI preference (not data — plain localStorage is fine).
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(CHANNEL_PANEL_PREF_KEY);
-      if (!raw) return;
-      const pref = JSON.parse(raw) as { pinned?: boolean; hover?: boolean };
-      if (typeof pref.pinned === 'boolean') setPinned(pref.pinned);
-      if (typeof pref.hover === 'boolean') setHoverEnabled(pref.hover);
-    } catch {
-      /* corrupted pref — keep defaults */
-    }
-  }, []);
-
-  const savePref = (pref: { pinned: boolean; hover: boolean }) => {
-    try {
-      localStorage.setItem(CHANNEL_PANEL_PREF_KEY, JSON.stringify(pref));
-    } catch {
-      /* storage unavailable — preference just won't persist */
-    }
-  };
 
   const expanded = pinned || (hoverEnabled && peeking);
 
@@ -318,9 +397,7 @@ function ChannelRail({
           <button
             type="button"
             onClick={() => {
-              const next = !hoverEnabled;
-              setHoverEnabled(next);
-              savePref({ pinned, hover: next });
+                  writeChannelPanelPref({ pinned, hover: !hoverEnabled });
             }}
             className="text-sidebar-foreground/60 hover:text-sidebar-foreground truncate px-1.5 text-[11px] whitespace-nowrap transition-colors"
           >
@@ -333,10 +410,9 @@ function ChannelRail({
               <button
                 type="button"
                 onClick={() => {
-                  const next = !pinned;
-                  setPinned(next);
-                  if (!next) setPeeking(false);
-                  savePref({ pinned: next, hover: hoverEnabled });
+                    const next = !pinned;
+                    if (!next) setPeeking(false);
+                    writeChannelPanelPref({ pinned: next, hover: hoverEnabled });
                 }}
                 aria-label={
                   pinned ? 'Collapse channel panel' : 'Expand channel panel'

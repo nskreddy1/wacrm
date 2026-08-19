@@ -5,7 +5,7 @@ import {
   getCurrentAccount,
   toErrorResponse,
 } from '@/features/auth/lib/account';
-import { channelAdmin } from '@/features/channels/lib/admin-client';
+import { channelAdmin } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 

@@ -4,7 +4,7 @@ import {
   requireRole,
   toErrorResponse,
 } from '@/features/auth/lib/account';
-import { supabaseAdmin } from '@/features/flows/lib/admin-client';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { validateInteractivePayload } from '@/features/whatsapp/lib/interactive';
 
 // Quick replies — reusable snippets (plain text or a saved interactive
