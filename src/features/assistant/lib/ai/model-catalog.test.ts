@@ -426,7 +426,10 @@ describe('listProviderModels — cache', () => {
   });
 
   it('coalesces concurrent identical listings into one upstream call', async () => {
-    let release: (() => void) | null = null;
+    // Initialized to a no-op (not null) so TS control-flow analysis does not
+    // narrow the variable to `null` at the call site below — the real value
+    // is assigned inside the mock's callback, which TS cannot see.
+    let release: () => void = () => {};
     fetchMock.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -449,7 +452,7 @@ describe('listProviderModels — cache', () => {
     });
     // Both are in flight before any response lands.
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    release?.();
+    release();
 
     expect(await a).toEqual(await b);
     expect(fetchMock).toHaveBeenCalledTimes(1);
