@@ -43,7 +43,14 @@ type ProviderInfo = {
   provider: ChannelProvider;
   channel: ChannelKind;
   label: string;
+  /** An adapter is implemented for this provider+channel. */
   available: boolean;
+  /**
+   * The platform still offers it. Operators withdraw providers from
+   * /admin/providers → Catalog; a withdrawn provider must disappear
+   * from this page instead of failing on save.
+   */
+  offered?: boolean;
 };
 
 /**
@@ -179,13 +186,13 @@ function ProviderCard({
     <button
       type="button"
       onClick={onClick}
-      className="border-border bg-card hover:border-primary/50 hover:bg-muted/40 focus-visible:ring-ring flex w-40 flex-col items-center gap-3 rounded-lg border px-4 py-6 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      className="border-border bg-card hover:border-primary/50 hover:bg-muted/40 focus-visible:ring-ring flex w-36 flex-col items-center gap-2 rounded-lg border px-3 py-4 text-center transition-[color,background-color,border-color,transform] duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:outline-none motion-reduce:active:scale-100"
     >
       {iconSrc ? (
-        <BrandIcon src={iconSrc} size={40} />
+        <BrandIcon src={iconSrc} size={32} />
       ) : IconCmp ? (
         <IconCmp
-          className="text-muted-foreground size-10"
+          className="text-muted-foreground size-8"
           strokeWidth={1.25}
           aria-hidden
         />
@@ -254,9 +261,21 @@ export function ChannelConnections({
   const providers = useMemo(
     () =>
       (data?.providers.filter((item) => item.channel === channel) ?? []).map(
-        ({ provider, label, available }) => ({ provider, label, available })
+        ({ provider, label, available, offered }) => ({
+          provider,
+          label,
+          available,
+          // Absent field (older payload) means offered — never hide a
+          // provider because the API predates the policy flag.
+          offered: offered !== false,
+        })
       ),
     [data, channel]
+  );
+  /** Providers a workspace can actually connect right now. */
+  const connectable = useMemo(
+    () => providers.filter((item) => item.available && item.offered),
+    [providers]
   );
   // An existing Twilio connection on ANOTHER channel whose credentials
   // can be reused — one Twilio account often serves WhatsApp + SMS, so
@@ -339,8 +358,22 @@ export function ChannelConnections({
   }
 
   function startConnect(target: ChannelKind) {
-    if (target === 'email') openSetup(null);
-    else startTwilio();
+    // Route by what the platform actually offers, not by channel: with
+    // Twilio withdrawn, "Add number" used to open a Twilio-only flow
+    // that could never save.
+    if (connectable.length === 0) {
+      toast.error(
+        `No ${CHANNEL_HEAD[target].title} provider is available on this plan. Contact support.`
+      );
+      return;
+    }
+    if (connectable.length === 1) {
+      const only = connectable[0].provider;
+      if (only === 'twilio') startTwilio();
+      else openSetup({ provider: only });
+      return;
+    }
+    openSetup(null);
   }
 
   const visibleChannels: ChannelKind[] = fixedChannel
@@ -416,31 +449,28 @@ export function ChannelConnections({
                    paths that actually work are visible — guided
                    one-click options appear when their env config
                    exists. */
-                <div className="flex flex-col items-center gap-4 pt-4 text-center">
-                  <h2 className="text-foreground text-2xl font-bold text-balance">
-                    {head.heroTitle}
-                  </h2>
+                <div className="flex flex-col items-center gap-3 text-center">
                   {tab === 'whatsapp' ? (
                     <BrandIcon
                       src="/icons/brands/whatsapp.svg"
                       alt="WhatsApp"
-                      size={48}
+                      size={40}
                     />
                   ) : (
-                    <div className="bg-primary-soft flex size-14 items-center justify-center rounded-full">
-                      <Icon className="text-primary size-7" aria-hidden />
+                    <div className="bg-primary-soft flex size-12 items-center justify-center rounded-full">
+                      <Icon className="text-primary size-6" aria-hidden />
                     </div>
                   )}
-                  <p className="text-muted-foreground max-w-xl text-sm leading-relaxed text-pretty">
-                    {head.description}
-                  </p>
-                  <div className="flex w-full max-w-2xl flex-col gap-3 pt-2">
+                  <h2 className="text-foreground text-xl font-semibold tracking-tight text-balance">
+                    {head.heroTitle}
+                  </h2>
+                  <div className="flex w-full max-w-3xl flex-col gap-3">
                     <h3 className="text-foreground text-left text-sm font-semibold">
                       {tab === 'email'
                         ? 'Popular email services:'
                         : `Popular ${tab === 'sms' ? 'SMS' : 'WhatsApp'} services:`}
                     </h3>
-                    <div className="flex flex-wrap gap-4">
+                    <div className="flex flex-wrap gap-3">
                       {/*
                         One card per provider the registry reports for
                         this channel. WhatsApp and SMS used to hardcode
@@ -451,26 +481,33 @@ export function ChannelConnections({
                         Connect flow and credential reuse; everything
                         else goes to the manual setup sheet.
                       */}
-                      {providers
-                        .filter((item) => item.available)
-                        .map((item) => (
-                          <ProviderCard
-                            key={item.provider}
-                            label={
-                              item.provider === 'meta'
-                                ? 'WhatsApp Cloud API'
-                                : item.label
-                            }
-                            hint={providerHint(item.provider, tab)}
-                            {...providerCardIcon(item.provider)}
-                            onClick={() =>
-                              item.provider === 'twilio'
-                                ? startTwilio()
-                                : openSetup({ provider: item.provider })
-                            }
-                          />
-                        ))}
-                      {providers.filter((item) => item.available).length > 1 ? (
+                      {connectable.map((item) => (
+                        <ProviderCard
+                          key={item.provider}
+                          label={
+                            item.provider === 'meta'
+                              ? 'WhatsApp Cloud API'
+                              : item.label
+                          }
+                          hint={providerHint(item.provider, tab)}
+                          {...providerCardIcon(item.provider)}
+                          onClick={() =>
+                            item.provider === 'twilio'
+                              ? startTwilio()
+                              : openSetup({ provider: item.provider })
+                          }
+                        />
+                      ))}
+                      {connectable.length === 0 ? (
+                        /* Every provider for this channel is withdrawn
+                           platform-wide. Say so plainly instead of
+                           showing an empty card row. */
+                        <p className="text-muted-foreground text-sm">
+                          No {head.title} provider is available on this plan
+                          right now. Contact support to enable one.
+                        </p>
+                      ) : null}
+                      {connectable.length > 1 ? (
                         /* A "Custom" card only makes sense when the
                            channel has more than one provider — with a
                            single one it opens the identical form. */
@@ -483,11 +520,11 @@ export function ChannelConnections({
                       ) : null}
                     </div>
                   </div>
-                  <div className="w-full max-w-2xl rounded-lg bg-amber-500/10 px-5 py-4 text-left">
-                    <h3 className="text-foreground mb-2 text-sm font-semibold">
+                  <div className="w-full max-w-3xl rounded-lg bg-amber-500/10 px-4 py-3 text-left">
+                    <h3 className="text-foreground mb-1.5 text-sm font-semibold">
                       Requirements
                     </h3>
-                    <ul className="flex flex-col gap-1.5">
+                    <ul className="flex flex-col gap-1">
                       {head.requirements.map((requirement) => (
                         <li
                           key={requirement}

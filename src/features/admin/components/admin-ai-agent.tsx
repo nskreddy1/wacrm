@@ -55,9 +55,7 @@ import {
 
 import {
   AI_PROVIDERS,
-  AUTO_REPLY_LIMIT_MODES,
   DEFAULT_REASONING_MODE,
-  DEFAULT_TUNING,
   isReasoningMode,
   type AiProvider,
   type AutoReplyLimitMode,
@@ -113,12 +111,6 @@ interface AiConfigResponse {
   reasoning?: ReasoningMode;
   tuning?: GenerationTuning;
 }
-
-const LIMIT_MODE_LABEL: Record<AutoReplyLimitMode, string> = {
-  per_conversation: 'Per conversation (lifetime)',
-  per_day: 'Per day (resets at midnight)',
-  never: 'No limit',
-};
 
 interface WorkspaceOption {
   id: string;
@@ -378,42 +370,51 @@ function AgentForm({
   const [isActive, setIsActive] = useState(
     config.configured ? (config.is_active ?? false) : true
   );
-  const [suggestions, setSuggestions] = useState(
-    config.configured ? (config.suggestions_enabled ?? false) : true
-  );
   const [autoReply, setAutoReply] = useState(
     config.configured ? (config.auto_reply_enabled ?? false) : true
   );
   const [maxPer, setMaxPer] = useState(
     String(config.auto_reply_max_per_conversation ?? 3)
   );
-  const [limitMode, setLimitMode] = useState<AutoReplyLimitMode>(
-    config.auto_reply_limit_mode ?? 'per_conversation'
-  );
-  const [scheduleStart, setScheduleStart] = useState(
-    config.auto_reply_schedule_start ?? ''
-  );
-  const [scheduleEnd, setScheduleEnd] = useState(
-    config.auto_reply_schedule_end ?? ''
-  );
-  const [timezone, setTimezone] = useState(config.auto_reply_timezone ?? '');
   const [handoff, setHandoff] = useState<string>(
     config.handoff_agent_id ?? 'unassigned'
   );
-  const [reasoning, setReasoning] = useState<ReasoningMode>(
-    isReasoningMode(config.reasoning) ? config.reasoning : DEFAULT_REASONING_MODE
-  );
+
+  // ---------------------------------------------------------------
+  // Carried-through settings.
+  //
+  // This console exposes the switches an operator needs day to day;
+  // the fields below have no control here yet. They are still part of
+  // the PUT payload, which sends the whole row — so they must be read
+  // back from the saved config and posted unchanged. Holding them in
+  // useState implied an editor existed and left dead setters behind;
+  // plain consts say what actually happens: read, then round-trip.
+  //
+  // When a control ships for one of these, promote just that line back
+  // to useState and wire it — the submit body already sends it.
+  // ---------------------------------------------------------------
+  const suggestions = config.configured
+    ? (config.suggestions_enabled ?? false)
+    : true;
+  const limitMode: AutoReplyLimitMode =
+    config.auto_reply_limit_mode ?? 'per_conversation';
+  const scheduleStart = config.auto_reply_schedule_start ?? '';
+  const scheduleEnd = config.auto_reply_schedule_end ?? '';
+  const timezone = config.auto_reply_timezone ?? '';
+  const reasoning: ReasoningMode = isReasoningMode(config.reasoning)
+    ? config.reasoning
+    : DEFAULT_REASONING_MODE;
   // Expert knobs. Kept as STRINGS, and an empty string means "don't send
   // this field" — distinct from 0, which is a legal temperature. The
   // stored value is whatever the API clamped, so round-tripping the form
   // never invents a number the operator didn't type.
-  const [tuning, setTuning] = useState<Record<keyof GenerationTuning, string>>({
+  const tuning: Record<keyof GenerationTuning, string> = {
     temperature: numText(config.tuning?.temperature),
     topP: numText(config.tuning?.topP),
     presencePenalty: numText(config.tuning?.presencePenalty),
     frequencyPenalty: numText(config.tuning?.frequencyPenalty),
     maxOutputTokens: numText(config.tuning?.maxOutputTokens),
-  });
+  };
   const [saving, setSaving] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -699,11 +700,18 @@ function AgentForm({
                 type="number"
                 min={1}
                 max={20}
-                value={maxPer}
+                value={unlimited ? '' : maxPer}
+                // Limit mode 'never' means the cap is never consulted.
+                // An editable number that changes nothing is a false
+                // promise, so the field reads as not applicable instead.
+                disabled={unlimited}
+                placeholder={unlimited ? 'No limit' : undefined}
                 onChange={(e) => setMaxPer(e.target.value)}
               />
               <p className="text-muted-foreground text-xs">
-                After this, the bot goes quiet and hands off.
+                {unlimited
+                  ? 'The limit mode for this workspace is set to no limit, so the bot never stops on a count.'
+                  : 'After this, the bot goes quiet and hands off.'}
               </p>
             </div>
 
