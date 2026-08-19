@@ -542,49 +542,53 @@ function AgentForm({
               </Select>
             </div>
 
+            {/* Key sits BESIDE provider and BEFORE model (ADR-005 D1) —
+                the model list is only trustworthy once a key backs it. */}
             <div className="flex flex-col gap-2">
-              <Label htmlFor="agent-model">Model</Label>
-              {/* Live list read with the WORKSPACE's stored key, so the
-                  platform picks from what that customer can actually
-                  call — still free text for a model we've never heard of. */}
-              <ModelPicker
-                id="agent-model"
-                provider={provider}
-                value={model}
-                onChange={setModel}
-                endpoint="/api/admin/ai-models"
-                accountId={accountId}
-                baseUrl={needsBaseUrl ? baseUrl : null}
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="agent-key">API key</Label>
+                {config.has_key ? (
+                  <Badge variant="secondary" className="text-xs font-normal">
+                    Key stored
+                  </Badge>
+                ) : keyOptional ? (
+                  <span className="text-muted-foreground text-xs">
+                    Optional for Ollama
+                  </span>
+                ) : null}
+              </div>
+              <Input
+                id="agent-key"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={
+                  config.has_key
+                    ? '•••••••••••• — leave blank to keep the stored key'
+                    : 'Provider API key'
+                }
+                autoComplete="new-password"
+                className="font-mono text-sm"
+                required={!config.has_key && !keyOptional}
               />
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="agent-key">API key</Label>
-              {config.has_key ? (
-                <Badge variant="secondary" className="text-xs font-normal">
-                  Key stored
-                </Badge>
-              ) : keyOptional ? (
-                <span className="text-muted-foreground text-xs">
-                  Optional for Ollama
-                </span>
-              ) : null}
-            </div>
-            <Input
-              id="agent-key"
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={
-                config.has_key
-                  ? '•••••••••••• — leave blank to keep the stored key'
-                  : 'Provider API key'
-              }
-              autoComplete="new-password"
-              className="font-mono text-sm"
-              required={!config.has_key && !keyOptional}
+            <Label htmlFor="agent-model">Model</Label>
+            {/* Live list read with the WORKSPACE's stored key, or with the
+                key being typed right now (POST /api/admin/ai-models with an
+                explicit account_id, F2) — still free text for a model we've
+                never heard of. */}
+            <ModelPicker
+              id="agent-model"
+              provider={provider}
+              value={model}
+              onChange={setModel}
+              endpoint="/api/admin/ai-models"
+              accountId={accountId}
+              baseUrl={needsBaseUrl ? baseUrl : null}
+              draftApiKey={apiKey}
             />
           </div>
 
