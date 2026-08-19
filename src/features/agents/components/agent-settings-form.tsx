@@ -6,9 +6,14 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   isAutoReplyLimitMode,
+  isReasoningMode,
+  DEFAULT_REASONING_MODE,
   type AutoReplyLimitMode,
+  type ReasoningMode,
 } from '@/features/assistant/lib/ai/types';
 import { fetchAccountMembers, memberLabel } from '@/lib/account/members';
 import type { AccountMember } from '@/types';
@@ -89,6 +94,14 @@ export function AgentSettingsForm({
   const [handoff, setHandoff] = useState(
     typeof settings.handoffAgentId === 'string' ? settings.handoffAgentId : ''
   );
+  // Thinking budget. Stored per agent and shared by both capabilities,
+  // because they share one provider connection. Anything unset or
+  // hand-edited reads as 'off' — the pre-toggle behaviour.
+  const [reasoning, setReasoning] = useState<ReasoningMode>(
+    isReasoningMode(settings.reasoning)
+      ? settings.reasoning
+      : DEFAULT_REASONING_MODE
+  );
   const [saving, setSaving] = useState(false);
 
   const preset = PROVIDER_PRESETS.find((p) => p.id === provider);
@@ -141,6 +154,7 @@ export function AgentSettingsForm({
         scheduleEnd: scheduleEnd || null,
         timezone: scheduleStart ? timezone : null,
         handoffAgentId: handoff || null,
+        reasoning,
       };
 
       const res = await fetch(`/api/ai/agents/${agent.id}`, {
@@ -271,6 +285,66 @@ export function AgentSettingsForm({
               />
             </div>
           ) : null}
+
+          <fieldset>
+            <legend className="text-foreground mb-1 text-sm font-medium">
+              Thinking before replying
+            </legend>
+            <p className="text-muted-foreground mb-2 text-xs">
+              Internal reasoning is never shown to the customer. It shares the
+              reply&apos;s token budget, so a model that thinks too long can run
+              out of room mid-answer.
+            </p>
+            <RadioGroup
+              value={reasoning}
+              onValueChange={(next) => {
+                if (isReasoningMode(next)) setReasoning(next);
+              }}
+              aria-label="Thinking before replying"
+            >
+              {(
+                [
+                  {
+                    value: 'off',
+                    label: 'Reply directly (recommended)',
+                    hint: 'The whole budget goes to the answer — right for almost every conversation.',
+                  },
+                  {
+                    value: 'auto',
+                    label: 'Model default',
+                    hint: 'Send no instruction either way and let the model decide.',
+                  },
+                  {
+                    value: 'on',
+                    label: 'Think first, privately',
+                    hint: 'A short hidden scratchpad for multi-step questions. Slower and costs more tokens.',
+                  },
+                ] as const
+              ).map((opt) => (
+                <div
+                  key={opt.value}
+                  className="border-border has-data-checked:border-primary has-data-checked:bg-primary/5 hover:border-muted-foreground/40 flex items-start gap-2 rounded-lg border p-3 transition-colors"
+                >
+                  <RadioGroupItem
+                    value={opt.value}
+                    id={`cfg-reasoning-${opt.value}`}
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor={`cfg-reasoning-${opt.value}`}
+                    className="flex flex-col items-start gap-0.5 font-normal"
+                  >
+                    <span className="text-foreground text-sm font-medium">
+                      {opt.label}
+                    </span>
+                    <span className="text-muted-foreground text-xs leading-relaxed">
+                      {opt.hint}
+                    </span>
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </fieldset>
         </div>
       </section>
 
