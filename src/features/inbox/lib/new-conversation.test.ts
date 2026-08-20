@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   matchesContactQuery,
+  renderTemplatePreview,
   resolveSendOutcome,
   type ContactCandidate,
 } from './new-conversation';
@@ -42,6 +43,30 @@ describe('matchesContactQuery', () => {
     const bare: ContactCandidate = { id: 'c2', phone: '+447700900123' };
     expect(matchesContactQuery(bare, '447700900123')).toBe(true);
     expect(matchesContactQuery(bare, 'ada')).toBe(false);
+  });
+});
+
+describe('renderTemplatePreview', () => {
+  it('substitutes positional placeholders in order', () => {
+    expect(renderTemplatePreview('Hi {{1}}, your {{2}} is ready', ['Ada', 'order'])).toBe(
+      'Hi Ada, your order is ready'
+    );
+  });
+
+  it('leaves an unfilled placeholder visible so the gap is obvious', () => {
+    expect(renderTemplatePreview('Hi {{1}}, your {{2}} is ready', ['Ada'])).toBe(
+      'Hi Ada, your {{2}} is ready'
+    );
+  });
+
+  it('repeats a value when the same placeholder appears twice', () => {
+    expect(renderTemplatePreview('{{1}} and {{1}}', ['Ada'])).toBe('Ada and Ada');
+  });
+
+  it('returns a body with no placeholders unchanged', () => {
+    expect(renderTemplatePreview('No variables here', [])).toBe(
+      'No variables here'
+    );
   });
 });
 
