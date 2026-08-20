@@ -208,8 +208,11 @@ export async function POST(request: Request) {
       });
     } catch (err) {
       if (err instanceof SendMessageError) {
+        // ADR-006 D4: the machine `code` travels with the message so the
+        // composer can switch to the template path on `window_closed`
+        // instead of showing a generic red toast.
         return NextResponse.json(
-          { error: err.message },
+          { error: err.message, code: err.code },
           { status: err.status }
         );
       }
