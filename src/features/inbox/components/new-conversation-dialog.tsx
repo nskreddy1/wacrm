@@ -1,7 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, MessageSquarePlus, Search, UserRound } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
+import {
+  ChevronRight,
+  Loader2,
+  MessageSquarePlus,
+  Search,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,7 +26,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -39,6 +52,10 @@ import {
 
 /** How many contacts to pull for local filtering. */
 const CONTACT_PAGE_SIZE = 200;
+
+/** Ties the input's aria-activedescendant to the rendered rows. */
+const OPTION_ID_PREFIX = 'new-conversation-contact-';
+const LISTBOX_ID = 'new-conversation-contacts';
 
 interface NewConversationDialogProps {
   open: boolean;
@@ -75,11 +92,14 @@ export function NewConversationDialog({
   /** Contact id currently being opened, so only that row shows a spinner. */
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
+  /** Row the keyboard is on. Clamped at render, so it can never dangle. */
+  const [activeIndex, setActiveIndex] = useState(0);
 
   // Ignore a resolved fetch/POST that belongs to a previous open of the
   // dialog — otherwise closing and reopening can land stale rows or
   // navigate to a conversation the agent no longer asked for.
   const requestRef = useRef(0);
+  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -142,6 +162,7 @@ export function NewConversationDialog({
       setQuery('');
       setOpeningId(null);
       setOpenError(null);
+      setActiveIndex(0);
     }
   }
 
@@ -149,6 +170,11 @@ export function NewConversationDialog({
     () => contacts.filter((c) => matchesContactQuery(c, query)),
     [contacts, query]
   );
+
+  // Clamp rather than reset-on-change: filtering can shrink the list under
+  // the cursor, and a stale index would point at a row that no longer
+  // exists (aria-activedescendant pointing at a dead id).
+  const active = visible.length === 0 ? -1 : Math.min(activeIndex, visible.length - 1);
 
   const handleSelect = useCallback(
     async (contact: ContactCandidate) => {
@@ -190,14 +216,76 @@ export function NewConversationDialog({
     [onConversationReady, onOpenChange, openingId]
   );
 
+  /** Step the cursor, skipping rows the picker refuses. */
+  const moveActive = useCallback(
+    (direction: 1 | -1) => {
+      setActiveIndex((current) => {
+        if (visible.length === 0) return current;
+        const start = Math.min(current, visible.length - 1);
+        let next = start;
+        for (let step = 0; step < visible.length; step += 1) {
+          next = (next + direction + visible.length) % visible.length;
+          if (!contactBlockReason(visible[next])) return next;
+        }
+        return start;
+      });
+    },
+    [visible]
+  );
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // A CJK IME uses Enter to confirm composition; Safari reports the final
+    // composition keydown as 229. Selecting a contact there would fire while
+    // the agent is still typing the name.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveActive(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveActive(-1);
+      return;
+    }
+    if (event.key === 'Enter' && active >= 0) {
+      event.preventDefault();
+      void handleSelect(visible[active]);
+    }
+  };
+
+  // Keep the keyboard cursor inside the scroll port.
+  useEffect(() => {
+    if (active < 0) return;
+    listRef.current
+      ?.querySelector(`#${OPTION_ID_PREFIX}${CSS.escape(visible[active].id)}`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [active, visible]);
+
+  const activeId =
+    active >= 0 ? `${OPTION_ID_PREFIX}${visible[active].id}` : undefined;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[32rem] flex-col gap-0 p-0 sm:max-w-md">
-        <DialogHeader className="gap-1 border-b border-border px-5 py-4">
-          <DialogTitle className="text-base">New message</DialogTitle>
-          <DialogDescription>
-            Pick a contact to open their conversation.
-          </DialogDescription>
+      {/* max-h is capped against the viewport too: on a short window a fixed
+          32rem would run the footer off-screen. */}
+      <DialogContent className="flex max-h-[min(34rem,calc(100dvh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <DialogHeader className="gap-0 border-b border-border px-5 py-4 pr-14">
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+            >
+              <MessageSquarePlus className="size-4.5" />
+            </span>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <DialogTitle className="text-base">New message</DialogTitle>
+              <DialogDescription className="text-xs">
+                Pick a contact to open their conversation.
+              </DialogDescription>
+            </span>
+          </div>
         </DialogHeader>
 
         <div className="border-b border-border px-5 py-3">
@@ -208,12 +296,33 @@ export function NewConversationDialog({
             />
             <Input
               autoFocus
+              role="combobox"
+              aria-expanded
+              aria-controls={LISTBOX_ID}
+              aria-activedescendant={activeId}
+              autoComplete="off"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="Search name, phone, or email"
               aria-label="Search contacts"
-              className="pl-9"
+              className={cn('pl-9', query && 'pr-9')}
             />
+            {query ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Clear search"
+                onClick={() => {
+                  setQuery('');
+                  setActiveIndex(0);
+                }}
+                className="absolute top-1/2 right-1 -translate-y-1/2"
+              >
+                <X />
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -226,7 +335,13 @@ export function NewConversationDialog({
           </p>
         ) : null}
 
-        <ScrollArea className="min-h-0 flex-1">
+        {/* Plain overflow container rather than <ScrollArea>: the Base UI
+            viewport is `size-full`, so its `height:100%` can't resolve
+            against a `flex-1` parent with no explicit height — it grows to
+            full content height instead of scrolling, spilling rows past the
+            dialog and painting the footer over them (same failure as the
+            contacts import modal). */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:thin]">
           {loading ? (
             <div className="flex items-center justify-center gap-2 px-5 py-10 text-sm text-muted-foreground">
               <Loader2 aria-hidden="true" className="size-4 animate-spin" />
@@ -241,10 +356,12 @@ export function NewConversationDialog({
             </p>
           ) : visible.length === 0 ? (
             <div className="flex flex-col items-center gap-1 px-5 py-10 text-center">
-              <UserRound
+              <span
                 aria-hidden="true"
-                className="size-5 text-muted-foreground"
-              />
+                className="mb-1 flex size-10 items-center justify-center rounded-full bg-muted"
+              >
+                <UserRound className="size-5 text-muted-foreground" />
+              </span>
               <p className="text-sm font-medium text-foreground">
                 {contacts.length === 0
                   ? 'No contacts yet'
@@ -257,30 +374,47 @@ export function NewConversationDialog({
               </p>
             </div>
           ) : (
-            <ul className="flex flex-col py-1">
-              {visible.map((contact) => {
+            <ul
+              ref={listRef}
+              id={LISTBOX_ID}
+              role="listbox"
+              aria-label="Contacts"
+              className="flex flex-col p-1.5"
+            >
+              {visible.map((contact, index) => {
                 const blocked = contactBlockReason(contact);
                 const isOpening = openingId === contact.id;
                 const busy = openingId !== null;
+                const isActive = index === active;
 
                 return (
                   <li key={contact.id}>
                     <button
                       type="button"
+                      id={`${OPTION_ID_PREFIX}${contact.id}`}
+                      role="option"
+                      aria-selected={isActive}
+                      tabIndex={-1}
                       disabled={Boolean(blocked) || busy}
+                      onPointerMove={() => {
+                        if (!blocked) setActiveIndex(index);
+                      }}
                       onClick={() => handleSelect(contact)}
                       className={cn(
-                        'flex w-full items-center gap-3 px-5 py-2.5 text-left',
+                        'flex w-full items-center gap-3 rounded-lg px-3.5 py-2.5 text-left',
                         'transition-[background-color,transform] duration-150 ease-out',
-                        'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:-inset-ring',
+                        'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
                         blocked
                           ? 'cursor-not-allowed opacity-55'
-                          : 'hover:bg-accent active:scale-[0.99] disabled:opacity-60',
+                          : cn(
+                              'active:scale-[0.99] disabled:opacity-60',
+                              isActive && 'bg-accent'
+                            ),
                         'motion-reduce:transition-none motion-reduce:active:scale-100'
                       )}
                     >
-                      <Avatar className="size-9 shrink-0">
-                        <AvatarFallback className="text-xs">
+                      <Avatar className="size-9 shrink-0 ring-1 ring-border">
+                        <AvatarFallback className="text-xs font-medium">
                           {initialsOf(contact)}
                         </AvatarFallback>
                       </Avatar>
@@ -292,7 +426,9 @@ export function NewConversationDialog({
                             'Unnamed contact'}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
-                          {contact.phone || contact.email || 'No contact details'}
+                          {contact.phone ||
+                            contact.email ||
+                            'No contact details'}
                         </span>
                       </span>
 
@@ -302,19 +438,27 @@ export function NewConversationDialog({
                           className="size-4 shrink-0 animate-spin text-muted-foreground"
                         />
                       ) : blocked ? (
-                        <span className="shrink-0 text-xs text-muted-foreground">
+                        <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted-foreground">
                           {BLOCK_LABEL[blocked]}
                         </span>
-                      ) : null}
+                      ) : (
+                        <ChevronRight
+                          aria-hidden="true"
+                          className={cn(
+                            'size-4 shrink-0 text-muted-foreground transition-opacity',
+                            isActive ? 'opacity-100' : 'opacity-0'
+                          )}
+                        />
+                      )}
                     </button>
                   </li>
                 );
               })}
             </ul>
           )}
-        </ScrollArea>
+        </div>
 
-        <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+        <p className="border-t border-border bg-muted/40 px-5 py-3 text-xs leading-relaxed text-muted-foreground">
           New conversations start with an approved template. You can reply
           freely for 24 hours after the contact writes back.
         </p>
