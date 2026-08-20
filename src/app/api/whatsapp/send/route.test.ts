@@ -120,11 +120,39 @@ function makeSupabaseMock() {
 
   return {
     auth: {
-      getUser: vi.fn(async () => ({
-        data: { user: { id: 'user-1' } },
+      // Mirrors real auth-js: `getClaims()` verifies the JWT locally and
+      // resolves with the token claims (`sub` = user id). This is what
+      // `getCurrentAccount()` calls — mocking only `getUser()` (the
+      // pre-migration-053 path) made every request 500 with
+      // "getClaims is not a function" instead of exercising the route.
+      getClaims: vi.fn(async () => ({
+        data: { claims: { sub: 'user-1' } },
         error: null,
       })),
     },
+    // `get_account_context()` (migration 053) resolves profile + account +
+    // permissions in one round trip. `is_owner` passes every permission
+    // check, which is what the solo-owner accounts these tests model do.
+    rpc: vi.fn(async (name: string) => {
+      if (name !== 'get_account_context') return { data: null, error: null };
+      return {
+        data: [
+          {
+            user_id: 'user-1',
+            account_id: 'acct-1',
+            account_role: 'owner',
+            account_name: 'Acme',
+            status: 'active',
+            permissions: ['messages:send'],
+            is_owner: true,
+            memberships: null,
+            workspace_profile_id: null,
+            workspace_profile_name: null,
+          },
+        ],
+        error: null,
+      };
+    }),
     from: vi.fn((table: string) => builder(table)),
   };
 }
