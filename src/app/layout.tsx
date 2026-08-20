@@ -6,6 +6,7 @@ import './globals.css';
 import { ThemeProvider } from '@/hooks/use-theme';
 import { ThemedToaster } from '@/components/themed-toaster';
 import { DEFAULT_MODE, DEFAULT_THEME } from '@/lib/themes';
+import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 
 const inter = Inter({
@@ -81,6 +82,7 @@ export default async function RootLayout({
             <ThemedToaster />
           </ThemeProvider>
         </NextIntlClientProvider>
+        <Analytics />
         <SpeedInsights />
       </body>
     </html>
