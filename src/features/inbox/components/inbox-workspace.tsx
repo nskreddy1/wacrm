@@ -25,6 +25,7 @@ import {
 import { useCan } from '@/features/auth/hooks/use-can';
 import { useLocalStorageBoolean } from '@/hooks/use-local-storage-state';
 import { WifiOff } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 // Remembers the agent's show/hide choice for the desktop contact panel
@@ -110,6 +111,17 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     CONTACT_PANEL_STORAGE_KEY,
     true
   );
+
+  /**
+   * "New message" (ADR-006 D14). The workspace owns this state because it
+   * owns conversation selection — the dialog's whole job is to hand back a
+   * conversation id for this component to open.
+   */
+  const [newConversationOpen, setNewConversationOpen] = useState(false);
+  // Viewers can read the inbox but never start a conversation, so the
+  // entry point simply isn't rendered for them. Solo owners pass every
+  // capability, so this is always true for single-user accounts.
+  const canStartConversation = useCan('send-messages');
 
   const handleToggleContactPanel = useCallback(() => {
     setContactPanelOpen((prev) => !prev);
@@ -542,6 +554,51 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
     [activeConversation?.id, router, basePath]
   );
 
+  /**
+   * Open a conversation by id, fetching the row when the list hasn't seen
+   * it yet. This is how the "New message" dialog lands the agent in the
+   * thread it just created: POST /api/inbox/conversations returns an id,
+   * and a brand-new conversation is by definition not in the list.
+   *
+   * Deliberately reuses handleSelectConversation for the actual switch, so
+   * a compose-created thread goes through exactly the same selection path
+   * (URL sync, unread reset, deep-link bookkeeping) as a click in the list
+   * — one code path, one set of behaviours to keep correct.
+   */
+  const openConversationById = useCallback(
+    async (conversationId: string) => {
+      const known = conversations.find((c) => c.id === conversationId);
+      if (known) {
+        handleSelectConversation(known);
+        return;
+      }
+
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('conversations')
+        .select(CONVERSATION_SELECT)
+        .eq('id', conversationId)
+        .maybeSingle();
+
+      if (error || !data) {
+        // The row exists (the API just returned its id) — this is a read
+        // failure, so fall back to the hydrate path and let the realtime
+        // INSERT surface it in the list rather than silently doing nothing.
+        hydrateConversation(conversationId);
+        toast.error('Opened the conversation, but the thread failed to load.');
+        return;
+      }
+
+      const conv = normalizeConversation(data);
+      if (!belongsHere(conv)) return;
+      setConversations((prev) =>
+        prev.some((c) => c.id === conv.id) ? prev : [conv, ...prev]
+      );
+      handleSelectConversation(conv);
+    },
+    [conversations, handleSelectConversation, hydrateConversation, belongsHere]
+  );
+
   // Mobile "back" — deselect the conversation so the list pane comes
   // back. Also clears the ?c= param so a refresh lands on the list
   // instead of re-opening the thread the user just backed out of.
@@ -652,6 +709,13 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
             onConversationsLoaded={handleConversationsLoaded}
             resyncToken={resyncToken}
             channel={channel}
+            headerAction={
+              canStartConversation ? (
+                <NewConversationButton
+                  onClick={() => setNewConversationOpen(true)}
+                />
+              ) : null
+            }
           />
         </div>
 
@@ -698,6 +762,17 @@ export function InboxWorkspace({ channel }: InboxWorkspaceProps) {
           </div>
         )}
       </div>
+
+      {/* Contact picker for "New message". Mounted at the workspace level
+          (not inside the list) so it survives the mobile list/thread swap
+          and so its result flows straight into conversation selection. */}
+      {canStartConversation && (
+        <NewConversationDialog
+          open={newConversationOpen}
+          onOpenChange={setNewConversationOpen}
+          onConversationReady={openConversationById}
+        />
+      )}
     </div>
   );
 }

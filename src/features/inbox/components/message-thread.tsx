@@ -28,7 +28,7 @@ import {
   PanelRightOpen,
   PanelRightClose,
 } from 'lucide-react';
-import { format, isToday, isYesterday, differenceInHours } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -1276,9 +1276,17 @@ export function MessageThread({
         onSelect={handleSendTemplate}
       />
 
-      {/* Composer */}
-      <MessageComposer
-        conversationId={conversation.id}
+        {/* Composer — keyed by conversation so switching contact tears
+            down that thread's composer instance instead of reusing it.
+            Without the key, React kept one instance alive and the
+            free-form draft, staged attachment and live recording of
+            conversation A appeared inside conversation B (and could be
+            sent to the wrong contact). The unmount also GCs any staged
+            media object. Text drafts are NOT lost: the composer keeps
+            them in a per-conversation store and rehydrates on mount. */}
+        <MessageComposer
+          key={conversation.id}
+          conversationId={conversation.id}
         sessionExpired={sessionInfo.expired}
         onSend={handleSend}
         onSendMedia={handleSendMedia}
