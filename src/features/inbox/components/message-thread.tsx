@@ -50,6 +50,10 @@ import { MessageThreadSkeleton } from '@/components/ui/loading-skeletons';
 import { TemplatePicker } from './template-picker';
 import { AiThreadBanner } from './ai-thread-banner';
 import { buildReplyPreview } from './reply-quote';
+import {
+  evaluateSessionWindow,
+  newestInboundInPage,
+} from '@/features/inbox/lib/session-window';
 import { toast } from 'sonner';
 
 interface ReplyDraft {
@@ -297,36 +301,51 @@ export function MessageThread({
     };
   }, []);
 
-  // 24-hour session timer
+  // The window closes on a clock, not on a message arriving, so the memo
+  // needs a ticking input. One minute is fine: the composer's 10-minute
+  // margin (ADR-006 D9) absorbs the granularity, and the alternative — a
+  // per-second interval on every open thread — buys nothing.
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // 24-hour session window — a *display* of the server's truth
+  // (`conversations.last_inbound_at`), with the loaded page used only as a
+  // fresher-than-the-column fallback. Fails closed on a cold thread.
   const sessionInfo = useMemo(() => {
-    if (!messages.length) return { expired: false, remaining: '' };
+    const state = evaluateSessionWindow({
+      lastInboundAt: conversation?.last_inbound_at ?? null,
+      loadedInboundAt: newestInboundInPage(messages),
+      channel: conversation?.channel,
+      now: nowTick,
+    });
 
-    // Find last customer message
-    const lastCustomerMsg = [...messages]
-      .reverse()
-      .find((m) => m.sender_type === 'customer');
-
-    if (!lastCustomerMsg)
-      return { expired: true, remaining: 'No customer messages' };
-
-    const hoursSince = differenceInHours(
-      new Date(),
-      new Date(lastCustomerMsg.created_at)
-    );
-    const expired = hoursSince >= 24;
-
-    if (expired) {
+    if (!state.hasInbound) {
+      return { expired: true, remaining: tTimer('noCustomerMessages') };
+    }
+    if (state.msRemaining <= 0) {
       return { expired: true, remaining: tTimer('expired') };
     }
 
-    const hoursLeft = 24 - hoursSince;
+    const minutesLeft = Math.floor(state.msRemaining / 60_000);
     const remaining =
-      hoursLeft >= 1
-        ? tTimer('xhRemaining', { hours: Math.floor(hoursLeft) })
-        : tTimer('xmRemaining', { minutes: Math.floor(hoursLeft * 60) });
+      minutesLeft >= 60
+        ? tTimer('xhRemaining', { hours: Math.floor(minutesLeft / 60) })
+        : tTimer('xmRemaining', { minutes: minutesLeft });
 
-    return { expired, remaining };
-  }, [messages, tTimer]);
+    // `closed` includes the safety margin: inside the last 10 minutes the
+    // composer is already shut while the countdown still reads a few
+    // minutes, which is exactly the nudge toward a template.
+    return { expired: state.closed, remaining };
+  }, [
+    conversation?.last_inbound_at,
+    conversation?.channel,
+    messages,
+    nowTick,
+    tTimer,
+  ]);
 
   // Store latest callback in a ref so fetchMessages doesn't need to
   // depend on `onMessagesLoaded` — otherwise parent re-renders cause
