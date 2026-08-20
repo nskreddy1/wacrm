@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizePhone } from '@/features/whatsapp/lib/phone-utils';
 import { toE164 } from '@/lib/phone/e164';
 import { resolveAuditUserId } from '@/lib/api/v1/contacts';
+import { detectOptEvent } from './consent';
 
 export interface InboundChannelMessage {
   provider: 'meta' | 'twilio';
@@ -147,7 +148,7 @@ export async function persistInboundChannelMessage(
     const threadId = message.externalThreadId || normalizedFrom;
     let { data: conversation } = await db
       .from('conversations')
-      .select('id, unread_count')
+      .select('id, unread_count, last_inbound_at')
       .eq('channel_connection_id', connection.id)
       .eq('external_thread_id', threadId)
       .maybeSingle();
@@ -163,7 +164,7 @@ export async function persistInboundChannelMessage(
           channel_connection_id: connection.id,
           external_thread_id: threadId,
         })
-        .select('id, unread_count')
+        .select('id, unread_count, last_inbound_at')
         .single();
       if (error) throw error;
       conversation = created;
@@ -194,17 +195,61 @@ export async function persistInboundChannelMessage(
     });
     if (messageError) throw messageError;
 
+    // ADR-006 D3: this inbound message opens (or extends) the 24h service
+    // window that the outbound guard reads. Monotonic on purpose — providers
+    // retry and can deliver webhooks out of order, and an older retry must
+    // never shorten a window that a newer message already extended.
+    const priorInboundAt = conversation.last_inbound_at as string | null;
+    const nextInboundAt =
+      priorInboundAt && Date.parse(priorInboundAt) > Date.parse(timestamp)
+        ? priorInboundAt
+        : timestamp;
+
     const { error: conversationError } = await db
       .from('conversations')
       .update({
         last_message_text:
           message.text || `[${message.contentType || 'message'}]`,
         last_message_at: timestamp,
+        last_inbound_at: nextInboundAt,
         unread_count: (conversation.unread_count || 0) + 1,
         updated_at: new Date().toISOString(),
       })
       .eq('id', conversation.id);
     if (conversationError) throw conversationError;
+
+    // ADR-006 D19: consent keywords, checked after the message is persisted
+    // so the STOP itself is still visible in the thread. Independent of the
+    // window above: a STOP opens a window (it is a customer message) and the
+    // outbound guard simply refuses to use it.
+    const optEvent = detectOptEvent(message.text);
+    if (optEvent) {
+      const optedOut = optEvent === 'out';
+      const consentColumn =
+        channel === 'sms' ? 'sms_opted_out' : 'whatsapp_opted_out';
+      const consentAtColumn =
+        channel === 'sms' ? 'sms_opted_out_at' : 'whatsapp_opted_out_at';
+      const { error: consentError } = await db
+        .from('contacts')
+        .update({
+          [consentColumn]: optedOut,
+          [consentAtColumn]: optedOut ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', contactId)
+        .eq('account_id', connection.account_id);
+      if (consentError) throw consentError;
+      console.info(
+        JSON.stringify({
+          event: 'inbound_consent_change',
+          direction: optEvent,
+          channel,
+          account_id: connection.account_id,
+          contact_id: contactId,
+          conversation_id: conversation.id,
+        })
+      );
+    }
 
     await db
       .from('channel_webhook_events')
