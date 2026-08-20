@@ -180,6 +180,18 @@ export interface Conversation {
   assigned_agent_id?: string;
   last_message_text?: string;
   last_message_at?: string;
+  /**
+   * When the *customer* last wrote on this thread (ADR-006 D3).
+   *
+   * Denormalised onto the conversation by both inbound paths so the
+   * outbound guard can evaluate the WhatsApp 24-hour service window
+   * without scanning `messages`, and so the composer can read the same
+   * truth instead of guessing from whichever page happens to be loaded.
+   *
+   * `null`/absent means the customer has never written — a CLOSED
+   * window, not an unknown one. Every consumer must fail closed.
+   */
+  last_inbound_at?: string | null;
   unread_count: number;
   created_at: string;
   updated_at: string;
