@@ -47,10 +47,10 @@ import {
 } from './message-composer';
 import { deleteAccountMedia } from '@/lib/storage/upload-media';
 import { MessageThreadSkeleton } from '@/components/ui/loading-skeletons';
-import { TemplatePicker } from './template-picker';
+import { TemplatePicker, type TemplateSendValues } from './template-picker';
 import { AiThreadBanner } from './ai-thread-banner';
 import { buildReplyPreview } from './reply-quote';
-import { renderTemplatePreview } from '@/features/inbox/lib/new-conversation';
+import { renderTemplateText } from '@/features/whatsapp/lib/template-variables';
 import {
   evaluateSessionWindow,
   newestInboundInPage,
@@ -755,17 +755,18 @@ export function MessageThread({
   }, []);
 
   const handleSendTemplate = useCallback(
-    async (
-      template: MessageTemplate,
-      values: {
-        body: string[];
-        headerText?: string;
-        buttonParams?: Record<number, string>;
-      }
-    ) => {
+    async (template: MessageTemplate, values: TemplateSendValues) => {
       if (!conversation) return;
 
-      const renderedBody = renderTemplateBody(template.body_text, values.body);
+      // Render from the token-keyed map, not the positional array: named
+      // templates (`hi {{first_name}}`) have no positional slots, so the
+      // old positional-only render left the raw `{{first_name}}` in the
+      // bubble — and that same unrendered string was what we posted as
+      // `content_text` for channels that send template bodies as text.
+      const renderedBody = renderTemplateText(
+        template.body_text,
+        values.variables
+      );
       const tempId = `temp-${Date.now()}`;
 
       const optimisticMsg: Message = {
@@ -1267,6 +1268,19 @@ export function MessageThread({
         }}
       />
 
+      {/* Template panel sits between the thread and the composer — an
+          in-flow surface rather than a modal, so the conversation the
+          template is addressed to stays visible while it's filled in.
+          Keyed by conversation so switching contact tears down any
+          half-filled state instead of carrying it across threads. */}
+      <TemplatePicker
+        key={conversation.id}
+        conversationId={conversation.id}
+        open={templateModalOpen}
+        onOpenChange={setTemplateModalOpen}
+        onSelect={handleSendTemplate}
+      />
+
       {/* Composer */}
       <MessageComposer
         conversationId={conversation.id}
@@ -1277,12 +1291,6 @@ export function MessageThread({
         onOpenTemplates={handleOpenTemplates}
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
-      />
-
-      <TemplatePicker
-        open={templateModalOpen}
-        onOpenChange={setTemplateModalOpen}
-        onSelect={handleSendTemplate}
       />
     </div>
   );
