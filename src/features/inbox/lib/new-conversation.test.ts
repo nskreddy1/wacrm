@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  contactBlockReason,
   matchesContactQuery,
   renderTemplatePreview,
   resolveSendOutcome,
@@ -12,6 +13,45 @@ const contact: ContactCandidate = {
   phone: '+1 (555) 010-1234',
   email: 'ada@example.com',
 };
+
+describe('contactBlockReason', () => {
+  it('allows a contact with a phone who has not opted out', () => {
+    expect(contactBlockReason(contact)).toBeNull();
+  });
+
+  it('blocks a contact who replied STOP', () => {
+    expect(contactBlockReason({ ...contact, whatsappOptedOut: true })).toBe(
+      'opted_out'
+    );
+  });
+
+  it('blocks a contact with no phone number', () => {
+    expect(contactBlockReason({ ...contact, phone: null })).toBe('no_phone');
+    expect(contactBlockReason({ ...contact, phone: '' })).toBe('no_phone');
+  });
+
+  it('blocks a phone that has no digits at all', () => {
+    // Guards against a junk-but-truthy value like '-' or 'n/a' passing the
+    // presence check and producing an unsendable thread.
+    expect(contactBlockReason({ ...contact, phone: '---' })).toBe('no_phone');
+  });
+
+  it('reports opt-out ahead of a missing phone', () => {
+    // Both are terminal, but opt-out is the more meaningful explanation.
+    expect(
+      contactBlockReason({ ...contact, phone: null, whatsappOptedOut: true })
+    ).toBe('opted_out');
+  });
+
+  it('treats an absent opt-out flag as not opted out', () => {
+    // Fetch paths that don't select the column must stay usable; the server
+    // guard remains the real boundary.
+    expect(contactBlockReason({ ...contact, whatsappOptedOut: null })).toBeNull();
+    expect(
+      contactBlockReason({ id: 'c2', name: 'No Flag', phone: '+15550000000' })
+    ).toBeNull();
+  });
+});
 
 describe('matchesContactQuery', () => {
   it('matches a name case-insensitively', () => {

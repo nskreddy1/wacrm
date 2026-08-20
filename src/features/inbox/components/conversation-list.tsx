@@ -43,6 +43,13 @@ interface ConversationListProps {
    * which also matches legacy rows saved before the channel column.
    */
   channel?: 'whatsapp' | 'sms';
+  /**
+   * Rendered beside the search field. The inbox passes its "New message"
+   * trigger here so this component keeps its single responsibility —
+   * listing and filtering conversations — while the parent owns the
+   * compose dialog and the permission gate around it.
+   */
+  headerAction?: React.ReactNode;
 }
 
 const STATUS_COLORS: Record<ConversationStatus, string> = {
@@ -60,6 +67,7 @@ export function ConversationList({
   onConversationsLoaded,
   resyncToken = 0,
   channel = 'whatsapp',
+  headerAction,
 }: ConversationListProps) {
   const t = useTranslations('Inbox.conversationList');
 
@@ -245,14 +253,21 @@ export function ConversationList({
     <div className="border-border bg-card flex h-full w-full flex-col border-r lg:w-80">
       {/* Search + Filter */}
       <div className="border-border space-y-2 border-b p-3">
-        <div className="relative">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <Input
-            value={search}
-            onChange={handleSearchChange}
-            placeholder={t('searchPlaceholder')}
-            className="border-border bg-muted text-foreground placeholder-muted-foreground focus:border-primary/50 pl-9 text-sm"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              value={search}
+              onChange={handleSearchChange}
+              placeholder={t('searchPlaceholder')}
+              className="border-border bg-muted text-foreground placeholder-muted-foreground focus:border-primary/50 pl-9 text-sm"
+            />
+          </div>
+          {/* "New message" lives here, beside search, because both are
+              ways of getting to a thread. Rendered by the parent so this
+              list stays a pure list and the dialog's state sits with the
+              workspace that owns conversation selection. */}
+          {headerAction}
         </div>
 
         <div className="flex flex-wrap items-center gap-1">

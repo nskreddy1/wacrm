@@ -23,6 +23,14 @@ export interface ContactCandidate {
   name?: string | null;
   phone?: string | null;
   email?: string | null;
+  /**
+   * `contacts.whatsapp_opted_out`. Present so the picker can refuse the
+   * row up front instead of letting the agent open a thread they can
+   * never send in (ADR-006 D8). Optional because older fetch paths do
+   * not select the column; `undefined` reads as "not opted out", which
+   * is safe — the server guard is still the boundary.
+   */
+  whatsappOptedOut?: boolean | null;
 }
 
 /**
@@ -46,6 +54,32 @@ export type SendOutcome =
 /** Digits only, so a typed query matches a stored phone whatever the formatting. */
 function digitsOf(value: string): string {
   return value.replace(/\D/g, '');
+}
+
+/**
+ * Why a contact cannot be messaged from the picker, or `null` when they
+ * can. Separated from the render so the rule is one testable expression
+ * rather than a condition spread across JSX.
+ *
+ * Both reasons are hard blocks, and both are re-checked server-side:
+ *   - `opted_out` — ADR-006 D8. Terminal; even a template is refused, so
+ *     offering the row would be a lie.
+ *   - `no_phone` — WhatsApp is addressed by phone. A contact captured
+ *     from an email-only source has nothing to send to.
+ *
+ * A cold thread is deliberately NOT a block: that is the normal case for
+ * this flow. The 24-hour window is closed, so the thread opens
+ * template-only — which is the composer's job to enforce, not the
+ * picker's job to prevent.
+ */
+export type ContactBlockReason = 'opted_out' | 'no_phone';
+
+export function contactBlockReason(
+  contact: ContactCandidate
+): ContactBlockReason | null {
+  if (contact.whatsappOptedOut) return 'opted_out';
+  if (!contact.phone || !digitsOf(contact.phone)) return 'no_phone';
+  return null;
 }
 
 /**

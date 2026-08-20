@@ -35,6 +35,7 @@ import {
   buildSendComponents,
   type SendTimeParams,
 } from '@/features/whatsapp/lib/template-send-builder';
+import { toContentVariables } from '@/features/whatsapp/lib/template-variables';
 import { sendChannelMessage } from '@/features/channels/lib/orchestration/outbound';
 import { OutboundBlockedError } from '@/features/channels/lib/orchestration/window-guard';
 import type { OutboundMessagePayload } from '@/features/channels/lib/contracts';
@@ -359,72 +360,165 @@ export async function sendMessageToConversation(
     }
   }
 
-  // Template row (for header + button components). isMessageTemplate
-  // guards against a malformed local row crashing the send-builder.
+  // The conversation's channel decides how a template must be sent:
+  // WhatsApp has provider template objects (Meta components / Twilio
+  // Content SIDs), SMS has none and is rendered to text. Legacy rows
+  // predate the column and are WhatsApp.
+  const conversationChannel = (conversation.channel ?? 'whatsapp') as
+    | 'whatsapp'
+    | 'sms'
+    | 'email';
+
+  /** Positional {{1}}-style substitution for channels sent as plain text. */
+  const renderTemplateBodyText = (
+    body: string,
+    values: Array<string | number>
+  ): string =>
+    body
+      .replace(/\{\{(\d+)\}\}/g, (match, raw: string) => {
+        const value = values[Number(raw) - 1];
+        return value === undefined || String(value).length === 0
+          ? match
+          : String(value);
+      })
+      .trim();
+
+  // Template row (for header + button components, or the Twilio content
+  // SID). isMessageTemplate guards against a malformed local row
+  // crashing the send-builder.
+  //
+  // Name+language is not unique across channels: the same account can
+  // hold an SMS row and a WhatsApp row with one name. Matching on the
+  // conversation's channel is what stops an SMS template from being
+  // pushed down a WhatsApp connection, which the provider rejects with
+  // an opaque "templates are not supported on this channel" error.
   let templateRow: MessageTemplate | null = null;
   if (messageType === 'template' && templateName) {
-    const { data } = await db
+    const { data: rows } = await db
       .from('message_templates')
       .select('*')
       .eq('account_id', accountId)
       .eq('name', templateName)
-      .eq('language', templateLanguage || 'en_US')
-      .maybeSingle();
-    if (data && !isMessageTemplate(data)) {
+      .eq('language', templateLanguage || 'en_US');
+
+    const candidates = (rows ?? []) as MessageTemplate[];
+    const match =
+      candidates.find(
+        (row) => (row.channel ?? 'whatsapp') === conversationChannel
+      ) ?? null;
+
+    if (!match && candidates.length > 0) {
+      const otherChannel = candidates[0].channel ?? 'whatsapp';
+      throw new SendMessageError(
+        'template_channel_mismatch',
+        `"${templateName}" is a ${otherChannel.toUpperCase()} template and cannot be sent in this ${conversationChannel.toUpperCase()} conversation.`,
+        400
+      );
+    }
+    if (match && !isMessageTemplate(match)) {
       throw new SendMessageError(
         'template_malformed',
         'Template row is malformed locally — run "Sync from Meta" in Settings to repair it.',
         500
       );
     }
-    templateRow = data ?? null;
+    templateRow = match;
   }
 
   // Build the typed payload for the orchestrator.
   let payload: OutboundMessagePayload;
   if (messageType === 'template') {
     const structured = (templateMessageParams ?? undefined) as
-      SendTimeParams | undefined;
-    let components: unknown[] | undefined;
-    if (templateRow) {
-      try {
-        const built = buildSendComponents(templateRow, {
-          // Legacy callers pass body values in `templateParams`; fold
-          // them into `body` so the structured path covers them too.
-          body: structured?.body ?? templateParams,
-          headerText: structured?.headerText,
-          headerMediaUrl: structured?.headerMediaUrl,
-          headerMediaId: structured?.headerMediaId,
-          buttonParams: structured?.buttonParams,
-        });
-        components = built.length > 0 ? built : undefined;
-      } catch (err) {
-        // Builder throws are caller-payload problems (missing variable
-        // values etc.) — surface them as a 400, not a provider 502.
+      | SendTimeParams
+      | undefined;
+    const bodyValues = structured?.body ?? templateParams ?? [];
+
+    // --- SMS / email: no provider template object exists. The approved
+    // body is rendered locally and sent as plain text, which is what the
+    // orchestrator's strict provider check expects on these channels.
+    if (conversationChannel !== 'whatsapp') {
+      const rendered =
+        contentText?.trim() ||
+        renderTemplateBodyText(templateRow?.body_text ?? '', bodyValues);
+      if (!rendered) {
         throw new SendMessageError(
           'bad_request',
-          err instanceof Error ? err.message : 'Invalid template parameters',
+          'Template has no body to render for this channel',
           400
         );
       }
-    } else if (templateParams && templateParams.length > 0) {
-      // Legacy body-only path — no template row available.
-      components = [
-        {
-          type: 'body',
-          parameters: templateParams.map((p) => ({
-            type: 'text',
-            text: String(p),
-          })),
-        },
-      ];
+      payload = { kind: 'text', text: rendered };
     }
-    payload = {
-      kind: 'template',
-      templateName: templateName!,
-      language: templateLanguage || 'en_US',
-      components,
-    };
+    // --- WhatsApp on Twilio: the Content API template is addressed by
+    // its ContentSid with positional variables. Without the SID the
+    // adapter has nothing to send, which surfaced as the opaque
+    // "template messages are not supported on the whatsapp twilio
+    // channel" failure agents were hitting.
+    else if (templateRow?.provider === 'twilio') {
+      if (!templateRow.twilio_content_sid) {
+        throw new SendMessageError(
+          'template_not_synced',
+          `"${templateName}" has no Twilio content SID yet — publish it to Twilio from Templates before sending.`,
+          400
+        );
+      }
+      payload = {
+        kind: 'template',
+        templateName: templateName!,
+        language: templateLanguage || 'en_US',
+        contentSid: templateRow.twilio_content_sid,
+        // Key the map by the token the Content template actually declares.
+        // A named template (`{{first_name}}`) keyed positionally is accepted
+        // by Twilio but substitutes nothing, so the contact receives the raw
+        // `{{first_name}}` text — the bug this mapping replaces.
+        contentVariables: toContentVariables(
+          templateRow.body_text,
+          bodyValues
+        ),
+      };
+    } else {
+      // --- WhatsApp on Meta: name + language + typed components.
+      let components: unknown[] | undefined;
+      if (templateRow) {
+        try {
+          const built = buildSendComponents(templateRow, {
+            // Legacy callers pass body values in `templateParams`; fold
+            // them into `body` so the structured path covers them too.
+            body: structured?.body ?? templateParams,
+            headerText: structured?.headerText,
+            headerMediaUrl: structured?.headerMediaUrl,
+            headerMediaId: structured?.headerMediaId,
+            buttonParams: structured?.buttonParams,
+          });
+          components = built.length > 0 ? built : undefined;
+        } catch (err) {
+          // Builder throws are caller-payload problems (missing variable
+          // values etc.) — surface them as a 400, not a provider 502.
+          throw new SendMessageError(
+            'bad_request',
+            err instanceof Error ? err.message : 'Invalid template parameters',
+            400
+          );
+        }
+      } else if (templateParams && templateParams.length > 0) {
+        // Legacy body-only path — no template row available.
+        components = [
+          {
+            type: 'body',
+            parameters: templateParams.map((p) => ({
+              type: 'text',
+              text: String(p),
+            })),
+          },
+        ];
+      }
+      payload = {
+        kind: 'template',
+        templateName: templateName!,
+        language: templateLanguage || 'en_US',
+        components,
+      };
+    }
   } else if (isMediaKind) {
     payload = {
       kind: 'media',
