@@ -58,12 +58,24 @@ export interface CreateBroadcastParams {
 
 interface PlannedRecipient {
   recipientRowId: string;
+  /**
+   * Carried through to delivery so the fan-out phase can re-check consent
+   * against the same identity the plan resolved — matching on contact id,
+   * not on a phone string that would have to be re-normalised.
+   */
+  contactId: string;
   phone: string;
   params: string[];
 }
 
 export interface BroadcastPlan {
   broadcastId: string;
+  /**
+   * Required by the delivery phase: every service-role query filters by
+   * account, including the consent re-check, so one tenant's consent state
+   * can never decide another tenant's fan-out.
+   */
+  accountId: string;
   templateName: string;
   templateLanguage: string;
   phoneNumberId: string;
@@ -256,6 +268,7 @@ export async function createBroadcast(
     const r = byContact.get(row.contact_id as string)!;
     return {
       recipientRowId: row.id as string,
+      contactId: r.contactId,
       phone: r.phone,
       params: r.params,
     };
@@ -263,6 +276,7 @@ export async function createBroadcast(
 
   return {
     broadcastId: broadcast.id,
+    accountId,
     templateName,
     templateLanguage,
     phoneNumberId: config.phone_number_id,
@@ -293,7 +307,52 @@ export async function deliverBroadcast(
 ): Promise<void> {
   let sentCount = 0;
 
+  // ADR-006 D8/D13 — consent is re-read at *delivery* time, not just at
+  // plan time.
+  //
+  // Plan and fan-out are deliberately separated (the route acknowledges,
+  // then `after()` sends), so the two are not the same instant: a contact
+  // can reply STOP in the gap, and on a 1000-recipient plan that gap is
+  // long. Plan-time filtering alone would send to someone the system
+  // already knows has opted out — the exact violation D8 exists to
+  // prevent, just arriving a few seconds later.
+  //
+  // Still one indexed query for the whole fan-out, hitting the partial
+  // `contacts_whatsapp_opted_out_idx`. If it fails we do NOT sail on:
+  // unproven consent is treated as no consent, the recipients are stamped
+  // failed with the machine code, and the tenant retries — the same
+  // fail-closed direction as the plan-time load.
+  let optedOut: ReadonlySet<string>;
+  try {
+    optedOut = await loadOptedOutContactIds(
+      db,
+      plan.accountId,
+      plan.planned.map((r) => r.contactId)
+    );
+  } catch (error) {
+    console.warn('[broadcast-core] consent re-check failed; refusing fan-out', {
+      broadcastId: plan.broadcastId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    optedOut = new Set(plan.planned.map((r) => r.contactId));
+  }
+
   for (const recipient of plan.planned) {
+    if (optedOut.has(recipient.contactId)) {
+      // Never enters the provider loop, so no message is sent and no
+      // whatsapp_message_id is recorded. Stamped failed with the code so
+      // the recipient list explains itself rather than showing a blank
+      // failure the tenant reads as a delivery bug.
+      await db
+        .from('broadcast_recipients')
+        .update({
+          status: 'failed',
+          error_message: 'Contact has opted out of WhatsApp messages.',
+        })
+        .eq('id', recipient.recipientRowId);
+      continue;
+    }
+
     const variants = phoneVariants(recipient.phone);
     let sentMessageId: string | null = null;
     let lastError: string | null = null;
