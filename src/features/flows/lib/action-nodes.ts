@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { isDeliverableUrl } from '@/features/webhooks/lib/ssrf';
 import { decrypt } from '@/lib/crypto/secrets';
-import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
+import { sendChannelMessage } from '@/features/channels/lib/orchestration/outbound';
 import { engineSendTemplate } from './meta-send';
 import type {
   AssignConversationNodeConfig,

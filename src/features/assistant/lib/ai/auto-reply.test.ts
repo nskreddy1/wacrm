@@ -37,7 +37,7 @@ vi.mock('./context', () => ({
 }));
 vi.mock('./knowledge', () => ({ retrieveKnowledge: h.retrieveKnowledge }));
 vi.mock('./generate', () => ({ generateReply: h.generateReply }));
-vi.mock('@/features/admin/lib/orchestration/outbound', () => ({
+vi.mock('@/features/channels/lib/orchestration/outbound', () => ({
   sendChannelMessage: h.sendChannelMessage,
 }));
 vi.mock('./admin-client', () => ({

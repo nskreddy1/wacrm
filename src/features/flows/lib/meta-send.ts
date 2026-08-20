@@ -4,7 +4,7 @@ import type {
   MediaKind,
 } from '@/features/whatsapp/lib/meta-api';
 import type { InteractiveMessagePayload } from '@/features/whatsapp/lib/interactive';
-import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
+import { sendChannelMessage } from '@/features/channels/lib/orchestration/outbound';
 
 // ------------------------------------------------------------
 // Flows-side senders — thin wrappers over the unified outbound

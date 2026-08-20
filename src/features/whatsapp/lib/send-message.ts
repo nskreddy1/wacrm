@@ -35,7 +35,7 @@ import {
   buildSendComponents,
   type SendTimeParams,
 } from '@/features/whatsapp/lib/template-send-builder';
-import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
+import { sendChannelMessage } from '@/features/channels/lib/orchestration/outbound';
 import type { OutboundMessagePayload } from '@/features/channels/lib/contracts';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
