@@ -60,8 +60,13 @@ export function extractTemplateVariables(
 ): TemplateVariable[] {
   if (!text) return [];
 
-  const seen = new Map<string, TemplateVariable>();
-  let namedCursor = 0;
+  // Pass 1 — collect distinct tokens in source order and classify them.
+  // Positional indices must be reserved before any named token is
+  // numbered, otherwise a mixed body like `Hi {{1}}, on {{date}}` assigns
+  // `date` index 1 as well and both slots read the same value.
+  const order: Array<{ token: string; kind: 'positional' | 'named' }> = [];
+  const seen = new Set<string>();
+  const reserved = new Set<number>();
 
   for (const match of text.matchAll(TOKEN_RE)) {
     const token = match[1];
@@ -71,24 +76,31 @@ export function extractTemplateVariables(
       const index = Number(token);
       // `{{0}}` is not a slot in either dialect — treat it as literal text.
       if (index < 1) continue;
-      seen.set(token, {
-        token,
-        kind: 'positional',
-        index,
-        label: `{{${token}}}`,
-      });
+      seen.add(token);
+      reserved.add(index);
+      order.push({ token, kind: 'positional' });
     } else {
-      namedCursor += 1;
-      seen.set(token, {
-        token,
-        kind: 'named',
-        index: namedCursor,
-        label: humanize(token),
-      });
+      seen.add(token);
+      order.push({ token, kind: 'named' });
     }
   }
 
-  return [...seen.values()];
+  // Pass 2 — number named tokens into the lowest slot no positional
+  // token claimed, preserving source order among themselves.
+  let cursor = 0;
+  const nextFreeIndex = (): number => {
+    do {
+      cursor += 1;
+    } while (reserved.has(cursor));
+    reserved.add(cursor);
+    return cursor;
+  };
+
+  return order.map(({ token, kind }) =>
+    kind === 'positional'
+      ? { token, kind, index: Number(token), label: `{{${token}}}` }
+      : { token, kind, index: nextFreeIndex(), label: humanize(token) }
+  );
 }
 
 /** True when the template uses named tokens (`{{first_name}}`). */
@@ -134,5 +146,45 @@ export function toPositionalValues(
   }
   // Fill holes so a sparse array never serializes as `null`.
   for (let i = 0; i < out.length; i += 1) out[i] ??= '';
+  return out;
+}
+
+/**
+ * Build Twilio's `ContentVariables` map from an ordered positional array.
+ *
+ * Twilio keys `ContentVariables` by whatever token the Content template
+ * actually declares: `{"1": …}` for a positional template, but
+ * `{"first_name": …}` for a named one. Keying a named template
+ * positionally is silently accepted by the API — Twilio just substitutes
+ * nothing, and the contact receives the literal `{{first_name}}`. That is
+ * the failure this function exists to prevent.
+ *
+ * The wire format between the composer and this module stays positional
+ * (`SendTimeParams.body`), because `toPositionalValues` already ordered
+ * those values by `extractTemplateVariables`. Re-extracting the same
+ * tokens here recovers each value's original token, so the two functions
+ * agree on which value belongs to which slot.
+ */
+export function toContentVariables(
+  text: string | null | undefined,
+  positionalValues: ReadonlyArray<string | number>
+): Record<string, string> {
+  const vars = extractTemplateVariables(text);
+
+  // No parsable tokens (or no local body text — e.g. a Twilio-authored
+  // template we only know by SID). Fall back to positional keys, which is
+  // the pre-existing behaviour and correct for positional templates.
+  if (vars.length === 0) {
+    return Object.fromEntries(
+      positionalValues.map((value, i) => [String(i + 1), String(value)])
+    );
+  }
+
+  const out: Record<string, string> = {};
+  for (const v of vars) {
+    const value = positionalValues[v.index - 1];
+    out[v.kind === 'named' ? v.token : String(v.index)] =
+      value === undefined ? '' : String(value);
+  }
   return out;
 }

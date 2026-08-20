@@ -90,11 +90,6 @@ const messageThreadCache = {
   },
 };
 
-// Template placeholder substitution lives in the inbox lib so the
-// compose sheet's preview and this optimistic bubble can never drift
-// apart. See `new-conversation.ts` for the unfilled-slot behaviour.
-const renderTemplateBody = renderTemplatePreview;
-
 /**
  * Builds the optimistic placeholder row shown while a reaction POST is
  * in flight. The temp id is replaced by the realtime INSERT that follows.

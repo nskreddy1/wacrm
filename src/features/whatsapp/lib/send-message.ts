@@ -35,6 +35,7 @@ import {
   buildSendComponents,
   type SendTimeParams,
 } from '@/features/whatsapp/lib/template-send-builder';
+import { toContentVariables } from '@/features/whatsapp/lib/template-variables';
 import { sendChannelMessage } from '@/features/channels/lib/orchestration/outbound';
 import { OutboundBlockedError } from '@/features/channels/lib/orchestration/window-guard';
 import type { OutboundMessagePayload } from '@/features/channels/lib/contracts';
@@ -466,8 +467,13 @@ export async function sendMessageToConversation(
         templateName: templateName!,
         language: templateLanguage || 'en_US',
         contentSid: templateRow.twilio_content_sid,
-        contentVariables: Object.fromEntries(
-          bodyValues.map((value, i) => [String(i + 1), String(value)])
+        // Key the map by the token the Content template actually declares.
+        // A named template (`{{first_name}}`) keyed positionally is accepted
+        // by Twilio but substitutes nothing, so the contact receives the raw
+        // `{{first_name}}` text — the bug this mapping replaces.
+        contentVariables: toContentVariables(
+          templateRow.body_text,
+          bodyValues
         ),
       };
     } else {
