@@ -15,6 +15,11 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
+import {
+  CONSENT_BLOCKED_CODE,
+  loadWhatsAppConsentBlocklist,
+} from '@/features/channels/lib/orchestration/consent-filter';
+import { OutboundBlockedError } from '@/features/channels/lib/orchestration/window-guard';
 import { logAuditEvent } from '@/lib/audit-events';
 import { checkMonthlyQuota, consumeMonthlyQuota } from '@/lib/quotas';
 import { quotaExceededResponse } from '@/lib/quotas/response';
@@ -24,6 +29,8 @@ interface BroadcastResult {
   status: 'sent' | 'failed';
   whatsapp_message_id?: string;
   error?: string;
+  /** Machine code for policy refusals (ADR-006): `contact_opted_out`. */
+  code?: string;
 }
 
 /**
@@ -137,13 +144,65 @@ export async function POST(request: Request) {
       );
     }
 
+    // ADR-006 D8/D13: consent is resolved at plan time, before quota, so
+    // the count the tenant is charged for is the count that can legally
+    // send. One indexed query for the whole batch.
+    const results: BroadcastResult[] = [];
+    let sentCount = 0;
+    let failedCount = 0;
+
+    let blocklist;
+    try {
+      blocklist = await loadWhatsAppConsentBlocklist(
+        supabase,
+        accountId,
+        recipients.map((r) => r.phone)
+      );
+    } catch (err) {
+      if (err instanceof OutboundBlockedError) {
+        return NextResponse.json(
+          { error: err.message, code: err.code },
+          { status: err.status }
+        );
+      }
+      throw err;
+    }
+
+    const sendable: NewRecipient[] = [];
+    for (const recipient of recipients) {
+      if (blocklist.blocks(recipient.phone)) {
+        results.push({
+          phone: recipient.phone,
+          status: 'failed',
+          error: blocklist.reason().message,
+          code: CONSENT_BLOCKED_CODE,
+        });
+        failedCount++;
+        continue;
+      }
+      sendable.push(recipient);
+    }
+
+    if (sendable.length === 0) {
+      return NextResponse.json(
+        {
+          success: true,
+          total: recipients.length,
+          sent: 0,
+          failed: failedCount,
+          results,
+        },
+        { status: 200 }
+      );
+    }
+
     // Plan quota: monthly broadcast-recipient budget, checked for the
     // WHOLE batch before any send so a campaign never half-delivers
     // on a quota boundary. Consumed after the loop by actual sends.
     const quota = await checkMonthlyQuota(
       accountId,
       'broadcast_recipients',
-      recipients.length
+      sendable.length
     );
     if (!quota.allowed) {
       return quotaExceededResponse(quota, 'Monthly broadcast recipient');
@@ -190,11 +249,7 @@ export async function POST(request: Request) {
     }
     const templateRow = rawTemplateRow ?? null;
 
-    const results: BroadcastResult[] = [];
-    let sentCount = 0;
-    let failedCount = 0;
-
-    for (const recipient of recipients) {
+    for (const recipient of sendable) {
       const sanitized = sanitizePhoneForMeta(recipient.phone);
 
       if (!isValidE164(sanitized)) {
@@ -279,6 +334,8 @@ export async function POST(request: Request) {
         total: recipients.length,
         sent: sentCount,
         failed: failedCount,
+        // How many the consent boundary removed before sending (ADR-006 D8).
+        opted_out: recipients.length - sendable.length,
       },
     });
 
