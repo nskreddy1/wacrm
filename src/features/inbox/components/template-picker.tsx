@@ -148,10 +148,16 @@ export function TemplatePicker({
   }, [open, conversationId, t]);
 
   // Switching contact while the panel is open must not carry the previous
-  // thread's half-filled template into the new one.
-  useEffect(() => {
+  // thread's half-filled template into the new one. Adjusted during render
+  // (the React-documented pattern) so the new thread never paints the old
+  // thread's selection for a frame, and so no cascading effect render is
+  // queued. The parent also keys this component by conversation — this is
+  // the belt to that braces, and it keeps the guarantee local.
+  const [prevConversationId, setPrevConversationId] = useState(conversationId);
+  if (prevConversationId !== conversationId) {
+    setPrevConversationId(conversationId);
     resetSelection();
-  }, [conversationId, resetSelection]);
+  }
 
   const slots = useMemo(
     () => (selected ? collectSlots(selected) : null),

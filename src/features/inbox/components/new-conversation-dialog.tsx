@@ -85,11 +85,14 @@ export function NewConversationDialog({
     if (!open) return;
 
     const requestId = ++requestRef.current;
-    setLoading(true);
-    setLoadError(null);
-    setOpenError(null);
 
+    // Every setState lives inside the async body: a synchronous setState
+    // in an effect body cascades an extra render pass (and trips
+    // react-hooks/set-state-in-effect). The loading flag is set on the
+    // first microtask instead, which the spinner renders identically.
     (async () => {
+      setLoading(true);
+      setLoadError(null);
       try {
         const supabase = createClient();
         // RLS scopes this to the caller's account, so no explicit
@@ -128,13 +131,19 @@ export function NewConversationDialog({
     })();
   }, [open]);
 
-  // Reset transient state on close so reopening is a clean slate.
-  useEffect(() => {
-    if (open) return;
-    setQuery('');
-    setOpeningId(null);
-    setOpenError(null);
-  }, [open]);
+  // Reset transient state when the dialog closes so reopening is a clean
+  // slate. Adjusted during render (the React-documented pattern) rather
+  // than in an effect: an effect would paint the stale query/error for one
+  // frame on reopen and cascade a second render.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (!open) {
+      setQuery('');
+      setOpeningId(null);
+      setOpenError(null);
+    }
+  }
 
   const visible = useMemo(
     () => contacts.filter((c) => matchesContactQuery(c, query)),

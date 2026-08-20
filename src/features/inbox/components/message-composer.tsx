@@ -63,6 +63,43 @@ export const MEDIA_CAPTION_MAX = 1024;
  *  transcode limits — auto-stops the recorder when reached. */
 const MAX_RECORDING_SECONDS = 5 * 60;
 
+/**
+ * Free-form drafts, keyed by conversation, for the lifetime of the tab.
+ *
+ * The composer is mounted per conversation (the thread keys it by id), so
+ * component state alone would drop a half-typed reply the moment the agent
+ * glanced at another thread — and, before the key, would have shown that
+ * reply *inside* the other thread. This store gives the honest behaviour:
+ * one draft per conversation, restored when you come back, never visible
+ * anywhere else.
+ *
+ * Bounded LRU (Map preserves insertion order) so a long shift hopping
+ * across hundreds of threads can't grow without limit. Deliberately
+ * in-memory: drafts are scratch text, not data we want surviving a reload
+ * behind the agent's back.
+ */
+const DRAFT_CACHE_MAX = 50;
+const composerDraftStore = {
+  map: new Map<string, string>(),
+  get(conversationId: string): string {
+    const hit = this.map.get(conversationId);
+    if (hit === undefined) return '';
+    // Refresh recency: delete + re-set moves the key to the end.
+    this.map.delete(conversationId);
+    this.map.set(conversationId, hit);
+    return hit;
+  },
+  set(conversationId: string, text: string) {
+    this.map.delete(conversationId);
+    // An empty draft is an absent draft — don't hold a slot for it.
+    if (text.length > 0) this.map.set(conversationId, text);
+    if (this.map.size > DRAFT_CACHE_MAX) {
+      const oldest = this.map.keys().next().value;
+      if (oldest) this.map.delete(oldest);
+    }
+  },
+};
+
 export interface SendMediaPayload {
   kind: ComposerMediaKind;
   /** Public chat-media URL Meta fetches at send time. */
@@ -140,7 +177,9 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const t = useTranslations('Inbox.composer');
 
-  const [text, setText] = useState('');
+  // Rehydrate this conversation's draft on mount. The initializer runs
+  // once per mounted conversation, which is exactly the lifetime we want.
+  const [text, setText] = useState(() => composerDraftStore.get(conversationId));
   const [sending, setSending] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -217,6 +256,19 @@ export function MessageComposer({
     el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
   }, []);
 
+  // Mirror the draft into the per-conversation store. This is the
+  // legitimate use of an effect: pushing React state out to an external
+  // system, so a mid-sentence switch to another thread and back finds the
+  // sentence where it was left.
+  useEffect(() => {
+    composerDraftStore.set(conversationId, text);
+  }, [conversationId, text]);
+
+  // A rehydrated multi-line draft must not open collapsed to one row.
+  useEffect(() => {
+    adjustHeight();
+  }, [adjustHeight]);
+
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || sending || sessionExpired) return;
@@ -255,7 +307,12 @@ export function MessageComposer({
   // composer for the agent to edit + send. Read-only server-side —
   // nothing is sent until the agent hits Send.
   const handleDraft = useCallback(async () => {
-    if (drafting) return;
+    // Never write into a composer the agent cannot send from. Outside the
+    // 24-hour window (or read-only) a suggested reply is dead text in a
+    // disabled textarea — it reads as "the app accepted this" when
+    // nothing can be sent. Templates are the only route out; the
+    // session-expired banner already points there.
+    if (drafting || inputsDisabled) return;
     setDrafting(true);
     try {
       const res = await fetch('/api/ai/draft', {
@@ -295,16 +352,20 @@ export function MessageComposer({
     } finally {
       setDrafting(false);
     }
-  }, [drafting, conversationId, adjustHeight]);
+  }, [drafting, inputsDisabled, conversationId, adjustHeight]);
 
   // ---- Interactive message + quick replies --------------------------
 
   const openInteractiveBuilder = useCallback(
     (seed?: InteractiveMessagePayload) => {
+      // Interactive messages are free-form traffic: same window rule as
+      // text. Guarded here as well as on the trigger so a quick reply
+      // picked from the list can't open a builder that cannot send.
+      if (inputsDisabled) return;
       setInteractivePayload(seed ?? blankButtonsPayload());
       setInteractiveOpen(true);
     },
-    []
+    [inputsDisabled]
   );
 
   const sendInteractive = useCallback(() => {
@@ -356,6 +417,8 @@ export function MessageComposer({
   const handlePickQuickReply = useCallback(
     (qr: QuickReply) => {
       setQuickReplyOpen(false);
+      // Same reason as the AI draft: no filling a composer that can't send.
+      if (inputsDisabled) return;
       if (qr.kind === 'interactive' && qr.interactive_payload) {
         openInteractiveBuilder(qr.interactive_payload);
         return;
@@ -375,7 +438,7 @@ export function MessageComposer({
         }
       });
     },
-    [openInteractiveBuilder, adjustHeight]
+    [openInteractiveBuilder, adjustHeight, inputsDisabled]
   );
 
   // Upload a captured file to chat-media and stage it as a draft.
@@ -745,7 +808,9 @@ export function MessageComposer({
             size="sm"
             canAct={!readOnly}
             gateReason="send messages"
-            disabled={drafting}
+            // Disabled outside the 24h window: a suggestion the agent
+            // cannot send is worse than no suggestion.
+            disabled={drafting || sessionExpired}
             title={readOnly ? undefined : t('draftWithAI')}
             className="text-muted-foreground hover:text-primary h-9 w-9 shrink-0 p-0"
             onClick={handleDraft}
