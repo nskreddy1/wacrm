@@ -119,6 +119,16 @@ export interface Contact {
   avatar_url?: string;
   created_at: string;
   updated_at: string;
+  /**
+   * Contact replied STOP (or equivalent) on WhatsApp — ADR-006 D8.
+   * Terminal: the outbound guard refuses everything to this contact,
+   * templates included, so the UI must never offer to message them.
+   * Absent on older fetch paths that don't select the column; treat
+   * `undefined` as "not known to be opted out".
+   */
+  whatsapp_opted_out?: boolean;
+  /** When the opt-out was recorded. Null while `whatsapp_opted_out` is false. */
+  whatsapp_opted_out_at?: string | null;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the
    *  Inbox conversation list, for tag filtering). Absent otherwise. */
   tags?: Tag[];

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import {
+  requirePermission,
+  toErrorResponse,
+} from '@/features/auth/lib/account';
+import { ensureConversationForContact } from '@/features/inbox/lib/ensure-conversation';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -24,39 +28,19 @@ import { quotaExceededResponse } from '@/lib/quotas/response';
 // dashboard's internal `{ error }` shape.
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // ADR-006 C11: this is the dashboard's only outbound send path, so the
+    // permission check belongs here rather than in the composer. A viewer
+    // whose UI was bypassed (devtools, a stale bundle, a direct curl) now
+    // gets a 403 instead of a delivered WhatsApp message. `requirePermission`
+    // also resolves account_id, replacing this route's own profile lookup.
+    const ctx = await requirePermission('messages:send');
+    const { supabase, accountId } = ctx;
 
     // Per-user rate limit. Bucket key is scoped to this route so
     // `/broadcast` has an independent budget.
-    const limit = await checkRateLimit(`send:${user.id}`, RATE_LIMITS.send);
+    const limit = await checkRateLimit(`send:${ctx.userId}`, RATE_LIMITS.send);
     if (!limit.success) {
       return rateLimitResponse(limit);
-    }
-
-    // Resolve the caller's account_id. Every downstream lookup
-    // (conversation, whatsapp_config, message_templates) is account-
-    // scoped post-multi-user, so the previous `user_id` filters
-    // returned nothing for teammates who didn't author the row.
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    const accountId = profile?.account_id as string | undefined;
-    if (!accountId) {
-      return NextResponse.json(
-        { error: 'Your profile is not linked to an account.' },
-        { status: 403 }
-      );
     }
 
     // Plan quota: monthly outbound message budget. Checked before any
@@ -140,35 +124,24 @@ export async function POST(request: Request) {
       }
       conversationId = data.id;
     } else {
-      // contact_id path: verify the contact is in this account first so a
-      // caller can't open a conversation against someone else's contact.
-      const { data: contactRow, error: contactErr } = await supabase
-        .from('contacts')
-        .select('id')
-        .eq('id', contact_id)
-        .eq('account_id', accountId)
-        .maybeSingle();
-
-      if (contactErr || !contactRow) {
-        return NextResponse.json(
-          { error: 'Contact not found' },
-          { status: 404 }
-        );
-      }
-
-      const resolved = await findOrCreateConversation(
+      // contact_id path: shared with the inbox's New-conversation route so
+      // both converge on one thread per contact (see ensure-conversation.ts).
+      // It verifies contact→account ownership itself.
+      const resolved = await ensureConversationForContact(
         supabase,
         accountId,
-        user.id,
+        ctx.userId,
         contact_id
       );
-      if (!resolved) {
-        return NextResponse.json(
-          { error: 'Failed to open a conversation for this contact' },
-          { status: 500 }
-        );
+      if (!resolved.ok) {
+        return resolved.reason === 'contact_not_found'
+          ? NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+          : NextResponse.json(
+              { error: 'Failed to open a conversation for this contact' },
+              { status: 500 }
+            );
       }
-      conversationId = resolved;
+      conversationId = resolved.conversationId;
     }
 
     if (!conversationId) {
@@ -224,55 +197,8 @@ export async function POST(request: Request) {
       throw err;
     }
   } catch (error) {
-    console.error('Error in WhatsApp send POST:', error);
-    return NextResponse.json(
-      { error: 'Failed to send message' },
-      { status: 500 }
-    );
+    // `requirePermission` throws Unauthorized/Forbidden — map those to
+    // 401/403 rather than burying an auth failure in a generic 500.
+    return toErrorResponse(error);
   }
-}
-
-type SendSupabase = Awaited<ReturnType<typeof createClient>>;
-
-/**
- * Return the contact's conversation id in this account, creating one if
- * it doesn't exist yet. Mirrors the webhook's find-or-create so an
- * inbound-then-outbound (or outbound-first) sequence converges on a single
- * thread per contact. Runs under the caller's RLS — the conversations_insert
- * policy requires account agent membership, which the caller already is.
- */
-async function findOrCreateConversation(
-  supabase: SendSupabase,
-  accountId: string,
-  userId: string,
-  contactId: string
-): Promise<string | null> {
-  const { data: existing } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('account_id', accountId)
-    .eq('contact_id', contactId)
-    .maybeSingle();
-
-  if (existing) return existing.id;
-
-  const { data: created, error } = await supabase
-    .from('conversations')
-    .insert({
-      account_id: accountId,
-      user_id: userId,
-      contact_id: contactId,
-    })
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error(
-      'Error creating conversation for contact send:',
-      error.message
-    );
-    return null;
-  }
-
-  return created.id;
 }
