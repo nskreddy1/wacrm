@@ -78,6 +78,26 @@
     "whatsapp -> contacts",
     "whatsapp -> flows"
   ],
+  "restrictedSymbols": [
+    {
+      "$comment": "ADR-006 D13 — provider send primitives are the last mile to Meta. Anything that reaches them has left the policy boundary behind, so the set of modules allowed to import them is closed and every entry states how it satisfies consent + the 24-hour window.",
+      "module": "@/features/whatsapp/lib/meta-api",
+      "symbols": [
+        "sendTextMessage",
+        "sendMediaMessage",
+        "sendTemplateMessage",
+        "sendReactionMessage",
+        "sendInteractiveButtons",
+        "sendInteractiveList"
+      ],
+      "allowedImporters": {
+        "src/features/channels/lib/adapters/meta.ts": "The orchestrator's WhatsApp adapter. Only reachable via sendChannelMessage(), which calls evaluateOutboundWindow() before dispatch — this is the guarded single-send path.",
+        "src/features/whatsapp/lib/broadcast-core.ts": "Bulk fan-out, template-only. Consent is resolved once at plan time via loadOptedOutContactIds(); the window guard cannot reject a template, so per-recipient routing would add cost and no safety.",
+        "src/app/api/whatsapp/broadcast/route.ts": "Bulk fan-out, template-only. Consent resolved once at plan time via loadWhatsAppConsentBlocklist(). See ADR-007 for the durable-queue follow-up.",
+        "src/app/api/whatsapp/react/route.ts": "KNOWN GAP (ADR-007): reactions are free-form under Meta's rules and require an open window, but this route calls the primitive directly and is not window-guarded. Baselined to make the gap visible, NOT to bless it."
+      }
+    }
+  ],
   "sharedExceptions": [
     "src/components/layout/app-sidebar.tsx",
     "src/components/layout/mobile-top-bar.tsx",

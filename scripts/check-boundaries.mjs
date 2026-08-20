@@ -65,6 +65,40 @@ function importsOf(file) {
   return specs;
 }
 
+/**
+ * Named-binding imports: `import { a, b as c } from 'spec'`.
+ *
+ * The negated class spans newlines, so multi-line clauses (the common
+ * formatting for several send primitives) are matched as one.
+ */
+const NAMED_IMPORT_RE =
+  /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
+
+/** Namespace imports: `import * as meta from 'spec'` — grants the whole module. */
+const NAMESPACE_IMPORT_RE =
+  /import\s+(?:type\s+)?\*\s*as\s+\w+\s*from\s*['"]([^'"]+)['"]/g;
+
+/**
+ * @returns {{ spec: string, names: string[], namespace: boolean }[]}
+ *   One entry per import statement that could pull a restricted symbol.
+ */
+function bindingsOf(content) {
+  const out = [];
+  for (const m of content.matchAll(NAMED_IMPORT_RE)) {
+    const names = m[1]
+      .split(',')
+      // `orig as alias` — the restriction is on what is imported, not the
+      // local name, so key off the original.
+      .map((part) => part.trim().split(/\s+as\s+/)[0].trim())
+      .filter(Boolean);
+    out.push({ spec: m[2], names, namespace: false });
+  }
+  for (const m of content.matchAll(NAMESPACE_IMPORT_RE)) {
+    out.push({ spec: m[1], names: [], namespace: true });
+  }
+  return out;
+}
+
 /** Feature name if the file lives inside src/features, else null. */
 function featureOf(file) {
   const rel = file.slice(SRC.length + 1).split(sep);
@@ -135,15 +169,30 @@ for (const file of files) {
 // ---------------------------------------------------------------------------
 
 if (UPDATE) {
+  // `restrictedSymbols` is hand-authored policy (ADR-006 D13), not something
+  // derived from the code — regenerating from the current tree would happily
+  // "discover" a new bypass and bless it. Carry it through untouched so
+  // --update can never quietly widen the send boundary.
+  let existing = {};
+  try {
+    existing = JSON.parse(readFileSync(GRAPH_PATH, 'utf8'));
+  } catch {
+    // First generation — nothing to preserve.
+  }
+
   const graph = {
     $comment:
       'Declared architecture graph — regenerate with `node scripts/check-boundaries.mjs --update` after an APPROVED dependency change. New edges must be justified in code review.',
     allowedEdges: [...foundEdges].sort(),
+    ...(existing.restrictedSymbols
+      ? { restrictedSymbols: existing.restrictedSymbols }
+      : {}),
     sharedExceptions: [...foundSharedImporters].sort(),
   };
   writeFileSync(GRAPH_PATH, JSON.stringify(graph, null, 2) + '\n');
   console.log(
-    `feature-graph.json updated: ${foundEdges.size} edges, ${foundSharedImporters.size} shared exceptions.`
+    `feature-graph.json updated: ${foundEdges.size} edges, ${foundSharedImporters.size} shared exceptions. ` +
+      `restrictedSymbols preserved (${(existing.restrictedSymbols ?? []).length} rule(s)).`
   );
   process.exit(0);
 }
@@ -173,6 +222,49 @@ for (const file of foundSharedImporters) {
     violations.push(
       `${file}: shared layer imports from @/features — shared code must not depend on features. If unavoidable, baseline it in feature-graph.json.`
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Rule 4: RESTRICTED SYMBOLS (ADR-006 D13)
+//
+// Layering rules constrain which *modules* may talk. They cannot express
+// "this one function is a policy choke point", which is exactly the shape
+// of the outbound send boundary: `@/features/whatsapp/lib/meta-api` is
+// legitimately imported for template CRUD and media download by code that
+// must never reach the send primitives. So the pin is per-symbol, and the
+// importer allowlist is a map whose values are the justification.
+// ---------------------------------------------------------------------------
+
+for (const rule of graph.restrictedSymbols ?? []) {
+  const restricted = new Set(rule.symbols);
+  const allowed = rule.allowedImporters ?? {};
+
+  for (const file of files) {
+    const rel = relPath(file);
+    if (Object.hasOwn(allowed, rel)) continue;
+
+    for (const { spec, names, namespace } of bindingsOf(
+      readFileSync(file, 'utf8')
+    )) {
+      if (spec !== rule.module) continue;
+
+      // A namespace import hands over every export, including the pinned
+      // ones, so it defeats the check by construction.
+      if (namespace) {
+        violations.push(
+          `${rel}: namespace-imports "${rule.module}" — that grants the restricted send primitives (${rule.symbols.join(', ')}). Import the specific non-restricted symbols you need instead.`
+        );
+        continue;
+      }
+
+      const hits = names.filter((n) => restricted.has(n));
+      if (hits.length > 0) {
+        violations.push(
+          `${rel}: imports restricted symbol(s) ${hits.join(', ')} from "${rule.module}". These are provider send primitives that bypass the ADR-006 consent + 24-hour-window boundary. Route the send through sendChannelMessage() (src/features/channels/lib/orchestration/outbound.ts), or — if this is a reviewed bulk path — add this file to restrictedSymbols.allowedImporters in scripts/architecture/feature-graph.json with a justification.`
+        );
+      }
+    }
   }
 }
 
