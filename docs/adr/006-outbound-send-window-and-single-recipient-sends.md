@@ -6,6 +6,11 @@
 §Verification against the code). Three claims in the original draft were wrong,
 one decision (D1) does not hold for the path it claims to dominate, and D10's
 framing was rewritten to be tier-based rather than trial-based. D13–D15 added.
+**Revised:** 2026-08-20 (second pass) — multi-vendor research across Meta Cloud
+API, Twilio, and MSG91 (see §Provider comparison). All three impose the same
+window, which upgrades D1 from a convenient choice to the only correct one;
+D16–D17 added, the latter adopting MSG91 as a third adapter specifically to
+prove the provider seam holds.
 **Deciders:** Project owner
 **Relates to:** `docs/outbound-messaging.md` (§2, §5.1–5.2 — the analysis this ADR decides on), ADR-001 (workspace modules — `inbox:send` / `broadcasts:manage` gating), ADR-005 (typed error codes, "the client check is not the boundary"), `AGENTS.md` (channel conventions: WhatsApp specifics stay in `src/features/whatsapp/lib/`; *"The UI disabling a button is never the security boundary"*)
 
@@ -311,6 +316,77 @@ any agent, with nothing in the system disagreeing.
     quote**, and the two documents get a dated caveat rather than a silent
     expiry. Recorded under Revisit with the surfacing work in (c).
 
+16. **D16 — The window is a *platform* rule, not a vendor rule, and a third
+    BSP is how we prove it.** D10's tier table answers "what can we send
+    today". It does not answer the sharper question: is the guard we are about
+    to build a Meta-shaped guess, or the actual constraint? Three independent
+    vendors were checked, and all three expose the *same* split at the API
+    surface, under different names:
+
+    | Vendor | "Open window" call | "Cold start" call |
+    | --- | --- | --- |
+    | **Meta Cloud API** | `POST /messages` `type=text` | `type=template` |
+    | **Twilio** | `Body` on `/Messages` | `ContentSid` (Content API `HX…`) |
+    | **MSG91** | *"Send message (once session started)"* | *"Send WhatsApp Template — this API is to initiate a conversation"* |
+
+    MSG91's own documentation labels the template endpoint as the one that
+    *initiates* a conversation and the free-form endpoint as valid only *once
+    the session started*. That is this ADR's D4 restated by a third party who
+    has no incentive to agree with us. **Conclusion: the 24-hour window is
+    imposed by WhatsApp on every BSP, so encoding it once in
+    `sendChannelMessage` (D1) is not merely convenient — it is the only place
+    it can live without being re-derived per vendor.** This retires the
+    residual worry that Option B (per-adapter) was viable.
+
+    It also settles the reverse question. Because all three vendors agree, the
+    guard needs **no provider branch at all**: `payload.kind` (D4) already
+    carries the only distinction that matters. Any adapter-specific detail —
+    Meta `components`, Twilio `contentSid`, MSG91 `template_name` — lives
+    below the guard, in the adapter, where `OutboundMessagePayload` already
+    puts it.
+
+17. **D17 — Add MSG91 as a third WhatsApp adapter, and treat it as the
+    conformance test for the seam rather than a feature.** The provider seam
+    (`ChannelAdapter` in `channels/lib/contracts.ts`, factory in
+    `adapters/index.ts`, `PROVIDER_CHANNELS` / `PROVIDER_LABEL` in
+    `provider-registry.ts`) was designed for exactly this and has so far only
+    been exercised by two vendors, both of which we chose early. A third
+    vendor added *after* the guard lands is the cheapest available proof that
+    the vertical boundary holds. The full change surface, from reading the
+    seam:
+
+    | Layer | Change |
+    | --- | --- |
+    | `ChannelProvider` (`types/index.ts:253`) | add `'msg91'` |
+    | `channel_provider` PG enum | new migration adding the value, **in its own transaction** (`040`/`041` split exists because of SQLSTATE 55P04) |
+    | `channel_provider_pair` CHECK (`041`) | `whatsapp` → `IN ('meta','twilio','msg91')` |
+    | `provider-registry.ts` | `PROVIDER_CHANNELS.msg91 = ['whatsapp']`, `PROVIDER_LABEL.msg91 = 'MSG91'` |
+    | `adapters/msg91.ts` | new `Msg91WhatsAppAdapter` implementing `send` / `checkHealth` / `sendTest` |
+    | `adapters/index.ts` | one `case 'msg91'` |
+    | `api/channels/webhooks/msg91/route.ts` | inbound + delivery reports → `persistInboundChannelMessage` |
+    | **Guard, orchestrator, UI, contracts** | **unchanged — this is the assertion** |
+
+    Two provider facts constrain the adapter and must not leak upward:
+
+    - **Auth is a header `authkey`, not a bearer token**, and the sender is an
+      `integrated_number` in the body. Both go in `channel_connections`
+      credentials via `lib/crypto/secrets.ts` like every other provider
+      secret. Sends are `POST
+      api/v5/whatsapp/whatsapp-outbound-message/bulk/`; the bulk shape is an
+      implementation detail of *this* adapter and MUST NOT be surfaced as a
+      bulk capability, or D13's single choke point is lost again.
+    - **MSG91 has no HMAC webhook signature.** Meta's webhook fails closed on
+      `X-Hub-Signature-256`; MSG91 offers only user-defined custom headers.
+      The adapter therefore verifies a **shared secret in a custom header
+      using a timing-safe comparison**, fails closed when unset exactly as the
+      Meta path does, and this asymmetry is recorded as a *provider* risk, not
+      a platform one. A per-provider `verifyWebhook` shape on the adapter is
+      the right home for it, so the difference stays inside the seam.
+
+    Sequencing: **after** action items 1–5. Adding a vendor before the guard
+    exists means writing the same policy a third time, which is the drift
+    Option B was rejected for.
+
 ## Verification against the code (2026-08-20)
 
 Every claim in the Context and Decision sections above was checked against the
@@ -337,6 +413,32 @@ External facts re-checked at the same time: Meta's per-message pricing with the
 capped at 5 manually added recipients; the Twilio sandbox's shared number,
 `join <code>` opt-in, **72-hour** expiry, and 1-message-per-3-seconds cap; and
 trial accounts' 5-verified-recipient limit (all in D10).
+
+## Provider comparison (2026-08-20)
+
+Gathered for D16/D17. The point of the table is the **left column**: every row
+where all three vendors agree is a rule that belongs in the guard, and every
+row where they differ is a detail that belongs in an adapter.
+
+| Concern | Meta Cloud API | Twilio | MSG91 | Where it lives |
+| --- | --- | --- | --- | --- |
+| 24-hour window | Yes | Yes | Yes (documented as session vs. initiate) | **Guard** (D1) |
+| Template needed to cold-start | Yes | Yes | Yes | **Guard** (D4) |
+| Pre-approved templates | Meta review | Meta review, wrapped as Content API | Meta review, via dashboard | **Guard** reads local status (D6) |
+| Opt-out honoured by platform | No — ours to enforce | No | No | **Guard** (D8) |
+| Closed-window rejection | Sync throw (131047) | **Async** status callback | Assume async | **Adapter** → normalized (C5) |
+| Auth | Bearer token + phone number ID | Account SID / auth token | **Header `authkey`** + `integrated_number` | **Adapter** |
+| Template reference | `name` + `components` | `ContentSid` `HX…` | `template_name` | **Adapter** (already in `OutboundMessagePayload`) |
+| Webhook authenticity | HMAC `X-Hub-Signature-256` | Signature validation | **None — custom header only** | **Adapter** (D17 risk) |
+| Business verification to develop | **Not required** (test number, ≤ 5 recipients) | Not required (shared sandbox, 72 h) | Required — needs an integrated number | **D10 tiers** |
+| Cost posture | Meta rate | Meta rate **+ ~$0.005/msg** platform fee, USD-billed | Positions as pass-through, no markup | Commercial, not code (D15) |
+
+Two consequences worth stating plainly. First, **eight of the eleven rows are
+either identical across vendors or already have a home in the existing
+contract** — the seam is sound, which is what D17 asserts. Second, the
+**webhook-authenticity row is the only place a new provider makes the system
+weaker**, so it is the one row that needs a named owner rather than an adapter
+default. Cost figures are a **dated quote**, not a standing fact (D15).
 
 ## Options considered
 
@@ -486,3 +588,11 @@ edge, and D9's client-side margin keeps agents away from it.
         which no route checks today (C11), and date the cost claims in
         `docs/outbound-messaging.md` §1 and ADR-008 ahead of the 2026-10-01
         pricing change (D15)
+15. [ ] **After 1–5:** add the MSG91 WhatsApp adapter as the seam conformance
+        test — `'msg91'` on `ChannelProvider`, enum value in its own migration,
+        `channel_provider_pair` widened, registry entries, `adapters/msg91.ts`,
+        webhook route. The pass condition is that **the guard, orchestrator,
+        contracts, and UI are untouched** by the diff (D17)
+16. [ ] Give `ChannelAdapter` a `verifyWebhook` member so MSG91's
+        shared-secret-in-custom-header check and Meta's HMAC live at the same
+        level, and neither leaks into a route (D17)
