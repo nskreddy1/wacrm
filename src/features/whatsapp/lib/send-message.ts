@@ -36,6 +36,7 @@ import {
   type SendTimeParams,
 } from '@/features/whatsapp/lib/template-send-builder';
 import { sendChannelMessage } from '@/features/channels/lib/orchestration/outbound';
+import { OutboundBlockedError } from '@/features/channels/lib/orchestration/window-guard';
 import type { OutboundMessagePayload } from '@/features/channels/lib/contracts';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
@@ -215,6 +216,16 @@ function buildRawInteractive(
 /** Map an orchestrator/provider error onto a `SendMessageError`. */
 function toSendMessageError(err: unknown): SendMessageError {
   if (err instanceof SendMessageError) return err;
+
+  // ADR-006 D4/D8: a policy refusal is not a provider failure. It already
+  // carries the machine code and the 409 both routes should surface, so it
+  // is translated verbatim rather than falling through to the regex
+  // heuristics below (which would flatten it into a 502 provider_error and
+  // lose the one thing the client needs to render the template prompt).
+  if (err instanceof OutboundBlockedError) {
+    return new SendMessageError(err.code, err.message, err.status);
+  }
+
   const message = err instanceof Error ? err.message : 'Unknown send error';
 
   // Provider accepted the message but the `messages` insert failed.
@@ -452,7 +463,17 @@ export async function sendMessageToConversation(
     });
   } catch (err) {
     const mapped = toSendMessageError(err);
-    console.error('[send-message] orchestrator send failed:', mapped.message);
+    // A policy refusal (409) is the boundary working, not a fault: the
+    // orchestrator already emitted the structured line (D20), so this stays
+    // at warn to keep error dashboards meaningful.
+    if (mapped.status >= 500) {
+      console.error('[send-message] orchestrator send failed:', mapped.message);
+    } else {
+      console.warn(
+        `[send-message] send refused (${mapped.code}):`,
+        mapped.message
+      );
+    }
     throw mapped;
   }
 

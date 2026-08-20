@@ -28,6 +28,7 @@ import { toE164 } from '@/lib/phone/e164';
 import { isMessageTemplate } from '@/features/whatsapp/lib/template-row-guard';
 import type { MessageTemplate } from '@/types';
 import { findOrCreateContact } from '@/lib/api/v1/contacts';
+import { loadOptedOutContactIds } from '@/features/channels/lib/orchestration/consent-filter';
 
 /** Thrown by createBroadcast on a caller-visible failure; route maps it. */
 export class BroadcastError extends Error {
@@ -71,6 +72,8 @@ export interface BroadcastPlan {
   planned: PlannedRecipient[];
   /** Phones rejected up front (invalid E.164) — counted as failed. */
   rejected: number;
+  /** Recipients dropped at plan time for WhatsApp opt-out (ADR-006 D8). */
+  optedOut: number;
 }
 
 const MAX_RECIPIENTS = 1000;
@@ -172,18 +175,37 @@ export async function createBroadcast(
   // params aren't silently overwritten by a later duplicate — and so
   // the row↔params pairing below (keyed by contact_id) is unambiguous.
   const seenContact = new Set<string>();
-  const deduped = resolved.filter((r) => {
+  const dedupedAll = resolved.filter((r) => {
     if (seenContact.has(r.contactId)) return false;
     seenContact.add(r.contactId);
     return true;
   });
 
+  // ADR-006 D8: consent is enforced at plan time, so an opted-out contact
+  // never gets a recipient row, never counts toward the persisted total,
+  // and cannot be resurrected by a retry of the delivery phase. Counted as
+  // `optedOut` rather than folded into `rejected` so the caller can tell an
+  // unreachable number from a person who said STOP.
+  const optedOutIds = await loadOptedOutContactIds(
+    db,
+    accountId,
+    dedupedAll.map((r) => r.contactId)
+  );
+  const deduped = dedupedAll.filter((r) => !optedOutIds.has(r.contactId));
+  const optedOut = dedupedAll.length - deduped.length;
+
   if (deduped.length === 0) {
-    throw new BroadcastError(
-      'bad_request',
-      'No recipients had a valid E.164 phone number',
-      400
-    );
+    throw optedOut > 0
+      ? new BroadcastError(
+          'contact_opted_out',
+          'Every recipient has opted out of WhatsApp messages, so nothing was sent.',
+          409
+        )
+      : new BroadcastError(
+          'bad_request',
+          'No recipients had a valid E.164 phone number',
+          400
+        );
   }
 
   // Persist the broadcast + its recipients. The count columns
@@ -248,6 +270,7 @@ export async function createBroadcast(
     templateRow,
     planned,
     rejected,
+    optedOut,
   };
 }
 
