@@ -165,7 +165,7 @@ const { sendChannelMessage } = vi.hoisted(() => ({
     dbMessageId: 'msg-1',
   })),
 }));
-vi.mock('@/features/admin/lib/orchestration/outbound', () => ({
+vi.mock('@/features/channels/lib/orchestration/outbound', () => ({
   sendChannelMessage,
 }));
 

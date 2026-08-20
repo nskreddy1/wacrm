@@ -13,6 +13,10 @@ import {
   sanitizePhoneForMeta,
 } from '@/features/whatsapp/lib/phone-utils';
 import type { ChannelConnection, ContentType } from '@/types';
+import {
+  evaluateOutboundWindow,
+  OutboundBlockedError,
+} from './window-guard';
 
 // ============================================================
 // Unified outbound orchestrator.
@@ -235,7 +239,7 @@ export async function sendChannelMessage(
   // 1. Conversation → contact + channel + pinned connection.
   const { data: conversation, error: convErr } = await db
     .from('conversations')
-    .select('id, contact_id, channel, channel_connection_id')
+    .select('id, contact_id, channel, channel_connection_id, last_inbound_at')
     .eq('id', args.conversationId)
     .eq('account_id', args.accountId)
     .maybeSingle();
@@ -245,12 +249,52 @@ export async function sendChannelMessage(
   const contactId = args.contactId ?? conversation.contact_id;
   const { data: contact, error: contactErr } = await db
     .from('contacts')
-    .select('id, phone')
+    .select('id, phone, whatsapp_opted_out, sms_opted_out')
     .eq('id', contactId)
     .eq('account_id', args.accountId)
     .maybeSingle();
   if (contactErr || !contact?.phone)
     throw new Error('contact not found for this account');
+
+  // Fallback connection lookup below honors the conversation's channel so
+  // an SMS thread never sends through WhatsApp (and vice versa).
+  const conversationChannel =
+    (conversation.channel as ChannelConnection['channel']) ?? 'whatsapp';
+
+  // ADR-006: consent + 24h window, enforced at the choke point so every
+  // caller (dashboard, flow, automation, AI reply, broadcast) inherits it.
+  // Pure function over the two rows just loaded — no extra query on the
+  // send hot path. Rejections are logged structured (D20) so a rollout
+  // regression (e.g. a mis-backfilled last_inbound_at) is visible in logs
+  // rather than presenting as a silent client failure.
+  try {
+    evaluateOutboundWindow({
+      channel: conversationChannel,
+      lastInboundAt: (conversation.last_inbound_at as string | null) ?? null,
+      payload: args.payload,
+      optedOut:
+        conversationChannel === 'whatsapp'
+          ? contact.whatsapp_opted_out === true
+          : conversationChannel === 'sms'
+            ? contact.sms_opted_out === true
+            : false,
+    });
+  } catch (err) {
+    if (err instanceof OutboundBlockedError) {
+      console.warn(
+        JSON.stringify({
+          event: 'outbound_blocked',
+          code: err.code,
+          account_id: args.accountId,
+          conversation_id: args.conversationId,
+          channel: conversationChannel,
+          payload_kind: args.payload.kind,
+          sender_type: args.senderType ?? 'bot',
+        })
+      );
+    }
+    throw err;
+  }
 
   // 2. Resolve connection: pinned → enabled (primary first) → legacy config.
   let connection: ChannelConnection | null = null;
@@ -264,10 +308,6 @@ export async function sendChannelMessage(
       .maybeSingle();
     connection = (data as ChannelConnection | null) ?? null;
   }
-  // Fallback connection lookup honors the conversation's channel so
-  // an SMS thread never sends through WhatsApp (and vice versa).
-  const conversationChannel =
-    (conversation.channel as ChannelConnection['channel']) ?? 'whatsapp';
   if (!connection) {
     const { data } = await db
       .from('channel_connections')

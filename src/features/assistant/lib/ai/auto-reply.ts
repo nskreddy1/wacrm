@@ -19,7 +19,7 @@ import {
 import { logAiUsage } from './usage';
 import { latestUserMessage } from './query';
 import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule';
-import { sendChannelMessage } from '@/features/admin/lib/orchestration/outbound';
+import { sendChannelMessage } from '@/features/channels/lib/orchestration/outbound';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { checkMonthlyQuota, consumeMonthlyQuota } from '@/lib/quotas';
 

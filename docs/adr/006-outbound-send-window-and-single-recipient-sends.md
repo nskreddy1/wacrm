@@ -11,6 +11,14 @@ API, Twilio, and MSG91 (see §Provider comparison). All three impose the same
 window, which upgrades D1 from a convenient choice to the only correct one;
 D16–D17 added, the latter adopting MSG91 as a third adapter specifically to
 prove the provider seam holds.
+**Revised:** 2026-08-20 (third pass) — full re-verification against the tree
+plus an insecure-defaults review (see §Critique pass). C1–C11 all still hold
+and none of ADR-006 is implemented yet. The pass found five gaps the first two
+revisions missed — the choke point's own file lives in the wrong feature
+module, D8's STOP semantics were asserted but never specified, the guard had
+no observability decision, D4's payload classification was not exhaustive, and
+D14's quick-send bound collides with the per-user rate limit. D18–D21 added;
+external pricing facts in D15 re-confirmed against Meta's published notice.
 **Deciders:** Project owner
 **Relates to:** `docs/outbound-messaging.md` (§2, §5.1–5.2 — the analysis this ADR decides on), ADR-001 (workspace modules — `inbox:send` / `broadcasts:manage` gating), ADR-005 (typed error codes, "the client check is not the boundary"), `AGENTS.md` (channel conventions: WhatsApp specifics stay in `src/features/whatsapp/lib/`; *"The UI disabling a button is never the security boundary"*)
 
@@ -387,6 +395,96 @@ any agent, with nothing in the system disagreeing.
     exists means writing the same policy a third time, which is the drift
     Option B was rejected for.
 
+18. **D18 — The choke point is named by path, and it moves home before the
+    guard lands: `src/features/admin/lib/orchestration/outbound.ts` →
+    `src/features/channels/lib/orchestration/outbound.ts`.** Every prior
+    revision called `sendChannelMessage` "the unified outbound orchestrator"
+    without ever naming its file — and the file lives inside the **`admin`
+    feature module**, imported cross-feature by `whatsapp/lib/send-message.ts`,
+    `flows/lib/meta-send.ts`, and `assistant/lib/ai/auto-reply.ts`. A
+    cross-channel orchestrator housed in `admin` is a vertical-boundary
+    anomaly under `AGENTS.md`'s feature-module rules: `channels` already owns
+    the adapters, contracts, registry, and inbound path the orchestrator
+    depends on. The move is a mechanical relocation (imports only, zero logic
+    change) and is sequenced **before** the guard, so the policy is written
+    once, in the right home, rather than written in `admin` and moved with
+    history noise later. `pnpm check:boundaries` is the acceptance test.
+
+19. **D19 — WhatsApp STOP/START semantics are specified, not assumed.** D8
+    said "Inbound `STOP` sets them" and stopped there. The SMS precedent
+    already in the tree (`api/channels/webhooks/twilio/route.ts:284–293`)
+    handles **both directions** — opt-out sets the flags, opt-in clears them
+    (`sms_opted_out: false, sms_opted_out_at: null`) — and WhatsApp mirrors it
+    exactly:
+
+    - **Keywords:** case-insensitive, trimmed, exact-match on the message
+      body. Opt-out: `STOP`, `UNSUBSCRIBE`. Opt-in: `START`, `UNSTOP`. Exact
+      match, not substring — "please don't stop the delivery" is not an
+      opt-out.
+    - **Parse sites:** both inbound paths that D3 already touches — the Meta
+      webhook's message handler and `channels/lib/inbound.ts` — so a future
+      provider inherits the behaviour through the unified path.
+    - **Direction of error:** unlike Twilio SMS (where the carrier blocks
+      sends to a stopped number regardless of what we store), **nothing
+      upstream enforces WhatsApp opt-out** (§Provider comparison, row 4) —
+      our column is the only record. This is why D8's guard placement is
+      load-bearing rather than belt-and-braces.
+    - An inbound STOP still opens a 24-hour window (it is a customer
+      message); the consent check simply refuses to use it. The two guards
+      are independent by design.
+
+20. **D20 — Guard rejections are observable from day one.** A compliance
+    boundary that rejects silently is indistinguishable from an outage, and
+    the first week of the guard's life is exactly when a mis-backfilled
+    `last_inbound_at` (F3) would surface as a spike. Every `window_closed`,
+    `contact_opted_out`, and `template_not_approved` rejection is logged
+    structured — account id, conversation id, payload kind, and code — at the
+    guard site. No new table and no metrics infrastructure in V1; the
+    decision is that the log line **exists and is greppable**, so "did the
+    guard fire?" is answerable during rollout without a deploy. A rejection
+    counter per account is Revisit material, not scope.
+
+21. **D21 — No kill switch, and D4's classification is exhaustive by
+    allowlist.** Two insecure-defaults findings, resolved in the same
+    direction:
+
+    - **Kill switch considered and rejected.** An env flag that disables the
+      guard is a fail-open default one incident away from becoming permanent
+      — the precise pattern the composer's `expired: false` on an empty
+      thread (C6) already demonstrates. Mitigation for a bad rollout is F3's
+      ordering (columns + verified backfill first, guard second) plus D20's
+      observability, not a bypass.
+    - **The guard allowlists `kind === 'template'` and treats every other
+      payload kind as free-form** — including `email` (present on
+      `OutboundMessagePayload` today) and any kind added later. An
+      unrecognised kind on a WhatsApp send fails closed with
+      `window_closed`, never open. A switch statement that enumerates
+      free-form kinds would fail open on the day someone adds one; the
+      allowlist cannot.
+
+    One more bound from the same review: **D14's quick-send cap must sit
+    inside the per-user send rate limit** (`RATE_LIMITS.send`, checked
+    per-request in the send route). A 25-recipient client-side loop that
+    trips the limiter at recipient 12 produces a half-sent batch with no
+    record; the quick-send UI therefore sends sequentially, surfaces
+    per-recipient results, and its cap is chosen to fit the limiter budget.
+
+## Critique pass (2026-08-20, third)
+
+The second revision was audited with fresh eyes against the tree and an
+insecure-defaults review. Verdicts on the ADR itself, not the code:
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| R1 | The "choke point" was never named by path, and it lives in the wrong feature module (`admin`) | **D18.** The strongest structural claim in the ADR (D1) rested on a file the ADR never located. |
+| R2 | D8 asserted STOP handling without specifying keywords, parse sites, or the opt-back-in direction — while the SMS handler in the tree already answers all three | **D19.** An ADR that says "STOP sets them" ships a parser someone else designs ad hoc. |
+| R3 | No observability decision: a guard that 409s silently cannot be distinguished from a broken client or a bad backfill during rollout | **D20.** |
+| R4 | D4 enumerated free-form kinds instead of allowlisting `template` — fails open on the next payload kind (`email` already exists on the contract) | **D21.** |
+| R5 | D14's quick-send loop collides with the per-user rate limiter; unbounded partial failure | **D21**, final paragraph. |
+| R6 | The guard's read of `last_inbound_at` is not atomic with the send (TOCTOU) | **Accepted as residual, both directions benign:** a window that *opens* mid-flight means we rejected a send that just became legal (caller retries); a window that *closes* mid-flight is the clock-edge risk already recorded after F6. Neither direction sends an illegal message. |
+| R7 | D15's pricing facts are a moving external claim | **Re-verified this pass** against Meta's published notice: service messages and in-window utility templates become per-message billable 2026-10-01, rates per recipient market published by 2026-09-01, no volume tiers for service messages. The dated-quote treatment stands. |
+| R8 | D17 (MSG91) is a large work item riding on a policy ADR | **Stands as scoped** — it is already sequenced strictly after the guard (action 15) and exists to *prove* the seam, but it is explicitly severable: the guard's correctness does not depend on it, and the implementation plan carries it as a separate phase that can be dropped without reopening this ADR. |
+
 ## Verification against the code (2026-08-20)
 
 Every claim in the Context and Decision sections above was checked against the
@@ -496,6 +594,16 @@ Findings **F1–F6** are binding on the implementation.
   (`push-supabase-schema.mjs` already wraps each migration), and the migration
   is verified against a non-zero inbound count before the guard ships. Order of
   deployment is part of the decision: **column + backfill first, guard second.**
+
+  *Implementation note (2026-08-20):* the gate is now executable —
+  `scripts/verify-outbound-window-backfill.mjs`, where exit 1 blocks the guard.
+  It has been run against the development database and passes, but that
+  database holds **zero conversations and zero messages**, so the backfill
+  assertion passed **vacuously** and proves nothing about a populated
+  environment. The script detects this and emits an explicit `WARN`. **The gate
+  MUST be re-run against staging and production, with a non-zero
+  `inbound_msgs`, before the guard is enabled there.** A green run on an empty
+  database is not the evidence F3 asks for.
 - **F4 — A rejected send must not leave a partial record.** D5 rejects before
   the insert, so there is no row to reconcile and no quota to refund. The
   inverse ordering — insert, then discover the rejection — is the bug being
@@ -596,3 +704,14 @@ edge, and D9's client-side margin keeps agents away from it.
 16. [ ] Give `ChannelAdapter` a `verifyWebhook` member so MSG91's
         shared-secret-in-custom-header check and Meta's HMAC live at the same
         level, and neither leaks into a route (D17)
+17. [ ] **Before 3:** relocate the orchestrator from
+        `src/features/admin/lib/orchestration/outbound.ts` to
+        `src/features/channels/lib/orchestration/outbound.ts` — imports only,
+        zero logic change, `pnpm check:boundaries` green (D18)
+18. [ ] WhatsApp STOP/UNSUBSCRIBE → set `whatsapp_opted_out`,
+        START/UNSTOP → clear it; exact-match, case-insensitive, both inbound
+        paths, mirroring the Twilio SMS handler (D19, D8)
+19. [ ] Structured log line on every guard rejection — account id,
+        conversation id, payload kind, error code (D20)
+20. [ ] Guard classifies by **allowlisting `kind === 'template'`**; all other
+        kinds, present and future, are free-form and fail closed (D21, D4)

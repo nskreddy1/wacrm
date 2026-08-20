@@ -18,6 +18,7 @@ import {
   dispatchInboundToFlows,
 } from '@/features/flows/lib/engine';
 import { dispatchInboundToAiReply } from '@/features/assistant/lib/ai/auto-reply';
+import { detectOptEvent } from '@/features/channels/lib/consent';
 import { dispatchWebhookEvent } from '@/features/webhooks/lib/deliver';
 import {
   handleTemplateWebhookChange,
@@ -731,12 +732,27 @@ async function processMessage(
     return;
   }
 
-  // Update conversation
+  // Update conversation.
+  // ADR-006 D3: last_inbound_at opens the 24h service window the outbound
+  // guard reads. Monotonic — Meta retries webhooks and can deliver them out
+  // of order, and a late retry of an older message must never shorten a
+  // window a newer message already extended.
+  const inboundAt = new Date(
+    parseInt(message.timestamp) * 1000
+  ).toISOString();
+  const priorInboundAt = (conversation as { last_inbound_at?: string | null })
+    .last_inbound_at;
+  const nextInboundAt =
+    priorInboundAt && Date.parse(priorInboundAt) > Date.parse(inboundAt)
+      ? priorInboundAt
+      : inboundAt;
+
   const { error: convError } = await supabaseAdmin()
     .from('conversations')
     .update({
       last_message_text: contentText || `[${message.type}]`,
       last_message_at: new Date().toISOString(),
+      last_inbound_at: nextInboundAt,
       unread_count: (conversation.unread_count || 0) + 1,
       updated_at: new Date().toISOString(),
     })
@@ -744,6 +760,39 @@ async function processMessage(
 
   if (convError) {
     console.error('Error updating conversation:', convError);
+  }
+
+  // ADR-006 D19: WhatsApp consent keywords. Nothing upstream enforces
+  // WhatsApp opt-out (unlike SMS, where the carrier blocks after STOP), so
+  // this column is the only record and the guard's consent check is the only
+  // thing that stops the next send. Runs after the insert so the STOP itself
+  // stays visible in the thread.
+  const optEvent = detectOptEvent(contentText);
+  if (optEvent) {
+    const optedOut = optEvent === 'out';
+    const { error: consentError } = await supabaseAdmin()
+      .from('contacts')
+      .update({
+        whatsapp_opted_out: optedOut,
+        whatsapp_opted_out_at: optedOut ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', contactRecord.id)
+      .eq('account_id', accountId);
+    if (consentError) {
+      console.error('Error recording consent change:', consentError);
+    } else {
+      console.info(
+        JSON.stringify({
+          event: 'inbound_consent_change',
+          direction: optEvent,
+          channel: 'whatsapp',
+          account_id: accountId,
+          contact_id: contactRecord.id,
+          conversation_id: conversation.id,
+        })
+      );
+    }
   }
 
   // If this contact was a recent broadcast recipient, flag the reply
