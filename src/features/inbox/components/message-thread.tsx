@@ -50,6 +50,7 @@ import { MessageThreadSkeleton } from '@/components/ui/loading-skeletons';
 import { TemplatePicker } from './template-picker';
 import { AiThreadBanner } from './ai-thread-banner';
 import { buildReplyPreview } from './reply-quote';
+import { renderTemplatePreview } from '@/features/inbox/lib/new-conversation';
 import {
   evaluateSessionWindow,
   newestInboundInPage,
@@ -89,12 +90,10 @@ const messageThreadCache = {
   },
 };
 
-function renderTemplateBody(body: string, params: string[]): string {
-  return body.replace(/\{\{(\d+)\}\}/g, (_, raw) => {
-    const idx = Number(raw) - 1;
-    return params[idx] ?? `{{${raw}}}`;
-  });
-}
+// Template placeholder substitution lives in the inbox lib so the
+// compose sheet's preview and this optimistic bubble can never drift
+// apart. See `new-conversation.ts` for the unfilled-slot behaviour.
+const renderTemplateBody = renderTemplatePreview;
 
 /**
  * Builds the optimistic placeholder row shown while a reaction POST is

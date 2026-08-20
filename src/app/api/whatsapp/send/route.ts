@@ -205,6 +205,11 @@ export async function POST(request: Request) {
         success: true,
         message_id: result.messageId,
         whatsapp_message_id: result.whatsappMessageId,
+        // Additive (ADR-006 D13): the `contact_id` caller doesn't know
+        // which conversation it just opened, because find-or-create ran
+        // server-side. Returning it lets the inbox's New-message flow
+        // select the new thread instead of making the agent hunt for it.
+        conversation_id: conversationId,
       });
     } catch (err) {
       if (err instanceof SendMessageError) {
