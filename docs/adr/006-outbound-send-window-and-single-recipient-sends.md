@@ -594,6 +594,16 @@ Findings **F1–F6** are binding on the implementation.
   (`push-supabase-schema.mjs` already wraps each migration), and the migration
   is verified against a non-zero inbound count before the guard ships. Order of
   deployment is part of the decision: **column + backfill first, guard second.**
+
+  *Implementation note (2026-08-20):* the gate is now executable —
+  `scripts/verify-outbound-window-backfill.mjs`, where exit 1 blocks the guard.
+  It has been run against the development database and passes, but that
+  database holds **zero conversations and zero messages**, so the backfill
+  assertion passed **vacuously** and proves nothing about a populated
+  environment. The script detects this and emits an explicit `WARN`. **The gate
+  MUST be re-run against staging and production, with a non-zero
+  `inbound_msgs`, before the guard is enabled there.** A green run on an empty
+  database is not the evidence F3 asks for.
 - **F4 — A rejected send must not leave a partial record.** D5 rejects before
   the insert, so there is no row to reconcile and no quota to refund. The
   inverse ordering — insert, then discover the rejection — is the bug being
