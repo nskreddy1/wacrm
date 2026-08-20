@@ -2,6 +2,15 @@
 
 **Status:** Proposed
 **Date:** 2026-08-20
+**Revised:** 2026-08-20 — verification pass against the code (see
+§Verification against the code). Three claims in the original draft were wrong,
+one decision (D1) does not hold for the path it claims to dominate, and D10's
+framing was rewritten to be tier-based rather than trial-based. D13–D15 added.
+**Revised:** 2026-08-20 (second pass) — multi-vendor research across Meta Cloud
+API, Twilio, and MSG91 (see §Provider comparison). All three impose the same
+window, which upgrades D1 from a convenient choice to the only correct one;
+D16–D17 added, the latter adopting MSG91 as a third adapter specifically to
+prove the provider seam holds.
 **Deciders:** Project owner
 **Relates to:** `docs/outbound-messaging.md` (§2, §5.1–5.2 — the analysis this ADR decides on), ADR-001 (workspace modules — `inbox:send` / `broadcasts:manage` gating), ADR-005 (typed error codes, "the client check is not the boundary"), `AGENTS.md` (channel conventions: WhatsApp specifics stay in `src/features/whatsapp/lib/`; *"The UI disabling a button is never the security boundary"*)
 
@@ -202,30 +211,44 @@ any agent, with nothing in the system disagreeing.
     no template regime, so the check is gated on `channel === 'whatsapp'` and
     SMS is unaffected.
 
-    **Amended after the original draft.** The earlier wording made Meta Cloud
-    API the primary path and Twilio the fallback. That inverts the actual
-    constraint: Meta Cloud API requires a verified Meta Business (a registered
-    legal entity), which this project does not have, and the only WhatsApp
-    credential available today is a **Twilio free trial**. So:
+    **Rewritten 2026-08-20 — the sender *tier* is an environment variable, not
+    a decision.** The previous wording built the decision around "the only
+    credential we have is a Twilio free trial". That is a fact about this
+    week, not a fact about the product, and encoding it in an ADR makes the
+    architecture read as trial-shaped to anyone who arrives after the account
+    is upgraded. Restated tier-first:
 
-    - **Adapter precedence is unchanged in code** — `channel_connections`
-      already selects the provider per tenant, and both adapters sit under the
-      same guard. Nothing in this ADR depends on which provider is "primary".
-    - **Development and all tests run on the Twilio WhatsApp Sandbox.** The
-      sandbox requires the recipient to send `join <two-words>` and expires
-      that opt-in after 72 h, which is *stricter* than the 24-hour window this
-      ADR enforces — so a guard that is correct under the sandbox is correct in
-      production, never the reverse.
-    - **A trial account cannot be a tenant sender.** Trial accounts may only
-      message verified numbers and cannot host a production WABA; the sandbox
-      number is shared, so it can never be a per-tenant sender. Production
-      WhatsApp therefore stays blocked on an upgraded Twilio account plus a
-      Meta-verified WABA — a **business/procurement blocker, not an
-      architectural one**, and explicitly outside this ADR.
-    - **Consequence for the acceptance tests (action item 9):** they must run
-      against the sandbox or a stubbed adapter, because a real cold-start
-      template send to an arbitrary number is not possible on trial. The guard
-      itself is provider-agnostic and unit-testable without any provider call.
+    | Tier | What it can send | Who it is for |
+    | --- | --- | --- |
+    | **Meta test number** (auto-provisioned, **no Business verification**) | Templates + free-form to ≤ 5 manually added test recipients | Meta-adapter development |
+    | **Twilio WhatsApp Sandbox** (shared `+1 415 523 8886`, `join <code>`) | Anything, to numbers that joined; opt-in expires at **72 h**, 1 msg / 3 s | Twilio-adapter development |
+    | **Trial / unverified sender** | Verified recipients only; cannot host a per-tenant WABA | Nobody in production |
+    | **Production WABA** (verified business, own sender) | The full regime this ADR encodes | Every real tenant |
+
+    The consequences that actually bind the code:
+
+    - **The guard is tier-independent.** The 24-hour window is a *policy* over
+      `messages`, evaluated before any provider call, so it behaves identically
+      on a test number, a sandbox, and a verified WABA. Nothing in D1–D9 reads
+      a credential, and no branch anywhere may key off "are we on trial".
+    - **Both development tiers are stricter than production**, which is the
+      only property that matters for test validity: the sandbox's 72 h opt-in
+      and the test number's 5-recipient allowlist both *narrow* what a correct
+      guard would allow, so a guard that passes there passes in production —
+      never the reverse.
+    - **Neither vendor gates development on business verification.** The Meta
+      test number needs none, so the Meta adapter — the one with the deeper
+      integration — is developable today. Correcting the original draft: Meta
+      is not blocked, only Meta *at production scale* is.
+    - **Per-tenant sender identity is a tier property, not a code path.**
+      `channel_connections` already stores one sender per tenant; a shared
+      sandbox number simply cannot populate it honestly. So multi-tenant
+      WhatsApp waits on verified senders — a procurement milestone, with **no
+      migration and no branch** behind it.
+    - **Acceptance tests (action item 9) stub the adapter.** The guard rejects
+      before the provider call by construction (D5), so every assertion in
+      that list is reachable with no credential of any tier. Live sandbox runs
+      are a smoke test on top, not the proof.
 
 11. **D11 — One migration.** `conversations.last_inbound_at` (+ backfill),
     `contacts.whatsapp_opted_out` / `_at` (+ partial index). Idempotent,
@@ -237,6 +260,185 @@ any agent, with nothing in the system disagreeing.
     and nothing has been sent. Neither blocks this ADR, and bundling them would
     delay the phantom-send fix behind a timezone data model. Recorded in
     §Consequences → Revisit.
+
+13. **D13 — The choke point must actually be a choke point: broadcast
+    delivery moves onto `sendChannelMessage`.** Verification found that
+    `src/app/api/whatsapp/broadcast/route.ts` calls
+    `sendTemplateMessage()` from `meta-api.ts` per recipient and never enters
+    the orchestrator (evidence in §Verification, C4). D1 therefore does *not*
+    cover broadcasts as written, and D8's promise — "single or bulk, template
+    or free-form, one guard" — is unenforceable until this changes. Two
+    options were considered and only one is acceptable: duplicating the
+    consent check into the broadcast route (rejected — it is Option B from the
+    window table wearing a different hat, and it drifts) versus routing
+    broadcast recipients through the orchestrator like every other caller
+    (**chosen**). Until that lands, D8 for broadcasts rests on plan-time
+    filtering alone and MUST be labelled as such rather than implied to be a
+    boundary. The same applies to `api/sms/broadcast` and `api/email/broadcast`,
+    which are separate routes with their own send calls.
+
+14. **D14 — The one-to-one send needs a *built* surface, not a relabelled
+    one.** D7 said the gap was "presentation, not capability". Half true: the
+    API capability exists (`contact_id` on `POST /api/whatsapp/send`), but no
+    UI anywhere calls it — `message-thread.tsx` is the only component in the
+    app that posts to that route (§Verification, C3). So SRE's mental model
+    ("this product only does broadcasts") is not a misreading of the product;
+    it is an accurate reading of it. Three entry points, all on the existing
+    route and the existing core:
+
+    - **Contact record → "Message".** Opens the same composer the inbox uses,
+      against a conversation found-or-created for that contact. Window open →
+      free-form. Window closed (the normal case for a cold contact) → template
+      picker with variable inputs, labelled *"Send a message to this
+      contact"*. Never the word "broadcast".
+    - **Inbox → "New message".** Contact search, then the identical composer.
+      This is the path an agent reaches for when they are already in the inbox
+      and the thread does not exist yet.
+    - **Contact list → select 2–N → "Quick send".** A small multi-select
+      (bounded, e.g. ≤ 25) that loops the *same* one-to-one send per contact
+      and shows a per-recipient result. It is deliberately **not** a
+      broadcast: no campaign record, no pacing, no `broadcasts:manage`
+      permission — it is N single sends under `inbox:send`, which is what a
+      salesperson messaging today's five leads is actually doing. Above the
+      bound, the UI points at broadcasts, which is where campaign records,
+      pacing, and reporting belong.
+
+    All three reuse `contact_id`; the "no new endpoint" half of D7 stands.
+
+15. **D15 — Cost text must not hard-code "free inside the window".** Meta's
+    published pricing changes on **2026-10-01**: service (non-template)
+    messages and utility templates sent inside an open customer-service window
+    become billable at the recipient market's per-message rate, with no volume
+    tiers for service messages. `docs/outbound-messaging.md` §1 and ADR-008's
+    cost positioning both assert the current "free inside the window" rule as
+    a standing fact. Neither the guard nor any decision here depends on price,
+    so this changes no code — but any tenant-facing number is a **dated
+    quote**, and the two documents get a dated caveat rather than a silent
+    expiry. Recorded under Revisit with the surfacing work in (c).
+
+16. **D16 — The window is a *platform* rule, not a vendor rule, and a third
+    BSP is how we prove it.** D10's tier table answers "what can we send
+    today". It does not answer the sharper question: is the guard we are about
+    to build a Meta-shaped guess, or the actual constraint? Three independent
+    vendors were checked, and all three expose the *same* split at the API
+    surface, under different names:
+
+    | Vendor | "Open window" call | "Cold start" call |
+    | --- | --- | --- |
+    | **Meta Cloud API** | `POST /messages` `type=text` | `type=template` |
+    | **Twilio** | `Body` on `/Messages` | `ContentSid` (Content API `HX…`) |
+    | **MSG91** | *"Send message (once session started)"* | *"Send WhatsApp Template — this API is to initiate a conversation"* |
+
+    MSG91's own documentation labels the template endpoint as the one that
+    *initiates* a conversation and the free-form endpoint as valid only *once
+    the session started*. That is this ADR's D4 restated by a third party who
+    has no incentive to agree with us. **Conclusion: the 24-hour window is
+    imposed by WhatsApp on every BSP, so encoding it once in
+    `sendChannelMessage` (D1) is not merely convenient — it is the only place
+    it can live without being re-derived per vendor.** This retires the
+    residual worry that Option B (per-adapter) was viable.
+
+    It also settles the reverse question. Because all three vendors agree, the
+    guard needs **no provider branch at all**: `payload.kind` (D4) already
+    carries the only distinction that matters. Any adapter-specific detail —
+    Meta `components`, Twilio `contentSid`, MSG91 `template_name` — lives
+    below the guard, in the adapter, where `OutboundMessagePayload` already
+    puts it.
+
+17. **D17 — Add MSG91 as a third WhatsApp adapter, and treat it as the
+    conformance test for the seam rather than a feature.** The provider seam
+    (`ChannelAdapter` in `channels/lib/contracts.ts`, factory in
+    `adapters/index.ts`, `PROVIDER_CHANNELS` / `PROVIDER_LABEL` in
+    `provider-registry.ts`) was designed for exactly this and has so far only
+    been exercised by two vendors, both of which we chose early. A third
+    vendor added *after* the guard lands is the cheapest available proof that
+    the vertical boundary holds. The full change surface, from reading the
+    seam:
+
+    | Layer | Change |
+    | --- | --- |
+    | `ChannelProvider` (`types/index.ts:253`) | add `'msg91'` |
+    | `channel_provider` PG enum | new migration adding the value, **in its own transaction** (`040`/`041` split exists because of SQLSTATE 55P04) |
+    | `channel_provider_pair` CHECK (`041`) | `whatsapp` → `IN ('meta','twilio','msg91')` |
+    | `provider-registry.ts` | `PROVIDER_CHANNELS.msg91 = ['whatsapp']`, `PROVIDER_LABEL.msg91 = 'MSG91'` |
+    | `adapters/msg91.ts` | new `Msg91WhatsAppAdapter` implementing `send` / `checkHealth` / `sendTest` |
+    | `adapters/index.ts` | one `case 'msg91'` |
+    | `api/channels/webhooks/msg91/route.ts` | inbound + delivery reports → `persistInboundChannelMessage` |
+    | **Guard, orchestrator, UI, contracts** | **unchanged — this is the assertion** |
+
+    Two provider facts constrain the adapter and must not leak upward:
+
+    - **Auth is a header `authkey`, not a bearer token**, and the sender is an
+      `integrated_number` in the body. Both go in `channel_connections`
+      credentials via `lib/crypto/secrets.ts` like every other provider
+      secret. Sends are `POST
+      api/v5/whatsapp/whatsapp-outbound-message/bulk/`; the bulk shape is an
+      implementation detail of *this* adapter and MUST NOT be surfaced as a
+      bulk capability, or D13's single choke point is lost again.
+    - **MSG91 has no HMAC webhook signature.** Meta's webhook fails closed on
+      `X-Hub-Signature-256`; MSG91 offers only user-defined custom headers.
+      The adapter therefore verifies a **shared secret in a custom header
+      using a timing-safe comparison**, fails closed when unset exactly as the
+      Meta path does, and this asymmetry is recorded as a *provider* risk, not
+      a platform one. A per-provider `verifyWebhook` shape on the adapter is
+      the right home for it, so the difference stays inside the seam.
+
+    Sequencing: **after** action items 1–5. Adding a vendor before the guard
+    exists means writing the same policy a third time, which is the drift
+    Option B was rejected for.
+
+## Verification against the code (2026-08-20)
+
+Every claim in the Context and Decision sections above was checked against the
+tree. **Confirmed** means the code says what the ADR says. **Corrected** means
+the ADR was wrong and the finding replaces it.
+
+| # | Claim | Verdict |
+| --- | --- | --- |
+| C1 | `sendChannelMessage` never checks the window or consent; it resolves connection → sends → inserts | **Confirmed.** `orchestration/outbound.ts` steps 1–4; no read of inbound recency, no `contacts` consent column. |
+| C2 | `last_message_at` is bumped by our own outbound, so it cannot express the window | **Confirmed.** `orchestration/outbound.ts:343`. D2 stands. |
+| C3 | The `contact_id` cold-start path "already exists" as a Contact-detail surface | **Corrected.** The route supports it (`api/whatsapp/send/route.ts:73–163`, `findOrCreateConversation` at `:236`) but **no UI calls it** — `message-thread.tsx` is the only component posting to that route, and `contact-record-sheet.tsx` has no send action. See D14. |
+| C4 | Broadcast delivery funnels through the orchestrator (D1's coverage argument) | **Corrected.** `api/whatsapp/broadcast/route.ts:218` calls `sendTemplateMessage()` from `meta-api.ts` directly. Flows (`flows/lib/meta-send.ts`) and AI auto-reply (`assistant/lib/ai/auto-reply.ts:450, 645, 745`) *do* use the orchestrator. See D13. |
+| C5 | A closed-window free-form send inserts a row that reads `sent` — the "phantom send" | **Corrected, and the real failure is different per provider.** The insert happens *after* the provider accepts, so on **Meta** the rejection (error 131047) throws in the adapter (`adapters/meta.ts:62–67`) → no row → the caller gets an opaque **502 `provider_error`**. On **Twilio** the API accepts and fails asynchronously; the row exists as `sent` until the status callback lands (`adapters/twilio.ts:136`, `channels/webhooks/twilio` → `applyMessageDeliveryStatus`). So the harms are: an unactionable 502 where a 409 belongs, a Twilio-only window of a lying row, and quota consumed (`api/whatsapp/send/route.ts:202`) on a send that was never legal. D4/D5 remain correct — the *justification* narrows. |
+| C6 | The composer treats a thread with no inbound message as closed ("fails safe") | **Corrected — it fails open on the exact case that matters.** `message-thread.tsx:302`: `if (!messages.length) return { expired: false }`. A conversation created by the `contact_id` path has zero messages, so the composer would be **enabled** for a contact who has never written. Only a thread that *has* messages but no `customer` one reads expired. This makes D1 and D9 more urgent, not less. |
+| C7 | No `last_inbound_at`; no WhatsApp consent columns | **Confirmed.** Absent from all migrations and from the generated schema doc; `sms_opted_out` (`051_sms_opt_out.sql`) and `email_opted_out` exist as the shape to mirror. D3/D8/D11 stand. |
+| C8 | Both inbound paths already write the conversation row, so `last_inbound_at` rides along | **Confirmed.** `channels/lib/inbound.ts:199–202` and `api/whatsapp/webhook/route.ts:737–739`. D3's two write sites are the right two. |
+| C9 | Template approval status is never checked locally at send time | **Confirmed.** `send-message.ts` loads the row for components and validates only its *shape* (`isMessageTemplate`); no status read on any send path. D6 stands. |
+| C10 | Interactive sends are gated on the window client-side | **Confirmed.** `message-composer.tsx:190` (`inputsDisabled`) gates the `+` menu (`:704`). D4's grouping of `interactive` with free-form matches the UI. |
+| C11 | `inbox:send` / `broadcasts:manage` gate these routes (the ADR-001 cross-reference) | **Corrected.** Neither the dashboard send route, the broadcast route, nor `api/v1/messages` performs a module/permission check today. D14's permission split is a **statement of intent**, not a description. |
+
+External facts re-checked at the same time: Meta's per-message pricing with the
+**2026-10-01** change to service messages and in-window utility templates
+(D15); the Meta **test business number** requiring no Business verification and
+capped at 5 manually added recipients; the Twilio sandbox's shared number,
+`join <code>` opt-in, **72-hour** expiry, and 1-message-per-3-seconds cap; and
+trial accounts' 5-verified-recipient limit (all in D10).
+
+## Provider comparison (2026-08-20)
+
+Gathered for D16/D17. The point of the table is the **left column**: every row
+where all three vendors agree is a rule that belongs in the guard, and every
+row where they differ is a detail that belongs in an adapter.
+
+| Concern | Meta Cloud API | Twilio | MSG91 | Where it lives |
+| --- | --- | --- | --- | --- |
+| 24-hour window | Yes | Yes | Yes (documented as session vs. initiate) | **Guard** (D1) |
+| Template needed to cold-start | Yes | Yes | Yes | **Guard** (D4) |
+| Pre-approved templates | Meta review | Meta review, wrapped as Content API | Meta review, via dashboard | **Guard** reads local status (D6) |
+| Opt-out honoured by platform | No — ours to enforce | No | No | **Guard** (D8) |
+| Closed-window rejection | Sync throw (131047) | **Async** status callback | Assume async | **Adapter** → normalized (C5) |
+| Auth | Bearer token + phone number ID | Account SID / auth token | **Header `authkey`** + `integrated_number` | **Adapter** |
+| Template reference | `name` + `components` | `ContentSid` `HX…` | `template_name` | **Adapter** (already in `OutboundMessagePayload`) |
+| Webhook authenticity | HMAC `X-Hub-Signature-256` | Signature validation | **None — custom header only** | **Adapter** (D17 risk) |
+| Business verification to develop | **Not required** (test number, ≤ 5 recipients) | Not required (shared sandbox, 72 h) | Required — needs an integrated number | **D10 tiers** |
+| Cost posture | Meta rate | Meta rate **+ ~$0.005/msg** platform fee, USD-billed | Positions as pass-through, no markup | Commercial, not code (D15) |
+
+Two consequences worth stating plainly. First, **eight of the eleven rows are
+either identical across vendors or already have a home in the existing
+contract** — the seam is sound, which is what D17 asserts. Second, the
+**webhook-authenticity row is the only place a new provider makes the system
+weaker**, so it is the one row that needs a named owner rather than an adapter
+default. Cost figures are a **dated quote**, not a standing fact (D15).
 
 ## Options considered
 
@@ -373,3 +575,24 @@ edge, and D9's client-side margin keeps agents away from it.
 10. [ ] Update `docs/outbound-messaging.md` (§5.1/§5.2 → resolved by this ADR)
         and `.agents/context/api-routes.md`, then `pnpm db:doc`,
         `pnpm docs:sync`, `pnpm check`
+11. [ ] Fix `sessionInfo` failing **open** on an empty thread —
+        `message-thread.tsx:302` returns `expired: false` for zero messages,
+        which is exactly the state the `contact_id` path creates (C6, D9)
+12. [ ] Route WhatsApp broadcast delivery through `sendChannelMessage` instead
+        of calling `sendTemplateMessage()` per recipient, so D1/D8 cover bulk;
+        same for the SMS and email broadcast routes (D13, C4)
+13. [ ] Build the three one-to-one entry points on the existing `contact_id`
+        route: Contact record → "Message", Inbox → "New message", contact list
+        → bounded "Quick send" (D14, C3)
+14. [ ] Gate the send/broadcast routes on `inbox:send` / `broadcasts:manage`,
+        which no route checks today (C11), and date the cost claims in
+        `docs/outbound-messaging.md` §1 and ADR-008 ahead of the 2026-10-01
+        pricing change (D15)
+15. [ ] **After 1–5:** add the MSG91 WhatsApp adapter as the seam conformance
+        test — `'msg91'` on `ChannelProvider`, enum value in its own migration,
+        `channel_provider_pair` widened, registry entries, `adapters/msg91.ts`,
+        webhook route. The pass condition is that **the guard, orchestrator,
+        contracts, and UI are untouched** by the diff (D17)
+16. [ ] Give `ChannelAdapter` a `verifyWebhook` member so MSG91's
+        shared-secret-in-custom-header check and Meta's HMAC live at the same
+        level, and neither leaks into a route (D17)
