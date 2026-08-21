@@ -14,8 +14,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Send, Loader2, Users, Save } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Users, Save, ClipboardCheck, Tag } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { StepFooter, StepHeading, SummaryGrid, SummaryItem, WizardPanel } from './wizard-ui';
 
 interface AudienceConfig {
   type: string;
@@ -227,11 +228,11 @@ export function Step4ScheduleSend({
                   <Send className="h-4 w-4" />
                   {t('scheduleSend.sendNow')}
                 </Button>
-              </DialogFooter>
+            
+        </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+      </StepFooter>
     </div>
   );
 }
