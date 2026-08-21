@@ -4,15 +4,12 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import useSWR from 'swr';
 import { createClient } from '@/lib/supabase/client';
 import { CustomField, Tag } from '@/types';
-import { Button } from '@/components/ui/button';
 import {
   Users,
   Tags,
   Filter,
   Upload,
   Loader2,
-  ArrowRight,
-  ArrowLeft,
   X,
   Database,
   AlertTriangle,

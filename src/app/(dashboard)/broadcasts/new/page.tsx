@@ -267,7 +267,11 @@ export default function NewBroadcastPage() {
         externalParamMap={
           audience.type === 'external' ? audience.externalParamMap : undefined
         }
-        onGateChange={setPersonalizeGate}
+        onNext={() => {
+          setPersonalizeGate({ ready: true });
+          setCurrentStep(3);
+        }}
+        onBack={() => setCurrentStep(1)}
       />
     ) : null,
     template ? (
@@ -276,9 +280,10 @@ export default function NewBroadcastPage() {
         name={name}
         onNameChange={setName}
         template={template}
-        channel={channel}
         audience={audience}
-        estimatedReach={estimatedReach}
+        onSend={handleSend}
+        onSaveDraft={handleSaveDraft}
+        onBack={() => setCurrentStep(2)}
         isProcessing={isProcessing}
         progress={progress}
       />
