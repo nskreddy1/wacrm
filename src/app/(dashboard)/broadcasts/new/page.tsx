@@ -176,7 +176,17 @@ export default function NewBroadcastPage() {
       template_name: template.name,
       template_language: template.language ?? 'en_US',
       template_variables: variables,
-      audience_filter: { type: audience.type, tagIds: audience.tagIds },
+      // Persist everything needed to rebuild the audience. Saving only
+      // {type, tagIds} silently dropped the selection for every other
+      // method, so a reopened draft targeted "field" with no filter.
+      audience_filter: {
+        type: audience.type,
+        tagIds: audience.tagIds,
+        contactIds: audience.contactIds,
+        contactPreview: audience.contactPreview,
+        fieldFilter: audience.fieldFilter,
+        excludeTagIds: audience.excludeTagIds,
+      },
       status: 'draft',
       total_recipients: 0,
       sent_count: 0,

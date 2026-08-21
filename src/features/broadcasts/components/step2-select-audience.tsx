@@ -14,7 +14,12 @@ import {
   FileSpreadsheet,
   Trash2,
   UserMinus,
+  UserCheck,
 } from 'lucide-react';
+import {
+  AudienceContactPicker,
+  type PickedContact,
+} from './audience-contact-picker';
 import { useTranslations } from 'next-intl';
 import {
   controlClass,
@@ -43,7 +48,13 @@ import {
  * `external` is retained in the union (stored drafts and the send
  * pipeline still understand it) but is not offered in the UI for now.
  */
-export type AudienceType = 'all' | 'tags' | 'field' | 'csv' | 'external';
+export type AudienceType =
+  | 'all'
+  | 'tags'
+  | 'field'
+  | 'csv'
+  | 'contacts'
+  | 'external';
 
 type FieldOperator = 'is' | 'is_not' | 'contains';
 
@@ -75,6 +86,13 @@ export interface AudienceConfig {
   csvContacts?: { phone: string; name?: string }[];
   /** Original filename, kept so the CSV panel can name what is loaded. */
   csvFileName?: string;
+  /** Hand-picked contacts (`type === 'contacts'`). */
+  contactIds?: string[];
+  /**
+   * Display snapshot for `contactIds`, so chips and the review step can
+   * name the picked people without another round-trip.
+   */
+  contactPreview?: PickedContact[];
   excludeTagIds?: string[];
   /** External-source audience — plumbing kept, UI currently hidden. */
   externalSourceId?: string;
@@ -129,6 +147,15 @@ async function estimateAudienceCount(
     else q = q.ilike(field, `%${value.trim()}%`);
     const { data } = await q;
     baseIds = new Set((data ?? []).map((r) => r.id));
+  } else if (
+    audience.type === 'contacts' &&
+    (audience.contactIds?.length ?? 0) > 0
+  ) {
+    // Hand-picked: the ids *are* the audience, no query needed. Exclude
+    // tags still apply below — an explicitly picked contact who also
+    // carries an excluded tag is dropped, because the exclude list is
+    // the workspace's do-not-message rule and outranks the pick.
+    baseIds = new Set(audience.contactIds);
   } else if (audience.type !== 'all') {
     // Partially-configured audience — wait for the user to finish.
     return null;
@@ -198,6 +225,12 @@ export function Step2SelectAudience({
         icon: Users,
       },
       {
+        type: 'contacts' as const,
+        label: t('selectAudience.method.contacts'),
+        description: t('selectAudience.contactsDesc'),
+        icon: UserCheck,
+      },
+      {
         type: 'tags' as const,
         label: t('selectAudience.method.tags'),
         description: t('selectAudience.tagDesc'),
@@ -247,6 +280,7 @@ export function Step2SelectAudience({
   const needsQuery =
     audience.type === 'all' ||
     (audience.type === 'tags' && (audience.tagIds?.length ?? 0) > 0) ||
+    (audience.type === 'contacts' && (audience.contactIds?.length ?? 0) > 0) ||
     (audience.type === 'field' && isFieldFilterComplete(audience.fieldFilter));
   const { data: queriedCount, isLoading: loadingCount } = useSWR(
     needsQuery
@@ -255,6 +289,7 @@ export function Step2SelectAudience({
           JSON.stringify({
             type: audience.type,
             tagIds: audience.tagIds,
+            contactIds: audience.contactIds,
             fieldFilter: audience.fieldFilter,
             excludeTagIds: audience.excludeTagIds,
           }),
@@ -280,6 +315,8 @@ export function Step2SelectAudience({
       fieldFilter: type === 'field' ? audience.fieldFilter : undefined,
       csvContacts: type === 'csv' ? audience.csvContacts : undefined,
       csvFileName: type === 'csv' ? audience.csvFileName : undefined,
+      contactIds: type === 'contacts' ? audience.contactIds : undefined,
+      contactPreview: type === 'contacts' ? audience.contactPreview : undefined,
     });
     if (type !== 'csv') {
       setCsvError(null);
@@ -405,6 +442,7 @@ export function Step2SelectAudience({
   const isValid =
     audience.type === 'all' ||
     (audience.type === 'tags' && (audience.tagIds?.length ?? 0) > 0) ||
+    (audience.type === 'contacts' && (audience.contactIds?.length ?? 0) > 0) ||
     (audience.type === 'field' && isFieldFilterComplete(audience.fieldFilter)) ||
     (audience.type === 'csv' && (audience.csvContacts?.length ?? 0) > 0);
 
@@ -412,11 +450,13 @@ export function Step2SelectAudience({
     ? null
     : audience.type === 'tags'
       ? t('selectAudience.hintPickTag')
-      : audience.type === 'field'
-        ? t('selectAudience.hintCompleteFilter')
-        : audience.type === 'csv'
-          ? t('selectAudience.hintUploadCsv')
-          : null;
+      : audience.type === 'contacts'
+        ? t('selectAudience.hintPickContact')
+        : audience.type === 'field'
+          ? t('selectAudience.hintCompleteFilter')
+          : audience.type === 'csv'
+            ? t('selectAudience.hintUploadCsv')
+            : null;
 
   return (
     <div className="space-y-6">
@@ -426,9 +466,10 @@ export function Step2SelectAudience({
       />
 
       <OptionGrid label={t('selectAudience.title')}>
-        {audienceOptions.map((option) => (
+        {audienceOptions.map((option, index) => (
           <OptionCard
             key={option.type}
+            index={index}
             icon={option.icon}
             label={option.label}
             description={option.description}
@@ -437,6 +478,20 @@ export function Step2SelectAudience({
           />
         ))}
       </OptionGrid>
+
+      {audience.type === 'contacts' && (
+        <AudienceContactPicker
+          selected={audience.contactPreview ?? []}
+          onChange={(contacts: PickedContact[]) =>
+            onUpdate({
+              ...audience,
+              type: 'contacts',
+              contactPreview: contacts,
+              contactIds: contacts.map((c) => c.id),
+            })
+          }
+        />
+      )}
 
       {audience.type === 'tags' && (
         <WizardPanel
@@ -663,17 +718,27 @@ export function Step2SelectAudience({
         tone="accent"
         title={t('selectAudience.summaryTitle')}
         action={
-          loadingCount ? (
-            <InlineLoading label={t('selectAudience.calculating')} />
-          ) : estimatedCount !== null ? (
-            <p className="text-foreground text-sm font-medium">
-              {t('selectAudience.estimatedRecipients', {
-                count: estimatedCount,
-              })}
-            </p>
-          ) : (
-            <EmptyHint>{t('selectAudience.summaryEmpty')}</EmptyHint>
-          )
+          // The estimate is the answer to the whole step, and it changes
+          // without the user moving focus — so it is a polite live
+          // region rather than silent text.
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {loadingCount ? (
+              <InlineLoading label={t('selectAudience.calculating')} />
+            ) : estimatedCount !== null ? (
+              <p
+                // Re-keyed on the value so each new estimate fades in
+                // instead of swapping mid-glance.
+                key={estimatedCount}
+                className="text-foreground motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 text-sm font-medium tabular-nums motion-safe:duration-200"
+              >
+                {t('selectAudience.estimatedRecipients', {
+                  count: estimatedCount,
+                })}
+              </p>
+            ) : (
+              <EmptyHint>{t('selectAudience.summaryEmpty')}</EmptyHint>
+            )}
+          </div>
         }
       />
 
