@@ -586,7 +586,21 @@ export function StepFooter({
   showBackArrow?: boolean;
 }) {
   return (
-    <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-5">
+    // Pinned to the bottom of the viewport so the primary action is
+    // always reachable, no matter how tall the step body grows. Before
+    // this, a long step (audience with many tags + a big selection)
+    // pushed Next below the fold and it read as missing — users had to
+    // zoom the browser out to find it. The step body scrolls under this
+    // bar; it stays aligned with the content column and a translucent
+    // background keeps it legible over whatever scrolls behind.
+    <div
+      className={cn(
+        'sticky bottom-0 z-10 mt-2',
+        'border-border bg-background/85 flex flex-wrap items-center justify-between gap-3 border-t',
+        'pt-4 pb-4',
+        'supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur-sm'
+      )}
+    >
       <Button variant="outline" onClick={onBack} disabled={backDisabled}>
         {showBackArrow ? <ArrowLeft className="size-4" /> : null}
         {backLabel}
