@@ -17,11 +17,43 @@ export interface CustomFieldFilter {
   value: string;
 }
 
+/**
+ * Contact-column filter behind the `field` audience type. Only these
+ * columns are addressable — the value is interpolated into a
+ * PostgREST filter, so the column name must never come from user
+ * input unchecked.
+ */
+export const AUDIENCE_FIELD_COLUMNS = [
+  'name',
+  'email',
+  'phone',
+  'company',
+  'source',
+  'campaign',
+] as const;
+
+export type AudienceFieldColumn = (typeof AUDIENCE_FIELD_COLUMNS)[number];
+
+export interface FieldFilter {
+  field: AudienceFieldColumn | '';
+  operator: CustomFieldOperator;
+  value: string;
+}
+
 export interface AudienceConfig {
-  type: 'all' | 'tags' | 'custom_field' | 'csv' | 'external';
+  /**
+   * `custom_field` is legacy — the wizard no longer produces it, but
+   * broadcasts saved as drafts before the switch still carry it, so
+   * resolveAudience keeps handling it.
+   */
+  type: 'all' | 'tags' | 'field' | 'custom_field' | 'csv' | 'external';
   tagIds?: string[];
   customField?: CustomFieldFilter;
+  /** Contact-column filter used by `type === 'field'`. */
+  fieldFilter?: FieldFilter;
   csvContacts?: { phone: string; name?: string }[];
+  /** Original CSV filename, for display only. */
+  csvFileName?: string;
   /** Contacts carrying any of these tags are subtracted from the result. */
   excludeTagIds?: string[];
   /** External source connector (type === 'external'). */
@@ -275,6 +307,8 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           throw new Error(`Failed to fetch contacts: ${error.message}`);
         contacts = data ?? [];
       }
+    } else if (audience.type === 'field' && audience.fieldFilter) {
+      contacts = await resolveFieldAudience(supabase, audience.fieldFilter);
     } else if (audience.type === 'custom_field' && audience.customField) {
       contacts = await resolveCustomFieldAudience(
         supabase,
@@ -457,6 +491,42 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       .filter((c): c is Contact => Boolean(c));
   }
 
+  /**
+   * Contact-field audience — filters the `contacts` table directly.
+   * Replaces the custom-field audience in the wizard: same three
+   * operators, but against columns that exist on every contact rather
+   * than rows in contact_custom_values that most workspaces never
+   * populate.
+   *
+   * The column is validated against AUDIENCE_FIELD_COLUMNS before it
+   * reaches the query builder — a filter column is an identifier, not
+   * a value, so PostgREST cannot parameterize it.
+   */
+  async function resolveFieldAudience(
+    supabase: ReturnType<typeof createClient>,
+    filter: FieldFilter
+  ): Promise<Contact[]> {
+    const { field, operator, value } = filter;
+    const trimmed = value.trim();
+
+    if (
+      !field ||
+      !AUDIENCE_FIELD_COLUMNS.includes(field as AudienceFieldColumn) ||
+      !trimmed
+    ) {
+      throw new Error('This audience filter is incomplete.');
+    }
+
+    let query = supabase.from('contacts').select('*');
+    if (operator === 'is') query = query.eq(field, trimmed);
+    else if (operator === 'is_not') query = query.neq(field, trimmed);
+    else query = query.ilike(field, `%${trimmed}%`);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`Audience filter failed: ${error.message}`);
+    return data ?? [];
+  }
+
   async function resolveCustomFieldAudience(
     supabase: ReturnType<typeof createClient>,
     filter: CustomFieldFilter
@@ -539,6 +609,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           audience_filter: {
             type: payload.audience.type,
             tagIds: payload.audience.tagIds,
+            fieldFilter: payload.audience.fieldFilter,
             customField: payload.audience.customField,
             excludeTagIds: payload.audience.excludeTagIds,
           },

@@ -7,7 +7,10 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { toast } from 'sonner';
 import { MessageTemplate } from '@/types';
 import { Step1ChooseTemplate } from '@/features/broadcasts/components/step1-choose-template';
-import { Step2SelectAudience } from '@/features/broadcasts/components/step2-select-audience';
+import {
+  Step2SelectAudience,
+  type AudienceConfig,
+} from '@/features/broadcasts/components/step2-select-audience';
 import { Step3Personalize } from '@/features/broadcasts/components/step3-personalize';
 import { Step4ScheduleSend } from '@/features/broadcasts/components/step4-schedule-send';
 import { useBroadcastSending } from '@/features/broadcasts/hooks/use-broadcast-sending';
@@ -53,21 +56,9 @@ export default function NewBroadcastPage() {
     BroadcastChannel[] | null
   >(null);
   const [channel, setChannel] = useState<BroadcastChannel>('whatsapp');
-  const [audience, setAudience] = useState<{
-    type: 'all' | 'tags' | 'custom_field' | 'csv' | 'external';
-    tagIds?: string[];
-    customField?: {
-      fieldId: string;
-      operator: 'is' | 'is_not' | 'contains';
-      value: string;
-    };
-    csvContacts?: { phone: string; name?: string }[];
-    excludeTagIds?: string[];
-    externalSourceId?: string;
-    externalSourceName?: string;
-    externalCount?: number;
-    externalParamMap?: Record<string, string>;
-  }>({ type: 'all' });
+  // The audience shape is owned by step 2 — importing it keeps the
+  // wizard state and the panel that edits it from drifting apart.
+  const [audience, setAudience] = useState<AudienceConfig>({ type: 'all' });
   const [variables, setVariables] = useState<
     Record<
       string,
@@ -380,15 +371,16 @@ export default function NewBroadcastPage() {
         </aside>
 
         <section className="min-w-0 p-4 sm:p-6 lg:p-8">
-          <div className="border-border bg-card mx-auto max-w-4xl rounded-xl border p-5 shadow-sm sm:p-7 lg:p-8">
-            <div
-              className={cn(
-                'transition-opacity duration-150',
-                isProcessing && 'pointer-events-none opacity-60'
-              )}
-            >
-              {stepContent[currentStep]}
-            </div>
+          {/* No card here on purpose. Each step now composes its own
+              WizardPanel boxes, and wrapping those in another bordered
+              card produced card-inside-a-card at every step. */}
+          <div
+            className={cn(
+              'mx-auto max-w-3xl transition-opacity duration-150',
+              isProcessing && 'pointer-events-none opacity-60'
+            )}
+          >
+            {stepContent[currentStep]}
           </div>
         </section>
       </div>
