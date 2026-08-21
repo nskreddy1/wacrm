@@ -13,18 +13,26 @@
  * the chips keep naming who is in the audience after the search box has
  * moved on to a different query, and the review step never has to
  * refetch to say "3 contacts".
+ *
+ * Scale: the result list is capped so a big database never renders a
+ * thousand rows, but the picker still has to tell the truth about how
+ * many contacts match ("Showing 40 of 128") and let the user take the
+ * whole set in one action without scrolling a wall of rows. The
+ * selection itself is also height-capped and scrolls, so choosing 100
+ * people no longer buries the search box under 100 chips.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useTranslations } from 'next-intl';
-import { Search, UserCheck, X } from 'lucide-react';
+import { Loader2, Search, UserCheck, Users, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import {
   CheckRow,
   EmptyHint,
   InlineLoading,
+  Notice,
   RemovableChip,
   WizardPanel,
   controlClass,
@@ -43,9 +51,20 @@ interface SearchRow extends PickedContact {
   whatsapp_opted_out?: boolean | null;
 }
 
-/** How many matches one search shows. Deliberately small: the picker is
- *  for a handful of people — larger audiences belong to tags or fields. */
+interface SearchResult {
+  rows: SearchRow[];
+  /** Total contacts matching the term, before the display limit. */
+  total: number;
+}
+
+/** How many matches the scrollable list renders. Deliberately small:
+ *  the list is for eyeballing and refining, not for scrolling hundreds
+ *  of rows — "Select all" handles the bulk case. */
 const RESULT_LIMIT = 40;
+
+/** Ceiling on a single "Select all" action. Past this the hand-picker
+ *  is the wrong tool and the user is nudged toward tags / field. */
+const SELECT_ALL_CAP = 500;
 
 /**
  * PostgREST's `or=(...)` filter is a comma/parenthesis-delimited
@@ -57,29 +76,68 @@ function sanitizeTerm(term: string): string {
   return term.replace(/[,()%_*\\"']/g, ' ').trim();
 }
 
-async function searchContacts(term: string): Promise<SearchRow[]> {
-  const supabase = createClient();
-  let query = supabase
-    .from('contacts')
-    .select('id, name, phone, email, company, whatsapp_opted_out')
-    .order('name', { ascending: true, nullsFirst: false })
-    .limit(RESULT_LIMIT);
-
+/** Applies the free-text term to a contacts query, if any. */
+function withTermFilter<T>(query: T, term: string): T {
   const safe = sanitizeTerm(term);
-  if (safe) {
-    query = query.or(
-      [
-        `name.ilike.%${safe}%`,
-        `phone.ilike.%${safe}%`,
-        `email.ilike.%${safe}%`,
-        `company.ilike.%${safe}%`,
-      ].join(',')
-    );
-  }
+  if (!safe) return query;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (query as any).or(
+    [
+      `name.ilike.%${safe}%`,
+      `phone.ilike.%${safe}%`,
+      `email.ilike.%${safe}%`,
+      `company.ilike.%${safe}%`,
+    ].join(',')
+  );
+}
+
+/**
+ * One round trip returns both the visible page and the true match
+ * count: PostgREST reports the unpaginated total via `count: 'exact'`
+ * even when the rows are `.limit()`-ed. That count is what lets the UI
+ * say "40 of 128" and offer to select every one of them.
+ */
+async function searchContacts(term: string): Promise<SearchResult> {
+  const supabase = createClient();
+  const query = withTermFilter(
+    supabase
+      .from('contacts')
+      .select('id, name, phone, email, company, whatsapp_opted_out', {
+        count: 'exact',
+      })
+      .order('name', { ascending: true, nullsFirst: false })
+      .limit(RESULT_LIMIT),
+    term
+  );
+
+  const { data, error, count } = await query;
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as SearchRow[];
+  return { rows, total: count ?? rows.length };
+}
+
+/** Fetches every matching contact (up to the cap) for "Select all". */
+async function fetchMatchingContacts(
+  term: string,
+  cap: number
+): Promise<PickedContact[]> {
+  const supabase = createClient();
+  const query = withTermFilter(
+    supabase
+      .from('contacts')
+      .select('id, name, phone')
+      .order('name', { ascending: true, nullsFirst: false })
+      .limit(cap),
+    term
+  );
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as SearchRow[];
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    name: r.name as string | null,
+    phone: r.phone as string,
+  }));
 }
 
 interface Props {
@@ -92,6 +150,8 @@ export function AudienceContactPicker({ selected, onChange }: Props) {
 
   const [term, setTerm] = useState('');
   const [debounced, setDebounced] = useState('');
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [selectAllError, setSelectAllError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Debounce so typing "ada" is one query, not three.
@@ -101,12 +161,15 @@ export function AudienceContactPicker({ selected, onChange }: Props) {
   }, [term]);
 
   const {
-    data: results,
+    data,
     isLoading,
     error,
   } = useSWR(['broadcast-audience-contacts', debounced] as const, ([, q]) =>
     searchContacts(q)
   );
+
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
 
   const selectedIds = useMemo(
     () => new Set(selected.map((c) => c.id)),
@@ -121,19 +184,31 @@ export function AudienceContactPicker({ selected, onChange }: Props) {
     );
   }
 
-  const rows = results ?? [];
   const unselectedRows = rows.filter((r) => !selectedIds.has(r.id));
 
-  function addAllResults() {
-    onChange([
-      ...selected,
-      ...unselectedRows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        phone: r.phone,
-      })),
-    ]);
+  // How many matches are still outside the selection. This is the real
+  // "Select all" target — the visible rows are just a window onto it.
+  const matchesToAdd = Math.min(total, SELECT_ALL_CAP);
+  const overCap = total > SELECT_ALL_CAP;
+
+  async function selectAllMatching() {
+    setSelectAllError(false);
+    setSelectingAll(true);
+    try {
+      const all = await fetchMatchingContacts(debounced, SELECT_ALL_CAP);
+      // Merge instead of replace: a previous search's picks survive a
+      // second "Select all" on a different term.
+      const merged = new Map(selected.map((c) => [c.id, c]));
+      for (const c of all) if (!merged.has(c.id)) merged.set(c.id, c);
+      onChange([...merged.values()]);
+    } catch {
+      setSelectAllError(true);
+    } finally {
+      setSelectingAll(false);
+    }
   }
+
+  const showSelectAll = total > 0 && (unselectedRows.length > 0 || overCap);
 
   return (
     <WizardPanel
@@ -171,13 +246,21 @@ export function AudienceContactPicker({ selected, onChange }: Props) {
 
         {/* Chips first: what is already in the audience outranks what
             you might add next, and they stay put while the result list
-            below churns with each query. */}
+            below churns with each query. The list is height-capped and
+            scrolls so a 100-contact selection stays a tidy block
+            instead of a wall that shoves the search box off screen. */}
         {selected.length > 0 ? (
           <div className="border-border bg-muted/30 space-y-2 rounded-lg border p-2.5">
             <p className="text-muted-foreground text-xs font-medium">
               {t('selectedContacts', { count: selected.length })}
             </p>
-            <div className="flex flex-wrap gap-1.5">
+            <div
+              className={
+                selected.length > 24
+                  ? 'flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1 [scrollbar-width:thin]'
+                  : 'flex flex-wrap gap-1.5'
+              }
+            >
               {selected.map((contact) => {
                 const label = contact.name?.trim() || contact.phone;
                 return (
@@ -193,6 +276,11 @@ export function AudienceContactPicker({ selected, onChange }: Props) {
                 );
               })}
             </div>
+            {selected.length > 24 ? (
+              <p className="text-muted-foreground/70 text-[11px]">
+                {t('selectionScrollHint')}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -206,7 +294,7 @@ export function AudienceContactPicker({ selected, onChange }: Props) {
         >
           {isLoading
             ? t('loadingContacts')
-            : t('resultsCount', { count: rows.length })}
+            : t('resultsCount', { count: total })}
         </p>
 
         <div className="max-h-72 overflow-y-auto">
@@ -247,17 +335,44 @@ export function AudienceContactPicker({ selected, onChange }: Props) {
           )}
         </div>
 
-        {unselectedRows.length > 0 ? (
+        {rows.length > 0 ? (
           <div className="flex items-center justify-between gap-3">
-            <p className="text-muted-foreground text-xs">
-              {rows.length === RESULT_LIMIT
-                ? t('resultsCapped', { count: RESULT_LIMIT })
-                : t('resultsCount', { count: rows.length })}
+            <p className="text-muted-foreground text-xs tabular-nums">
+              {total > rows.length
+                ? t('matchSummary', { shown: rows.length, total })
+                : t('resultsCount', { count: total })}
             </p>
-            <Button variant="outline" size="sm" onClick={addAllResults}>
-              {t('addAllResults', { count: unselectedRows.length })}
-            </Button>
+            {showSelectAll ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectAllMatching}
+                disabled={selectingAll}
+              >
+                {selectingAll ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    {t('selectingAll')}
+                  </>
+                ) : (
+                  <>
+                    <Users className="size-3.5" />
+                    {t('selectAllMatching', { count: matchesToAdd })}
+                  </>
+                )}
+              </Button>
+            ) : null}
           </div>
+        ) : null}
+
+        {overCap ? (
+          <p className="text-muted-foreground/80 text-[11px] leading-relaxed">
+            {t('selectAllCappedHint', { count: SELECT_ALL_CAP })}
+          </p>
+        ) : null}
+
+        {selectAllError ? (
+          <Notice tone="error">{t('errorLoadContacts')}</Notice>
         ) : null}
       </div>
     </WizardPanel>
