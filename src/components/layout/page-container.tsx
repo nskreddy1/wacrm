@@ -62,6 +62,18 @@ export function PageContainer({
         // fab-safe-area reserves bottom padding for the shell's floating
         // launchers, which would otherwise cover the last row of content.
         'app-scrollbar fab-safe-area mx-auto flex h-0 min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8',
+        // NEVER let a section shrink. This is a height-constrained flex
+        // column (h-0 + flex-1), so whenever content is taller than the
+        // viewport there is negative free space and every flex child is a
+        // shrink candidate. A child's automatic minimum size normally
+        // pins it to its content height — but per CSS that protection is
+        // ZEROED when the child's own overflow is not `visible`. So any
+        // section with `overflow-hidden` (rounded metric grids, bordered
+        // cards) collapses and clips its own content instead of scrolling:
+        // stat tiles cut off mid-number, the last card sliced in half.
+        // Pinning children to shrink-0 makes them overflow the container,
+        // which is precisely what this scroller exists to handle.
+        '[&>*]:shrink-0',
         widthClass[width],
         className
       )}
