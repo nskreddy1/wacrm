@@ -4,7 +4,7 @@
 **Date:** 2026-08-21
 **Deciders:** Owner/product (catalog contents + recommendations), backend (enablement storage + enforcement), design (Settings → Features surface)
 **Supersedes:** the rejected "Vertical packs and module enablement" draft (removed in `7d7ce7f`)
-**Relates to:** ADR-001 (workspace modules), ADR-004 (invites and membership), ADR-005 (AI agent configuration), ADR-008 (the onboarding flow that asks the question this ADR stores the answer to)
+**Relates to:** ADR-001 (workspace modules), ADR-004 (invites and membership), ADR-005 (AI agent configuration), ADR-008 (the onboarding flow that asks the question this ADR stores the answer to), ADR-009 (analytics/reporting depth gaps behind this mapping)
 
 ---
 
@@ -55,6 +55,12 @@ modules (`src/features/`), almost everything already exists here:
 | 17. Journey orchestration            | `flows` + `broadcasts`                     | Optional                                                     |
 | 18. Third-party integrations         | `webhooks`, `api-keys`, `external-sources` | Optional                                                     |
 | 19. Security                         | RLS, roles, encrypted secrets              | **Core** (never a toggle)                                    |
+
+**A mapping caveat:** "exists" in this table means the surface exists, not
+that it matches the benchmark's depth. The audit found the analytic half of
+several rows (sales forecasting, AI outcome reporting, campaign analytics,
+daily reporting) is thin or missing — that gap analysis and its improvement
+plan are **ADR-009**, so this ADR stays about enablement only.
 
 Salesforce's own closing guidance is the thesis of this ADR:
 
