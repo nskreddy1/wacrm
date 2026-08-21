@@ -702,51 +702,6 @@ export function Step2SelectAudience({
         )}
       </div>
 
-      {/* Audience Summary */}
-      <div className="border-border bg-card/50 rounded-xl border p-4">
-        <p className="text-foreground mb-2 text-sm font-medium">
-          Audience Summary
-        </p>
-        {loadingCount ? (
-          <div className="flex items-center gap-2">
-            <Loader2 className="text-primary h-4 w-4 animate-spin" />
-            <span className="text-muted-foreground text-xs">Calculating…</span>
-          </div>
-        ) : estimatedCount !== null ? (
-          <div className="flex items-center gap-2">
-            <Users className="text-primary h-4 w-4" />
-            <span className="text-foreground text-sm">
-              {estimatedCount.toLocaleString()}
-            </span>
-            <span className="text-muted-foreground text-xs">
-              estimated recipients
-            </span>
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-xs">
-            Select an audience type to see the estimate.
-          </p>
-        )}
-      </div>
-
-      <div className="border-border flex items-center justify-between border-t pt-4">
-        <Button
-          variant="outline"
-          onClick={onBack}
-          className="border-border text-muted-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t('back')}
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={!isValid}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {t('next')}
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-      </div>
     </div>
   );
 }
