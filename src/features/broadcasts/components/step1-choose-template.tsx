@@ -6,8 +6,16 @@ import { createClient } from '@/lib/supabase/client';
 import { routes } from '@/lib/routing/routes';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
-import { FileText, ArrowRight, Plus } from 'lucide-react';
+import { FileText, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import {
+  Notice,
+  OptionCard,
+  OptionGrid,
+  StepFooter,
+  StepHeading,
+  WizardPanel,
+} from './wizard-ui';
 
 const categoryColors: Record<string, string> = {
   Marketing: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
@@ -106,111 +114,83 @@ export function Step1ChooseTemplate({
 
   if (error) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-2">
-        <p className="text-sm text-red-400">{error}</p>
+      <div className="space-y-6">
+        <StepHeading
+          title={t('chooseTemplate.title')}
+          description={t('chooseTemplate.subtitle')}
+        />
+        <Notice tone="error">{error}</Notice>
+        <StepFooter
+          backLabel={t('back')}
+          onBack={onBack}
+          showBackArrow={false}
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-foreground text-lg font-semibold">
-          {t('chooseTemplate.title')}
-        </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {t('chooseTemplate.subtitle')}
-        </p>
-      </div>
+      <StepHeading
+        title={t('chooseTemplate.title')}
+        description={t('chooseTemplate.subtitle')}
+      />
 
       {templates.length === 0 ? (
-        <div className="border-border bg-card/50 flex flex-col items-center justify-center gap-3 rounded-xl border px-6 py-12 text-center">
-          <div className="bg-muted flex size-10 items-center justify-center rounded-full">
-            <FileText className="text-muted-foreground size-5" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-foreground text-sm font-medium">
-              {t('chooseTemplate.noTemplates')}
-            </p>
-            <p className="text-muted-foreground mx-auto max-w-sm text-xs leading-relaxed">
-              {t('chooseTemplate.createFirst')}
-            </p>
-          </div>
+        <WizardPanel
+          icon={FileText}
+          title={t('chooseTemplate.noTemplates')}
+          description={t('chooseTemplate.createFirst')}
+        >
           {/* The old empty state was a dead end: it told the user to go
               to Settings but gave them no way to get there. */}
-          <Button variant="outline" render={<Link href={routes.app.templates} />}>
+          <Button
+            variant="outline"
+            render={<Link href={routes.app.templates} />}
+          >
             <Plus className="size-4" />
             {t('chooseTemplate.createTemplateAction')}
           </Button>
-        </div>
+        </WizardPanel>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <OptionGrid label={t('chooseTemplate.title')} columns={3}>
           {templates.map((template) => {
-            const isSelected = selectedTemplate?.id === template.id;
             const catColor =
               categoryColors[template.category] ?? categoryColors.Utility;
 
             return (
-              <button
+              <OptionCard
                 key={template.id}
-                onClick={() => onSelect(template)}
-                className={`flex flex-col gap-3 rounded-xl border p-4 text-left transition-all ${
-                  isSelected
-                    ? 'border-primary bg-primary/5 ring-primary/30 ring-1'
-                    : 'border-border bg-card/50 hover:border-border hover:bg-card'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <h3 className="text-foreground text-sm font-medium">
-                    {template.name}
-                  </h3>
+                label={template.name}
+                description={template.body_text}
+                selected={selectedTemplate?.id === template.id}
+                onSelect={() => onSelect(template)}
+                meta={
                   <span
-                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${catColor}`}
+                    className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${catColor}`}
                   >
                     {template.category}
                   </span>
-                </div>
-                <p className="text-muted-foreground line-clamp-3 text-xs">
-                  {template.body_text}
-                </p>
-                <div className="text-muted-foreground flex items-center gap-2 text-[10px]">
-                  <span>{template.language ?? 'en_US'}</span>
-                  {/* Status is omitted on purpose — every template
-                      shown here is already filtered to APPROVED,
-                      so the chip carried no information. */}
-                </div>
-              </button>
+                }
+              />
             );
           })}
-        </div>
+        </OptionGrid>
       )}
 
-      <div className="border-border flex items-center justify-between border-t pt-4">
-        <Button
-          variant="outline"
-          onClick={onBack}
-          className="border-border text-muted-foreground"
-        >
-          {t('back')}
-        </Button>
-        {/* A disabled primary button with no explanation reads as a bug.
-            Name the blocking condition instead. */}
-        <div className="flex items-center gap-3">
-          {!selectedTemplate && templates.length > 0 && (
-            <p className="text-muted-foreground text-xs">
-              {t('chooseTemplate.selectToContinue')}
-            </p>
-          )}
-          <Button
-            onClick={onNext}
-            disabled={!selectedTemplate}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {t('next')}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <StepFooter
+        backLabel={t('back')}
+        onBack={onBack}
+        showBackArrow={false}
+        hint={
+          !selectedTemplate && templates.length > 0
+            ? t('chooseTemplate.selectToContinue')
+            : null
+        }
+        nextLabel={t('next')}
+        onNext={onNext}
+        nextDisabled={!selectedTemplate}
+      />
     </div>
   );
 }
