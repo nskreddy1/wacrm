@@ -162,7 +162,13 @@ export function OptionCard({
         'transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out',
         'focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none',
         'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:fill-mode-backwards motion-safe:duration-300',
-        'motion-safe:hover:-translate-y-0.5 active:translate-y-0',
+        // Tailwind v4 already wraps `hover:` in `@media (hover: hover)`,
+        // so the lift can't stick on a touch tap — no hand-rolled media
+        // variant needed. `active:scale` is the press itself:
+        // `translate-y-0` alone only cancelled the lift, which read as
+        // no feedback at all on touch.
+        'motion-safe:hover:-translate-y-0.5',
+        'active:scale-[0.99] active:translate-y-0',
         selected
           ? 'border-primary bg-primary/5 shadow-primary/5 shadow-sm'
           : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-muted/40'
@@ -338,7 +344,10 @@ export function TagPill({
       onClick={onClick}
       className={cn(
         'focus-visible:ring-ring inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium',
-        'transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none',
+        // Tags get toggled in bursts, so the press has to register on
+        // every tap — colour alone reads as lag on a fast selection run.
+        'transition-[color,background-color,border-color,transform] duration-150 ease-out',
+        'focus-visible:ring-2 focus-visible:outline-none active:scale-[0.96]',
         selected
           ? tone === 'danger'
             ? 'border-destructive/40 bg-destructive/10 text-destructive'
@@ -385,7 +394,10 @@ export function RemovableChip({
       aria-label={removeLabel}
       className={cn(
         'border-primary/40 bg-primary/10 text-primary focus-visible:ring-ring group inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium',
-        'transition-colors duration-150 hover:bg-primary/20 focus-visible:ring-2 focus-visible:outline-none',
+        'transition-[color,background-color,transform] duration-150 ease-out',
+        'hover:bg-primary/20 focus-visible:ring-2 focus-visible:outline-none active:scale-[0.96]',
+        // zoom-in-95, never scale(0): a chip that grows from nothing
+        // reads as a glitch when a bulk selection adds dozens at once.
         'motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:fade-in-0 motion-safe:duration-150'
       )}
     >
@@ -430,7 +442,11 @@ export function CheckRow({
       onClick={onToggle}
       className={cn(
         'focus-visible:ring-ring flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left',
-        'transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none',
+        'transition-[color,background-color,border-color,transform] duration-150 ease-out',
+        'focus-visible:ring-2 focus-visible:outline-none',
+        // Not on :disabled — a press animation on a row you cannot
+        // toggle promises something that never happens.
+        'enabled:active:scale-[0.99]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         checked
           ? 'border-primary/40 bg-primary/5'
