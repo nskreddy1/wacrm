@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { routes } from '@/lib/routing/routes';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, FileText, ArrowRight } from 'lucide-react';
+import { FileText, ArrowRight, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 const categoryColors: Record<string, string> = {
@@ -81,9 +83,23 @@ export function Step1ChooseTemplate({
   }, [channel, t]);
 
   if (loading) {
+    // Skeleton mirrors the real card grid so the layout doesn't jump
+    // when templates arrive — a centered spinner collapsed the panel
+    // height and shifted every control below it.
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="text-primary h-6 w-6 animate-spin" />
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <div className="bg-muted h-6 w-48 animate-pulse rounded-md" />
+          <div className="bg-muted/60 h-4 w-72 animate-pulse rounded-md" />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="border-border bg-card/50 h-32 animate-pulse rounded-xl border"
+            />
+          ))}
+        </div>
       </div>
     );
   }
@@ -108,14 +124,24 @@ export function Step1ChooseTemplate({
       </div>
 
       {templates.length === 0 ? (
-        <div className="border-border bg-card/50 flex h-48 flex-col items-center justify-center rounded-xl border">
-          <FileText className="text-muted-foreground mb-2 h-8 w-8" />
-          <p className="text-muted-foreground text-sm">
-            {t('chooseTemplate.noTemplates')}
-          </p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            {t('chooseTemplate.createFirst')}
-          </p>
+        <div className="border-border bg-card/50 flex flex-col items-center justify-center gap-3 rounded-xl border px-6 py-12 text-center">
+          <div className="bg-muted flex size-10 items-center justify-center rounded-full">
+            <FileText className="text-muted-foreground size-5" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-foreground text-sm font-medium">
+              {t('chooseTemplate.noTemplates')}
+            </p>
+            <p className="text-muted-foreground mx-auto max-w-sm text-xs leading-relaxed">
+              {t('chooseTemplate.createFirst')}
+            </p>
+          </div>
+          {/* The old empty state was a dead end: it told the user to go
+              to Settings but gave them no way to get there. */}
+          <Button variant="outline" render={<Link href={routes.app.templates} />}>
+            <Plus className="size-4" />
+            {t('chooseTemplate.createTemplateAction')}
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -167,14 +193,23 @@ export function Step1ChooseTemplate({
         >
           {t('back')}
         </Button>
-        <Button
-          onClick={onNext}
-          disabled={!selectedTemplate}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {t('next')}
-          <ArrowRight className="h-4 w-4" />
-        </Button>
+        {/* A disabled primary button with no explanation reads as a bug.
+            Name the blocking condition instead. */}
+        <div className="flex items-center gap-3">
+          {!selectedTemplate && templates.length > 0 && (
+            <p className="text-muted-foreground text-xs">
+              {t('chooseTemplate.selectToContinue')}
+            </p>
+          )}
+          <Button
+            onClick={onNext}
+            disabled={!selectedTemplate}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {t('next')}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );

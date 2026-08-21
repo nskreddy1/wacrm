@@ -686,14 +686,16 @@
       "back": "Back",
       "cancel": "Cancel",
       "chooseTemplate": {
-        "title": "Choose a Template",
-        "subtitle": "Select an approved message template for your broadcast.",
-        "noTemplates": "No templates available.",
-        "createFirst": "Create a template in Settings first.",
+      "title": "Choose a template",
+      "subtitle": "Select an approved message template for your broadcast.",
+      "noTemplates": "No approved templates yet",
+      "createFirst": "Templates need approval before they can be broadcast. Create one to get started.",
+      "createTemplateAction": "Create a template",
+      "selectToContinue": "Select a template to continue",
         "errorLoad": "Failed to load templates"
       },
       "selectAudience": {
-        "title": "Select Audience",
+        "title": "Select audience",
         "subtitle": "Choose who will receive this broadcast.",
         "method": {
           "all": "All Contacts",
@@ -738,7 +740,7 @@
         "errorCsvMissingPhone": "CSV must have a 'phone' column."
       },
       "personalize": {
-        "title": "Personalize Variables",
+        "title": "Personalize variables",
         "subtitle": "Map your template variables to contact fields or provide static values.",
         "headerImage": "Header Image",
         "headerImageDesc": "This template requires a header image.",
@@ -767,7 +769,7 @@
         }
       },
       "scheduleSend": {
-        "title": "Review & Send",
+        "title": "Review and send",
         "subtitle": "Give your broadcast a name and confirm sending.",
         "broadcastName": "Broadcast Name",
         "broadcastNamePlaceholder": "e.g., Summer Promo",

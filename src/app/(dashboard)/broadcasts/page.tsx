@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { createClient } from '@/lib/supabase/client';
+import { cn } from '@/lib/utils';
 import { Broadcast } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -269,78 +270,61 @@ export default function BroadcastsPage() {
                 broadcast.delivered_count
               );
               const isSms = (broadcast.channel ?? 'whatsapp') === 'sms';
+              const ChannelIcon = isSms ? MessageSquare : MessageCircle;
 
-              if (isSms) {
-                return (
-                  <button
-                    key={broadcast.id}
-                    type="button"
-                    onClick={() => router.push(`/broadcasts/${broadcast.id}`)}
-                    className="group hover:bg-muted/50 flex w-full flex-col gap-4 p-4 text-left transition-colors duration-150 sm:flex-row sm:items-center sm:p-5"
-                  >
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <div className="border-border bg-background text-muted-foreground flex size-10 shrink-0 items-center justify-center rounded-full border">
-                        <MessageSquare className="size-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-foreground truncate font-medium">
-                            {broadcast.name}
-                          </h3>
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] tracking-wider uppercase"
-                          >
-                            SMS
-                          </Badge>
-                        </div>
-                        <p className="text-muted-foreground mt-1 truncate text-xs">
-                          {broadcast.template_name} ·{' '}
-                          {new Date(broadcast.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="border-border bg-background flex w-full items-center gap-5 rounded-lg border px-4 py-3 sm:w-80">
-                      <div className="min-w-16">
-                        <p className="text-muted-foreground text-xs">Sent</p>
-                        <p className="text-foreground mt-0.5 font-medium tabular-nums">
-                          {broadcast.sent_count.toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">
-                            Carrier delivery
-                          </span>
-                          <span className="text-foreground font-medium tabular-nums">
-                            {deliveryRate}%
-                          </span>
-                        </div>
-                        <div className="bg-muted mt-2 h-1.5 overflow-hidden rounded-full">
-                          <div
-                            className="bg-primary h-full rounded-full"
-                            style={{ width: `${deliveryRate}%` }}
-                          />
-                        </div>
-                      </div>
-                      {broadcast.failed_count > 0 ? (
-                        <div className="text-right">
-                          <p className="text-muted-foreground text-xs">
-                            Failed
-                          </p>
-                          <p className="text-destructive mt-0.5 font-medium tabular-nums">
-                            {broadcast.failed_count}
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:w-36 sm:justify-end">
-                      <Badge variant="secondary">{tStatus(status.label)}</Badge>
-                      <ArrowRight className="text-muted-foreground size-4 transition-transform duration-150 group-hover:translate-x-0.5" />
-                    </div>
-                  </button>
-                );
-              }
+              // Channel changes WHICH metrics a row reports, never how the
+              // row is SHAPED. Carriers give us no read/reply receipts for
+              // SMS, so that column set trades Read/Replied for Sent/Failed
+              // — but both channels render through the same 4-up grid so the
+              // list reads as one table instead of two competing layouts.
+              const metrics: {
+                label: string;
+                value: number;
+                rate: number | null;
+                tone?: 'critical';
+              }[] = isSms
+                ? [
+                    {
+                      label: 'Recipients',
+                      value: broadcast.total_recipients,
+                      rate: null,
+                    },
+                    { label: 'Sent', value: broadcast.sent_count, rate: null },
+                    {
+                      label: 'Delivered',
+                      value: broadcast.delivered_count,
+                      rate: deliveryRate,
+                    },
+                    {
+                      label: 'Failed',
+                      value: broadcast.failed_count,
+                      rate: null,
+                      tone:
+                        broadcast.failed_count > 0 ? 'critical' : undefined,
+                    },
+                  ]
+                : [
+                    {
+                      label: 'Recipients',
+                      value: broadcast.total_recipients,
+                      rate: null,
+                    },
+                    {
+                      label: 'Delivered',
+                      value: broadcast.delivered_count,
+                      rate: deliveryRate,
+                    },
+                    {
+                      label: 'Read',
+                      value: broadcast.read_count,
+                      rate: readRate,
+                    },
+                    {
+                      label: 'Replied',
+                      value: broadcast.replied_count,
+                      rate: replyRate,
+                    },
+                  ];
 
               return (
                 <button
@@ -352,7 +336,7 @@ export default function BroadcastsPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex min-w-0 items-start gap-3">
                       <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
-                        <MessageCircle className="size-5" />
+                        <ChannelIcon className="size-5" aria-hidden="true" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -363,7 +347,7 @@ export default function BroadcastsPage() {
                             variant="outline"
                             className="text-[10px] tracking-wider uppercase"
                           >
-                            WhatsApp
+                            {isSms ? 'SMS' : 'WhatsApp'}
                           </Badge>
                           <Badge variant="secondary">
                             {tStatus(status.label)}
@@ -378,28 +362,7 @@ export default function BroadcastsPage() {
                     <ArrowRight className="text-muted-foreground size-4 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5" />
                   </div>
                   <div className="border-border bg-border grid gap-px overflow-hidden rounded-lg border sm:grid-cols-4">
-                    {[
-                      {
-                        label: 'Recipients',
-                        value: broadcast.total_recipients,
-                        rate: 100,
-                      },
-                      {
-                        label: 'Delivered',
-                        value: broadcast.delivered_count,
-                        rate: deliveryRate,
-                      },
-                      {
-                        label: 'Read',
-                        value: broadcast.read_count,
-                        rate: readRate,
-                      },
-                      {
-                        label: 'Replied',
-                        value: broadcast.replied_count,
-                        rate: replyRate,
-                      },
-                    ].map((metric) => (
+                    {metrics.map((metric) => (
                       <div
                         key={metric.label}
                         className="bg-background px-4 py-3"
@@ -408,13 +371,20 @@ export default function BroadcastsPage() {
                           <span className="text-muted-foreground text-xs">
                             {metric.label}
                           </span>
-                          {metric.label !== 'Recipients' && (
+                          {metric.rate !== null && (
                             <span className="text-muted-foreground text-[10px] tabular-nums">
                               {metric.rate}%
                             </span>
                           )}
                         </div>
-                        <p className="text-foreground mt-1 text-lg font-semibold tabular-nums">
+                        <p
+                          className={cn(
+                            'mt-1 text-lg font-semibold tabular-nums',
+                            metric.tone === 'critical'
+                              ? 'text-destructive'
+                              : 'text-foreground'
+                          )}
+                        >
                           {metric.value.toLocaleString()}
                         </p>
                       </div>
