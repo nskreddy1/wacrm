@@ -1,0 +1,4 @@
+interface:
+  display_name: "Compact Landing"
+  short_description: "Distinct compact pages without repeated templates"
+  default_prompt: "Use $compact-landing to choose a fresh design fingerprint, then build a compact, product-specific landing page with one clear CTA and zero layout shift."

@@ -14,16 +14,29 @@ import { useBroadcastSending } from '@/features/broadcasts/hooks/use-broadcast-s
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   ArrowLeft,
+  ArrowRight,
   Check,
   FileText,
+  Loader2,
   Mail,
   MessageCircle,
   MessageSquare,
+  Save,
+  Send,
   SlidersHorizontal,
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslations } from 'next-intl';
 
 const steps = [
   { label: 'Template', description: 'Choose approved content', icon: FileText },
@@ -42,8 +55,24 @@ const steps = [
 
 type BroadcastChannel = 'whatsapp' | 'sms' | 'email';
 
+const CHANNEL_META: Record<
+  BroadcastChannel,
+  { label: string; icon: typeof MessageCircle }
+> = {
+  whatsapp: { label: 'WhatsApp', icon: MessageCircle },
+  sms: { label: 'SMS', icon: MessageSquare },
+  email: { label: 'Email', icon: Mail },
+};
+
+/** What a step reports back so the shared action bar can gate "Next". */
+interface StepGate {
+  ready: boolean;
+  reason?: string;
+}
+
 export default function NewBroadcastPage() {
   const router = useRouter();
+  const t = useTranslations('Broadcasts.wizard');
   const { accountId } = useAuth();
   const { createAndSendBroadcast, isProcessing, progress } =
     useBroadcastSending();
@@ -79,6 +108,16 @@ export default function NewBroadcastPage() {
   >({});
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [name, setName] = useState('');
+  // Gates published by the steps that own non-trivial validation.
+  const [audienceGate, setAudienceGate] = useState<StepGate>({ ready: true });
+  const [personalizeGate, setPersonalizeGate] = useState<StepGate>({
+    ready: false,
+  });
+  // Single source of truth for reach: step 2 already resolves it exactly
+  // (tags, custom fields, CSV, external sources, minus exclusions), so it
+  // is lifted here instead of being re-derived — and wrongly — in step 4.
+  const [estimatedReach, setEstimatedReach] = useState<number | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,15 +247,13 @@ export default function NewBroadcastPage() {
       channel={channel}
       selectedTemplate={template}
       onSelect={setTemplate}
-      onNext={() => setCurrentStep(1)}
-      onBack={() => router.push('/broadcasts')}
     />,
     <Step2SelectAudience
       key="audience"
       audience={audience}
       onUpdate={setAudience}
-      onNext={() => setCurrentStep(2)}
-      onBack={() => setCurrentStep(0)}
+      onGateChange={setAudienceGate}
+      onEstimateChange={setEstimatedReach}
     />,
     template ? (
       <Step3Personalize
@@ -230,8 +267,7 @@ export default function NewBroadcastPage() {
         externalParamMap={
           audience.type === 'external' ? audience.externalParamMap : undefined
         }
-        onNext={() => setCurrentStep(3)}
-        onBack={() => setCurrentStep(1)}
+        onGateChange={setPersonalizeGate}
       />
     ) : null,
     template ? (
@@ -240,22 +276,43 @@ export default function NewBroadcastPage() {
         name={name}
         onNameChange={setName}
         template={template}
+        channel={channel}
         audience={audience}
-        onSend={handleSend}
-        onSaveDraft={handleSaveDraft}
-        onBack={() => setCurrentStep(2)}
+        estimatedReach={estimatedReach}
         isProcessing={isProcessing}
         progress={progress}
       />
     ) : null,
   ];
 
+  // One place decides what the footer does on each step, so the primary
+  // action can live in a bar that is pinned and always reachable.
+  const gate: StepGate =
+    currentStep === 0
+      ? {
+          ready: Boolean(template),
+          reason: template ? undefined : t('chooseTemplate.selectToContinue'),
+        }
+      : currentStep === 1
+        ? audienceGate
+        : currentStep === 2
+          ? personalizeGate
+          : {
+              ready: Boolean(name.trim()) && !isProcessing,
+              reason: name.trim() ? undefined : t('actions.nameRequired'),
+            };
+
+  const isLastStep = currentStep === steps.length - 1;
+
   return (
-    // Plain <div>: the dashboard shell already provides <main>.
-    <div className="bg-muted/20 min-h-full">
-      <header className="border-border bg-background border-b">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
+    // Plain <div>: the dashboard shell already provides <main>. h-full +
+    // min-h-0 hands the scroll to the content column below, so the action
+    // bar stays on screen at any zoom level instead of being clipped by
+    // the shell's overflow-hidden wrapper.
+    <div className="bg-muted/20 flex h-full min-h-0 flex-col">
+      <header className="border-border bg-background shrink-0 border-b">
+        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
@@ -265,12 +322,9 @@ export default function NewBroadcastPage() {
               <ArrowLeft />
             </Button>
             <div className="min-w-0">
-              <h1 className="text-foreground truncate text-lg font-semibold">
+              <h1 className="text-foreground truncate text-base font-semibold">
                 Create broadcast
               </h1>
-              <p className="text-muted-foreground hidden text-xs sm:block">
-                Build a targeted campaign with confidence.
-              </p>
             </div>
           </div>
           <Badge variant="outline">
@@ -279,25 +333,25 @@ export default function NewBroadcastPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1500px] lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="border-border bg-card border-b p-4 lg:min-h-[calc(100vh-73px)] lg:border-r lg:border-b-0 lg:p-6">
-          <div className="flex gap-2 lg:flex-col">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+        <aside className="border-border bg-card shrink-0 border-b px-4 py-3 lg:min-h-0 lg:overflow-y-auto lg:border-r lg:border-b-0 lg:px-4 lg:py-5">
+          <ol className="flex gap-1 lg:flex-col">
             {steps.map((step, index) => {
               const Icon = step.icon;
               const completed = index < currentStep;
               const active = index === currentStep;
               return (
-                <div
+                <li
                   key={step.label}
                   className={cn(
-                    'flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5',
+                    'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2',
                     active && 'bg-primary/10'
                   )}
                   aria-current={active ? 'step' : undefined}
                 >
-                  <div
+                  <span
                     className={cn(
-                      'flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
+                      'flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
                       completed &&
                         'border-primary bg-primary text-primary-foreground',
                       active && !completed && 'border-primary text-primary',
@@ -307,63 +361,52 @@ export default function NewBroadcastPage() {
                     )}
                   >
                     {completed ? (
-                      <Check className="size-4" />
+                      <Check className="size-3.5" />
                     ) : (
-                      <Icon className="size-4" />
+                      <Icon className="size-3.5" />
                     )}
-                  </div>
-                  <div className="hidden min-w-0 lg:block">
-                    <p
-                      className={cn(
-                        'text-sm font-medium',
-                        active || completed
-                          ? 'text-foreground'
-                          : 'text-muted-foreground'
-                      )}
-                    >
-                      {step.label}
-                    </p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {step.description}
-                    </p>
-                  </div>
-                </div>
+                  </span>
+                  <span
+                    className={cn(
+                      'hidden truncate text-sm font-medium lg:block',
+                      active || completed
+                        ? 'text-foreground'
+                        : 'text-muted-foreground'
+                    )}
+                  >
+                    {step.label}
+                  </span>
+                </li>
               );
             })}
-          </div>
-          <div className="border-border mt-6 hidden border-t pt-6 lg:block">
-            <p className="text-muted-foreground mb-3 text-xs font-medium tracking-wider uppercase">
+          </ol>
+
+          <div className="border-border mt-3 border-t pt-3 lg:mt-5 lg:pt-5">
+            <p className="text-muted-foreground mb-2 text-[11px] font-medium tracking-wider uppercase">
               Delivery channel
             </p>
             {enabledChannels === null ? (
-              <div className="bg-muted h-20 animate-pulse rounded-lg" />
+              <div className="bg-muted h-9 animate-pulse rounded-lg" />
             ) : enabledChannels.length === 0 ? (
               <p className="text-destructive text-xs leading-5">
                 Connect WhatsApp, SMS, or Email in Settings before creating a
                 broadcast.
               </p>
             ) : (
-              <div className="flex flex-col gap-2">
+              // Horizontal on small screens, stacked on desktop — the old
+              // layout hid the selector below lg, so phone users were
+              // silently locked to WhatsApp.
+              <div className="flex flex-wrap gap-2 lg:flex-col">
                 {enabledChannels.map((value) => {
-                  const Icon =
-                    value === 'whatsapp'
-                      ? MessageCircle
-                      : value === 'sms'
-                        ? MessageSquare
-                        : Mail;
-                  const label =
-                    value === 'whatsapp'
-                      ? 'WhatsApp'
-                      : value === 'sms'
-                        ? 'SMS'
-                        : 'Email';
+                  const { label, icon: Icon } = CHANNEL_META[value];
                   return (
                     <button
                       key={value}
                       type="button"
                       onClick={() => handleChannelChange(value)}
+                      aria-pressed={channel === value}
                       className={cn(
-                        'flex items-center gap-3 rounded-lg border p-3 text-left text-sm font-medium transition-colors duration-150',
+                        'flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors duration-150',
                         channel === value
                           ? 'border-primary bg-primary/5 text-foreground'
                           : 'border-border text-muted-foreground hover:bg-muted'
@@ -379,19 +422,114 @@ export default function NewBroadcastPage() {
           </div>
         </aside>
 
-        <section className="min-w-0 p-4 sm:p-6 lg:p-8">
-          <div className="border-border bg-card mx-auto max-w-4xl rounded-xl border p-5 shadow-sm sm:p-7 lg:p-8">
-            <div
-              className={cn(
-                'transition-opacity duration-150',
-                isProcessing && 'pointer-events-none opacity-60'
-              )}
-            >
-              {stepContent[currentStep]}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+            <div className="border-border bg-card mx-auto max-w-4xl rounded-xl border p-5 shadow-sm sm:p-6">
+              <div
+                className={cn(
+                  'transition-opacity duration-150',
+                  isProcessing && 'pointer-events-none opacity-60'
+                )}
+              >
+                {stepContent[currentStep]}
+              </div>
             </div>
           </div>
-        </section>
+
+          {/* Pinned action bar: the wizard's primary action never scrolls
+              out of reach, and the reach estimate travels with it so the
+              consequence of "Send" is visible at the moment of the click. */}
+          <div className="border-border bg-background/95 shrink-0 border-t backdrop-blur">
+            <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    currentStep === 0
+                      ? router.push('/broadcasts')
+                      : setCurrentStep(currentStep - 1)
+                  }
+                  disabled={isProcessing}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  {t('back')}
+                </Button>
+                <p className="text-muted-foreground min-w-0 truncate text-xs">
+                  {gate.ready
+                    ? estimatedReach === null
+                      ? CHANNEL_META[channel].label
+                      : `${estimatedReach.toLocaleString()} ${t('actions.recipients')} · ${CHANNEL_META[channel].label}`
+                    : gate.reason}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {isLastStep && (
+                  <Button
+                    variant="outline"
+                    onClick={handleSaveDraft}
+                    disabled={!name.trim() || isProcessing}
+                  >
+                    <Save className="h-4 w-4" />
+                    {t('scheduleSend.saveDraft')}
+                  </Button>
+                )}
+                <Button
+                  onClick={() =>
+                    isLastStep
+                      ? setShowConfirm(true)
+                      : setCurrentStep(currentStep + 1)
+                  }
+                  disabled={!gate.ready || isProcessing}
+                >
+                  {isProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isLastStep ? t('scheduleSend.sendNow') : t('next')}
+                  {isLastStep ? (
+                    <Send className="h-4 w-4" />
+                  ) : (
+                    <ArrowRight className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <DialogContent className="border-border bg-popover sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-popover-foreground">
+              Confirm broadcast
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              You are about to send this broadcast to{' '}
+              <span className="text-popover-foreground font-medium">
+                {(estimatedReach ?? 0).toLocaleString()}
+              </span>{' '}
+              contacts over {CHANNEL_META[channel].label} using the{' '}
+              <span className="text-popover-foreground font-medium">
+                {template?.name}
+              </span>{' '}
+              template. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirm(false)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              onClick={() => {
+                setShowConfirm(false);
+                void handleSend();
+              }}
+            >
+              <Send className="h-4 w-4" />
+              {t('scheduleSend.sendNow')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

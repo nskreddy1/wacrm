@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { routes } from '@/lib/routing/routes';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
-import { FileText, ArrowRight, Plus } from 'lucide-react';
+import { FileText, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 const categoryColors: Record<string, string> = {
@@ -26,16 +26,12 @@ interface Step1Props {
   channel?: 'whatsapp' | 'sms' | 'email';
   selectedTemplate: MessageTemplate | null;
   onSelect: (template: MessageTemplate) => void;
-  onNext: () => void;
-  onBack: () => void;
 }
 
 export function Step1ChooseTemplate({
   channel = 'whatsapp',
   selectedTemplate,
   onSelect,
-  onNext,
-  onBack,
 }: Step1Props) {
   const t = useTranslations('Broadcasts.wizard');
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -185,32 +181,6 @@ export function Step1ChooseTemplate({
         </div>
       )}
 
-      <div className="border-border flex items-center justify-between border-t pt-4">
-        <Button
-          variant="outline"
-          onClick={onBack}
-          className="border-border text-muted-foreground"
-        >
-          {t('back')}
-        </Button>
-        {/* A disabled primary button with no explanation reads as a bug.
-            Name the blocking condition instead. */}
-        <div className="flex items-center gap-3">
-          {!selectedTemplate && templates.length > 0 && (
-            <p className="text-muted-foreground text-xs">
-              {t('chooseTemplate.selectToContinue')}
-            </p>
-          )}
-          <Button
-            onClick={onNext}
-            disabled={!selectedTemplate}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {t('next')}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

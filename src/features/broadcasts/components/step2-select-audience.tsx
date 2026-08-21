@@ -123,15 +123,17 @@ async function estimateAudienceCount(
 interface Step2Props {
   audience: AudienceConfig;
   onUpdate: (audience: AudienceConfig) => void;
-  onNext: () => void;
-  onBack: () => void;
+  /** Publishes "can the wizard advance, and if not why" to the action bar. */
+  onGateChange: (gate: { ready: boolean; reason?: string }) => void;
+  /** Lifts the resolved recipient count so the shell owns one estimate. */
+  onEstimateChange: (count: number | null) => void;
 }
 
 export function Step2SelectAudience({
   audience,
   onUpdate,
-  onNext,
-  onBack,
+  onGateChange,
+  onEstimateChange,
 }: Step2Props) {
   const t = useTranslations('Broadcasts.wizard');
 
@@ -366,23 +368,44 @@ export function Step2SelectAudience({
     onUpdate({ ...audience, customField: { ...prev, ...patch } });
   }
 
-  const isValid =
+  const isValid = Boolean(
     audience.type === 'all' ||
-    (audience.type === 'tags' &&
-      audience.tagIds &&
-      audience.tagIds.length > 0) ||
-    (audience.type === 'custom_field' &&
-      !!audience.customField?.fieldId &&
-      audience.customField.value.length > 0) ||
-    (audience.type === 'csv' &&
-      audience.csvContacts &&
-      audience.csvContacts.length > 0) ||
-    (audience.type === 'external' &&
-      !!audience.externalSourceId &&
-      (audience.externalCount ?? 0) > 0 &&
-      !previewCapped &&
-      !previewError &&
-      !previewing);
+      (audience.type === 'tags' &&
+        audience.tagIds &&
+        audience.tagIds.length > 0) ||
+      (audience.type === 'custom_field' &&
+        !!audience.customField?.fieldId &&
+        audience.customField.value.length > 0) ||
+      (audience.type === 'csv' &&
+        audience.csvContacts &&
+        audience.csvContacts.length > 0) ||
+      (audience.type === 'external' &&
+        !!audience.externalSourceId &&
+        (audience.externalCount ?? 0) > 0 &&
+        !previewCapped &&
+        !previewError &&
+        !previewing)
+  );
+
+  // Name the blocking condition rather than shipping a mute disabled
+  // button — the action bar renders this next to "Next".
+  const blockedReason = isValid
+    ? undefined
+    : audience.type === 'tags'
+      ? t('selectAudience.selectTags')
+      : audience.type === 'custom_field'
+        ? t('selectAudience.selectField')
+        : audience.type === 'csv'
+          ? t('selectAudience.uploadCsv')
+          : t('selectAudience.selectSource');
+
+  useEffect(() => {
+    onGateChange({ ready: isValid, reason: blockedReason });
+  }, [isValid, blockedReason, onGateChange]);
+
+  useEffect(() => {
+    onEstimateChange(loadingCount ? null : estimatedCount);
+  }, [estimatedCount, loadingCount, onEstimateChange]);
 
   return (
     <div className="space-y-6">
