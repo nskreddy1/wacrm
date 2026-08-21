@@ -4,15 +4,12 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import useSWR from 'swr';
 import { createClient } from '@/lib/supabase/client';
 import { CustomField, Tag } from '@/types';
-import { Button } from '@/components/ui/button';
 import {
   Users,
   Tags,
   Filter,
   Upload,
   Loader2,
-  ArrowRight,
-  ArrowLeft,
   X,
   Database,
   AlertTriangle,
@@ -123,15 +120,17 @@ async function estimateAudienceCount(
 interface Step2Props {
   audience: AudienceConfig;
   onUpdate: (audience: AudienceConfig) => void;
-  onNext: () => void;
-  onBack: () => void;
+  /** Publishes "can the wizard advance, and if not why" to the action bar. */
+  onGateChange: (gate: { ready: boolean; reason?: string }) => void;
+  /** Lifts the resolved recipient count so the shell owns one estimate. */
+  onEstimateChange: (count: number | null) => void;
 }
 
 export function Step2SelectAudience({
   audience,
   onUpdate,
-  onNext,
-  onBack,
+  onGateChange,
+  onEstimateChange,
 }: Step2Props) {
   const t = useTranslations('Broadcasts.wizard');
 
@@ -366,23 +365,44 @@ export function Step2SelectAudience({
     onUpdate({ ...audience, customField: { ...prev, ...patch } });
   }
 
-  const isValid =
+  const isValid = Boolean(
     audience.type === 'all' ||
-    (audience.type === 'tags' &&
-      audience.tagIds &&
-      audience.tagIds.length > 0) ||
-    (audience.type === 'custom_field' &&
-      !!audience.customField?.fieldId &&
-      audience.customField.value.length > 0) ||
-    (audience.type === 'csv' &&
-      audience.csvContacts &&
-      audience.csvContacts.length > 0) ||
-    (audience.type === 'external' &&
-      !!audience.externalSourceId &&
-      (audience.externalCount ?? 0) > 0 &&
-      !previewCapped &&
-      !previewError &&
-      !previewing);
+      (audience.type === 'tags' &&
+        audience.tagIds &&
+        audience.tagIds.length > 0) ||
+      (audience.type === 'custom_field' &&
+        !!audience.customField?.fieldId &&
+        audience.customField.value.length > 0) ||
+      (audience.type === 'csv' &&
+        audience.csvContacts &&
+        audience.csvContacts.length > 0) ||
+      (audience.type === 'external' &&
+        !!audience.externalSourceId &&
+        (audience.externalCount ?? 0) > 0 &&
+        !previewCapped &&
+        !previewError &&
+        !previewing)
+  );
+
+  // Name the blocking condition rather than shipping a mute disabled
+  // button — the action bar renders this next to "Next".
+  const blockedReason = isValid
+    ? undefined
+    : audience.type === 'tags'
+      ? t('selectAudience.selectTags')
+      : audience.type === 'custom_field'
+        ? t('selectAudience.selectField')
+        : audience.type === 'csv'
+          ? t('selectAudience.uploadCsv')
+          : t('selectAudience.selectSource');
+
+  useEffect(() => {
+    onGateChange({ ready: isValid, reason: blockedReason });
+  }, [isValid, blockedReason, onGateChange]);
+
+  useEffect(() => {
+    onEstimateChange(loadingCount ? null : estimatedCount);
+  }, [estimatedCount, loadingCount, onEstimateChange]);
 
   return (
     <div className="space-y-6">
@@ -679,51 +699,6 @@ export function Step2SelectAudience({
         )}
       </div>
 
-      {/* Audience Summary */}
-      <div className="border-border bg-card/50 rounded-xl border p-4">
-        <p className="text-foreground mb-2 text-sm font-medium">
-          Audience Summary
-        </p>
-        {loadingCount ? (
-          <div className="flex items-center gap-2">
-            <Loader2 className="text-primary h-4 w-4 animate-spin" />
-            <span className="text-muted-foreground text-xs">Calculating…</span>
-          </div>
-        ) : estimatedCount !== null ? (
-          <div className="flex items-center gap-2">
-            <Users className="text-primary h-4 w-4" />
-            <span className="text-foreground text-sm">
-              {estimatedCount.toLocaleString()}
-            </span>
-            <span className="text-muted-foreground text-xs">
-              estimated recipients
-            </span>
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-xs">
-            Select an audience type to see the estimate.
-          </p>
-        )}
-      </div>
-
-      <div className="border-border flex items-center justify-between border-t pt-4">
-        <Button
-          variant="outline"
-          onClick={onBack}
-          className="border-border text-muted-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t('back')}
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={!isValid}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {t('next')}
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-      </div>
     </div>
   );
 }

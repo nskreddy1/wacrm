@@ -1,0 +1,1070 @@
+{
+  "12-principles-of-animation": {
+    "name": "12-principles-of-animation",
+    "skill": "12-principles-of-animation",
+    "source": "raphaelsalaja/skill",
+    "catalogue": "https://www.ui-skills.com/skills/raphaelsalaja/12-principles-of-animation"
+  },
+  "60fps-animation": {
+    "name": "60fps-animation",
+    "skill": "60fps-animation",
+    "source": "iart-ai/web-animation-skills",
+    "catalogue": "https://www.ui-skills.com/skills/iart-ai/60fps-animation"
+  },
+  "accessibility-audit": {
+    "name": "accessibility-audit",
+    "skill": "audit-and-fix",
+    "source": "AccessLint/claude-marketplace",
+    "catalogue": "https://www.ui-skills.com/skills/accesslint/audit-and-fix"
+  },
+  "accessible-animation": {
+    "name": "accessible-animation",
+    "skill": "accessible-animation",
+    "source": "iart-ai/web-animation-skills",
+    "catalogue": "https://www.ui-skills.com/skills/iart-ai/accessible-animation"
+  },
+  "agent-browser": {
+    "name": "agent-browser",
+    "skill": "agent-browser",
+    "source": "vercel-labs/agent-browser",
+    "catalogue": "https://www.ui-skills.com/skills/vercel-labs/agent-browser"
+  },
+  "animation-on-scroll": {
+    "name": "animation-on-scroll",
+    "skill": "animation-on-scroll",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/animation-on-scroll"
+  },
+  "animation-systems": {
+    "name": "animation-systems",
+    "skill": "animation-systems",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/animation-systems"
+  },
+  "antfu": {
+    "name": "antfu",
+    "skill": "antfu",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/antfu"
+  },
+  "anthropics-canvas-design": {
+    "name": "anthropics-canvas-design",
+    "skill": "canvas-design",
+    "source": "anthropics/skills",
+    "catalogue": "https://www.ui-skills.com/skills/anthropics/canvas-design"
+  },
+  "anthropics-frontend-design": {
+    "name": "anthropics-frontend-design",
+    "skill": "frontend-design",
+    "source": "anthropics/skills",
+    "catalogue": "https://www.ui-skills.com/skills/anthropics/frontend-design"
+  },
+  "apply-design-system": {
+    "name": "apply-design-system",
+    "skill": "apply-design-system",
+    "source": "edenspiekermann/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/edenspiekermann/apply-design-system"
+  },
+  "ask-matt": {
+    "name": "ask-matt",
+    "skill": "ask-matt",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/ask-matt"
+  },
+  "audit-design-system": {
+    "name": "audit-design-system",
+    "skill": "audit-design-system",
+    "source": "edenspiekermann/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/edenspiekermann/audit-design-system"
+  },
+  "baseline-ui": {
+    "name": "baseline-ui",
+    "skill": "baseline-ui",
+    "source": "ibelick/ui-skills",
+    "catalogue": "https://www.ui-skills.com/skills/ibelick/baseline-ui"
+  },
+  "beautiful-shadows": {
+    "name": "beautiful-shadows",
+    "skill": "beautiful-shadows",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/beautiful-shadows"
+  },
+  "bencium-innovative-ux-designer": {
+    "name": "bencium-innovative-ux-designer",
+    "skill": "bencium-innovative-ux-designer",
+    "source": "bencium/bencium-marketplace",
+    "catalogue": "https://www.ui-skills.com/skills/bencium/bencium-innovative-ux-designer"
+  },
+  "better-accessibility": {
+    "name": "better-accessibility",
+    "skill": "better-accessibility",
+    "source": "jakubkrehel/skills",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/better-accessibility"
+  },
+  "better-colors": {
+    "name": "better-colors",
+    "skill": "better-colors",
+    "source": "jakubkrehel/skills",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/better-colors"
+  },
+  "better-interface": {
+    "name": "better-interface",
+    "skill": "better-interface",
+    "source": "jakubkrehel/skills",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/better-interface"
+  },
+  "better-layout": {
+    "name": "better-layout",
+    "skill": "better-layout",
+    "source": "jakubkrehel/skills",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/better-layout"
+  },
+  "better-typography": {
+    "name": "better-typography",
+    "skill": "better-typography",
+    "source": "jakubkrehel/skills",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/better-typography"
+  },
+  "better-ui": {
+    "name": "better-ui",
+    "skill": "better-ui",
+    "source": "jakubkrehel/skills",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/better-ui"
+  },
+  "better-writing": {
+    "name": "better-writing",
+    "skill": "better-writing",
+    "source": "jakubkrehel/skills",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/better-writing"
+  },
+  "brag": {
+    "name": "brag",
+    "skill": "brag",
+    "source": "latent-spaces/brag",
+    "catalogue": "https://www.ui-skills.com/skills/latent-spaces/brag"
+  },
+  "brutalist-skill": {
+    "name": "brutalist-skill",
+    "skill": "industrial-brutalist-ui",
+    "source": "Leonxlnx/taste-skill",
+    "catalogue": "https://www.ui-skills.com/skills/leonxlnx/brutalist-skill"
+  },
+  "budge": {
+    "name": "budge",
+    "skill": "budge",
+    "source": "millionco/skills",
+    "catalogue": "https://www.ui-skills.com/skills/millionco/budge"
+  },
+  "build-primitive": {
+    "name": "build-primitive",
+    "skill": "build-primitive",
+    "source": "PrototyperAI/prototyper-ui",
+    "catalogue": "https://www.ui-skills.com/skills/prototyperai/build-primitive"
+  },
+  "cc-figma-component": {
+    "name": "cc-figma-component",
+    "skill": "cc-figma-component",
+    "source": "nvillapiano/component-contracts-figma",
+    "catalogue": "https://www.ui-skills.com/skills/nvillapiano/cc-figma-component"
+  },
+  "cc-figma-tokens": {
+    "name": "cc-figma-tokens",
+    "skill": "cc-figma-tokens",
+    "source": "nvillapiano/component-contracts-figma",
+    "catalogue": "https://www.ui-skills.com/skills/nvillapiano/cc-figma-tokens"
+  },
+  "cobejs": {
+    "name": "cobejs",
+    "skill": "cobejs",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/cobejs"
+  },
+  "codebase-design": {
+    "name": "codebase-design",
+    "skill": "codebase-design",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/codebase-design"
+  },
+  "compact-landing": {
+    "name": "compact-landing",
+    "skill": "compact-landing",
+    "source": "Danilaa1/compact-landing-skill",
+    "catalogue": "https://www.ui-skills.com/skills/danilaa1/compact-landing"
+  },
+  "company-logos": {
+    "name": "company-logos",
+    "skill": "company-logos",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/company-logos"
+  },
+  "container-lines": {
+    "name": "container-lines",
+    "skill": "container-lines",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/container-lines"
+  },
+  "create-adaptable-composable": {
+    "name": "create-adaptable-composable",
+    "skill": "create-adaptable-composable",
+    "source": "vuejs-ai/skills",
+    "catalogue": "https://www.ui-skills.com/skills/vuejs-ai/create-adaptable-composable"
+  },
+  "create-design-md": {
+    "name": "create-design-md",
+    "skill": "create-design-md",
+    "source": "ibelick/ui-skills",
+    "catalogue": "https://www.ui-skills.com/skills/ibelick/create-design-md"
+  },
+  "create-voice": {
+    "name": "create-voice",
+    "skill": "create-voice",
+    "source": "redongreen/uSpec",
+    "catalogue": "https://www.ui-skills.com/skills/redongreen/create-voice"
+  },
+  "daisyui": {
+    "name": "daisyui",
+    "skill": "daisyui",
+    "source": "saadeghi/daisyui",
+    "catalogue": "https://www.ui-skills.com/skills/saadeghi/daisyui"
+  },
+  "design-first-ui-prompting": {
+    "name": "design-first-ui-prompting",
+    "skill": "design-first-ui-prompting",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/design-first-ui-prompting"
+  },
+  "design-lab": {
+    "name": "design-lab",
+    "skill": "design-lab",
+    "source": "0xdesign/design-plugin",
+    "catalogue": "https://www.ui-skills.com/skills/0xdesign/design-lab"
+  },
+  "diagnosing-bugs": {
+    "name": "diagnosing-bugs",
+    "skill": "diagnosing-bugs",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/diagnosing-bugs"
+  },
+  "domain-modeling": {
+    "name": "domain-modeling",
+    "skill": "domain-modeling",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/domain-modeling"
+  },
+  "effect": {
+    "name": "effect",
+    "skill": "effect",
+    "source": "kitlangton/skills",
+    "catalogue": "https://www.ui-skills.com/skills/kitlangton/effect"
+  },
+  "emilkowalski-animation-vocabulary": {
+    "name": "emilkowalski-animation-vocabulary",
+    "skill": "animation-vocabulary",
+    "source": "emilkowalski/skills",
+    "catalogue": "https://www.ui-skills.com/skills/emilkowalski/animation-vocabulary"
+  },
+  "emilkowalski-apple-design": {
+    "name": "emilkowalski-apple-design",
+    "skill": "apple-design",
+    "source": "emilkowalski/skills",
+    "catalogue": "https://www.ui-skills.com/skills/emilkowalski/apple-design"
+  },
+  "emilkowalski-emil-design-eng": {
+    "name": "emilkowalski-emil-design-eng",
+    "skill": "emil-design-eng",
+    "source": "emilkowalski/skills",
+    "catalogue": "https://www.ui-skills.com/skills/emilkowalski/emil-design-eng"
+  },
+  "emilkowalski-find-animation-opportunities": {
+    "name": "emilkowalski-find-animation-opportunities",
+    "skill": "find-animation-opportunities",
+    "source": "emilkowalski/skills",
+    "catalogue": "https://www.ui-skills.com/skills/emilkowalski/find-animation-opportunities"
+  },
+  "emilkowalski-improve-animations": {
+    "name": "emilkowalski-improve-animations",
+    "skill": "improve-animations",
+    "source": "emilkowalski/skills",
+    "catalogue": "https://www.ui-skills.com/skills/emilkowalski/improve-animations"
+  },
+  "emilkowalski-pick-ui-library": {
+    "name": "emilkowalski-pick-ui-library",
+    "skill": "pick-ui-library",
+    "source": "emilkowalski/skills",
+    "catalogue": "https://www.ui-skills.com/skills/emilkowalski/pick-ui-library"
+  },
+  "emilkowalski-review-animations": {
+    "name": "emilkowalski-review-animations",
+    "skill": "review-animations",
+    "source": "emilkowalski/skills",
+    "catalogue": "https://www.ui-skills.com/skills/emilkowalski/review-animations"
+  },
+  "figma-generate-design": {
+    "name": "figma-generate-design",
+    "skill": "figma-generate-design",
+    "source": "figma/mcp-server-guide",
+    "catalogue": "https://www.ui-skills.com/skills/figma/figma-generate-design"
+  },
+  "figma-generate-library": {
+    "name": "figma-generate-library",
+    "skill": "figma-generate-library",
+    "source": "figma/mcp-server-guide",
+    "catalogue": "https://www.ui-skills.com/skills/figma/figma-generate-library"
+  },
+  "figma-use": {
+    "name": "figma-use",
+    "skill": "figma-use",
+    "source": "figma/mcp-server-guide",
+    "catalogue": "https://www.ui-skills.com/skills/figma/figma-use"
+  },
+  "fixing-accessibility": {
+    "name": "fixing-accessibility",
+    "skill": "fixing-accessibility",
+    "source": "ibelick/ui-skills",
+    "catalogue": "https://www.ui-skills.com/skills/ibelick/fixing-accessibility"
+  },
+  "fixing-metadata": {
+    "name": "fixing-metadata",
+    "skill": "fixing-metadata",
+    "source": "ibelick/ui-skills",
+    "catalogue": "https://www.ui-skills.com/skills/ibelick/fixing-metadata"
+  },
+  "fixing-motion-performance": {
+    "name": "fixing-motion-performance",
+    "skill": "fixing-motion-performance",
+    "source": "ibelick/ui-skills",
+    "catalogue": "https://www.ui-skills.com/skills/ibelick/fixing-motion-performance"
+  },
+  "frontend-slides": {
+    "name": "frontend-slides",
+    "skill": "frontend-slides",
+    "source": "zarazhangrui/frontend-slides",
+    "catalogue": "https://www.ui-skills.com/skills/zarazhangrui/frontend-slides"
+  },
+  "frontend-ui-engineering": {
+    "name": "frontend-ui-engineering",
+    "skill": "frontend-ui-engineering",
+    "source": "addyosmani/agent-skills",
+    "catalogue": "https://www.ui-skills.com/skills/addyosmani/frontend-ui-engineering"
+  },
+  "generating-sounds-with-ai": {
+    "name": "generating-sounds-with-ai",
+    "skill": "generating-sounds-with-ai",
+    "source": "raphaelsalaja/skill",
+    "catalogue": "https://www.ui-skills.com/skills/raphaelsalaja/generating-sounds-with-ai"
+  },
+  "gh-stack": {
+    "name": "gh-stack",
+    "skill": "gh-stack",
+    "source": "github/gh-stack",
+    "catalogue": "https://www.ui-skills.com/skills/github/gh-stack"
+  },
+  "gpt-tasteskill": {
+    "name": "gpt-tasteskill",
+    "skill": "gpt-taste",
+    "source": "Leonxlnx/taste-skill",
+    "catalogue": "https://www.ui-skills.com/skills/leonxlnx/gpt-tasteskill"
+  },
+  "grill-with-docs": {
+    "name": "grill-with-docs",
+    "skill": "grill-with-docs",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/grill-with-docs"
+  },
+  "gsap": {
+    "name": "gsap",
+    "skill": "gsap",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/gsap"
+  },
+  "gsap-core": {
+    "name": "gsap-core",
+    "skill": "gsap-core",
+    "source": "greensock/gsap-skills",
+    "catalogue": "https://www.ui-skills.com/skills/greensock/gsap-core"
+  },
+  "gsap-frameworks": {
+    "name": "gsap-frameworks",
+    "skill": "gsap-frameworks",
+    "source": "greensock/gsap-skills",
+    "catalogue": "https://www.ui-skills.com/skills/greensock/gsap-frameworks"
+  },
+  "gsap-performance": {
+    "name": "gsap-performance",
+    "skill": "gsap-performance",
+    "source": "greensock/gsap-skills",
+    "catalogue": "https://www.ui-skills.com/skills/greensock/gsap-performance"
+  },
+  "gsap-plugins": {
+    "name": "gsap-plugins",
+    "skill": "gsap-plugins",
+    "source": "greensock/gsap-skills",
+    "catalogue": "https://www.ui-skills.com/skills/greensock/gsap-plugins"
+  },
+  "gsap-react": {
+    "name": "gsap-react",
+    "skill": "gsap-react",
+    "source": "greensock/gsap-skills",
+    "catalogue": "https://www.ui-skills.com/skills/greensock/gsap-react"
+  },
+  "gsap-scrolltrigger": {
+    "name": "gsap-scrolltrigger",
+    "skill": "gsap-scrolltrigger",
+    "source": "greensock/gsap-skills",
+    "catalogue": "https://www.ui-skills.com/skills/greensock/gsap-scrolltrigger"
+  },
+  "gsap-scrolltrigger-storytelling": {
+    "name": "gsap-scrolltrigger-storytelling",
+    "skill": "gsap-scrolltrigger-storytelling",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/gsap-scrolltrigger-storytelling"
+  },
+  "gsap-timeline": {
+    "name": "gsap-timeline",
+    "skill": "gsap-timeline",
+    "source": "greensock/gsap-skills",
+    "catalogue": "https://www.ui-skills.com/skills/greensock/gsap-timeline"
+  },
+  "gsap-utils": {
+    "name": "gsap-utils",
+    "skill": "gsap-utils",
+    "source": "greensock/gsap-skills",
+    "catalogue": "https://www.ui-skills.com/skills/greensock/gsap-utils"
+  },
+  "gsap-web": {
+    "name": "gsap-web",
+    "skill": "gsap-web",
+    "source": "iart-ai/web-animation-skills",
+    "catalogue": "https://www.ui-skills.com/skills/iart-ai/gsap-web"
+  },
+  "i-have-adhd": {
+    "name": "i-have-adhd",
+    "skill": "i-have-adhd",
+    "source": "ayghri/i-have-adhd",
+    "catalogue": "https://www.ui-skills.com/skills/ayghri/i-have-adhd"
+  },
+  "impeccable": {
+    "name": "impeccable",
+    "skill": "typeset",
+    "source": "pbakaus/impeccable",
+    "catalogue": "https://www.ui-skills.com/skills/pbakaus/typeset"
+  },
+  "improve": {
+    "name": "improve",
+    "skill": "improve",
+    "source": "shadcn/improve",
+    "catalogue": "https://www.ui-skills.com/skills/shadcn/improve"
+  },
+  "improve-codebase-architecture": {
+    "name": "improve-codebase-architecture",
+    "skill": "improve-codebase-architecture",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/improve-codebase-architecture"
+  },
+  "improve-react": {
+    "name": "improve-react",
+    "skill": "improve-react",
+    "source": "millionco/react-doctor",
+    "catalogue": "https://www.ui-skills.com/skills/millionco/improve-react"
+  },
+  "improve-ui": {
+    "name": "improve-ui",
+    "skill": "improve-ui",
+    "source": "ibelick/ui-skills",
+    "catalogue": "https://www.ui-skills.com/skills/ibelick/improve-ui"
+  },
+  "interaction-design": {
+    "name": "interaction-design",
+    "skill": "interaction-design",
+    "source": "wshobson/agents",
+    "catalogue": "https://www.ui-skills.com/skills/wshobson/interaction-design"
+  },
+  "interface-design": {
+    "name": "interface-design",
+    "skill": "interface-design",
+    "source": "Dammyjay93/interface-design",
+    "catalogue": "https://www.ui-skills.com/skills/dammyjay93/interface-design"
+  },
+  "Jane-xiaoer__claude-skill-web-clone": {
+    "name": "Jane-xiaoer__claude-skill-web-clone",
+    "skill": "web-clone",
+    "source": "Jane-xiaoer/claude-skill-web-clone",
+    "catalogue": "https://www.ui-skills.com/skills/jane-xiaoer/web-clone"
+  },
+  "landing-page": {
+    "name": "landing-page",
+    "skill": "landing-page",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/landing-page"
+  },
+  "landing-page-design": {
+    "name": "landing-page-design",
+    "skill": "landing-page-design",
+    "source": "elayadesign/ai-design-skills",
+    "catalogue": "https://www.ui-skills.com/skills/elayadesign/landing-page-design"
+  },
+  "LiamGvchi__gc-minimal-zine-poster": {
+    "name": "LiamGvchi__gc-minimal-zine-poster",
+    "skill": "gc-minimal-zine-poster-v0-1",
+    "source": "LiamGvchi/gc-minimal-zine-poster",
+    "catalogue": "https://www.ui-skills.com/skills/liamgvchi/gc-minimal-zine-poster-v0-1"
+  },
+  "linear-discipline": {
+    "name": "linear-discipline",
+    "skill": "linear-discipline",
+    "source": "tjcages/linear",
+    "catalogue": "https://www.ui-skills.com/skills/tjcages/linear-discipline"
+  },
+  "linear-finish-install": {
+    "name": "linear-finish-install",
+    "skill": "linear-finish-install",
+    "source": "tjcages/linear",
+    "catalogue": "https://www.ui-skills.com/skills/tjcages/linear-finish-install"
+  },
+  "linear-methodology": {
+    "name": "linear-methodology",
+    "skill": "linear-methodology",
+    "source": "tjcages/linear",
+    "catalogue": "https://www.ui-skills.com/skills/tjcages/linear-methodology"
+  },
+  "linear-monitor": {
+    "name": "linear-monitor",
+    "skill": "linear-monitor",
+    "source": "tjcages/linear",
+    "catalogue": "https://www.ui-skills.com/skills/tjcages/linear-monitor"
+  },
+  "linear-setup": {
+    "name": "linear-setup",
+    "skill": "linear-setup",
+    "source": "tjcages/linear",
+    "catalogue": "https://www.ui-skills.com/skills/tjcages/linear-setup"
+  },
+  "linear-sync": {
+    "name": "linear-sync",
+    "skill": "linear-sync",
+    "source": "tjcages/linear",
+    "catalogue": "https://www.ui-skills.com/skills/tjcages/linear-sync"
+  },
+  "lottie-animation": {
+    "name": "lottie-animation",
+    "skill": "lottie-animation",
+    "source": "iart-ai/web-animation-skills",
+    "catalogue": "https://www.ui-skills.com/skills/iart-ai/lottie-animation"
+  },
+  "make-interfaces-feel-better": {
+    "name": "make-interfaces-feel-better",
+    "skill": "make-interfaces-feel-better",
+    "source": "jakubkrehel/make-interfaces-feel-better",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/make-interfaces-feel-better"
+  },
+  "marquee-loop": {
+    "name": "marquee-loop",
+    "skill": "marquee-loop",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/marquee-loop"
+  },
+  "masked-reveal": {
+    "name": "masked-reveal",
+    "skill": "masked-reveal",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/masked-reveal"
+  },
+  "mastering-animate-presence": {
+    "name": "mastering-animate-presence",
+    "skill": "mastering-animate-presence",
+    "source": "raphaelsalaja/skill",
+    "catalogue": "https://www.ui-skills.com/skills/raphaelsalaja/mastering-animate-presence"
+  },
+  "matterjs": {
+    "name": "matterjs",
+    "skill": "matterjs",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/matterjs"
+  },
+  "micro-interaction": {
+    "name": "micro-interaction",
+    "skill": "micro-interaction",
+    "source": "iart-ai/web-animation-skills",
+    "catalogue": "https://www.ui-skills.com/skills/iart-ai/micro-interaction"
+  },
+  "minimalist-skill": {
+    "name": "minimalist-skill",
+    "skill": "minimalist-ui",
+    "source": "Leonxlnx/taste-skill",
+    "catalogue": "https://www.ui-skills.com/skills/leonxlnx/minimalist-skill"
+  },
+  "morphing-icons": {
+    "name": "morphing-icons",
+    "skill": "morphing-icons",
+    "source": "raphaelsalaja/skill",
+    "catalogue": "https://www.ui-skills.com/skills/raphaelsalaja/morphing-icons"
+  },
+  "next-cache-components-adoption": {
+    "name": "next-cache-components-adoption",
+    "skill": "next-cache-components",
+    "source": "vercel/next.js",
+    "catalogue": "https://www.ui-skills.com/skills/vercel/next-cache-components"
+  },
+  "next-cache-components-optimizer": {
+    "name": "next-cache-components-optimizer",
+    "skill": "next-cache-components-optimizer",
+    "source": "vercel/next.js",
+    "catalogue": "https://www.ui-skills.com/skills/vercel/next-cache-components-optimizer"
+  },
+  "nuxt": {
+    "name": "nuxt",
+    "skill": "nuxt",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/nuxt"
+  },
+  "oklch-skill": {
+    "name": "oklch-skill",
+    "skill": "oklch-skill",
+    "source": "jakubkrehel/oklch-skill",
+    "catalogue": "https://www.ui-skills.com/skills/jakubkrehel/oklch-skill"
+  },
+  "output-skill": {
+    "name": "output-skill",
+    "skill": "full-output-enforcement",
+    "source": "Leonxlnx/taste-skill",
+    "catalogue": "https://www.ui-skills.com/skills/leonxlnx/output-skill"
+  },
+  "page-transition-animation": {
+    "name": "page-transition-animation",
+    "skill": "page-transition-animation",
+    "source": "iart-ai/web-animation-skills",
+    "catalogue": "https://www.ui-skills.com/skills/iart-ai/page-transition-animation"
+  },
+  "pinia": {
+    "name": "pinia",
+    "skill": "pinia",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/pinia"
+  },
+  "playwright-cli": {
+    "name": "playwright-cli",
+    "skill": "playwright-cli",
+    "source": "microsoft/playwright-cli",
+    "catalogue": "https://www.ui-skills.com/skills/microsoft/playwright-cli"
+  },
+  "pnpm": {
+    "name": "pnpm",
+    "skill": "pnpm",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/pnpm"
+  },
+  "pricing-page": {
+    "name": "pricing-page",
+    "skill": "pricing-page",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/pricing-page"
+  },
+  "progressive-blur": {
+    "name": "progressive-blur",
+    "skill": "progressive-blur",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/progressive-blur"
+  },
+  "prototype": {
+    "name": "prototype",
+    "skill": "prototype",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/prototype"
+  },
+  "pseudo-elements": {
+    "name": "pseudo-elements",
+    "skill": "pseudo-elements",
+    "source": "raphaelsalaja/skill",
+    "catalogue": "https://www.ui-skills.com/skills/raphaelsalaja/pseudo-elements"
+  },
+  "react-best-practices": {
+    "name": "react-best-practices",
+    "skill": "vercel-react-best-practices",
+    "source": "vercel-labs/agent-skills",
+    "catalogue": "https://www.ui-skills.com/skills/vercel-labs/react-best-practices"
+  },
+  "react-doctor": {
+    "name": "react-doctor",
+    "skill": "react-doctor",
+    "source": "millionco/react-doctor",
+    "catalogue": "https://www.ui-skills.com/skills/millionco/react-doctor"
+  },
+  "react-native-best-practices": {
+    "name": "react-native-best-practices",
+    "skill": "react-native-best-practices",
+    "source": "callstackincubator/agent-skills",
+    "catalogue": "https://www.ui-skills.com/skills/callstackincubator/react-native-best-practices"
+  },
+  "react-router-framework-mode": {
+    "name": "react-router-framework-mode",
+    "skill": "react-router-framework-mode",
+    "source": "remix-run/agent-skills",
+    "catalogue": "https://www.ui-skills.com/skills/remix-run/react-router-framework-mode"
+  },
+  "redesign-skill": {
+    "name": "redesign-skill",
+    "skill": "redesign-existing-projects",
+    "source": "Leonxlnx/taste-skill",
+    "catalogue": "https://www.ui-skills.com/skills/leonxlnx/redesign-skill"
+  },
+  "refine-live": {
+    "name": "refine-live",
+    "skill": "refine-live",
+    "source": "Jakubantalik/transitions.dev",
+    "catalogue": "https://www.ui-skills.com/skills/jakubantalik/refine-live"
+  },
+  "remotion-best-practices": {
+    "name": "remotion-best-practices",
+    "skill": "remotion-best-practices",
+    "source": "remotion-dev/skills",
+    "catalogue": "https://www.ui-skills.com/skills/remotion-dev/remotion-best-practices"
+  },
+  "scroll-world": {
+    "name": "scroll-world",
+    "skill": "scroll-world",
+    "source": "oso95/scroll-world",
+    "catalogue": "https://www.ui-skills.com/skills/oso95/scroll-world"
+  },
+  "seo": {
+    "name": "seo",
+    "skill": "seo",
+    "source": "iannuttall/seo",
+    "catalogue": "https://www.ui-skills.com/skills/iannuttall/seo"
+  },
+  "setup-matt-pocock-skills": {
+    "name": "setup-matt-pocock-skills",
+    "skill": "setup-matt-pocock-skills",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/setup-matt-pocock-skills"
+  },
+  "shadcn": {
+    "name": "shadcn",
+    "skill": "shadcn",
+    "source": "shadcn-ui/ui",
+    "catalogue": "https://www.ui-skills.com/skills/shadcn-ui/shadcn"
+  },
+  "signal-geometry": {
+    "name": "signal-geometry",
+    "skill": "signal-geometry",
+    "source": "CaliCastle/skills",
+    "catalogue": "https://www.ui-skills.com/skills/calicastle/signal-geometry"
+  },
+  "simple-english": {
+    "name": "simple-english",
+    "skill": "simple-english",
+    "source": "AminBlg/SimpleEnglish",
+    "catalogue": "https://www.ui-skills.com/skills/aminblg/simple-english"
+  },
+  "slide-wright": {
+    "name": "slide-wright",
+    "skill": "slide-wright",
+    "source": "arifszn/slide-wright",
+    "catalogue": "https://www.ui-skills.com/skills/arifszn/slide-wright"
+  },
+  "slidev": {
+    "name": "slidev",
+    "skill": "slidev",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/slidev"
+  },
+  "smooth-shadow-ring": {
+    "name": "smooth-shadow-ring",
+    "skill": "smooth-shadow-ring",
+    "source": "flornkm/shadow-plugin",
+    "catalogue": "https://www.ui-skills.com/skills/flornkm/smooth-shadow-ring"
+  },
+  "soft-skill": {
+    "name": "soft-skill",
+    "skill": "high-end-visual-design",
+    "source": "Leonxlnx/taste-skill",
+    "catalogue": "https://www.ui-skills.com/skills/leonxlnx/soft-skill"
+  },
+  "sounds-on-the-web": {
+    "name": "sounds-on-the-web",
+    "skill": "sounds-on-the-web",
+    "source": "raphaelsalaja/skill",
+    "catalogue": "https://www.ui-skills.com/skills/raphaelsalaja/sounds-on-the-web"
+  },
+  "src": {
+    "name": "src",
+    "skill": "human-review",
+    "source": "petergyang/human-review",
+    "catalogue": "https://www.ui-skills.com/skills/petergyang/human-review"
+  },
+  "stitch-skill": {
+    "name": "stitch-skill",
+    "skill": "stitch-design-taste",
+    "source": "Leonxlnx/taste-skill",
+    "catalogue": "https://www.ui-skills.com/skills/leonxlnx/stitch-skill"
+  },
+  "svelte-code-writer": {
+    "name": "svelte-code-writer",
+    "skill": "svelte-code-writer",
+    "source": "sveltejs/ai-tools",
+    "catalogue": "https://www.ui-skills.com/skills/sveltejs/svelte-code-writer"
+  },
+  "svg-animation": {
+    "name": "svg-animation",
+    "skill": "svg-animation",
+    "source": "iart-ai/web-animation-skills",
+    "catalogue": "https://www.ui-skills.com/skills/iart-ai/svg-animation"
+  },
+  "swiftui-ui-patterns": {
+    "name": "swiftui-ui-patterns",
+    "skill": "swiftui-ui-patterns",
+    "source": "dimillian/skills",
+    "catalogue": "https://www.ui-skills.com/skills/dimillian/swiftui-ui-patterns"
+  },
+  "swiss-design": {
+    "name": "swiss-design",
+    "skill": "swiss-design",
+    "source": "zeke/swiss-design-skill",
+    "catalogue": "https://www.ui-skills.com/skills/zeke/swiss-design"
+  },
+  "sync-figma-token": {
+    "name": "sync-figma-token",
+    "skill": "sync-figma-token",
+    "source": "firebenders/sync-figma-token-skill",
+    "catalogue": "https://www.ui-skills.com/skills/firebenders/sync-figma-token"
+  },
+  "tailwindcss": {
+    "name": "tailwindcss",
+    "skill": "tailwindcss",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/tailwindcss"
+  },
+  "taste-skill": {
+    "name": "taste-skill",
+    "skill": "design-taste-frontend",
+    "source": "Leonxlnx/taste-skill",
+    "catalogue": "https://www.ui-skills.com/skills/leonxlnx/taste-skill"
+  },
+  "tdd": {
+    "name": "tdd",
+    "skill": "tdd",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/tdd"
+  },
+  "text-to-lottie": {
+    "name": "text-to-lottie",
+    "skill": "text-to-lottie",
+    "source": "diffusionstudio/lottie",
+    "catalogue": "https://www.ui-skills.com/skills/diffusionstudio/text-to-lottie"
+  },
+  "thermo-nuclear-code-quality-review": {
+    "name": "thermo-nuclear-code-quality-review",
+    "skill": "thermo-nuclear-code-quality-review",
+    "source": "cursor/plugins",
+    "catalogue": "https://www.ui-skills.com/skills/cursor/thermo-nuclear-code-quality-review"
+  },
+  "threejs": {
+    "name": "threejs",
+    "skill": "threejs",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/threejs"
+  },
+  "threejs-animation": {
+    "name": "threejs-animation",
+    "skill": "threejs-animation",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-animation"
+  },
+  "threejs-fundamentals": {
+    "name": "threejs-fundamentals",
+    "skill": "threejs-fundamentals",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-fundamentals"
+  },
+  "threejs-geometry": {
+    "name": "threejs-geometry",
+    "skill": "threejs-geometry",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-geometry"
+  },
+  "threejs-interaction": {
+    "name": "threejs-interaction",
+    "skill": "threejs-interaction",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-interaction"
+  },
+  "threejs-lighting": {
+    "name": "threejs-lighting",
+    "skill": "threejs-lighting",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-lighting"
+  },
+  "threejs-loaders": {
+    "name": "threejs-loaders",
+    "skill": "threejs-loaders",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-loaders"
+  },
+  "threejs-materials": {
+    "name": "threejs-materials",
+    "skill": "threejs-materials",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-materials"
+  },
+  "threejs-postprocessing": {
+    "name": "threejs-postprocessing",
+    "skill": "threejs-postprocessing",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-postprocessing"
+  },
+  "threejs-shaders": {
+    "name": "threejs-shaders",
+    "skill": "threejs-shaders",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-shaders"
+  },
+  "threejs-textures": {
+    "name": "threejs-textures",
+    "skill": "threejs-textures",
+    "source": "cloudai-x/threejs-skills",
+    "catalogue": "https://www.ui-skills.com/skills/cloudai-x/threejs-textures"
+  },
+  "to-spring-or-not-to-spring": {
+    "name": "to-spring-or-not-to-spring",
+    "skill": "to-spring-or-not-to-spring",
+    "source": "raphaelsalaja/skill",
+    "catalogue": "https://www.ui-skills.com/skills/raphaelsalaja/to-spring-or-not-to-spring"
+  },
+  "transitions-dev": {
+    "name": "transitions-dev",
+    "skill": "transitions-dev",
+    "source": "Jakubantalik/transitions-dev",
+    "catalogue": "https://www.ui-skills.com/skills/jakubantalik/transitions-dev"
+  },
+  "triage": {
+    "name": "triage",
+    "skill": "triage",
+    "source": "mattpocock/skills",
+    "catalogue": "https://www.ui-skills.com/skills/mattpocock/triage"
+  },
+  "tsdown": {
+    "name": "tsdown",
+    "skill": "tsdown",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/tsdown"
+  },
+  "turborepo": {
+    "name": "turborepo",
+    "skill": "turborepo",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/turborepo"
+  },
+  "ui-skills-root": {
+    "name": "ui-skills-root",
+    "skill": "ui-skills-root",
+    "source": "ibelick/ui-skills",
+    "catalogue": "https://www.ui-skills.com/skills/ibelick/ui-skills-root"
+  },
+  "ui-ux-pro-max": {
+    "name": "ui-ux-pro-max",
+    "skill": "ui-ux-pro-max",
+    "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+    "catalogue": "https://www.ui-skills.com/skills/nextlevelbuilder/ui-ux-pro-max"
+  },
+  "unocss": {
+    "name": "unocss",
+    "skill": "unocss",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/unocss"
+  },
+  "vite": {
+    "name": "vite",
+    "skill": "vite",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/vite"
+  },
+  "vitepress": {
+    "name": "vitepress",
+    "skill": "vitepress",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/vitepress"
+  },
+  "vitest": {
+    "name": "vitest",
+    "skill": "vitest",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/vitest"
+  },
+  "vue": {
+    "name": "vue",
+    "skill": "vue",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/vue"
+  },
+  "vue-best-practices": {
+    "name": "vue-best-practices",
+    "skill": "vue-best-practices",
+    "source": "vuejs-ai/skills",
+    "catalogue": "https://www.ui-skills.com/skills/vuejs-ai/vue-best-practices"
+  },
+  "vue-debug-guides": {
+    "name": "vue-debug-guides",
+    "skill": "vue-debug-guides",
+    "source": "vuejs-ai/skills",
+    "catalogue": "https://www.ui-skills.com/skills/vuejs-ai/vue-debug-guides"
+  },
+  "vue-jsx-best-practices": {
+    "name": "vue-jsx-best-practices",
+    "skill": "vue-jsx-best-practices",
+    "source": "vuejs-ai/skills",
+    "catalogue": "https://www.ui-skills.com/skills/vuejs-ai/vue-jsx-best-practices"
+  },
+  "vue-options-api-best-practices": {
+    "name": "vue-options-api-best-practices",
+    "skill": "vue-options-api-best-practices",
+    "source": "vuejs-ai/skills",
+    "catalogue": "https://www.ui-skills.com/skills/vuejs-ai/vue-options-api-best-practices"
+  },
+  "vue-pinia-best-practices": {
+    "name": "vue-pinia-best-practices",
+    "skill": "vue-pinia-best-practices",
+    "source": "vuejs-ai/skills",
+    "catalogue": "https://www.ui-skills.com/skills/vuejs-ai/vue-pinia-best-practices"
+  },
+  "vue-router-best-practices": {
+    "name": "vue-router-best-practices",
+    "skill": "vue-router-best-practices",
+    "source": "vuejs-ai/skills",
+    "catalogue": "https://www.ui-skills.com/skills/vuejs-ai/vue-router-best-practices"
+  },
+  "vue-testing-best-practices": {
+    "name": "vue-testing-best-practices",
+    "skill": "vue-testing-best-practices",
+    "source": "vuejs-ai/skills",
+    "catalogue": "https://www.ui-skills.com/skills/vuejs-ai/vue-testing-best-practices"
+  },
+  "vueuse-functions": {
+    "name": "vueuse-functions",
+    "skill": "vueuse-functions",
+    "source": "antfu/skills",
+    "catalogue": "https://www.ui-skills.com/skills/antfu/vueuse-functions"
+  },
+  "wcag-audit-patterns": {
+    "name": "wcag-audit-patterns",
+    "skill": "wcag-audit-patterns",
+    "source": "wshobson/agents",
+    "catalogue": "https://www.ui-skills.com/skills/wshobson/wcag-audit-patterns"
+  },
+  "web-design-guidelines": {
+    "name": "web-design-guidelines",
+    "skill": "web-design-guidelines",
+    "source": "vercel-labs/agent-skills",
+    "catalogue": "https://www.ui-skills.com/skills/vercel-labs/web-design-guidelines"
+  },
+  "web-quality-audit": {
+    "name": "web-quality-audit",
+    "skill": "web-quality-audit",
+    "source": "addyosmani/web-quality-skills",
+    "catalogue": "https://www.ui-skills.com/skills/addyosmani/web-quality-audit"
+  },
+  "webgl-landing-steering": {
+    "name": "webgl-landing-steering",
+    "skill": "webgl-landing-steering",
+    "source": "MengTo/Skills",
+    "catalogue": "https://www.ui-skills.com/skills/mengto/webgl-landing-steering"
+  }
+}
