@@ -16,10 +16,23 @@
  * and never re-spell the box.
  */
 
-import type { ComponentType, ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  type ComponentType,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Loader2,
+  X,
+} from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
 /* Step heading                                                               */
@@ -78,6 +91,11 @@ export function WizardPanel({
     <section
       className={cn(
         'border-border bg-card rounded-xl border p-4 sm:p-5',
+        // Panels appear in response to a choice the user just made, so
+        // they announce themselves with one short rise. Gated on
+        // motion-safe: a vestibular-sensitive user gets the same panel,
+        // instantly.
+        'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200',
         className
       )}
     >
@@ -118,6 +136,7 @@ export function OptionCard({
   selected,
   onSelect,
   meta,
+  index = 0,
 }: {
   icon?: ComponentType<{ className?: string }>;
   label: string;
@@ -126,6 +145,8 @@ export function OptionCard({
   onSelect: () => void;
   /** Small trailing content — a category chip, a language code. */
   meta?: ReactNode;
+  /** Position in the set, used only to stagger the entrance. */
+  index?: number;
 }) {
   return (
     <button
@@ -133,21 +154,33 @@ export function OptionCard({
       role="radio"
       aria-checked={selected}
       onClick={onSelect}
+      // Entrance stagger is capped so a 30-template grid never makes
+      // the last card arrive noticeably late.
+      style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
       className={cn(
-        'group focus-visible:ring-ring flex items-start gap-3 rounded-xl border p-4 text-left',
-        'transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none',
+        'group focus-visible:ring-ring relative flex items-start gap-3 rounded-xl border p-4 text-left',
+        'transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out',
+        'focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none',
+        'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:fill-mode-backwards motion-safe:duration-300',
+        // Tailwind v4 already wraps `hover:` in `@media (hover: hover)`,
+        // so the lift can't stick on a touch tap — no hand-rolled media
+        // variant needed. `active:scale` is the press itself:
+        // `translate-y-0` alone only cancelled the lift, which read as
+        // no feedback at all on touch.
+        'motion-safe:hover:-translate-y-0.5',
+        'active:scale-[0.99] active:translate-y-0',
         selected
-          ? 'border-primary bg-primary/5'
+          ? 'border-primary bg-primary/5 shadow-primary/5 shadow-sm'
           : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-muted/40'
       )}
     >
       {Icon ? (
         <span
           className={cn(
-            'flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-150',
+            'flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200',
             selected
               ? 'bg-primary/10 text-primary'
-              : 'bg-muted text-muted-foreground'
+              : 'bg-muted text-muted-foreground group-hover:text-foreground'
           )}
         >
           <Icon className="size-4" />
@@ -164,11 +197,32 @@ export function OptionCard({
           </span>
         ) : null}
       </span>
+      {/* Selection is carried by colour AND a mark, so the state does
+          not rely on hue alone (WCAG 1.4.1). */}
+      {selected ? (
+        <span
+          aria-hidden="true"
+          className="bg-primary text-primary-foreground motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-200 absolute top-2 right-2 flex size-4 items-center justify-center rounded-full"
+        >
+          <Check className="size-2.5" strokeWidth={3} />
+        </span>
+      ) : null}
     </button>
   );
 }
 
-/** Consistent 1-or-2 column grid for OptionCard sets. */
+/**
+ * Consistent 1-or-2 column grid for OptionCard sets.
+ *
+ * The cards carry `role="radio"`, which obliges the group to behave
+ * like a radio group: exactly one tab stop, arrows to move between
+ * options. Previously every card was its own tab stop and arrows did
+ * nothing, so a keyboard user tabbed through five "radios" that the
+ * screen reader announced as a group they could not navigate.
+ *
+ * Tab order is managed on the DOM rather than through cloned props so
+ * any caller's children shape keeps working.
+ */
 export function OptionGrid({
   label,
   columns = 2,
@@ -179,10 +233,57 @@ export function OptionGrid({
   columns?: 2 | 3;
   children: ReactNode;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  function radios(): HTMLElement[] {
+    return Array.from(
+      ref.current?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []
+    );
+  }
+
+  // Roving tabindex: the checked option owns the tab stop, falling back
+  // to the first option while nothing is checked (template step).
+  useEffect(() => {
+    const items = radios();
+    if (items.length === 0) return;
+    const checked = items.findIndex(
+      (el) => el.getAttribute('aria-checked') === 'true'
+    );
+    const stop = checked === -1 ? 0 : checked;
+    items.forEach((el, i) => {
+      el.tabIndex = i === stop ? 0 : -1;
+    });
+  });
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+    if (!keys.includes(event.key)) return;
+
+    const items = radios();
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    if (current === -1) return;
+    event.preventDefault();
+
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? items.length - 1
+          : event.key === 'ArrowRight' || event.key === 'ArrowDown'
+            ? (current + 1) % items.length
+            : (current - 1 + items.length) % items.length;
+
+    // Radio-group convention: moving focus also selects.
+    items[next].focus();
+    items[next].click();
+  }
+
   return (
     <div
+      ref={ref}
       role="radiogroup"
       aria-label={label}
+      onKeyDown={handleKeyDown}
       className={cn(
         'grid grid-cols-1 gap-3',
         columns === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'
@@ -243,7 +344,10 @@ export function TagPill({
       onClick={onClick}
       className={cn(
         'focus-visible:ring-ring inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium',
-        'transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none',
+        // Tags get toggled in bursts, so the press has to register on
+        // every tap — colour alone reads as lag on a fast selection run.
+        'transition-[color,background-color,border-color,transform] duration-150 ease-out',
+        'focus-visible:ring-2 focus-visible:outline-none active:scale-[0.96]',
         selected
           ? tone === 'danger'
             ? 'border-destructive/40 bg-destructive/10 text-destructive'
@@ -259,6 +363,123 @@ export function TagPill({
         />
       ) : null}
       {name}
+    </button>
+  );
+}
+
+/**
+ * Removable chip for an explicitly picked entity (a contact). The
+ * label and the remove control are one button on purpose: the whole
+ * chip means "this person is in — click to take them out", and a
+ * second nested button would double the tab stops in a list that can
+ * hold dozens of chips.
+ */
+export function RemovableChip({
+  label,
+  detail,
+  removeLabel,
+  onRemove,
+}: {
+  label: string;
+  /** Secondary text (a phone number) shown after the label. */
+  detail?: string;
+  /** Accessible name for the action, e.g. "Remove Ada Lovelace". */
+  removeLabel: string;
+  onRemove: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      aria-label={removeLabel}
+      className={cn(
+        'border-primary/40 bg-primary/10 text-primary focus-visible:ring-ring group inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium',
+        'transition-[color,background-color,transform] duration-150 ease-out',
+        'hover:bg-primary/20 focus-visible:ring-2 focus-visible:outline-none active:scale-[0.96]',
+        // zoom-in-95, never scale(0): a chip that grows from nothing
+        // reads as a glitch when a bulk selection adds dozens at once.
+        'motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:fade-in-0 motion-safe:duration-150'
+      )}
+    >
+      <span className="truncate">{label}</span>
+      {detail ? (
+        <span className="text-primary/70 truncate font-normal tabular-nums">
+          {detail}
+        </span>
+      ) : null}
+      <X className="size-3 shrink-0 opacity-60 transition-opacity group-hover:opacity-100" />
+    </button>
+  );
+}
+
+/**
+ * Multi-select row. Real checkbox semantics (`role="checkbox"` +
+ * `aria-checked`) so a screen reader announces "checked/unchecked"
+ * instead of an unlabelled button, and the whole row is the hit target.
+ */
+export function CheckRow({
+  title,
+  subtitle,
+  checked,
+  onToggle,
+  disabled,
+  badge,
+}: {
+  title: string;
+  subtitle?: string;
+  checked: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  /** Trailing note — an opt-out warning, a tag count. */
+  badge?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onToggle}
+      className={cn(
+        'focus-visible:ring-ring flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left',
+        'transition-[color,background-color,border-color,transform] duration-150 ease-out',
+        'focus-visible:ring-2 focus-visible:outline-none',
+        // Not on :disabled — a press animation on a row you cannot
+        // toggle promises something that never happens.
+        'enabled:active:scale-[0.99]',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        checked
+          ? 'border-primary/40 bg-primary/5'
+          : 'border-transparent hover:bg-muted/60'
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          'flex size-4 shrink-0 items-center justify-center rounded border transition-colors duration-150',
+          checked
+            ? 'border-primary bg-primary text-primary-foreground'
+            : 'border-muted-foreground/40'
+        )}
+      >
+        {checked ? (
+          <Check
+            className="motion-safe:animate-in motion-safe:zoom-in-50 size-3 motion-safe:duration-150"
+            strokeWidth={3}
+          />
+        ) : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="text-foreground block truncate text-sm font-medium">
+          {title}
+        </span>
+        {subtitle ? (
+          <span className="text-muted-foreground block truncate text-xs tabular-nums">
+            {subtitle}
+          </span>
+        ) : null}
+      </span>
+      {badge ? <span className="shrink-0">{badge}</span> : null}
     </button>
   );
 }
@@ -381,7 +602,21 @@ export function StepFooter({
   showBackArrow?: boolean;
 }) {
   return (
-    <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-5">
+    // Pinned to the bottom of the viewport so the primary action is
+    // always reachable, no matter how tall the step body grows. Before
+    // this, a long step (audience with many tags + a big selection)
+    // pushed Next below the fold and it read as missing — users had to
+    // zoom the browser out to find it. The step body scrolls under this
+    // bar; it stays aligned with the content column and a translucent
+    // background keeps it legible over whatever scrolls behind.
+    <div
+      className={cn(
+        'sticky bottom-0 z-10 mt-2',
+        'border-border bg-background/85 flex flex-wrap items-center justify-between gap-3 border-t',
+        'pt-4 pb-4',
+        'supports-[backdrop-filter]:bg-background/70 supports-[backdrop-filter]:backdrop-blur-sm'
+      )}
+    >
       <Button variant="outline" onClick={onBack} disabled={backDisabled}>
         {showBackArrow ? <ArrowLeft className="size-4" /> : null}
         {backLabel}

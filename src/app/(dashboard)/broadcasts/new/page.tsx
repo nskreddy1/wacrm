@@ -176,7 +176,17 @@ export default function NewBroadcastPage() {
       template_name: template.name,
       template_language: template.language ?? 'en_US',
       template_variables: variables,
-      audience_filter: { type: audience.type, tagIds: audience.tagIds },
+      // Persist everything needed to rebuild the audience. Saving only
+      // {type, tagIds} silently dropped the selection for every other
+      // method, so a reopened draft targeted "field" with no filter.
+      audience_filter: {
+        type: audience.type,
+        tagIds: audience.tagIds,
+        contactIds: audience.contactIds,
+        contactPreview: audience.contactPreview,
+        fieldFilter: audience.fieldFilter,
+        excludeTagIds: audience.excludeTagIds,
+      },
       status: 'draft',
       total_recipients: 0,
       sent_count: 0,
@@ -243,8 +253,11 @@ export default function NewBroadcastPage() {
 
   return (
     // Plain <div>: the dashboard shell already provides <main>.
-    <div className="bg-muted/20 min-h-full">
-      <header className="border-border bg-background border-b">
+    // The shell is overflow-hidden at every level, so this page must own
+    // its scrolling. Without it, a tall step (audience) was simply
+    // clipped — the end of the panel was unreachable at any zoom.
+    <div className="bg-muted/20 flex h-full min-h-0 flex-col overflow-hidden">
+      <header className="border-border bg-background shrink-0 border-b">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <Button
@@ -270,8 +283,11 @@ export default function NewBroadcastPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1500px] lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="border-border bg-card border-b p-4 lg:min-h-[calc(100vh-73px)] lg:border-r lg:border-b-0 lg:p-6">
+      {/* Mobile: the whole grid is one scroller (the stepper scrolls away
+          with the content). Desktop: the two panes scroll independently so
+          the stepper and channel picker stay put while a long step moves. */}
+      <div className="mx-auto grid min-h-0 w-full max-w-[1500px] flex-1 overflow-y-auto lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden">
+        <aside className="border-border bg-card min-h-0 border-b p-4 lg:overflow-y-auto lg:border-r lg:border-b-0 lg:p-6">
           <div className="flex gap-2 lg:flex-col">
             {steps.map((step, index) => {
               const Icon = step.icon;
@@ -370,7 +386,7 @@ export default function NewBroadcastPage() {
           </div>
         </aside>
 
-        <section className="min-w-0 p-4 sm:p-6 lg:p-8">
+        <section className="min-h-0 min-w-0 p-4 sm:p-6 lg:overflow-y-auto lg:p-8">
           {/* No card here on purpose. Each step now composes its own
               WizardPanel boxes, and wrapping those in another bordered
               card produced card-inside-a-card at every step. */}

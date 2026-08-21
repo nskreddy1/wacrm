@@ -18,11 +18,13 @@ import { ArrowLeft, Send, Loader2, Users, Save, ClipboardCheck, Tag } from 'luci
 import { useTranslations } from 'next-intl';
 import { StepFooter, StepHeading, SummaryGrid, SummaryItem, WizardPanel } from './wizard-ui';
 
-interface AudienceConfig {
-  type: string;
-  tagIds?: string[];
-  csvContacts?: { phone: string; name?: string }[];
-}
+/**
+ * The audience shape is owned by step 2. This step used to redeclare a
+ * loose local copy (`type: string` plus two fields), which is how the
+ * review screen ended up unable to see `fieldFilter` or `contactIds`
+ * and reported "0 recipients" for audiences that had plenty.
+ */
+import type { AudienceConfig } from './step2-select-audience';
 
 interface Step4Props {
   name: string;
@@ -79,6 +81,21 @@ export function Step4ScheduleSend({
           setEstimatedReach(uniqueIds.size);
         } else if (audience.type === 'csv' && audience.csvContacts) {
           setEstimatedReach(audience.csvContacts.length);
+        } else if (audience.type === 'contacts' && audience.contactIds) {
+          setEstimatedReach(new Set(audience.contactIds).size);
+        } else if (audience.type === 'field' && audience.fieldFilter?.field) {
+          // Field audiences used to fall through to the `else` and
+          // review the campaign as "0 recipients" right before send.
+          const { field, operator, value } = audience.fieldFilter;
+          const trimmed = value.trim();
+          let query = supabase
+            .from('contacts')
+            .select('*', { count: 'exact', head: true });
+          if (operator === 'is') query = query.eq(field, trimmed);
+          else if (operator === 'is_not') query = query.neq(field, trimmed);
+          else query = query.ilike(field, `%${trimmed}%`);
+          const { count } = await query;
+          setEstimatedReach(count ?? 0);
         } else {
           setEstimatedReach(0);
         }
@@ -97,7 +114,11 @@ export function Step4ScheduleSend({
         ? t('scheduleSend.audienceTags')
         : audience.type === 'csv'
           ? t('scheduleSend.audienceCsv')
-          : t('scheduleSend.audienceField');
+          : audience.type === 'contacts'
+            ? t('scheduleSend.audienceContacts', {
+                count: new Set(audience.contactIds ?? []).size,
+              })
+            : t('scheduleSend.audienceField');
 
   return (
     <div className="space-y-6">

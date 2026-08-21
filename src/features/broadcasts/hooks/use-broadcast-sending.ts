@@ -46,8 +46,19 @@ export interface AudienceConfig {
    * broadcasts saved as drafts before the switch still carry it, so
    * resolveAudience keeps handling it.
    */
-  type: 'all' | 'tags' | 'field' | 'custom_field' | 'csv' | 'external';
+  type:
+    | 'all'
+    | 'tags'
+    | 'field'
+    | 'custom_field'
+    | 'csv'
+    | 'contacts'
+    | 'external';
   tagIds?: string[];
+  /** Hand-picked contact ids (`type === 'contacts'`). */
+  contactIds?: string[];
+  /** Display snapshot of the picked contacts — never used for sending. */
+  contactPreview?: { id: string; name?: string | null; phone: string }[];
   customField?: CustomFieldFilter;
   /** Contact-column filter used by `type === 'field'`. */
   fieldFilter?: FieldFilter;
@@ -307,6 +318,34 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           throw new Error(`Failed to fetch contacts: ${error.message}`);
         contacts = data ?? [];
       }
+    } else if (
+      audience.type === 'contacts' &&
+      audience.contactIds &&
+      audience.contactIds.length > 0
+    ) {
+      // Hand-picked audience. Re-read the rows at send time rather than
+      // trusting the draft's snapshot: a contact may have been renamed,
+      // re-numbered, opted out or deleted since it was picked, and the
+      // send must use current data. Ids missing from the result are
+      // silently dropped — a deleted contact is not a failed send.
+      // Paged because PostgREST caps the IN-clause around 1000 values.
+      const ids = [...new Set(audience.contactIds)];
+      const PAGE = 500;
+      const collected: Contact[] = [];
+      for (let i = 0; i < ids.length; i += PAGE) {
+        const { data, error } = await supabase
+          .from('contacts')
+          .select('*')
+          .in('id', ids.slice(i, i + PAGE));
+        if (error)
+          throw new Error(`Failed to fetch contacts: ${error.message}`);
+        collected.push(...((data ?? []) as Contact[]));
+      }
+      // Preserve the order the user picked in.
+      const byId = new Map(collected.map((c) => [c.id, c]));
+      contacts = ids
+        .map((id) => byId.get(id))
+        .filter((c): c is Contact => Boolean(c));
     } else if (audience.type === 'field' && audience.fieldFilter) {
       contacts = await resolveFieldAudience(supabase, audience.fieldFilter);
     } else if (audience.type === 'custom_field' && audience.customField) {
@@ -460,7 +499,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     }
 
     // Insert only missing contacts, in one batch per 200 rows (PostgREST
-    // has a default payload cap — 200 keeps individual requests small).
+    // has a default payload cap ��� 200 keeps individual requests small).
     const missing = phones
       .filter((p) => !byPhone.has(p))
       .map((phone) => ({
