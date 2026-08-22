@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-
+import {
+  getChannel,
+  removeChannel,
+  type RealtimeChannel,
+} from '@/lib/realtime';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
@@ -276,7 +279,7 @@ export function useTeamChat(
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      removeChannel(channel);
     };
   }, [enabled, accountId, myId, mutateConvs, markReadInternal]);
 
