@@ -29,7 +29,8 @@
 | An idempotent webhook-claim pattern already exists (`webhook_events`, PK = provider event id, `INSERT … ON CONFLICT DO NOTHING`) | `20260822130000_webhook_event_dedupe.sql` |
 | A port convention exists for swappable infrastructure, with a hard "no vendor SDK in a port" rule | `src/lib/ports/message-ingress.ts` |
 | Env names resolve in exactly one module; optional getters return `undefined` and the feature must degrade or fail closed | `src/lib/env.ts` |
-| Cron routes authenticate with `cronSecret()` | `src/app/api/**/cron`, `src/lib/routes/cron-auth.ts` |
+| Cron routes authenticate with `authorizeCronRequest()` + `cronAuthEnv()` | `src/features/flows/lib/cron-auth.ts`, `src/lib/env.ts`, used by `/api/flows/cron` |
+| `/api/webhooks/` is **already** an unauthenticated public prefix — a route placed there has no gate but its own signature check | `src/middleware.ts` (`PUBLIC_PREFIXES`) |
 
 So the billing *catalogue* is done. What is missing is everything between "the
 tenant clicks Upgrade" and "`accounts.plan_id` says `growth`", plus the far
@@ -178,7 +179,7 @@ is set.
 14. **D14 — A daily reconciliation cron is part of the design, not a
     contingency.** Webhooks are at-least-once, not guaranteed-once: an outage on
     our side during a delivery window is a silently unactivated paying customer.
-    `/api/cron/billing-reconcile` (existing `cronSecret()` pattern) pages through
+    `/api/cron/billing-reconcile` (existing `authorizeCronRequest()` pattern) pages through
     non-terminal subscriptions, calls `fetchSubscription`, and applies drift
     through the same transition table. It is **cursor-based and bounded per run**
     to respect the Workers 50-subrequest and 10 ms-CPU limits — a cron that tries
@@ -400,6 +401,9 @@ paid for.
 ---
 
 ## Action items
+
+> Sequenced, with an adversarial review pass (attack tree A1–A20), in
+> [`.agents/plans/2026-08-22-payments-subscriptions.md`](../../.agents/plans/2026-08-22-payments-subscriptions.md).
 
 1. [ ] `src/lib/ports/payment-provider.ts` — port + domain types, zero vendor
    imports; boundary test asserts no SDK/Next/Supabase import (D1)
