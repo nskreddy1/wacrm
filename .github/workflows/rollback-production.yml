@@ -1,0 +1,134 @@
+# Production rollback (plan Task 7 Step 5, ADR-001 §4.5).
+#
+# Manual dispatch only. Redeploys a PREVIOUSLY VERIFIED artifact:
+#   1. Resets `prod` to the given release tag.
+#   2. Downloads the stored build artifact for that release.
+#   3. RE-VERIFIES its sha256 against the release manifest (integrity is
+#      checked at every hop, not just at build time — review §8).
+#   4. `wrangler deploy` the same artifact — NO REBUILD. A rebuild could
+#      produce different code than what the tag's manifest attests.
+#
+# Guard rails: typed confirmation string must be exactly
+# "rollback production", and the run requires `production` environment
+# approval like any other production mutation.
+name: Rollback Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to roll back TO (e.g. release-20260822-120000-abc1234)'
+        required: true
+        type: string
+      confirm:
+        description: 'Type exactly: rollback production'
+        required: true
+        type: string
+
+concurrency:
+  group: production-promotion # shares the promotion lock — never concurrent with a promote
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  rollback:
+    name: rollback
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "rollback production" ]; then
+            echo "::error::Confirmation string mismatch — expected 'rollback production'. Aborting."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # wrangler is needed for deploy; full install keeps versions
+      # identical to what the lockfile pinned at that release.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch release manifest + artifact
+        id: manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --pattern 'release-manifest.json' --dir /tmp --repo "$GITHUB_REPOSITORY"
+          GIT_SHA=$(jq -r '.git_sha' /tmp/release-manifest.json)
+          EXPECTED_SHA256=$(jq -r '.artifact_sha256' /tmp/release-manifest.json)
+          echo "git_sha=$GIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "artifact_sha256=$EXPECTED_SHA256" >> "$GITHUB_OUTPUT"
+          echo "Rolling back to $TAG ($GIT_SHA), expected artifact sha256 $EXPECTED_SHA256"
+          # The build artifact lives on the promotion run that created the
+          # release. Find it by name (open-next-<git_sha>) across runs.
+          RUN_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=open-next-$GIT_SHA" \
+            --jq '.artifacts[0].workflow_run.id // empty')
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::No stored artifact open-next-$GIT_SHA found (expired after retention?). Cannot roll back without a verified artifact — do NOT rebuild; investigate."
+            exit 1
+          fi
+          gh run download "$RUN_ID" --name "open-next-$GIT_SHA" --dir /tmp/artifact --repo "$GITHUB_REPOSITORY"
+
+      - name: Re-verify artifact sha256 against manifest
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ steps.manifest.outputs.artifact_sha256 }}"
+          ACTUAL=$(sha256sum /tmp/artifact/open-next-artifact.tar.gz | cut -d' ' -f1)
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::Artifact integrity FAILED on rollback — expected $EXPECTED got $ACTUAL. Aborting."
+            exit 1
+          fi
+          echo "Artifact integrity verified: $ACTUAL"
+          rm -rf .open-next
+          tar -xzf /tmp/artifact/open-next-artifact.tar.gz
+
+      - name: Reset prod branch to release tag
+        env:
+          GIT_SHA: ${{ steps.manifest.outputs.git_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Force is intentional and audited: rollback moves prod BACKWARD.
+          git push --force origin "$GIT_SHA":refs/heads/prod
+
+      - name: Deploy verified artifact (no rebuild)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy
+
+      - name: Post-rollback health check
+        env:
+          SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          GIT_SHA: ${{ steps.manifest.outputs.git_sha }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            BODY=$(curl -sf --max-time 10 "$SITE_URL/api/health" || true)
+            if [ -n "$BODY" ] && echo "$BODY" | grep -q "${GIT_SHA:0:7}"; then
+              echo "Rollback VERIFIED — $SITE_URL is serving ${GIT_SHA:0:7}."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Rollback deployed but /api/health never confirmed ${GIT_SHA:0:7} — escalate immediately."
+          exit 1

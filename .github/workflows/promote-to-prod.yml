@@ -1,0 +1,202 @@
+# Production promotion gate (plan Task 7 Step 4, ADR-001 §4.1, addendum §G).
+#
+# State machine, in order:
+#   BUILD → ATTESTED → VERIFY → MANIFEST → PROMOTE → DEPLOY → VERIFIED
+#
+# Non-negotiables encoded here:
+#   * workflow_run ELIGIBILITY GATE (review §11): only a SUCCESSFUL CI run
+#     whose head branch is `main` can become promotion input. A green run
+#     from any other branch or workflow never promotes.
+#   * Checkout pins github.event.workflow_run.head_sha — NEVER current
+#     main HEAD; the race between CI finishing and promotion starting
+#     would otherwise ship untested code (ADR-001 §4.1).
+#   * `environment: production` is the HUMAN approval gate — a person
+#     must approve in the GitHub UI before the build job even starts.
+#   * Artifact integrity (review §8): sha256 recorded at build, artifact
+#     uploaded, downloaded BACK, recomputed, and compared before deploy.
+#     Never assume upload == download.
+#   * DEPLOY ships the SAME verified artifact — no rebuild after VERIFY.
+#   * check-env-completeness --runtime runs HERE and only here, because
+#     only this environment holds the real production var names.
+#
+# Requires (Task 11): `production` GitHub Environment with required
+# reviewers, CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID, and the
+# production runtime env vars declared in .env.production.example.
+name: Promote to Production
+
+on:
+  workflow_run:
+    workflows: ["CI"] # exact upstream workflow name — do not rename one without the other
+    types: [completed]
+
+# One promotion at a time; NEVER cancel an in-flight production deploy.
+concurrency:
+  group: production-promotion
+  cancel-in-progress: false
+
+permissions:
+  contents: write # fast-forward `prod`, create tag + release
+
+jobs:
+  promote:
+    name: promote
+    # ELIGIBILITY GATE (review §11)
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    environment: production # manual approval happens here
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # NEVER current main HEAD — pin the exact SHA CI validated.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ---- BUILD ----------------------------------------------------
+      - name: Env completeness (--runtime, production values)
+        run: pnpm exec node scripts/check-env-completeness.mjs --runtime
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          META_APP_ID: ${{ vars.META_APP_ID }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          KV_REST_API_URL: ${{ vars.KV_REST_API_URL }}
+          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+        env:
+          ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+          META_APP_SECRET: 'ci-dummy-meta-secret'
+
+      - name: OpenNext build
+        run: pnpm exec opennextjs-cloudflare build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+
+      # ---- ATTESTED -------------------------------------------------
+      - name: Attest artifact (sha256)
+        id: attest
+        run: |
+          set -euo pipefail
+          tar -czf /tmp/open-next-artifact.tar.gz .open-next
+          SHA=$(sha256sum /tmp/open-next-artifact.tar.gz | cut -d' ' -f1)
+          echo "artifact_sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Recorded artifact sha256: $SHA"
+
+      - name: Upload artifact
+        id: upload-artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: open-next-${{ github.event.workflow_run.head_sha }}
+          path: /tmp/open-next-artifact.tar.gz
+          retention-days: 90
+          if-no-files-found: error
+
+      # ---- VERIFY (review §8 — never assume upload == download) -----
+      - name: Download artifact back and verify sha256
+        uses: actions/download-artifact@v7
+        with:
+          name: open-next-${{ github.event.workflow_run.head_sha }}
+          path: /tmp/verify
+
+      - name: Verify integrity
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ steps.attest.outputs.artifact_sha256 }}"
+          ACTUAL=$(sha256sum /tmp/verify/open-next-artifact.tar.gz | cut -d' ' -f1)
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::Artifact integrity FAILED — expected $EXPECTED got $ACTUAL. Aborting promotion."
+            exit 1
+          fi
+          echo "Artifact integrity verified: $ACTUAL"
+          # Deploy from the verified copy, not the local build dir.
+          rm -rf .open-next
+          tar -xzf /tmp/verify/open-next-artifact.tar.gz
+
+      # ---- MANIFEST (ADR-003 §6) ------------------------------------
+      - name: Generate release manifest
+        run: |
+          node scripts/generate-release-manifest.mjs \
+            --git-sha "$RELEASE_SHA" \
+            --artifact-sha256 "${{ steps.attest.outputs.artifact_sha256 }}" \
+            --infra-ref "${{ github.workflow_ref }}" \
+            --output /tmp/release-manifest.json
+          cat /tmp/release-manifest.json
+
+      # ---- PROMOTE (fast-forward prod, tag, release) ----------------
+      - name: Fast-forward prod + tag + release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="release-$(date -u +%Y%m%d-%H%M%S)-${RELEASE_SHA:0:7}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Fast-forward only: fails loudly if prod diverged (it must never).
+          if git ls-remote --exit-code origin refs/heads/prod > /dev/null 2>&1; then
+            git push origin "$RELEASE_SHA":refs/heads/prod
+          else
+            git push origin "$RELEASE_SHA":refs/heads/prod
+          fi
+          git tag "$TAG" "$RELEASE_SHA"
+          git push origin "refs/tags/$TAG"
+          gh release create "$TAG" /tmp/release-manifest.json \
+            --title "$TAG" \
+            --notes "Automated production promotion of $RELEASE_SHA. Manifest attached; artifact sha256 ${{ steps.attest.outputs.artifact_sha256 }}." \
+            --target "$RELEASE_SHA"
+
+      # ---- DEPLOY (the SAME verified artifact — no rebuild) ---------
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy
+
+      # ---- VERIFIED (post-deploy health poll) -----------------------
+      - name: Post-deploy health check
+        env:
+          SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+        run: |
+          set -euo pipefail
+          echo "Polling $SITE_URL/api/health for release $RELEASE_SHA ..."
+          for i in $(seq 1 10); do
+            BODY=$(curl -sf --max-time 10 "$SITE_URL/api/health" || true)
+            if [ -n "$BODY" ]; then
+              echo "Health response: $BODY"
+              if echo "$BODY" | grep -q "${RELEASE_SHA:0:7}"; then
+                echo "VERIFIED — deployed release is serving."
+                exit 0
+              fi
+              # Healthy but old SHA: keep polling, propagation takes seconds.
+            fi
+            sleep 15
+          done
+          echo "::error::FAILED_HEALTHCHECK — /api/health never confirmed release $RELEASE_SHA. Follow the rollback runbook (rollback-production workflow) with tag ${{ steps.release.outputs.tag }}'s predecessor."
+          exit 1

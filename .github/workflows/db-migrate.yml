@@ -1,0 +1,91 @@
+# Production database migrations (plan Task 7 Step 6, ADR-003 §5.3, NFR-007).
+#
+# Manual dispatch only, gated by the `db-production` GitHub Environment
+# (manual approval required). THIS WORKFLOW IS THE ONLY THING THAT EVER
+# HOLDS THE PRODUCTION SUPABASE_DB_URL — it lives exclusively as a secret
+# of the db-production environment, never as a repo secret, never in the
+# app runtime, never on a developer machine.
+#
+# Destructive gate: when the pending migration SQL matches a destructive
+# pattern (DROP / ALTER ... TYPE / DELETE FROM / TRUNCATE), or the ref's
+# latest commit message carries [destructive-migration], a SECOND typed
+# confirmation ("apply destructive migration") is required on top of the
+# environment approval. Expand → migrate → contract is the standing
+# protocol; a destructive step should be the audited exception.
+name: DB Migrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to run migrations from (default: main)'
+        required: false
+        default: 'main'
+        type: string
+      destructive_confirm:
+        description: 'ONLY for destructive migrations — type exactly: apply destructive migration'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: db-production-migration # one migration run at a time, never cancelled
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: migrate
+    environment: db-production # approval + sole holder of SUPABASE_DB_URL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Destructive gate
+        env:
+          CONFIRM: ${{ inputs.destructive_confirm }}
+        run: |
+          set -euo pipefail
+          # Scan every migration file for destructive statements. The
+          # push script itself skips already-applied migrations, so this
+          # is intentionally conservative: it looks at what COULD run.
+          PATTERN='(^|[^A-Za-z_])(DROP |ALTER [^;]*TYPE|DELETE FROM|TRUNCATE)'
+          DESTRUCTIVE_FILES=$(grep -rilE "$PATTERN" supabase/migrations/ || true)
+          COMMIT_FLAG=$(git log -1 --format=%B | grep -c '\[destructive-migration\]' || true)
+          if [ -n "$DESTRUCTIVE_FILES" ] || [ "$COMMIT_FLAG" -gt 0 ]; then
+            echo "Destructive pattern present in:"
+            echo "$DESTRUCTIVE_FILES"
+            if [ "$CONFIRM" != "apply destructive migration" ]; then
+              echo "::error::Destructive migration detected — re-run with destructive_confirm set to exactly 'apply destructive migration'. Prefer expand -> migrate -> contract instead."
+              exit 1
+            fi
+            echo "Destructive confirmation accepted — proceeding under audit."
+          else
+            echo "No destructive patterns detected."
+          fi
+
+      - name: Apply migrations to production
+        env:
+          # Sole holder (NFR-007): lives ONLY in the db-production environment.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node scripts/push-supabase-schema.mjs
+
+      - name: Summary
+        run: |
+          echo "Migrations applied from ref '${{ inputs.ref }}' ($(git rev-parse --short HEAD))." >> "$GITHUB_STEP_SUMMARY"
+          echo "Remember: regenerate the schema doc (pnpm db:doc) against dev and commit it via a normal PR." >> "$GITHUB_STEP_SUMMARY"
