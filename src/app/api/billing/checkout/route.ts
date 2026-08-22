@@ -276,7 +276,7 @@ export async function POST(request: NextRequest) {
       throw new Error('plan ref requested for an unvalidated plan');
     }
     const ref = resolveProviderPlanRef(
-      plan.provider_refs,
+      activePlan.provider_refs,
       provider.id,
       provider.environment,
       forInterval

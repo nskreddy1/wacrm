@@ -15,8 +15,16 @@ import { requestCancellation } from './cancel-subscription';
  * appearing here would be exactly the trust-boundary violation the
  * column split exists to prevent (ADR-009 8.2).
  */
+/**
+ * The shape every stubbed `rpc()` resolves to. Declared explicitly (rather
+ * than inferred from the happy path) so a test may return
+ * `{ data: null, error: … }` without TypeScript narrowing `error` to
+ * `null` — the failure paths are the interesting half of this suite.
+ */
+type RpcResult = { data: unknown; error: { message: string } | null };
+
 function clientAllowingOnlyRpc(rows: unknown) {
-  const rpc = vi.fn((name: string) => {
+  const rpc = vi.fn((name: string): Promise<RpcResult> => {
     if (name === 'request_subscription_cancellation') {
       return Promise.resolve({ data: rows, error: null });
     }
