@@ -122,6 +122,17 @@ export type MoneyEventKind = 'charged' | 'refunded' | 'charged_back';
  * chargeback never affects access" is NOT a rule we encode.
  */
 export type LifecycleEventKind =
+  /**
+   * A payment mandate was approved, but no money has moved yet.
+   *
+   * Recorded for forensics and DELIBERATELY INERT: it appears in no
+   * transition table, so it can never grant access. This exists as its
+   * own kind rather than being dropped at the adapter because the event
+   * is real and worth an audit row, and rather than being folded into
+   * `activated` because doing so would hand out paid access on the
+   * strength of an authorisation whose first debit can still fail.
+   */
+  | 'mandate_authenticated'
   | 'activated'
   | 'payment_failed'
   | 'cancel_scheduled'

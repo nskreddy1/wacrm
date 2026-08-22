@@ -34,6 +34,13 @@ export type SubscriptionStatus =
 export type MoneyEventKind = 'charged' | 'refunded' | 'charged_back';
 
 export type LifecycleEventKind =
+  /**
+   * Mandate approved, no money moved yet. INERT BY OMISSION: it appears
+   * in no row of `TRANSITIONS`, so every state treats it as a no-op and
+   * it can never grant access. Absence is the safety property here, so
+   * adding it to the table would be the bug.
+   */
+  | 'mandate_authenticated'
   | 'activated'
   | 'payment_failed'
   | 'cancel_scheduled'
