@@ -29,7 +29,40 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
 const GRAPH_PATH = join(ROOT, 'scripts', 'architecture', 'feature-graph.json');
+const BASELINE_PATH = join(ROOT, 'scripts', 'boundaries-baseline.json');
 const UPDATE = process.argv.includes('--update');
+
+// ---------------------------------------------------------------------------
+// Rule 5: SUPABASE SDK BOUNDARY (ADR-002 Phase 0 — Anti-Corruption Layer)
+//
+// `@supabase/*` and `@/lib/supabase` may be imported ONLY by the adapter
+// layer. Everything else goes through the facades:
+//   data       → @/lib/db (sql / withTransaction)  [repositories]
+//   sessions   → @/lib/auth-provider
+//   realtime   → @/lib/realtime
+//   storage    → @/lib/storage
+//
+// Existing violations are baselined in scripts/boundaries-baseline.json and
+// WARN; NEW violations FAIL. The baseline shrinks as ADR-002 Phase 1
+// converts call sites — the count is printed on every run so shrinkage is
+// visible in CI.
+// ---------------------------------------------------------------------------
+
+const SUPABASE_IMPORT_RE = /^(@supabase\/|@\/lib\/supabase)/;
+const SUPABASE_ALLOWLIST = [
+  'src/lib/db/',
+  'src/lib/auth-provider/',
+  'src/lib/realtime/',
+  'src/lib/storage/',
+  'src/lib/supabase/',
+  'src/lib/supabase',
+];
+
+function isSupabaseAllowlisted(rel) {
+  return SUPABASE_ALLOWLIST.some(
+    (prefix) => rel.startsWith(prefix) || rel === prefix.replace(/\/$/, '.ts')
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Collect source files
@@ -122,12 +155,18 @@ const violations = [];
 const foundEdges = new Set();
 /** @type {Set<string>} shared-layer files importing features */
 const foundSharedImporters = new Set();
+/** @type {Set<string>} files importing supabase outside the adapter layer (Rule 5) */
+const foundSupabaseImporters = new Set();
 
 for (const file of files) {
   const feature = featureOf(file);
   const sharedLayer = sharedLayerOf(file);
 
   for (const { spec } of importsOf(file)) {
+    // Rule 5: supabase SDK imports outside the adapter layer.
+    if (SUPABASE_IMPORT_RE.test(spec) && !isSupabaseAllowlisted(relPath(file))) {
+      foundSupabaseImporters.add(relPath(file));
+    }
     // Rule 1a: nothing outside src/app imports from @/app.
     if (spec.startsWith('@/app')) {
       const rel = file.slice(SRC.length + 1).split(sep)[0];
@@ -193,6 +232,36 @@ if (UPDATE) {
   console.log(
     `feature-graph.json updated: ${foundEdges.size} edges, ${foundSharedImporters.size} shared exceptions. ` +
       `restrictedSymbols preserved (${(existing.restrictedSymbols ?? []).length} rule(s)).`
+  );
+
+  // Rule 5 baseline: --update may only SHRINK it (drop files that no longer
+  // violate); it never adds new violators — those must be converted to the
+  // facades, not blessed.
+  let prevBaseline = [];
+  try {
+    prevBaseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'))
+      .supabaseImports;
+  } catch {
+    // First generation — baseline everything currently violating.
+    prevBaseline = [...foundSupabaseImporters];
+  }
+  const nextBaseline = prevBaseline
+    .filter((f) => foundSupabaseImporters.has(f))
+    .sort();
+  writeFileSync(
+    BASELINE_PATH,
+    JSON.stringify(
+      {
+        $comment:
+          'ADR-002 Phase 0 baseline of pre-existing direct supabase imports outside src/lib adapters. This list may only shrink (Phase 1 converts call sites to @/lib/db, @/lib/auth-provider, @/lib/realtime, @/lib/storage). NEW files must never be added here.',
+        supabaseImports: nextBaseline,
+      },
+      null,
+      2
+    ) + '\n'
+  );
+  console.log(
+    `boundaries-baseline.json updated: ${nextBaseline.length} baselined supabase importer(s).`
   );
   process.exit(0);
 }
@@ -268,6 +337,33 @@ for (const rule of graph.restrictedSymbols ?? []) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Rule 5 enforcement: baselined supabase importers warn; new ones fail.
+// ---------------------------------------------------------------------------
+
+let supabaseBaseline = new Set();
+try {
+  supabaseBaseline = new Set(
+    JSON.parse(readFileSync(BASELINE_PATH, 'utf8')).supabaseImports
+  );
+} catch {
+  console.error(
+    'Missing scripts/boundaries-baseline.json — run `node scripts/check-boundaries.mjs --update` to generate it.'
+  );
+  process.exit(1);
+}
+
+const baselinedSupabase = [];
+for (const file of [...foundSupabaseImporters].sort()) {
+  if (supabaseBaseline.has(file)) {
+    baselinedSupabase.push(file);
+  } else {
+    violations.push(
+      `${file}: imports supabase directly (@supabase/* or @/lib/supabase) outside the adapter layer. New code must use the facades: @/lib/db for data, @/lib/auth-provider for sessions, @/lib/realtime for subscriptions, @/lib/storage for files (ADR-002 Phase 0).`
+    );
+  }
+}
+
 // Report stale entries (kept as info, not failures, so deletions don't block).
 const staleEdges = [...allowedEdges].filter((e) => !foundEdges.has(e));
 const staleShared = [...sharedExceptions].filter(
@@ -283,6 +379,14 @@ if (violations.length > 0) {
 console.log(
   `Boundaries OK — ${foundEdges.size} declared feature edges, ${foundSharedImporters.size} shared exceptions, ${files.length} files scanned.`
 );
+console.log(
+  `ADR-002 baseline: ${baselinedSupabase.length}/${supabaseBaseline.size} baselined direct supabase importer(s) remain — target 0 by end of Phase 1.`
+);
+if (baselinedSupabase.length < supabaseBaseline.size) {
+  console.log(
+    `Info: ${supabaseBaseline.size - baselinedSupabase.length} baseline entries no longer violate — run with --update to shrink the baseline.`
+  );
+}
 if (staleEdges.length || staleShared.length) {
   console.log(
     `Info: ${staleEdges.length + staleShared.length} stale graph entries — run with --update to prune.`
