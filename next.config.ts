@@ -42,6 +42,25 @@ const SECURITY_HEADERS = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  /**
+   * The ONE sanctioned mirror of the alias resolution in `src/lib/env.ts`.
+   *
+   * Everything else in the app asks `@/lib/env` for a value and never
+   * knows a legacy name. This block cannot: `next.config.ts` is
+   * evaluated by the Next build before path aliases resolve, so it
+   * cannot import from `src/`. And it has to exist, because Next inlines
+   * `NEXT_PUBLIC_*` into the client bundle by matching the literal text
+   * `process.env.NEXT_PUBLIC_FOO` — a value routed through a function
+   * would reach the browser as `undefined`.
+   *
+   * The `zepo_`-prefixed and `*_PUBLISHABLE_KEY` spellings come from the
+   * Supabase↔Vercel marketplace integration, which namespaces variables
+   * per linked project. Resolution order must stay identical to
+   * `SUPABASE_URL_NAMES` / `SUPABASE_ANON_KEY_NAMES` in `src/lib/env.ts`
+   * so a browser and a server render never disagree about which project
+   * they are talking to. `check-env-completeness.mjs --contract`
+   * allowlists this file by name and nothing else.
+   */
   env: {
     NEXT_PUBLIC_SUPABASE_URL:
       process.env.NEXT_PUBLIC_SUPABASE_URL ??

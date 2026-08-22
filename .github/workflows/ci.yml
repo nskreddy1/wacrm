@@ -69,6 +69,20 @@ jobs:
       - name: Docs mirror in sync
         run: pnpm check:docs
 
+      # Environment contract (needs no secrets — static analysis only).
+      # `--manifest` proves every variable the app requires in production
+      # is declared; `--contract` proves legacy aliases stay confined to
+      # src/lib/env.ts, that next.config.ts's mirrored resolution chains
+      # still match it exactly, that no server secret hides behind a
+      # NEXT_PUBLIC_ prefix, and that no documented variable is dead.
+      # `--runtime` is NOT run here: it can only pass inside the
+      # `production` GitHub Environment (see promote-to-prod.yml).
+      - name: Env manifest complete
+        run: pnpm check:env
+
+      - name: Env contract (no alias drift)
+        run: pnpm check:env:contract
+
       - name: Test
         run: pnpm test
 
