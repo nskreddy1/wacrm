@@ -270,3 +270,34 @@ Honest note: "billions of concurrent users" is beyond any single-Postgres design
 8. Setup checklist handoff: Cloudflare token + account ID, Hyperdrive config IDs, Grafana Cloud, Sentry DSN, Langfuse keys, `SUPABASE_DB_URL`.
 
 Not in scope now: the first real production deploy (needs real tokens/env values).
+
+---
+
+## 13. Appendix — external review coverage matrix
+
+Three independent reviews were consolidated into this ADR. This matrix maps every
+action item from the final consolidated review to where it is decided in this
+document, so nothing silently drops during implementation.
+
+| # | Review action item | Where decided |
+| --- | --- | --- |
+| 1 | SHA-pin `workflow_run` promotion checkout + `production-promotion` concurrency group | §4.1 (implementation step 5) |
+| 2 | Replace `dependency-review-action` with `pnpm audit` + `osv-scanner`/Trivy | §4.4, `security.yml` in §4 |
+| 3 | Plain `release-manifest.json` instead of GitHub artifact attestation | §4.2 |
+| 4 | Destructive-migration confirmation gate in `db-migrate.yml` | §5 |
+| 5 | AI review structured JSON; block only machine-verifiable categories | §4.3 |
+| 6 | Wrap Supabase Realtime behind an adapter interface (`src/lib/realtime/`) | §6 (loose-coupling rule), §9 |
+| 7 | "Free/low-cost tier first, adapter-swappable" language (not "all free tiers") | §1 Constraints, README conventions |
+| — | 2-branch + gated promotion confirmed; never revert to 3 branches | §4 (options considered) |
+| — | Cloudflare Queues free since Feb 2026; interface-ready, build only when measured | §10 |
+| — | Transaction pooler port 6543 + `prepare: false` (prepared statements off) | §7.2 |
+| — | In-memory cache only for optimization data; never correctness data; isolates are not a shared cache | §8 |
+| — | pgvector not a lock-in risk; MAU not the Supabase cost driver | §9 |
+| — | Snyk rejected (scan caps, redundancy, no containers/IaC); revisit triggers documented | §4.4 |
+| — | Langfuse unit-economics caveat (trace+observation+score = 1 unit) | §6 table |
+| — | GitHub Models rate limits (~10/min, ~50/day high-tier; scales with Copilot tier) | §4.3 |
+| — | OpenNext remains correct; Next 16.2 native adapters not shipped yet | §3 |
+
+**Deferred list (verbatim from review, all agreed):** Sigstore attestation
+(needs Enterprise Cloud), Snyk or any paid security suite, building the Queues
+consumer before a measured bottleneck.
