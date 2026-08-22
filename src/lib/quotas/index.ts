@@ -1,4 +1,6 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /**
  * Quota engine (Phase 0.2).
@@ -64,19 +66,15 @@ export interface QuotaDecision {
 // Client (same lazy service-role convention as flows/admin-client.ts)
 // ---------------------------------------------------------------------------
 
+/**
+ * Test override only. When null, quota checks use the process-wide
+ * service-role client from `@/lib/supabase/admin`, so the env-alias
+ * resolution lives in exactly one place (`@/lib/env`).
+ */
 let _client: SupabaseClient | null = null;
 
 function admin(): SupabaseClient {
-  if (!_client) {
-    _client = createClient(
-      (process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)!,
-      (process.env.SUPABASE_SERVICE_ROLE_KEY ??
-        process.env.zepo_SUPABASE_SERVICE_ROLE_KEY ??
-        process.env.zepo_SUPABASE_SECRET_KEY ??
-        process.env.SUPABASE_SECRET_KEY)!
-    );
-  }
-  return _client;
+  return _client ?? supabaseAdmin();
 }
 
 /** Test seam. */

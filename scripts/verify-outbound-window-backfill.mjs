@@ -14,23 +14,10 @@
 // Exit code 0 = safe to ship the guard. Exit code 1 = do NOT ship.
 import pg from 'pg';
 import process from 'node:process';
+import { resolveDbUrlOrExit } from './lib/db-url.mjs';
 
-const raw = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
-if (!raw) {
-  console.error('POSTGRES_URL_NON_POOLING or POSTGRES_URL is required.');
-  process.exit(1);
-}
-
-// Mirrors scripts/push-supabase-schema.mjs: Supabase pooler certs include a
-// managed self-signed chain, so drop URL-level sslmode and configure TLS here.
-const isLocal = /localhost|127\.0\.0\.1/.test(raw);
-const url = new URL(raw);
-if (!isLocal) url.searchParams.delete('sslmode');
-
-const client = new pg.Client({
-  connectionString: url.toString(),
-  ssl: isLocal ? undefined : { rejectUnauthorized: false },
-});
+// Read-only verification queries, so a pooled connection is fine.
+const client = new pg.Client(resolveDbUrlOrExit());
 
 await client.connect();
 

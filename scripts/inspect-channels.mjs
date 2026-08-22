@@ -1,9 +1,8 @@
 import { Client } from 'pg';
+import { resolveDbUrlOrExit } from './lib/db-url.mjs';
 
-const c = new Client({
-  connectionString: process.env.POSTGRES_URL_NON_POOLING,
-  ssl: { rejectUnauthorized: false },
-});
+// Read-only inspection, so a pooled connection is fine.
+const c = new Client(resolveDbUrlOrExit());
 await c.connect();
 
 const ix = await c.query(
