@@ -77,6 +77,11 @@ Assessments and planning (point-in-time, marked as such):
 - [ADR-002](./adr/002-affective-layer.md) — affective layer
 - [ADR-003](./adr/003-record-ux-catalog-and-normalization.md) — record UX, catalog and normalization
 - [ADR-004](./adr/004-workspace-membership-and-invite-delivery.md) — workspace membership and invite delivery
+- [ADR-005](./adr/005-ai-agent-configuration-flow.md) — AI agent configuration flow
+- [ADR-006](./adr/006-outbound-send-window-and-single-recipient-sends.md) — outbound send window and single-recipient sends
+- [ADR-007](./adr/007-vertical-packs-and-module-enablement.md) — vertical packs and module enablement
+- [ADR-008](./adr/008-onboarding-split-and-cost-positioning.md) — onboarding split and cost positioning
+- [ADR-009](./adr/009-payments-and-subscription-billing.md) — payments, subscription lifecycle and the entitlement projection
 
 ## Archive
 
