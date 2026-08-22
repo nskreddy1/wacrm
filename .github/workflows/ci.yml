@@ -58,6 +58,11 @@ jobs:
       - name: Architecture boundaries
         run: pnpm check:boundaries
 
+      # ARCH-001..010 fitness functions (plan Task 10 / addendum §E).
+      # Baseline-aware: pre-existing violations warn, new ones fail.
+      - name: Architecture fitness (ARCH rules)
+        run: pnpm check:architecture
+
       # docs/architecture/ is a published mirror of .agents/context/.
       # Fails when the two drift, so the human-facing copy cannot silently
       # go stale after a migration or route change.
