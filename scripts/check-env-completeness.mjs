@@ -261,6 +261,62 @@ function checkContract() {
     }
   }
 
+  // 2b. Env vars whose names the code COMPOSES instead of spelling out.
+  //
+  // Rule 2 above only sees a literal `process.env.<NAME>` read. But
+  // `razorpayCredentials()` in src/lib/env.ts builds its names from a
+  // computed prefix:
+  //
+  //     const prefix = environment === 'live' ? 'RAZORPAY_LIVE' : 'RAZORPAY_TEST';
+  //     firstOf([`${prefix}_KEY_ID`])
+  //
+  // so not one of those ten names is literally present in the source.
+  // Without this step the checker calls them dead and tells an operator
+  // to delete the credentials that make test-mode payments and webhook
+  // secret rotation work. (The `RAZORPAY_LIVE_*` four escaped only by
+  // accident: a route test assigns them via `process.env.X = …`, which
+  // rule 2's regex happens to match. That is luck, not evidence — which
+  // is why the fix is declaring the family rather than adding more
+  // incidental references.)
+  //
+  // EVIDENCE, so this cannot rot into a permanent excuse: each family
+  // names a template that must still appear in src/lib/env.ts. Delete
+  // the composing code and this declaration fails instead of silently
+  // whitelisting names nobody reads any more — the same property the
+  // dead-key rule exists to provide.
+  const COMPOSED_KEY_FAMILIES = [
+    {
+      what: 'razorpayCredentials() — one credential set per payments environment',
+      prefixes: ['RAZORPAY_LIVE', 'RAZORPAY_TEST'],
+      suffixes: [
+        'KEY_ID',
+        'KEY_SECRET',
+        'WEBHOOK_SECRET',
+        'WEBHOOK_SECRET_PREVIOUS',
+        'ACCOUNT_ID',
+      ],
+      evidence: '${prefix}_KEY_ID',
+    },
+  ];
+
+  const envModuleText = readFileSync(ENV_MODULE_PATH, 'utf8');
+  for (const family of COMPOSED_KEY_FAMILIES) {
+    if (!envModuleText.includes(family.evidence)) {
+      violations.push(
+        `composed-key family '${family.what}' declares evidence ` +
+          `\`${family.evidence}\` but src/lib/env.ts no longer contains it. ` +
+          `Either restore the composing code or drop the family (and the ` +
+          `now-dead names) from this script and the manifests.`
+      );
+      continue;
+    }
+    for (const prefix of family.prefixes) {
+      for (const suffix of family.suffixes) {
+        referenced.add(`${prefix}_${suffix}`);
+      }
+    }
+  }
+
   // 3. No server secret behind a public prefix.
   for (const name of referenced) {
     if (!name.startsWith('NEXT_PUBLIC_')) continue;

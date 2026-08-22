@@ -44,7 +44,7 @@ import {
   reconcileOnce,
   type ReconcileCandidate,
 } from '@/features/billing/lib/reconcile';
-import { adminDb } from '@/lib/db/admin';
+import { billingAdminDb } from '@/features/billing/repositories/client';
 import { cronAuthEnv, paymentsEnvironment, paymentsProvider } from '@/lib/env';
 import type {
   PaymentEnvironment,
@@ -117,7 +117,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: 'payments_dormant' });
   }
 
-  const admin = adminDb();
+  const admin = billingAdminDb();
 
   // The cron never creates a checkout, so it has no legitimate use for a
   // plan-ref resolver. Supplying one that throws keeps that structural
@@ -331,7 +331,7 @@ function toCandidate(row: CandidateRow): ReconcileCandidate {
  * job (entitlement repair) already succeeded.
  */
 async function sweepAbandonedIntents(
-  admin: ReturnType<typeof adminDb>,
+  admin: ReturnType<typeof billingAdminDb>,
   provider: string,
   environment: string
 ): Promise<number> {

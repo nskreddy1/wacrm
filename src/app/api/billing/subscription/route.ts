@@ -35,9 +35,11 @@ import {
   getPaymentProvider,
   hasPaymentsConfigured,
 } from '@/features/billing/lib/provider-factory';
+import {
+  billingAdminDb,
+  billingSessionDb,
+} from '@/features/billing/repositories/client';
 import { logAuditEvent } from '@/lib/audit-events';
-import { adminDb } from '@/lib/db/admin';
-import { sessionDb } from '@/lib/db/session';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -79,7 +81,7 @@ export async function GET() {
   }
 
   const { accountId } = ctx;
-  const db = await sessionDb();
+  const db = await billingSessionDb();
 
   // Explicit column lists, never `select('*')`. `provider`,
   // `environment`, `provider_ref` and `provider_customer_ref` are
@@ -223,7 +225,7 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  const db = await sessionDb();
+  const db = await billingSessionDb();
   const provider = getPaymentProvider({ resolveProviderPlanRef: noPlanRefs });
 
   let outcome;
@@ -282,7 +284,7 @@ export async function DELETE(request: NextRequest) {
       // have not seen the provider confirm. Saying 200 would promise
       // more than we know; saying 500 would invite a retry that the
       // provider answers with a 400.
-      void logAuditEvent(adminDb(), {
+      void logAuditEvent(billingAdminDb(), {
         accountId,
         actorId: userId,
         action: 'billing.subscription.cancel_requested',
@@ -301,7 +303,7 @@ export async function DELETE(request: NextRequest) {
       );
 
     case 'requested':
-      void logAuditEvent(adminDb(), {
+      void logAuditEvent(billingAdminDb(), {
         accountId,
         actorId: userId,
         action: 'billing.subscription.cancel_requested',

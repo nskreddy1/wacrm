@@ -52,7 +52,7 @@ import {
   PaymentsUnavailableError,
   WebhookVerificationError,
 } from '@/lib/ports/payment-provider';
-import { adminDb } from '@/lib/db/admin';
+import { billingAdminDb } from '@/features/billing/repositories/client';
 import { paymentsEnvironment, paymentsProvider } from '@/lib/env';
 
 /**
@@ -222,7 +222,7 @@ export async function POST(
   // thing that makes claim-and-apply atomic.
   let result: PaymentEventResult;
   try {
-    result = await processPaymentEvent(adminDb(), {
+    result = await processPaymentEvent(billingAdminDb(), {
       provider: provider.id,
       // TRUSTED: this deployment's own mode, from env — not from the
       // event. Postgres cannot read PAYMENTS_ENVIRONMENT, so the gate

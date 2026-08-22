@@ -35,8 +35,8 @@ import {
   getPaymentProvider,
   hasPaymentsConfigured,
 } from '@/features/billing/lib/provider-factory';
+import { billingAdminDb } from '@/features/billing/repositories/client';
 import { logAuditEvent } from '@/lib/audit-events';
-import { adminDb } from '@/lib/db/admin';
 import type { BillingInterval } from '@/lib/ports/payment-provider';
 import {
   checkRateLimit,
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
       if (tampering.length > 0) {
         // Fire-and-forget; a failed audit write must not block the
         // rejection we have already decided on.
-        void logAuditEvent(adminDb(), {
+        void logAuditEvent(billingAdminDb(), {
           accountId,
           actorId: userId,
           action: 'billing.checkout.rejected',
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const db = adminDb();
+  const db = billingAdminDb();
 
   // 7.4 — load the plan SERVER-SIDE. This row, not the request, is the
   // source of truth for what the customer will be charged.
