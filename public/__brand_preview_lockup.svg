@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-label="Auxelon logo">
+  <!--
+    Auxelon horizontal lockup — mark + wordmark
+    Wordmark: geometric sans (Geist / system fallback), medium weight,
+    all caps, +8% letter-spacing per brand spec.
+    Palette: Ink #0A0A0B / Bone #F5F4F2 / Signal #3E6FF4
+  -->
+  <rect width="1200" height="320" fill="#0A0A0B"/>
+  <!-- mark, scaled to lockup height -->
+  <g transform="translate(96 44)">
+    <g fill="none" stroke="#F5F4F2" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M116 220 L116 133"/>
+      <path d="M116 133 L54 39"/>
+      <path d="M116 133 L178 39"/>
+      <path d="M70 86 L162 86"/>
+    </g>
+    <circle cx="116" cy="133" r="14" fill="#3E6FF4"/>
+  </g>
+  <!-- wordmark -->
+  <text x="356" y="186"
+        font-family="Geist, 'Geist Sans', Inter, 'Helvetica Neue', Arial, sans-serif"
+        font-size="104" font-weight="500" letter-spacing="8.3"
+        fill="#F5F4F2">AUXELON</text>
+</svg>

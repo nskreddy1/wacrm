@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Auxelon mark">
+  <!--
+    Auxelon mark — "the fork"
+    A single continuous stroke rises from the baseline and forks upward
+    into two branches (augmentation: one path becomes two).
+    Geometry quietly encodes A (the apex triangle) and X (the crossing).
+    Palette: Ink #0A0A0B / Bone #F5F4F2 / Signal #3E6FF4
+  -->
+  <rect width="512" height="512" fill="#0A0A0B"/>
+  <g fill="none" stroke="#F5F4F2" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <!-- stem: baseline up to the fork node -->
+    <path d="M256 416 L256 288"/>
+    <!-- left branch -->
+    <path d="M256 288 L164 148"/>
+    <!-- right branch -->
+    <path d="M256 288 L348 148"/>
+    <!-- crossbar: the "A" bar, crossing both branches (the X) -->
+    <path d="M188 218 L324 218"/>
+  </g>
+  <!-- signal node at the fork -->
+  <circle cx="256" cy="288" r="22" fill="#3E6FF4"/>
+</svg>

@@ -1,6 +1,7 @@
 # Company brand strategy — name, positioning, architecture
 
-- **Status:** Proposed — founder must pick the name and personally verify domains/trademarks before anything is registered.
+- **Status:** **Finalized (provisional)** — founder selected **Auxelon** on 2026-08-22 as the working company brand. Founder note: "not fully satisfied — keep Auxelon temporarily." All new repos, infra, and internal naming use **Auxelon** from now on; a rename before public launch remains possible but requires a follow-up ADR because repo names, org handles, and infra identifiers will already carry the name.
+- **Decided name:** **Auxelon** (AUX-eh-lon) — see §3 Tier 1 rationale. Logo and visual identity: `docs/brand/assets/` (see §8).
 - **Date:** 2026-08-22
 - **Scope:** the parent **company** brand. The product currently known as "wacrm" becomes one product line under it (§5).
 
@@ -105,4 +106,21 @@ One master brand, descriptively named products under it — the pattern that let
 
 ## 7. Out of scope of this doc
 
-Visual identity, logo, landing page, and renaming inside the app — deliberately deferred until the name is locked, per founder's selection ("name + brand strategy doc" only). Each is a fast follow-up once §6 steps 1–2 are done.
+Landing page and renaming inside the app — deferred. The logo and core visual identity are now delivered (§8); the in-app rebrand of the CRM (login, titles, emails, `messages/` catalogs) remains a separate, later task.
+
+---
+
+## 8. Visual identity v1 (finalized with the name)
+
+Premium, restrained, per §4 — one typeface family, near-monochrome plus one accent.
+
+- **Logo:** abstract "augmentation" monogram — an upward-forking node mark derived from the "A/X" of Auxelon, rendered as a single continuous stroke. Files in `docs/brand/assets/`:
+  - `auxelon-logo-mark.png` — the standalone mark (dark background master)
+  - `auxelon-logo-lockup.png` — mark + "AUXELON" wordmark, horizontal lockup
+- **Palette (3 colors, per premium restraint):**
+  - Ink `#0A0A0B` (near-black, primary surface)
+  - Bone `#F5F4F2` (off-white, text on dark / light surface)
+  - Signal `#3E6FF4` (electric cobalt accent — used only for the mark's fork node and interactive emphasis)
+- **Typography:** Geist (sans) for everything; wordmark set in Geist Medium, letter-spaced +8%. No second family.
+- **Usage rules:** never place the mark on gradients; never recolor the accent; minimum clear space = height of the mark's fork node; no taglines welded to the lockup.
+- **Repo naming (effective now):** GitHub org/user `nskreddy1` hosts `auxelon-app` (the product) and `auxelon-infra` (deployment/ops). The legacy `wacrm` repo is the reference/archive codebase.
