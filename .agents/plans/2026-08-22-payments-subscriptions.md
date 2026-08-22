@@ -123,7 +123,10 @@ If the invoices plan ships first, Task 5 shrinks to "extend the existing client"
   timestamp":
   | Signal | Role |
   | --- | --- |
-  | `(provider, environment, provider event id)` | **identity** (the idempotency claim, and the whole replay defense) |
+  | signed raw webhook body | **authenticated** event contents — the only cryptographically established data |
+  | `(provider, environment, provider event id)` | provider-supplied event **identity** / duplicate-detection key — *not* authenticated |
+  | `(provider, environment, provider_ref)` on `payment_transactions` | **effect** idempotency for money (key lives inside the signed body) |
+  | `payload_digest` | **non-unique** forensic / replay-correlation signal |
   | provider resource state/version | **authoritative** where the provider exposes it |
   | provider event timestamp | ordering **hint** only |
   | `subscriptions.last_event_at` | defensive **monotonic guard** |
@@ -132,8 +135,25 @@ If the invoices plan ships first, Task 5 shrinks to "extend the existing client"
 - **No replay window on a validly signed webhook** (Task 5.1). Razorpay retries
   failed deliveries for up to 24 hours, so "reject events older than N minutes"
   drops real payments while blocking nothing an attacker could send anyway. The
-  event-id claim is the replay defense. Freshness rules, where a provider signs a
-  timestamp, belong to that provider's adapter.
+  event-id claim is the primary event-level dedupe. Freshness rules, where a
+  provider signs a timestamp, belong to that provider's adapter.
+- **Effect idempotency is separate from event identity, because the event id is
+  not signed.** Razorpay's HMAC authenticates the raw request body;
+  `x-razorpay-event-id` is a provider-supplied header outside the signature base.
+  So `payment_events` deduplicates *deliveries* on
+  `(provider, environment, event_id)`, while financial effects are additionally
+  fenced by provider-resource identity —
+  `UNIQUE (provider, environment, provider_ref)` on `payment_transactions`, whose
+  key comes from **inside** the signed body. A fresh `event_id` on an otherwise
+  identical signed body must never be sufficient to produce a second money row
+  (`A35`). A conflict on an expected existing provider money identity is an
+  `already_applied` outcome, **not** a retryable database failure (Task 4.2.7a).
+- **Webhook completion budget is a design invariant, not operational trivia.**
+  Razorpay resends an event when the endpoint does not respond within **5
+  seconds**. Verification, normalization, the single `process_payment_event()`
+  RPC, and the response path must therefore be bounded: **no provider API call,
+  no reconciliation, and no unbounded query inside webhook processing** (Task 9).
+  Exceeding the budget manufactures our own duplicate storm.
 - **Every provider identifier is unique only within `(provider, environment)`.**
   Provider refs and provider event ids are never globally unique on their own —
   every uniqueness constraint on one is a three-column constraint, and internal
@@ -332,15 +352,37 @@ Additive only; no existing column is changed (ADR-009 data model).
     provider, and Razorpay test-mode and live-mode ids come from different
     id spaces with no cross-guarantee. The uniqueness that matters is the triple.
   - **`event_id` is the provider's own event identifier, taken from where that
-    provider actually publishes it.** For Razorpay it is the verified
+    provider actually publishes it.** For Razorpay it is the
     `x-razorpay-event-id` request header — documented as the unique per-event id
     for deduplication — **not** a payload field, and never synthesised locally
     (Task 5.1 step 5). The only other legitimate producer is the reconciliation
     cron's deterministic synthetic id (Task 10.3).
-  - **This unique triple is also the entire replay defense** (see Task 5.1): a
-    redelivered or replayed event loses the claim and is never applied twice, and
-    that holds no matter how old the delivery is.
+  - **The header is provider-supplied identity, not authenticated data — do not
+    describe it as "verified".** Razorpay's documented scheme is HMAC-SHA256 over
+    the **raw request body**; the header sits outside the signature base string.
+    So the triple is the primary provider-level idempotency claim and must not be
+    presented as cryptographic authentication of the event id. A redelivered
+    event with the *same* id loses the claim and is never applied twice, at any
+    age. An attacker holding a captured validly-signed body who substitutes a
+    fresh id gets a new claim — and is stopped at the **effect** layer instead:
+    `UNIQUE (provider, environment, provider_ref)` on `payment_transactions`
+    (whose key is inside the signed body), plus the `last_event_at` monotonic
+    guard for entitlement (`A35`, Task 4.2.7a). Signed body, provider resource
+    identity, ledger uniqueness, and the monotonic guard **jointly** constrain
+    replay effects.
   - **Digest only — never the raw payload** (`F7`).
+  - **`payload_digest` stays deliberately non-unique.** It is an anomaly-detection
+    and forensic-correlation signal — index it, alert on "same digest, new
+    `event_id`" — and it is **never** an authoritative event identity. Do **not**
+    add `UNIQUE (provider, environment, payload_digest)`: Razorpay documents
+    uniqueness for the event-id *header*, and guarantees nothing about body
+    uniqueness. The signed envelope carries a second-granularity `created_at` and
+    a payload that is "a snapshot of the entity when the event occurred", so two
+    genuinely distinct events with an unchanged snapshot inside the same second
+    produce an identical digest. A hard `UNIQUE` there silently **drops a real
+    billing event**, which in a revenue ledger is worse than an extra forensic
+    row. It also does nothing about the documented out-of-order delivery that the
+    effect-layer fences do handle.
   - `environment TEXT NOT NULL CHECK (environment IN ('test','live'))` — an
     **explicit stored column**, not something an adapter infers later. Attack A11
     (point our webhook at the provider's test mode and pay ₹1) is only defensible
@@ -357,6 +399,14 @@ Additive only; no existing column is changed (ADR-009 data model).
   `created_at`.
   - `UNIQUE (provider, environment, provider_ref)`, not `provider_ref UNIQUE` —
     same reasoning as 1.1.
+  - **This constraint is the money-effect idempotency fence, and it is load
+    bearing.** `provider_ref` is the provider's own payment/refund/chargeback id,
+    which lives **inside the signed body** — unlike `event_id`, which does not
+    (1.4). It is therefore what actually stops a replayed signed body carrying a
+    substituted `x-razorpay-event-id` from producing a second money row (`A35`),
+    and it equally covers the provider's own documented at-least-once
+    redeliveries. Its conflict behaviour must be classified deliberately, not left
+    to bubble as a generic DB error — Task 4.2.7a.
   - The ledger references `payment_events.id` (the surrogate), **never** the
     provider's `event_id` string. Internal foreign keys must not be provider
     identifiers.
@@ -702,6 +752,37 @@ One transaction, or nothing. This function is the only writer of billing state.
   7. Write the ledger row if the event carries money (this happens **whether or
      not** status moves — money and entitlement are separate consequences, see
      global constraints).
+- [ ] **4.2.7a** **A duplicate money-effect conflict is a deliberate outcome, not
+  a transient failure.** A unique violation on
+  `payment_transactions (provider, environment, provider_ref)` means *this
+  provider money resource has already been ledgered*. The RPC must distinguish:
+
+  ```text
+  UNIQUE violation on the expected provider money identity
+      → already_applied
+      → commit the payment_events row (status 'ignored',
+        ignored_reason='already_applied')
+      → 200
+
+  any other database failure
+      → RAISE
+      → roll back the whole transaction (claim included)
+      → 5xx, provider retries
+  ```
+
+  Catch it narrowly — `unique_violation` **on that specific constraint** — never
+  a bare exception handler that would also swallow a real fault. Without this
+  rule, a legitimate redelivery or an `A35` replay produces:
+
+  ```text
+  ledger UNIQUE conflict → generic exception → rollback → 5xx
+      → provider retries → same conflict → …
+  ```
+
+  which burns Razorpay's 24-hour backoff on an event that can never succeed, and
+  leaves no deterministic way to tell **already applied** from **actually
+  failed**. `already_applied` is a terminal, committed, `200` outcome; add it to
+  the 9.3b response taxonomy alongside the other `ignored` reasons.
   8. If it is a *lifecycle* event: write `subscriptions` (status, period end,
      `last_event_at`), set `accounts.plan_id`, clear or set `grace_until`.
   9. Insert the audit event, and mark the `checkout_intents` row `completed` on
@@ -729,15 +810,18 @@ claim rolled back with it).
   2. HMAC-SHA256 over the raw body with the webhook secret.
   3. `crypto.timingSafeEqual` on equal-length buffers.
   4. Parse **only after** the signature verifies.
-  5. **`event_id` comes from the verified `x-razorpay-event-id` request header,
-     not from a payload field.** Razorpay documents that header as the unique
-     per-event identifier intended for deduplication, and it is the value that
-     stays stable across the retries of one delivery. It is only trustworthy
-     *after* step 3, because the HMAC covers the body — so read it, then require
-     it: **absent or empty ⇒ throw** (`401`, nothing recorded). Never synthesise a
-     fallback id from the payload or from `now()`; a fabricated id defeats the
-     claim in Task 1.4 and lets one event apply twice. The claim key is
-     `(provider, environment, x-razorpay-event-id)`.
+  5. **`event_id` comes from the `x-razorpay-event-id` request header, not from a
+     payload field — and the header is provider-supplied, not authenticated.**
+     Razorpay documents it as the unique per-event identifier intended for
+     deduplication, and it is the value that stays stable across the retries of
+     one delivery. But it is **outside the HMAC base string**, which is the raw
+     body: read it only after step 3 (so we know the *body* is genuine), and treat
+     it as event identity, never as verified data. Require it: **absent or empty ⇒
+     throw** (`401`, nothing recorded). Never synthesise a fallback id from the
+     payload or from `now()`; a fabricated id defeats the claim in Task 1.4. The
+     claim key is `(provider, environment, x-razorpay-event-id)`; because that key
+     is not signed, duplicate *effects* are fenced separately at the ledger
+     (Task 1.5, Task 4.2.7a, `A35`).
   6. Deduplicate on `(provider, environment, event_id)` (Task 1.4, Task 9.3).
   7. **No timestamp/replay window. Do not reject a validly signed event for being
      old.**
@@ -751,8 +835,10 @@ claim rolled back with it).
   backoff **for up to 24 hours**. An "older than N minutes ⇒ reject" rule
   therefore does not raise the bar for an attacker (who cannot forge a signature
   at any age) and *does* discard legitimate retries — i.e. it throws away money.
-  The `UNIQUE (provider, environment, event_id)` claim is the replay defense, and
-  it is a complete one. If a future provider ships a signed timestamp in the
+  The `UNIQUE (provider, environment, event_id)` claim is the event-level replay
+  defense; because the event id itself is not signed, it is **not** a complete one
+  on its own, and the ledger's provider-resource uniqueness completes it
+  (Task 1.5, `A35`). If a future provider ships a signed timestamp in the
   signature base string, that provider's **adapter** may enforce freshness;
   replay semantics are adapter-local, never a shared rule in `verify.ts`.
 - [ ] **5.1a** **Webhook secret rotation is an operational procedure, and it has
@@ -829,6 +915,77 @@ claim rolled back with it).
     looking the resource up by `provider_ref` and by the intent
     (`checkout_intents`), never by blindly retrying the create. `database +
     provider_ref` reconciliation is the source of truth for ambiguity.
+- [ ] **5.3b-p** **The outbound Create Subscription body is a closed, exact
+  contract — validated against the provider's documented schema, not assembled by
+  guess.** `POST /v1/subscriptions` documents **9** request parameters, and the
+  API is **strict in both directions**: a missing required field *and* an
+  unrecognised extra field are both `400`. The documented error
+  `{any extra field} is/are not required and should not be sent` means we cannot
+  smuggle anything into the body — every local identifier has to travel in `notes`
+  (5.3a-i). The exact body the adapter sends:
+
+  ```ts
+  // razorpay/adapter.ts — createSubscription. Closed set. Nothing else.
+  {
+    plan_id,                 // REQUIRED. From plans.provider_refs (4.3), 19 chars
+    total_count,             // REQUIRED (see 5.3b-t). Never together with end_at
+    quantity: 1,             // pinned (5.3b-q)
+    customer_notify: false,  // explicit product decision (5.3b-n)
+    notes: { auxelon_checkout_intent: intent.id },  // locator (5.3a-i), max 15 pairs
+  }
+  ```
+
+  Documented `400`s the adapter must not be able to trigger, each of which would
+  otherwise surface as a failed checkout for a real customer:
+
+  | Provider error | Rule the adapter enforces |
+  | --- | --- |
+  | `The plan id field is required.` | `plan_id` resolved from our `plans` table before the call; absent ⇒ fail locally, never call |
+  | `The plan id must be 19 characters.` | validate the `plan_<14 alnum>` shape when a `provider_refs` value is read (a typo'd seed row must fail loudly, not at the customer) |
+  | `The total count field is required when end at is not present.` | always send `total_count` (5.3b-t) |
+  | `Please provide either an end date or a total count, but not both.` | **never** send `end_at` alongside it — mutually exclusive, not merely redundant |
+  | `The total count must be at least 1.` / `must be an integer.` | `total_count` is a server-computed positive integer |
+  | `The quantity must be at least 1.` | pinned to `1` (5.3b-q) |
+  | `start_at cannot be lesser than the current time.` | **do not send `start_at` at all** for immediate-start V1 checkout; omitting it starts the subscription after authorisation. A computed "now" is a clock-skew `400` waiting to happen |
+  | `{any extra field} … should not be sent` | the body is built from the closed literal above — no spreading of caller input, no passthrough object |
+
+  **Verify:** an adapter unit test asserts the serialised request body's key set is
+  **exactly** `{plan_id, total_count, quantity, customer_notify, notes}` — a set
+  equality, not a subset check, so a future field addition has to be deliberate.
+- [ ] **5.3b-t** **`total_count` is required by the provider, and its exhaustion is
+  a silent-access-loss cliff that V1 must decide about explicitly.** Razorpay
+  requires the subscription to be bounded — by `total_count` or `end_at`, never
+  both — so an "indefinite" SaaS subscription does not exist at the provider. What
+  happens at the boundary is the part that matters:
+
+  ```text
+  total_count cycles elapse
+    → provider moves subscription to `completed`
+    → subscription.completed webhook
+    → our mapping: completed → expired  (5.3d)
+    → entitlement revoked
+  … for a customer who never cancelled and would have kept paying.
+  ```
+
+  So `total_count` is not a throwaway constant; it sets the date the paying
+  customer silently loses access. Decide, record the decision, and test it:
+  - Compute it from the plan interval against a **documented horizon** (the API
+    states a 100-year maximum, so a monthly plan admits up to `1200`). A long
+    horizon — e.g. monthly ⇒ `120` (10 years) — turns the cliff into a
+    non-event for V1 while staying well inside provider limits.
+  - **`subscription.completed` must be treated as an operational alert, not a
+    routine terminal state.** It means either a genuine full-term completion or
+    that we under-set `total_count` on a live payer. Surface it (Task 13
+    observability), do not let it revoke access quietly.
+  - A renewal/re-subscribe path is explicitly **out of V1 scope** — which is only
+    acceptable *because* the horizon is long. Write that dependency down so the
+    two decisions cannot drift apart.
+- [ ] **5.3b-n** **`customer_notify` is a product decision, and the default is not
+  ours.** It defaults to `true`, which means **Razorpay** emails the customer about
+  subscription and charge events. For a product that owns its own transactional
+  email, that produces duplicate and off-brand mail. Send it **explicitly** —
+  `false` if we own the messaging, `true` only as a deliberate choice — and never
+  leave it to the provider default by omission.
 - [ ] **5.3b-q** **`quantity` is server-controlled and pinned to `1`.** Razorpay's
   Create Subscription API takes a `quantity` parameter (it multiplies the plan
   amount, for per-seat billing). This product has **no per-seat billing** (`D6`,
@@ -879,6 +1036,14 @@ claim rolled back with it).
   Both `provider_ref` lookups miss *by construction*, so without the note the
   paying customer is unrecoverable. The note closes it.
 
+  - **Read the locator only off the provider resource documented to carry it.**
+    Razorpay documents `notes` on the **subscription** object at Create
+    Subscription; a payment entity's `notes` is a different field and the
+    published `payment.captured` sample shows it as `[]`. When an event contains
+    both entities, inspect `payload.subscription.entity.notes` — never
+    `payload.payment.entity.notes` — and note the documented cap of **15**
+    key-value pairs. Missing correlation metadata is *unresolved* (9.4a), not an
+    invitation to fall back to some other arbitrary metadata field.
   - `verifyAndParse` extracts the note into the domain `PaymentEvent` as
     `correlationIntentId?: string`, **only if it parses as a UUID**; anything else
     is dropped silently (it is untrusted input, so it gets no error path of its
@@ -902,6 +1067,32 @@ claim rolled back with it).
   - Guessing at unguessable ids is not a bypass: the note only has effect on a
     request that already passed HMAC verification, and it can only ever attach a
     provider ref to an intent that is still open and unbound.
+- [ ] **5.3b-r** **The authorisation handoff comes from the create response, and
+  it is read back — never constructed.** The plan specifies what we create but not
+  how the customer reaches the mandate page. The Create Subscription response
+  documents `short_url` ("URL that can be used to make the authorisation
+  payment"), alongside `id`, `status: "created"`, and — importantly — a `notes`
+  object echoed back.
+
+  ```text
+  createSubscription returns
+    providerRef  ← response.id          (persist to checkout_intents.provider_ref)
+    authorizeUrl ← response.short_url   (returned to the browser)
+  ```
+
+  Rules:
+  - **Never hand-build a provider URL** from an id or a template. If `short_url`
+    is absent from a `2xx`, that is an ambiguous create ⇒ reconcile by
+    `provider_ref` (5.3a), do not improvise a redirect.
+  - **Persist `provider_ref` before returning the URL to the browser.** The
+    ordering is what makes 5.3a-i's crash window small rather than the primary
+    recovery path.
+  - **Echo-verify the locator.** The response returns `notes`; assert our
+    `auxelon_checkout_intent` survived the round trip. If it did not, the
+    correlation guarantee of 5.3a-i is void for that subscription and it must be
+    flagged immediately, while we still hold the intent in hand.
+  - The returned URL grants **nothing**. `A3` already holds: entitlement comes
+    only from a webhook or the cron, never from the customer arriving back.
 - [ ] **5.3b** `verifyAndParse` sets `environment` from the credential set that
   verified the signature — **never** from a field in the payload. Provider-specific
   ordering signals (`resourceStatus`/`resourceVersion`) are also mapped here; this
@@ -925,7 +1116,7 @@ claim rolled back with it).
   | `active` | `active` | |
   | `subscription.charged` | *(no status move)* | money event → ledger only |
   | `pending` | `past_due` | debit failed, provider still retrying |
-  | `halted` | `past_due` \* | provider gave up retrying; decide grace vs. immediate `canceled` |
+  | `halted` | `past_due` | provider gave up retrying — **recoverable**, see the recovery path below |
   | `cancelled` | `canceled` | |
   | `completed` | `expired` \* | ran its full term — terminal, not a failure |
   | `expired` | `expired` | |
@@ -933,14 +1124,60 @@ claim rolled back with it).
 
   Encode this as a total lookup that **throws on an unmapped provider state**, and
   unit-test every row. A `default:` branch here silently invents entitlement.
+
+  **`halted` is recoverable, and must not collapse to `canceled`.** Razorpay's
+  documented lifecycle lets a halted subscription persist across more than one
+  billing cycle and later return to `active` once a debit succeeds. Mapping it to
+  a terminal state throws away a paying customer. The full path:
+
+  ```text
+  halted → past_due
+
+  past_due + grace_until not expired      → access remains
+  provider later reports active           → past_due → active
+  provider still halted/past_due
+    + local grace expired                 → Task 10.4 reconciliation policy
+                                          → default plan
+  ```
+
+  So `halted` **does not mean canceled in V1**. Entitlement loss comes from our
+  own grace expiry under an explicit local policy, not from the provider state
+  name — and the `active` recovery transition must exist in Task 3's transition
+  table (`A9` requires it be legal, not invented at apply time).
+- [ ] **5.3e** **Signed provider-account consistency check.** Razorpay's webhook
+  envelope carries a top-level `account_id` **inside the signed body**, so it is
+  authenticated data — unlike the event-id header. The adapter may expose it as
+  `providerAccountRef` and compare it against the configured Razorpay merchant
+  account for the active environment:
+
+  ```text
+  mismatch → terminal verification failure → reject
+           → no payment_events row
+  ```
+
+  This anchors the A11/A32 environment gate to signed data rather than to
+  configuration alone. The hard boundary:
+
+  ```text
+  ALLOWED:   Razorpay account_id → "does this webhook belong to our account?"
+  FORBIDDEN: Razorpay account_id → Auxelon account_id
+  ```
+
+  It is a provider-identity assertion, never tenant resolution — `F3` and 9.4 are
+  untouched, and the Auxelon tenant still comes only from a row we wrote.
 - [ ] **5.4** Tests with fixture payloads: valid signature passes; single-byte
   mutation fails; absent secret fails; **a validly signed event with an old
   timestamp still passes verification** (the removed replay window, 5.1) and is
   stopped instead by the dedupe claim when it is a genuine duplicate; a signed
   request with **no `x-razorpay-event-id` header throws** rather than inventing an
   id (A31); `notes.auxelon_checkout_intent` surfaces as `correlationIntentId` when
-  it is a UUID and is dropped when it is not (A28); `notes.account_id` is never
-  read into the domain event at all (A29).
+it is a UUID and is dropped when it is not (A28); `notes.account_id` is never
+read into the domain event at all (A29); **the same signed body with a
+substituted `x-razorpay-event-id` still verifies** (the HMAC covers the body
+only) and is stopped downstream rather than at verification (A35); the locator is
+read from the subscription entity and **not** from a payment entity's `notes`
+(5.3a-i); a body whose signed top-level `account_id` is not our configured
+merchant account is rejected with nothing recorded (5.3e).
 
 **Verify:** `npx vitest run src/features/billing/lib/razorpay/`
 
@@ -1131,7 +1368,8 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
   | route provider ≠ configured provider, or provider unset | `404` + internal alert (9.6) | nothing |
   | valid signature, unsupported/uninterpretable event type | `200` | `failed_terminal` |
   | valid signature, deliberate no-op (wrong env, stale, manual billing, illegal transition) | `200` | `ignored` + reason |
-  | duplicate | `200 already_processed` | pre-existing row only |
+  | duplicate delivery (same `event_id`) | `200 already_processed` | pre-existing row only |
+  | duplicate money effect (new `event_id`, already-ledgered `provider_ref`) | `200` | `ignored` + `already_applied` (4.2.7a) |
   | applied | `200` | `applied` |
   | transient DB/provider failure, or unresolved tenant | `5xx` | nothing (rolled back) |
 
@@ -1170,8 +1408,25 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
   Otherwise someone wires live Razorpay at an environment where
   `PAYMENTS_PROVIDER` is unset and we silently discard paid customers' events
   with a clean-looking `404` and no signal that money is being dropped.
-- [ ] **9.7** Log `event_id`, `account_id`, `status`, `ignored_reason`. **Never**
-  the payload (`F7`).
+- [ ] **9.7** Log `event_id`, `account_id`, `status`, `ignored_reason`, and — on a
+  previous-secret match (5.1a) — the matched secret slot (`"current" | "previous"`)
+  as a structured line, e.g. `billing.webhook.signature_verified
+  secret_slot=previous provider=razorpay environment=live`. **Never** the payload,
+  the secret itself, or payment-instrument data (`F7`).
+- [ ] **9.8** **Stay inside Razorpay's 5-second response budget** (see global
+  constraints). Razorpay resends an event when the endpoint does not answer in
+  time, so a slow handler manufactures duplicates that then have to be absorbed by
+  4.2.7a. The whole handler is: read body → verify → normalize → **one** RPC →
+  respond.
+
+  ```text
+  No provider API call inside webhook processing.
+  No reconciliation inside webhook processing.
+  No unbounded query.
+  One RPC.
+  ```
+
+  Repairs that need a provider round-trip belong to the Task 10 cron, never here.
 
 ## Task 10 — `/api/cron/billing-reconcile` (`D13`, `D14`)
 
@@ -1287,7 +1542,7 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A3** | Hit the return URL / call the success callback directly | Redirect grants entitlement | Redirect grants nothing; only webhook or cron applies (`D9`) | `forged_redirect_grants_nothing` |
 | **A4** | Send a real event captured from their *own* paid account, with `metadata.account_id` swapped to their free workspace | Tenant taken from the payload | Tenant resolved from `subscriptions.provider_ref`; mismatch ⇒ alert, apply nothing (`F3`) | `payload_account_id_is_never_authority` |
 | **A5** | `DELETE /api/billing/subscription` with another account's subscription id | Handler trusts the id | Id ignored; resolved from session `accountId` (`F9`) | `cannot_cancel_another_account` |
-| **A6** | Replay the same `subscription.charged` 50× in parallel | Read-then-write race double-applies | `UNIQUE (provider, environment, event_id)` claim + `SELECT … FOR UPDATE` (`D11`) | `duplicate_event_applies_once` |
+| **A6** | Replay the same `subscription.charged` 50× in parallel | Read-then-write race double-applies | **Event-level** idempotency: `UNIQUE (provider, environment, event_id)` claim + `SELECT … FOR UPDATE` (`D11`). Effect-level idempotency for a *different* event id on the same money resource is A35's job | `duplicate_event_applies_once` |
 | **A7** | Two concurrent checkouts ⇒ **two real provider subscriptions**, two charges | "Check for an existing subscription, then create" in two statements; and a `subscriptions`-only constraint that fires *after* the provider already charged twice | **Primary:** partial unique index on `checkout_intents (account_id) WHERE status IN ('created','provider_attached')` — the loser reuses/409s **before** the provider is called (Task 1.2, Task 7.6 step 0). **Backstop:** partial unique index on `subscriptions (account_id) WHERE status IN ('active','past_due')` | `concurrent_checkouts_create_one_provider_subscription`, `one_live_subscription_per_account` |
 | **A8** | Replay an old `activated` event after cancelling | Last-write-wins | Monotonic `last_event_at` guard (`D12`) | `stale_event_is_ignored` |
 | **A9** | Force `expired → active` with a crafted sequence | Permissive switch/default branch | Total transition table; illegal ⇒ recorded, not applied (`D10`) | `illegal_transition_rejected` |
@@ -1312,12 +1567,31 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A28** | Put a *guessed or stolen* intent UUID in `notes.auxelon_checkout_intent` to attach a provider subscription to a victim's intent | Correlation metadata treated as authority, or bound without checks | Bind requires all seven conditions of 4.1b step 2b: verified signature, existing intent, matching provider **and** environment, open status, and `provider_ref` NULL-or-equal (never overwritten); `account_id` still comes from the intent row | `correlation_note_cannot_rebind_a_bound_intent`, `correlation_note_for_unknown_intent_is_rejected` |
 | **A29** | Send `notes.account_id` (or any account-naming field) hoping the locator relaxation also relaxed this | "Metadata is allowed now" read too broadly | A note may only *locate* one of our own intents; naming an account is still forbidden outright (`F3`, 5.3a-i) | `note_cannot_name_an_account` |
 | **A30** | Deliver a test-mode event to a live deployment whose RPC decides the environment from the event itself | Environment gate compares the event against the event | `p_environment` is a trusted parameter from `paymentsEnvironment()`, distinct from `p_event_environment` (4.1c); mismatch ⇒ `ignored`, absent/invalid trusted value ⇒ exception | `rpc_rejects_event_environment_mismatch`, `rpc_refuses_missing_configured_environment` |
-| **A31** | Strip or forge `x-razorpay-event-id` so every delivery claims a fresh id and applies again | `event_id` synthesised from the payload or `now()` when the header is missing | `event_id` is the verified `x-razorpay-event-id` header; absent/empty ⇒ `401`, never a fabricated fallback (5.1 step 5) | `missing_event_id_header_is_rejected` |
+| **A31** | Strip `x-razorpay-event-id` so a fabricated id is synthesised and every delivery applies again | `event_id` synthesised from the payload or `now()` when the header is missing | `event_id` is the **provider-supplied** `x-razorpay-event-id` header — not authenticated by the HMAC, which covers the raw body, so it is event identity/dedupe only; absent/empty ⇒ `401`, never a fabricated fallback (5.1 step 5), and effect-level fences cover the rest (A35) | `missing_event_id_header_is_rejected` |
 | **A32** | Deliver a test-mode event to a live deployment purely to make it **reconstruct a `subscriptions` row** before it is ignored — a billing-state write from an event with no authority | Environment gate placed *after* subscription resolution/reconstruction | Gate is 4.2 step **2**, ahead of resolution: a wrong-environment event commits only the `payment_events` forensic row — no reconstruction, no plan lookup, no ledger | `wrong_environment_event_creates_no_subscription_row` |
 | **A33** | Send `quantity: 100` (or a per-seat field) in the checkout body, or get it plumbed through a "completeness" refactor, to multiply the plan amount | Provider field passed through from the request | Strict `zod` schema rejects unknown keys (`F1`) **and** the adapter pins `quantity: 1` server-side (5.3b-q); amount always resolved from our `plans` table | `checkout_body_rejects_quantity`, `adapter_always_sends_quantity_one` |
 | **A34** | Sit on a valid provider subscription whose `provider_ref` we never persisted, so reconciliation alerts it as an orphan and a human "resolves" it into the wrong account | Orphan declared before the correlation locator is consulted | 10.6 requires **all three** lookups to miss — `subscriptions.provider_ref`, `checkout_intents.provider_ref`, and the verified correlation locator — before `ORPHAN_PROVIDER_SUBSCRIPTION` | `recoverable_subscription_is_not_reported_orphan` |
+| **A35** | Replay a captured, validly signed body with a substituted `x-razorpay-event-id`, so the delivery claims a fresh identity | The HMAC covers the **body**, not the event-id header, so the event-level claim is bypassable by anyone holding a signed body (leaked log, TLS interception, insider) | Effect-level idempotency: `UNIQUE (provider, environment, provider_ref)` on `payment_transactions` — a key from inside the signed body — plus the `last_event_at` monotonic guard for entitlement; the conflict is classified `already_applied` + `200`, never a `5xx` (Task 4.2.7a). Defence in depth: source-IP allowlist against Razorpay's published webhook IPs, and a non-unique `payload_digest` anomaly alert on "same digest, new event id" | `replayed_body_with_new_event_id_has_no_duplicate_money_effect`, `ledger_conflict_is_already_applied_not_5xx` |
 
-- [ ] **12.1** Write A1–A34 as tests. A red-team test that has never failed is
+**A35's expected outcome, stated exactly** — the point is that verification is
+*not* where this is stopped:
+
+```text
+same signed body + same event id        → already_processed (event claim)
+same signed body + different event id   → NOT a signature failure; verifies fine
+  → money effect blocked by payment_transactions provider-resource uniqueness
+  → entitlement re-application is a no-op (identical values + monotonic guard)
+  → outcome: ignored / already_applied, HTTP 200
+  → payload_digest correlation emits an anomaly signal
+never: UNIQUE (provider, environment, payload_digest)
+```
+
+Blast radius today is therefore a spurious `payment_events` row, **not** double
+revenue — provided 4.2.7a classifies the ledger conflict correctly. The attack
+also presupposes the attacker already holds a validly-signed body, which is why
+the IP allowlist is cheap and worth having.
+
+- [ ] **12.1** Write A1–A35 as tests. A red-team test that has never failed is
   documentation, not a test: **make each one fail first** by temporarily
   reverting its defense, then restore.
 - [ ] **12.1a** **A16 is an implementation assertion, not a statistical one.** Do
@@ -1332,7 +1606,14 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
   - **A6** (parallel replay of the same event) is contained by the
     `UNIQUE (provider, environment, event_id)` claim plus `SELECT … FOR UPDATE`,
     **not** by the absence of seat quantities. It is a concurrency/idempotency
-    defense and it is tested, not asserted away.
+    defense and it is tested, not asserted away. A6 covers **event-level**
+    idempotency only.
+  - **A35** (same signed body, substituted event id) is the **effect-level**
+    counterpart, and it is not contained by the event claim at all — the event id
+    is outside the HMAC. It is contained by `payment_transactions`'
+    provider-resource uniqueness plus the monotonic guard, with the conflict
+    classified `already_applied` (Task 4.2.7a). Keep the two rows distinct: if
+    A6's defense were the only one, A35 would pass.
   - **Quantity tampering** is the one that is structurally impossible: V1 has no
     seat quantity to tamper with (`D6`, ADR-008/D1). If seats are ever
     introduced, this line stops being true and needs its own attack row.
@@ -1430,7 +1711,14 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 1d. **Amounts and quantities are server-decided.** `quantity` is pinned to `1` in
    the adapter and never accepted from a caller (5.3b-q); the charged amount is
    always resolved from our `plans` table (A33).
-2. A1–A34 all pass, and each has been observed failing without its defense.
+1e. **Duplicate money effects are impossible on data the provider actually
+   signs.** No claim of replay safety rests on the unsigned
+   `x-razorpay-event-id` header alone: the ledger's
+   `UNIQUE (provider, environment, provider_ref)` — a key from inside the signed
+   body — is what makes a second money row impossible, and its conflict is a
+   deliberate `already_applied` + `200`, never a retry-burning `5xx`
+   (Task 4.2.7a, A35). `payload_digest` remains non-unique and advisory.
+2. A1–A35 all pass, and each has been observed failing without its defense.
 3. `src/lib/quotas/index.ts` has zero billing imports; deleting the billing
    feature would not break message delivery.
 4. Every entitlement change is answerable from `payment_events` +
