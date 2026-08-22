@@ -241,3 +241,84 @@ Ranked, with fixes, in `roadmap.md`. Summary:
 | Change the schema | New `YYYYMMDDHHMMSS_*.sql` in `supabase/migrations/` → `pnpm db:push` → `pnpm db:doc` (regenerates `database-schema.md`) → update `database.md` prose by hand |
 | Add a provider | `src/features/channels/lib/` adapter + `channel_provider` enum + admin catalog entry |
 | Add an AI tool | AI feature module; scope every query by `account_id` |
+
+---
+
+## 10. System design addendum (binding — production infrastructure plan)
+
+Adopted from the patterns review in
+`docs/superpowers/plans/2026-08-22-production-infrastructure.md` (§A–§G
+there, in full detail). These rules are binding on all future feature
+work so that many agents produce *one* architecture. Summary:
+
+### 10.1 Layering + Dependency Rule (Hexagonal-lite)
+
+Presentation (routes/webhooks/UI) → application use-cases → domain →
+**ports** (interfaces) → infrastructure adapters in `src/lib/*`.
+**Dependency Rule:** domain/application code MUST NOT import Next.js,
+`@supabase/*`, Redis, Sentry, Langfuse, Loki, or Cloudflare/Vercel
+SDKs. Infrastructure implements ports; nothing above ports knows a
+vendor name. SQL belongs in repositories; `src/lib/db/` is connection
+management only, never business queries.
+
+### 10.2 Pattern budget
+
+Patterns are allowed only at explicit boundaries: Ports & Adapters
+(db/auth/observability/cache), Repository, Unit of Work
+(`src/lib/db/transaction.ts`), Facade (auth-provider), Strategy +
+Factory (AI providers), Decorator (tracing/logging wrappers),
+Idempotency (webhooks/cron/deploys), Bulkhead (`ConcurrencyGuard`),
+Circuit Breaker (AI + external messaging only, never Postgres),
+Anti-Corruption Layer (the Supabase boundary check). Outbox/Saga/queues
+are NOT NOW — interface-ready via `MessageIngress`. Business logic
+stays plain.
+
+### 10.3 Webhook ingress (the scale-critical path)
+
+verify signature → idempotency claim on `webhook_events(event_id)`
+(duplicate → 200 fast) → `MessageIngress.accept(event)` — today
+`SynchronousMessageIngress` (inline), future `QueuedMessageIngress`
+(Cloudflare Queues) with zero call-site changes → Flows → Automations →
+AI (precedence preserved) → AI path: `ConcurrencyGuard` bulkhead →
+(future) circuit breaker → provider adapter. Ports live in
+`src/lib/ports/`; the bulkhead adapter is `src/lib/concurrency-guard.ts`
+(Upstash INCR/DECR, fail-open, per-account + global caps).
+
+### 10.4 NFRs (measurable)
+
+NFR-001 webhook ack < 1 s p99 · NFR-002 `/api/health` < 100 ms, no I/O ·
+NFR-003 no request path depends on synchronous observability delivery ·
+NFR-004 AI provider failure never crashes webhook ingestion · NFR-005
+one tenant cannot exhaust shared AI/Redis/DB capacity · NFR-006 every
+release traceable (commit + artifact SHA + tag) · NFR-007 no production
+DB mutation from developer/agent credentials · NFR-008 every externally
+retryable operation is idempotent · NFR-009 compute is stateless ·
+NFR-010 DB access always through pooled connections.
+
+### 10.5 Architecture fitness rules
+
+ARCH-001…010 (enforced by `check:architecture` when it lands; the
+Supabase-import boundary check with its frozen baseline already
+enforces ARCH-002): no infra SDKs above ports, no direct
+`@supabase/*`/Redis/Sentry/Langfuse imports in feature code, SQL only in
+repositories, account-scoped queries carry `account_id`, webhook
+handlers enforce idempotency, provider calls go through adapters,
+workflow `uses:` never points at mutable branches, production DB secret
+names never appear in app code.
+
+### 10.6 Scale ladder
+
+Launch→10k: this architecture as written (auto-scaling isolates,
+pooling, cache, bulkheads). 10k→100k: config/tier changes only (pool
+size, cache namespaces, circuit breakers, DB compute). 100k→1M+: swap
+`SynchronousMessageIngress` → queued, read replicas behind the db
+adapter — ports, repositories and feature code do not change. Each step
+is cheap because compute is stateless, vendors sit behind ports, and
+ingestion is async-ready.
+
+### 10.7 Deployment as a state machine
+
+BUILD → VALIDATE → ARTIFACT_CREATED → ATTESTED → PROMOTION_APPROVED →
+PROD_POINTER_UPDATED → DEPLOYED → VERIFIED, with explicit failure
+states and versioned rollback. Every workflow job maps to exactly one
+transition.
