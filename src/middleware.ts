@@ -1,3 +1,13 @@
+// REQUEST-INTERCEPTION FILE — exactly one exists (ADR-INFRA-001 §3, plan Task 1).
+//
+// Why `middleware.ts` and not the Next 16 name `proxy.ts`:
+// The production runtime is Cloudflare Workers via `@opennextjs/cloudflare`.
+// As of 2026-08-22 the adapter's `proxy.ts` support is EXPERIMENTAL only
+// (opennextjs-cloudflare PRs #1309/#1320; tracking issue #1279) — it emits a
+// build warning and is not production-supported. Next 16 remains backwards
+// compatible with `middleware.ts`, so that is the sole interception file
+// until the adapter ships stable `proxy.ts` support. NEVER add a second
+// interception file — double discovery is worse than either single choice.
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
@@ -56,7 +66,7 @@ function authenticatedDestination(request: NextRequest) {
   return invite ? routes.app.invite(invite) : routes.app.dashboard;
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

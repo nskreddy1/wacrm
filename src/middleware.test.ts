@@ -40,7 +40,7 @@ vi.mock('@supabase/ssr', () => ({
 }));
 
 // Imported after the mock is registered.
-const { proxy: middleware } = await import('./proxy');
+const { middleware } = await import('./middleware');
 
 beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
