@@ -9,9 +9,10 @@
 
 **Goal:** implement ADR-009 — self-serve subscription payments where the **only
 two paths that may change `accounts.plan_id` are (a) a signature-verified
-provider webhook and (b) an authenticated reconciliation operation acting on
-state it read back from the provider's own API**; money state is append-only; and
-a total payment outage cannot touch message delivery.
+provider webhook and (b) an authenticated reconciliation operation applying
+provider-read state together with explicitly defined local billing-policy
+transitions derived from that provider state**; money state is append-only; and a
+total payment outage cannot touch message delivery.
 
 **A browser redirect, a client request body, or any other client-influenced
 input can never change entitlement — at any point, by any route.** State the rule
@@ -19,6 +20,35 @@ this way everywhere: "verified webhook only" is *wrong* as written, because the
 `D14` reconciliation cron deliberately also applies provider-verified state. Both
 paths share one property — the state originates from the provider and is verified
 — and that property, not the transport, is the actual invariant.
+
+**What "billing-policy transition" buys, and what it must not become.** The
+reconciliation path needs a little more latitude than "copy the provider's
+status", because some entitlement consequences are ours to define: the provider
+says `past_due`, and *we* decide that a `grace_until` window then expires and the
+account falls back to the default plan (Task 10.4). That transition is driven by
+local time, not by a new provider read, so a strict "provider-read state only"
+reading would make 10.4 illegal. The latitude is bounded on all sides:
+
+```text
+provider state (read back, authenticated)
+        +
+documented local billing policy (grace expiry, default-plan fallback)
+        ↓
+authenticated reconciliation operation
+        ↓
+accounts.plan_id
+```
+
+- There are still **exactly two execution paths**, and this is not a third one —
+  it is what path (b) is permitted to compute.
+- A policy transition must be **written down in this plan** (10.4 is the only one
+  in scope) and must derive from a provider-read status the reconciliation run
+  actually observed. "Local policy" is never a licence to move a plan for a
+  reason the provider state does not support.
+- Every such transition goes through the same `process_payment_event` RPC, the
+  same audit row, and the same environment gate as a webhook. No side door.
+- It may only ever move entitlement **down** to the default plan, never up: a
+  local clock must not be able to grant a paid plan.
 
 **Source of truth:** [`docs/adr/009-payments-and-subscription-billing.md`](../../docs/adr/009-payments-and-subscription-billing.md).
 Decision ids (`D1`–`D17`) and security rules (`F1`–`F10`) below refer to it. If
@@ -461,9 +491,9 @@ One transaction, or nothing. This function is the only writer of billing state.
       ↓ supabase.rpc('process_payment_event', normalizedEvent)   ← ONE call
           BEGIN
             claim event            -- INSERT payment_events … ON CONFLICT DO NOTHING
+            environment guard      -- BEFORE any billing-state write
             ensure subscription    -- reconstruct from checkout_intent if missing
             lock subscription      -- SELECT … FOR UPDATE
-            environment guard
             ordering guard
             manual-billing guard
             state transition
@@ -608,8 +638,14 @@ One transaction, or nothing. This function is the only writer of billing state.
   4. The insert is `ON CONFLICT (provider, environment, provider_ref) DO NOTHING`
      followed by a re-select, so two concurrent first-deliveries cannot fork the
      row.
-  5. Then continue at 4.2 step 1 with a row that is guaranteed to exist and
+  5. Then continue at 4.2 step 4 with a row that is guaranteed to exist and
      locked.
+
+  This whole step runs **downstream of the environment gate** (4.2 step 2), so a
+  wrong-environment event never reaches it and never reconstructs anything.
+  Condition 5 below (`intent.environment = p_event_environment`) is therefore a
+  redundant check kept deliberately: it must not be the only thing standing
+  between a test-mode delivery and a live `subscriptions` insert.
 
   Reconstruction is a **repair path, not an adoption path**: it only ever fires
   when *our own* intent row already names the account — whether that row was found
@@ -621,29 +657,54 @@ One transaction, or nothing. This function is the only writer of billing state.
      (provider, environment, event_id) DO NOTHING`. Zero rows ⇒ duplicate ⇒
      return `already_processed` immediately, applying nothing. This step is
      *inside* the function precisely so it shares the fate of everything below it.
-  1. `SELECT … FOR UPDATE` the subscription row — reconstructing it from the
-     intent first if it is missing (4.1b). Locking serialises concurrent
-     deliveries of the same subscription (kills the A6 race).
-  2. **Environment gate:** if `p_event_environment <> p_environment` — the
-     observed environment versus the **trusted parameter the caller supplied**
-     (4.1c), never a value read back out of the event — record
-     `ignored_reason='wrong_environment'` and return. A test-mode event must never
-     move a live tenant's plan (A11).
-  3. **Monotonic guard (defensive, not authoritative):** if
+  1. **Validate the trusted environment:** `p_environment IS NULL` or not in
+     `('test','live')` ⇒ `RAISE EXCEPTION` (4.1c). A caller that cannot state its
+     own mode is a misconfiguration, not a `200`.
+  2. **Environment gate — before any billing-state write.** If
+     `p_event_environment <> p_environment` — the observed environment versus the
+     **trusted parameter the caller supplied** (4.1c), never a value read back out
+     of the event — record `ignored_reason='wrong_environment'` and return
+     `ignored`. A test-mode event must never move a live tenant's plan (A11).
+
+     **This gate sits ahead of subscription resolution deliberately.** With the
+     gate downstream of 4.1b, a test-mode delivery to a live deployment would
+     claim the event, find a `checkout_intent`, **insert a `subscriptions` row**,
+     and only then be ignored — committing a billing-state mutation it was
+     supposed to have no authority to make. The order above makes the rejection
+     total:
+
+     ```text
+     wrong environment
+         ↓
+     ignored (committed, 200)
+         ↓
+     NO subscription reconstruction
+     NO plan lookup
+     NO ledger row
+     NO entitlement mutation
+     ```
+
+     Only the `payment_events` claim row survives, which is the forensic record
+     (4.1c) and not billing state.
+  3. Resolve the subscription: `SELECT … FOR UPDATE` the subscription row —
+     reconstructing it from the intent first if it is missing (4.1b). Locking
+     serialises concurrent deliveries of the same subscription (kills the A6
+     race).
+  4. **Monotonic guard (defensive, not authoritative):** if
      `event_at <= last_event_at`, record `ignored_reason='stale_event'` and return
      without touching state (`D12`). This is a **backstop**, not the ordering
      mechanism — where the adapter supplied `resourceStatus`/`resourceVersion`,
      prefer it, and let the adapter own any provider-specific ordering quirk. Do
      not add provider `if`-branches to this function.
-  4. **Manual short-circuit:** if `accounts.billing_mode = 'manual'`, record
+  5. **Manual short-circuit:** if `accounts.billing_mode = 'manual'`, record
      `ignored_reason='manual_billing'` and return — do not apply (`D16`).
-  5. Compute the transition; `'illegal'` ⇒ `ignored_reason='illegal_transition'`.
-  6. Write the ledger row if the event carries money (this happens **whether or
+  6. Compute the transition; `'illegal'` ⇒ `ignored_reason='illegal_transition'`.
+  7. Write the ledger row if the event carries money (this happens **whether or
      not** status moves — money and entitlement are separate consequences, see
      global constraints).
-  7. If it is a *lifecycle* event: write `subscriptions` (status, period end,
+  8. If it is a *lifecycle* event: write `subscriptions` (status, period end,
      `last_event_at`), set `accounts.plan_id`, clear or set `grace_until`.
-  8. Insert the audit event, and mark the `checkout_intents` row `completed` on
+  9. Insert the audit event, and mark the `checkout_intents` row `completed` on
      first activation.
 - [ ] **4.3** `plan_id` is resolved **from our `plans` table** by matching
   `provider_refs`, never from a plan id in the payload (`F3`).
@@ -768,6 +829,31 @@ claim rolled back with it).
     looking the resource up by `provider_ref` and by the intent
     (`checkout_intents`), never by blindly retrying the create. `database +
     provider_ref` reconciliation is the source of truth for ambiguity.
+- [ ] **5.3b-q** **`quantity` is server-controlled and pinned to `1`.** Razorpay's
+  Create Subscription API takes a `quantity` parameter (it multiplies the plan
+  amount, for per-seat billing). This product has **no per-seat billing** (`D6`,
+  ADR-008/D1), so do not merely leave it out conceptually — **send the literal
+  `1`** from the adapter:
+
+  ```ts
+  // razorpay/adapter.ts — createSubscription
+  quantity: 1, // pinned: no per-seat billing. NEVER from the request body.
+  ```
+
+  The reason to be explicit rather than silent is the next person who reads the
+  Razorpay docs, sees a `quantity` field, and plumbs it through to be "complete":
+
+  ```json
+  { "planId": "enterprise", "interval": "monthly", "quantity": 100 }
+  ```
+
+  The strict `zod` body schema of Task 7 already rejects that (unknown keys, `F1`),
+  so this is defense in depth — the adapter is the second place the value is
+  decided, and it decides it without consulting the caller. `quantity` never
+  appears in a domain type, in `CreateCheckoutInput`, or in `checkout_intents`;
+  the only correct amount is the one resolved server-side from our `plans` table.
+  If per-seat billing is ever added, it arrives as a deliberate schema + ADR
+  change, never as a passthrough field.
 - [ ] **5.3a-i** **Correlation locator (required, not merely diagnostic).** Where
   a provider supports merchant-defined metadata — Razorpay's Create Subscription
   API documents a `notes` object — the adapter **must** include the local intent
@@ -1130,17 +1216,44 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
   -state hierarchy declared in the global constraints. Re-observing an *unchanged*
   state still collapses to one row, which is the deduplication we actually wanted.
 - [ ] **10.4** Expire grace: `past_due` with `grace_until < now()` ⇒ move to the
-  `is_default` plan. **Delete no data** (`D13`).
+  `is_default` plan. **Delete no data** (`D13`). This is the one **local
+  billing-policy transition** the reconciliation path is permitted to compute (see
+  the goal statement): it is driven by our clock, not by a fresh provider read, so
+  it is legal only under the bounds stated there — the provider-read status must be
+  `past_due`, the move is **downward to the default plan only**, and it is applied
+  through the same RPC, audit row, and environment gate as a webhook.
 - [ ] **10.5** Skip `billing_mode = 'manual'` accounts entirely (`D16`).
-- [ ] **10.6** **Surface orphans explicitly; never adopt them.** When the provider
-  reports a subscription as active and *neither* a `subscriptions` row *nor* a
-  `checkout_intents` row matches its `(provider, environment, provider_ref)`,
-  record the outcome as `ORPHAN_PROVIDER_SUBSCRIPTION`, increment
+- [ ] **10.6** **Surface orphans explicitly; never adopt them — but only after
+  every local resolution path has failed.** A provider subscription is an orphan
+  only when **all three** authoritative local lookups miss:
+
+  1. `public.subscriptions` on `(provider, environment, provider_ref)`;
+  2. `public.checkout_intents` on `(provider, environment, provider_ref)`;
+  3. the **verified correlation locator** — `notes.auxelon_checkout_intent`
+     (Task 5.3a-i) resolving to an existing `public.checkout_intents` row that
+     satisfies all of the 4.1b step 2b conditions.
+
+  Path 3 is not optional politeness: it is precisely the crash window where the
+  provider object exists but `provider_ref` was never written locally, so paths 1
+  and 2 **miss by construction**. Declaring an orphan without checking it would
+  alert on a subscription we can legitimately recover:
+
+  ```text
+  provider_ref not found locally
+        ↓
+  notes.auxelon_checkout_intent → existing intent → account_id
+        ↓
+  valid repair, NOT an orphan
+  ```
+
+  Only when all three miss: record `ORPHAN_PROVIDER_SUBSCRIPTION`, increment
   `billing_reconciliation_state.orphans_seen`, and **alert**. Do **not**
   auto-create a tenant mapping from an unknown provider resource — that is a
-  tenant assignment invented from external data, exactly what `F3` forbids. An
-  orphan is a human-resolved incident (a real customer we cannot identify), and
-  it must be loud rather than quietly healed into the wrong account.
+  tenant assignment invented from external data, exactly what `F3` forbids. Note
+  the asymmetry that keeps this safe: path 3 resolves to an account **only through
+  a row we wrote ourselves**, so a forged note points at nothing. An orphan is a
+  human-resolved incident (a real customer we cannot identify), and it must be
+  loud rather than quietly healed into the wrong account.
 
 ## Task 11 — Settings → Plan & usage UI
 
@@ -1200,8 +1313,11 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A29** | Send `notes.account_id` (or any account-naming field) hoping the locator relaxation also relaxed this | "Metadata is allowed now" read too broadly | A note may only *locate* one of our own intents; naming an account is still forbidden outright (`F3`, 5.3a-i) | `note_cannot_name_an_account` |
 | **A30** | Deliver a test-mode event to a live deployment whose RPC decides the environment from the event itself | Environment gate compares the event against the event | `p_environment` is a trusted parameter from `paymentsEnvironment()`, distinct from `p_event_environment` (4.1c); mismatch ⇒ `ignored`, absent/invalid trusted value ⇒ exception | `rpc_rejects_event_environment_mismatch`, `rpc_refuses_missing_configured_environment` |
 | **A31** | Strip or forge `x-razorpay-event-id` so every delivery claims a fresh id and applies again | `event_id` synthesised from the payload or `now()` when the header is missing | `event_id` is the verified `x-razorpay-event-id` header; absent/empty ⇒ `401`, never a fabricated fallback (5.1 step 5) | `missing_event_id_header_is_rejected` |
+| **A32** | Deliver a test-mode event to a live deployment purely to make it **reconstruct a `subscriptions` row** before it is ignored — a billing-state write from an event with no authority | Environment gate placed *after* subscription resolution/reconstruction | Gate is 4.2 step **2**, ahead of resolution: a wrong-environment event commits only the `payment_events` forensic row — no reconstruction, no plan lookup, no ledger | `wrong_environment_event_creates_no_subscription_row` |
+| **A33** | Send `quantity: 100` (or a per-seat field) in the checkout body, or get it plumbed through a "completeness" refactor, to multiply the plan amount | Provider field passed through from the request | Strict `zod` schema rejects unknown keys (`F1`) **and** the adapter pins `quantity: 1` server-side (5.3b-q); amount always resolved from our `plans` table | `checkout_body_rejects_quantity`, `adapter_always_sends_quantity_one` |
+| **A34** | Sit on a valid provider subscription whose `provider_ref` we never persisted, so reconciliation alerts it as an orphan and a human "resolves" it into the wrong account | Orphan declared before the correlation locator is consulted | 10.6 requires **all three** lookups to miss — `subscriptions.provider_ref`, `checkout_intents.provider_ref`, and the verified correlation locator — before `ORPHAN_PROVIDER_SUBSCRIPTION` | `recoverable_subscription_is_not_reported_orphan` |
 
-- [ ] **12.1** Write A1–A31 as tests. A red-team test that has never failed is
+- [ ] **12.1** Write A1–A34 as tests. A red-team test that has never failed is
   documentation, not a test: **make each one fail first** by temporarily
   reverting its defense, then restore.
 - [ ] **12.1a** **A16 is an implementation assertion, not a statistical one.** Do
@@ -1276,10 +1392,12 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 ## Definition of done
 
 1. **Exactly two paths can change `accounts.plan_id`:** a signature-verified
-   provider webhook, and the authenticated reconciliation cron applying state it
-   read back from the provider's API. Both go through the same RPC. **No
-   client-influenced input — redirect, request body, header, or provider payload
-   field — can change entitlement by any route.**
+   provider webhook, and the authenticated reconciliation cron applying
+   provider-read state plus the explicitly defined local billing-policy
+   transitions derived from it (grace expiry ⇒ default plan, Task 10.4 — downward
+   only). Both go through the same RPC. **No client-influenced input — redirect,
+   request body, header, or provider payload field — can change entitlement by any
+   route.**
 1a. **No signed event is ever silently acknowledged as processed when it was not
    applied.** A retryable failure leaves no claim behind (Task 9.3a), so every
    event either applies, is deliberately `ignored`, is `failed_terminal`, or
@@ -1301,11 +1419,18 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
    RPC then reconstructs the missing `subscriptions` row. Provider metadata locates
    one of our rows; it never names a tenant, so refusing to invent a mapping for a
    provider resource we have no intent for still holds (Task 10.6).
-1c. **The environment gate is decided by a value the event cannot influence.** The
-   trusted configured environment is passed into `process_payment_event()` by the
-   webhook route and the reconciliation cron (4.1c); a missing or invalid trusted
-   value is an exception, not a default.
-2. A1–A31 all pass, and each has been observed failing without its defense.
+1c. **The environment gate is decided by a value the event cannot influence, and it
+   runs before any billing-state write.** The trusted configured environment is
+   passed into `process_payment_event()` by the webhook route and the
+   reconciliation cron (4.1c); a missing or invalid trusted value is an exception,
+   not a default. The gate is 4.2 step 2 — ahead of subscription
+   resolution/reconstruction — so a wrong-environment delivery commits the
+   `payment_events` forensic row and **nothing else**: no `subscriptions` insert,
+   no plan lookup, no ledger row (A32).
+1d. **Amounts and quantities are server-decided.** `quantity` is pinned to `1` in
+   the adapter and never accepted from a caller (5.3b-q); the charged amount is
+   always resolved from our `plans` table (A33).
+2. A1–A34 all pass, and each has been observed failing without its defense.
 3. `src/lib/quotas/index.ts` has zero billing imports; deleting the billing
    feature would not break message delivery.
 4. Every entitlement change is answerable from `payment_events` +
