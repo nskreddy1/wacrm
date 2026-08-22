@@ -109,6 +109,31 @@ If the invoices plan ships first, Task 5 shrinks to "extend the existing client"
   entitlement**. Do not hard-code "a chargeback never affects access" — a dispute
   may drive a provider lifecycle event of its own, and if it does, that event is
   what revokes access.
+- **One RPC = one transaction, and that is the only way to get one.** Two
+  `supabase-js` calls are **two** transactions: Supabase's own documentation is
+  explicit that separate client queries are not grouped, and that multi-statement
+  transactional logic belongs inside a database function. So the event claim and
+  the state application are **not** two calls the route sequences — they are one
+  `process_payment_event()` database function (Task 4) invoked as a single
+  `supabase.rpc(...)`. Any design where the route does
+  `from('payment_events').insert(...)` and then `rpc('apply_subscription_state')`
+  violates the invariant in Task 9.3a while appearing to satisfy it.
+- **`payment_events` is an *accepted-event ledger*, not an attempt log.** A row
+  exists only for a transaction that committed:
+  | Outcome | Row |
+  | --- | --- |
+  | `applied` / `ignored` / `failed_terminal` | committed, row persists |
+  | transient failure (DB error, provider blip, unresolved tenant) | **rolled back — no row at all**, `5xx`, provider retries |
+  Do not "complete" the table by adding `failed_retryable`: recording an attempt
+  is precisely what burns the claim and makes the event permanently
+  unrecoverable (Task 1.4, Task 9.3a).
+- **HTTP response taxonomy for the webhook is fixed** (Task 9):
+  | Situation | Response | Record |
+  | --- | --- | --- |
+  | bad/absent signature | `401` | nothing |
+  | valid signature, unsupported event | `200` | `failed_terminal` |
+  | valid signature, deliberate no-op (wrong env, stale, manual, illegal) | `200` | `ignored` + reason |
+  | valid signature, transient failure | `5xx` | nothing (rolled back) |
 - **Quotas stay untouched.** `src/lib/quotas/index.ts` must not gain a single
   import from billing. Enforcement keeps reading `accounts.plan_id` and never
   learns that payments exist (`D15`).
@@ -121,12 +146,12 @@ If the invoices plan ships first, Task 5 shrinks to "extend the existing client"
 
 ```
 supabase/migrations/2026MMDDHHMMSS_subscriptions_and_payments.sql  (T1)
-supabase/migrations/2026MMDDHHMMSS_apply_subscription_state.sql    (T4)
+supabase/migrations/2026MMDDHHMMSS_process_payment_event.sql       (T4)
 src/lib/ports/payment-provider.ts                                 (T2)  zero vendor imports
 src/lib/ports/payment-provider.test.ts                            (T2)  boundary test
 src/features/billing/lib/subscription-state.ts + .test.ts          (T3)  pure, no I/O
 src/features/billing/lib/checkout-intent.ts + .test.ts             (T7)  local intent, written first
-src/features/billing/lib/apply-state.ts + .test.ts                 (T4)  RPC wrapper
+src/features/billing/lib/process-payment-event.ts + .test.ts       (T4)  single-RPC wrapper (claim + apply)
 src/features/billing/lib/reconciliation.ts + .test.ts              (T10) durable cursor
 src/features/billing/lib/razorpay/client.ts                        (T5)
 src/features/billing/lib/razorpay/verify.ts + .test.ts             (T5)  raw body HMAC
@@ -210,11 +235,13 @@ Additive only; no existing column is changed (ADR-009 data model).
   `account_id NULL`, `kind`, `status TEXT NOT NULL CHECK (status IN
   ('applied','ignored','failed_terminal'))`, `ignored_reason TEXT`, `event_at`,
   `received_at DEFAULT now()`, `payload_digest TEXT`.
-  - **There is deliberately no persisted `failed_retryable` state, because a
-    retryable failure must not leave a row at all.** The claim and the apply share
-    one transaction (Task 9.3a): if the apply fails transiently, the transaction
-    rolls back, the claim disappears with it, and the provider's retry gets a
-    fresh claim. A persisted "failed" row plus a `200` response is the trap — the
+  - **This table is an *accepted-event ledger*, not a log of every request.** A
+    row means "a transaction committed for this event". There is deliberately no
+    persisted `failed_retryable` state, because a retryable failure must not
+    leave a row at all. The claim and the apply are one transaction — one RPC
+    (Task 4, Task 9.3a): if the apply fails transiently, the transaction rolls
+    back, the claim disappears with it, and the provider's retry gets a fresh
+    claim. A persisted "failed" row plus a `200` response is the trap — the
     provider stops retrying while `ON CONFLICT DO NOTHING` makes every future
     redelivery look `already_processed`, so the event is unrecoverable forever.
   - `failed_terminal` is reserved for outcomes where retrying provably cannot
@@ -307,6 +334,23 @@ subscriptions` returns zero rows for account A; any `insert` fails; `update` on
 
 - [ ] **3.1** `transition(current: Status, event: EventKind): Status | 'illegal'`
   as a total, explicit table. Zero I/O, zero imports from the app.
+- [ ] **3.1a** **The domain spelling is `canceled`, and the provider's spelling
+  never leaves the adapter.** Razorpay says `cancelled`; a codebase that carries
+  both spellings will eventually compare them.
+
+  ```ts
+  export type SubscriptionStatus =
+    | "incomplete"
+    | "active"
+    | "past_due"
+    | "canceled"
+    | "expired";
+  ```
+
+  `cancelled` (and every other provider word) appears **only** in
+  `razorpay/adapter.ts`'s mapping table (5.3d). Assert it: a test greps
+  `src/features/billing` outside `razorpay/` for provider vocabulary and fails on
+  a hit, in the same style as the Task 2.3 boundary test.
 - [ ] **3.2** Encode the ADR diagram: `incomplete→active`, `active→past_due`,
   `past_due→active`, `past_due→canceled` (grace expiry), `active→canceled`,
   `canceled→expired`, `incomplete→expired` (abandoned).
@@ -332,18 +376,60 @@ subscriptions` returns zero rows for account A; any `insert` fails; `update` on
 
 **Verify:** `npx vitest run src/features/billing/lib/subscription-state.test.ts`
 
-## Task 4 — `apply_subscription_state` RPC (`D12`, `D15`, `D16`)
+## Task 4 — `process_payment_event` RPC (`D12`, `D15`, `D16`)
 
-**Files:** create `supabase/migrations/<ts>_apply_subscription_state.sql`,
-`src/features/billing/lib/apply-state.ts`, `…test.ts`
+**Files:** create `supabase/migrations/<ts>_process_payment_event.sql`,
+`src/features/billing/lib/process-payment-event.ts`, `…test.ts`
 
 One transaction, or nothing. This function is the only writer of billing state.
 
-- [ ] **4.1** `CREATE OR REPLACE FUNCTION apply_subscription_state(...) RETURNS
+- [ ] **4.0** **One function owns the whole event, claim included.** The earlier
+  draft split this into "route claims the event, then route calls
+  `apply_subscription_state()`" — two `supabase-js` calls, therefore **two
+  transactions**, therefore the Task 9.3a invariant was a requirement with no
+  implementation. Supabase documents that separate client queries are not grouped
+  into a transaction and that multi-step transactional logic must live in a
+  database function. So:
+
+  ```text
+  POST webhook
+      ↓ verify signature (raw body)
+      ↓ normalize to a domain PaymentEvent
+      ↓ supabase.rpc('process_payment_event', normalizedEvent)   ← ONE call
+          BEGIN
+            claim event            -- INSERT payment_events … ON CONFLICT DO NOTHING
+            ensure subscription    -- reconstruct from checkout_intent if missing
+            lock subscription      -- SELECT … FOR UPDATE
+            environment guard
+            ordering guard
+            manual-billing guard
+            state transition
+            ledger row
+            subscriptions write
+            accounts.plan_id
+            audit event
+          COMMIT
+      ↓ 200
+  ```
+
+  There is **no separate claim operation anywhere in the codebase.** Any future
+  `from('payment_events').insert(...)` in a route is a regression; say so in a
+  comment at the RPC call site. The internal steps may be factored into helper
+  functions (`ensure_subscription_for_event`, `apply_subscription_state_internal`)
+  **called from inside** `process_payment_event`, never from TypeScript.
+- [ ] **4.1** `CREATE OR REPLACE FUNCTION process_payment_event(...) RETURNS
   jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp`.
   **`SECURITY DEFINER` must be written explicitly** — `CREATE OR REPLACE` does
   not inherit it and Postgres silently downgrades to INVOKER (`AGENTS.md`;
-  `scripts/push-supabase-schema.mjs` enforces this).
+  `scripts/push-supabase-schema.mjs` enforces this). The same applies to every
+  internal helper it calls.
+- [ ] **4.1-i** On a committed path it returns a discriminated result the route
+  maps straight onto the HTTP taxonomy: `{ outcome: 'applied' |
+  'already_processed' | 'ignored' | 'failed_terminal', reason?, accountId?,
+  eventRowId? }` — all `200`. Every non-terminal outcome, **including an
+  unresolved tenant**, is a `RAISE EXCEPTION`: the transaction rolls back, no row
+  survives, and the route answers `5xx` so the provider redelivers (9.4a). A
+  return value can be ignored by a caller; an exception cannot.
 - [ ] **4.1a** Harden it as the privileged function it is. `SET search_path` is
   necessary but **not sufficient** — a definer function is the one place where a
   resolution surprise executes with elevated rights:
@@ -352,10 +438,20 @@ One transaction, or nothing. This function is the only writer of billing state.
     `public.payment_transactions`, `public.checkout_intents`,
     `public.audit_events`. No bare table names anywhere in the body.
   - **Control `EXECUTE` explicitly**, because Postgres grants it to `PUBLIC` by
-    default: `REVOKE EXECUTE ON FUNCTION public.apply_subscription_state(...)
-    FROM PUBLIC;` then `GRANT EXECUTE … TO service_role;` and **nothing else**.
-    An `authenticated` role able to call this function can grant itself any plan
-    — this single `REVOKE` is load-bearing.
+    default:
+
+    ```sql
+    REVOKE EXECUTE ON FUNCTION public.process_payment_event(...) FROM PUBLIC;
+    REVOKE EXECUTE ON FUNCTION public.process_payment_event(...) FROM anon, authenticated;
+    GRANT  EXECUTE ON FUNCTION public.process_payment_event(...) TO service_role;
+    ```
+
+    and **nothing else**, for the function and every internal helper. An
+    `authenticated` role able to call this function can grant itself any plan —
+    this `REVOKE` is load-bearing. Revoking from `PUBLIC` already removes the
+    inherited privilege in normal role semantics; the explicit `anon,
+    authenticated` revoke is written anyway so the *intent* is unmissable in the
+    migration and in the security checklist.
   - Record both in the RLS/security checklist so a later `CREATE OR REPLACE`
     (which resets neither) is caught.
 - [ ] **4.1b** **The function must be able to *reconstruct* a missing subscription
@@ -370,7 +466,7 @@ One transaction, or nothing. This function is the only writer of billing state.
   our process died before inserting `subscriptions`
   webhook arrives
     → tenant resolves via checkout_intent          ✅
-    → apply_subscription_state()
+    → process_payment_event()
     → SELECT subscription … FOR UPDATE
     → NO ROW                                        ❌ stuck
   ```
@@ -382,7 +478,8 @@ One transaction, or nothing. This function is the only writer of billing state.
   1. Look up `public.subscriptions` by `(provider, environment, provider_ref)`.
   2. If absent, `SELECT … FOR UPDATE` the `public.checkout_intents` row for the
      same triple. Still absent ⇒ this is a genuinely unresolvable event; do not
-     invent a tenant (`F3`) — return unresolved and let Task 9.4 handle it.
+     invent a tenant (`F3`) — `RAISE EXCEPTION` so the whole transaction (claim
+     included) rolls back and the provider redelivers (Task 9.4a).
   3. Build the `subscriptions` row from the **intent** (`account_id`, `plan_id`,
      `interval`, `amount_minor`, `currency` — our server-resolved values, never
      the payload's) plus the provider event's lifecycle/period fields, inserted as
@@ -397,6 +494,10 @@ One transaction, or nothing. This function is the only writer of billing state.
   when *our own* intent row already names the account. An event with no intent and
   no subscription is Task 10.6's orphan incident, never a new mapping.
 - [ ] **4.2** Order of operations inside the transaction:
+  0. **Claim the event**: `INSERT INTO public.payment_events … ON CONFLICT
+     (provider, environment, event_id) DO NOTHING`. Zero rows ⇒ duplicate ⇒
+     return `already_processed` immediately, applying nothing. This step is
+     *inside* the function precisely so it shares the fate of everything below it.
   1. `SELECT … FOR UPDATE` the subscription row — reconstructing it from the
      intent first if it is missing (4.1b). Locking serialises concurrent
      deliveries of the same subscription (kills the A6 race).
@@ -422,12 +523,15 @@ One transaction, or nothing. This function is the only writer of billing state.
 - [ ] **4.3** `plan_id` is resolved **from our `plans` table** by matching
   `provider_refs`, never from a plan id in the payload (`F3`).
 - [ ] **4.4** Never touch `account_limit_overrides` (`F5`).
-- [ ] **4.5** Thin TS wrapper in `apply-state.ts`; on any DB error it **throws**
-  so the route can return `5xx` and the provider retries (`D11`).
+- [ ] **4.5** Thin TS wrapper in `process-payment-event.ts` — **exactly one
+  `supabase.rpc('process_payment_event', …)` call and no other write**; on any DB
+  error it **throws** so the route can return `5xx` and the provider retries
+  (`D11`). The wrapper is the only module allowed to name the RPC.
 
 **Verify:** integration test — two concurrent calls with the same `event_id`
 produce exactly one ledger row; a call with an older `event_at` is recorded
-`ignored`.
+`ignored`; **a call whose apply raises leaves zero `payment_events` rows** (the
+claim rolled back with it).
 
 ## Task 5 — Razorpay adapter (`D2`, `F2`)
 
@@ -456,6 +560,33 @@ produce exactly one ledger row; a call with an older `event_at` is recorded
   it is a complete one. If a future provider ships a signed timestamp in the
   signature base string, that provider's **adapter** may enforce freshness;
   replay semantics are adapter-local, never a shared rule in `verify.ts`.
+- [ ] **5.1a** **Webhook secret rotation is an operational procedure, and it has
+  to exist before go-live.** Razorpay's own webhook FAQ notes that deliveries
+  already in flight when the secret changes still validate against the **old**
+  secret, while later events use the new one — and the provider's retry window is
+  up to 24 hours. A single-secret deployment that rotates therefore silently
+  `401`s a day's worth of real retries.
+  - `verify.ts` accepts an **ordered list** of candidate secrets and tries each
+    with `timingSafeEqual`, current first. Success records *which* secret matched
+    (for the metric below); failure means none matched.
+  - Env shape (both are optional; only the primary is required to run):
+
+    ```text
+    RAZORPAY_LIVE_WEBHOOK_SECRET            # current
+    RAZORPAY_LIVE_WEBHOOK_SECRET_PREVIOUS   # accepted during rotation only
+    ```
+
+  - Runbook (`docs/` + Task 15):
+    1. Generate the new secret and set it as `…_WEBHOOK_SECRET_PREVIOUS = old`,
+       `…_WEBHOOK_SECRET = new` **before** changing it at the provider.
+    2. Update the secret in the provider dashboard.
+    3. Watch the "verified by previous secret" counter drain to zero.
+    4. Wait out the full provider retry/replay window (24 h for Razorpay).
+    5. Remove `…_WEBHOOK_SECRET_PREVIOUS`.
+  - If the provider's configuration model permits only one active secret per
+    endpoint, document that limitation explicitly and rotate by adding a second
+    endpoint rather than mutating the live one. **Never** rotate by accepting an
+    unsigned request during the transition.
 - [ ] **5.2** `client.ts` — `fetch`-based, no SDK. Basic auth from env. Explicit
   timeout via `AbortSignal.timeout` (Workers has no patience for a hung
   subrequest, ADR-INFRA-001).
@@ -648,22 +779,28 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
 - [ ] **9.1** Read `await request.text()` first. Cap body size; reject oversized.
 - [ ] **9.2** `verifyAndParse` → on throw, `401`, log `event_id`-less rejection,
   **record nothing** and alert on a burst.
-- [ ] **9.3** Claim: `INSERT INTO payment_events … ON CONFLICT (provider,
-  environment, event_id) DO NOTHING`. Zero rows ⇒ duplicate ⇒
-  `200 already_processed`, no re-apply. This claim — not a timestamp window
-  (5.1) — is what makes replay harmless, including a 20-hour-old provider retry.
-  **Claim insert error ⇒ `5xx`** so the provider retries — fails *closed*, the
-  deliberate inverse of `IngressDedupeStore.claim()` (`D11`). Say so in a comment
-  at the call site; the next reader will otherwise "fix" it to match ingress.
+- [ ] **9.3** **The route performs no claim of its own.** It makes exactly one
+  write call — `processPaymentEvent(normalizedEvent)` → one
+  `supabase.rpc('process_payment_event', …)` — and the claim happens inside it
+  (Task 4.0, 4.2 step 0). A duplicate returns `already_processed` ⇒
+  `200`, no re-apply. This claim — not a timestamp window (5.1) — is what makes
+  replay harmless, including a 20-hour-old provider retry. **Any RPC error ⇒
+  `5xx`** so the provider retries — fails *closed*, the deliberate inverse of
+  `IngressDedupeStore.claim()` (`D11`). Say so in a comment at the call site; the
+  next reader will otherwise "fix" it to match ingress.
+  - **Do not write `from('payment_events').insert(...)` in this route, ever.**
+    Two `supabase-js` calls are two transactions (see global constraints), which
+    breaks 9.3a while looking like it satisfies it.
 - [ ] **9.3a** **The claim and the apply are one transaction, so a retryable
   failure never consumes the claim.** This is the rule that keeps the provider's
-  24-hour retry window usable:
+  24-hour retry window usable — and the *reason* it is one database function:
 
   ```text
-  BEGIN
-    claim event            -- INSERT … ON CONFLICT DO NOTHING
-    apply event            -- apply_subscription_state()
-  COMMIT                   -- 200
+  supabase.rpc('process_payment_event', …)
+  └─ BEGIN
+       claim event            -- INSERT … ON CONFLICT DO NOTHING
+       apply event            -- guards, ledger, subscription, plan_id, audit
+     COMMIT                   -- 200
   ```
 
   On a transient failure: `ROLLBACK` ⇒ the claim row vanishes ⇒ return `5xx` ⇒ the
@@ -683,6 +820,22 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
   (environment mismatch, stale, manual billing, illegal transition — all decided
   deliberately by the RPC) or `failed_terminal` (uninterpretable signed event).
   Everything else is a `5xx` with nothing left behind.
+- [ ] **9.3b** **Response taxonomy — write it as a single `switch`, not scattered
+  returns.** The distinction between "we decided not to act" and "we failed to
+  act" is the whole operational contract:
+  | Situation | HTTP | Persisted |
+  | --- | --- | --- |
+  | signature invalid / secret absent | `401` | nothing (9.2) |
+  | route provider ≠ configured provider, or provider unset | `404` + internal alert (9.6) | nothing |
+  | valid signature, unsupported/uninterpretable event type | `200` | `failed_terminal` |
+  | valid signature, deliberate no-op (wrong env, stale, manual billing, illegal transition) | `200` | `ignored` + reason |
+  | duplicate | `200 already_processed` | pre-existing row only |
+  | applied | `200` | `applied` |
+  | transient DB/provider failure, or unresolved tenant | `5xx` | nothing (rolled back) |
+
+  `failed_terminal` + `200` for an unsupported-but-signed event is deliberate:
+  the provider must stop retrying something we can never interpret. It is **not**
+  a bucket for "we could not do it right now" — that is always the `5xx` row.
 - [ ] **9.4** Resolve tenant **from our own mapping only**, in this order:
   `subscriptions.provider_ref` → `checkout_intents.provider_ref` (the crash-window
   fallback from 7.6, reconstructed by 4.1b). If the payload carries
@@ -696,8 +849,9 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
   only mechanism that would have recovered a real paying customer. Never guess a
   tenant to make the `200` possible. If redelivery is still unresolved when the
   provider's retry budget expires, Task 10.6's orphan incident is the human path.
-- [ ] **9.5** Call `applySubscriptionState`; return `200` on applied/ignored,
-  `5xx` only on genuine failure.
+- [ ] **9.5** Call `processPaymentEvent` (the single RPC wrapper); map its outcome
+  through the 9.3b table — `200` on applied/already_processed/ignored/
+  failed_terminal, `5xx` on any throw.
 - [ ] **9.6** Unknown provider in `[provider]` ⇒ `404`. Provider not configured
   ⇒ `404` (not `503` — an unconfigured webhook endpoint should not confirm it
   exists). **But `404` externally must not mean invisible internally:** emit a
@@ -796,7 +950,7 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A9** | Force `expired → active` with a crafted sequence | Permissive switch/default branch | Total transition table; illegal ⇒ recorded, not applied (`D10`) | `illegal_transition_rejected` |
 | **A10** | Valid signature, tampered body (amount raised) | HMAC computed over re-serialised JSON | HMAC over the **raw** body before parse (`F2`) | `mutated_body_fails_signature` |
 | **A11** | Point our webhook at the provider's **test** environment and pay ₹1 | One secret, no environment tag | `provider` column + separate secrets per env; test-mode events rejected in prod | `test_mode_event_rejected_in_prod` |
-| **A12** | Upgrade, then chargeback, keep access | Refund never revokes | Refund is a ledger row; entitlement follows the *subscription* event (`D8`) | `chargeback_recorded_not_ignored` |
+| **A12** | Upgrade, then chargeback, and assume the dispute alone silently settles entitlement either way | Money event conflated with lifecycle event | Chargeback always writes a negative ledger row; status/entitlement is untouched unless the provider emits a lifecycle event (`D8`) | `chargeback_is_recorded_without_implicit_entitlement_change` |
 | **A13** | Buy a plan that is `is_active = false` or price `NULL` (hidden/legacy tier) | Only the UI hides it | Server rejects inactive/unpriced plans (`D5`) | `inactive_plan_rejected` |
 | **A14** | Downgrade an enterprise tenant with one forged/stale event | Payments own `plan_id` unconditionally | `billing_mode='manual'` short-circuit (`D16`) | `manual_account_never_auto_downgraded` |
 | **A15** | Downgrade a tenant holding `unlimited_all` override | Plan overwrites overrides | Overrides always win; payments never write them (`F5`) | `override_survives_downgrade` |
@@ -810,8 +964,10 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A23** | Present an active provider subscription we have no intent for, hoping reconstruction adopts it | Repair path used as an adoption path | Reconstruction requires *our* intent row; otherwise orphan alert, no mapping created (Task 10.6, `F3`) | `orphan_is_never_adopted` |
 | **A24** | Run test-mode reconciliation to drag the live cursor / mix live and test cursors | One cursor row per provider | `billing_reconciliation_state` PK is `(provider, environment)` (Task 1.3) | `reconcile_cursor_is_per_environment` |
 | **A25** | Deploy with `PAYMENTS_PROVIDER` set and `PAYMENTS_ENVIRONMENT` absent/garbage, hoping it defaults to `live` (or to `test` against live credentials) | Environment inferred or defaulted | Invalid/absent environment ⇒ Noop, never a default (Task 6.1a) | `invalid_environment_yields_noop` |
+| **A26** | Chargeback, then keep using the product after the provider halts the subscription | Only the money half of a dispute is handled | The provider's halt/cancel lifecycle event revokes entitlement through the same RPC — the other half of A12's rule | `provider_halted_after_chargeback_revokes_entitlement` |
+| **A27** | Force the apply to fail *after* the claim by racing a DB error, then check whether the event was recorded | Claim and apply in two `supabase-js` calls = two transactions | Claim lives inside `process_payment_event`; rollback leaves **zero** `payment_events` rows (Task 4.0/4.2) | `claim_and_apply_share_one_transaction` |
 
-- [ ] **12.1** Write A1–A20 as tests. A red-team test that has never failed is
+- [ ] **12.1** Write A1–A27 as tests. A red-team test that has never failed is
   documentation, not a test: **make each one fail first** by temporarily
   reverting its defense, then restore.
 - [ ] **12.1a** **A16 is an implementation assertion, not a statistical one.** Do
@@ -884,7 +1040,7 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
    The webhook resolves through `checkout_intents` and the RPC reconstructs the
    missing `subscriptions` row (Task 4.1b) — while still refusing to invent a
    mapping for a provider resource we have no intent for (Task 10.6).
-2. A1–A20 all pass, and each has been observed failing without its defense.
+2. A1–A27 all pass, and each has been observed failing without its defense.
 3. `src/lib/quotas/index.ts` has zero billing imports; deleting the billing
    feature would not break message delivery.
 4. Every entitlement change is answerable from `payment_events` +

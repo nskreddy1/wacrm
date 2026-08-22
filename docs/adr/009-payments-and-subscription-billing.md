@@ -227,9 +227,13 @@ is set.
 ### Part 4 — The join to entitlement
 
 15. **D15 — `accounts.plan_id` stays the single read model, and the hot path
-    never reads a payment table.** Activation writes `subscriptions`,
-    `payment_transactions`, *and* `accounts.plan_id` in **one transaction**
-    through a single RPC, `apply_subscription_state(...)`. Consequence, and the
+    never reads a payment table.** Activation claims the event in
+    `payment_events` and writes `subscriptions`, `payment_transactions`, *and*
+    `accounts.plan_id` in **one transaction** through a single RPC,
+    `process_payment_event(...)`. The claim is inside that RPC deliberately: in
+    `supabase-js` each call is its own transaction, so a separate claim insert
+    could commit while the apply rolled back, permanently consuming the
+    provider's redelivery for an event that was never applied. Consequence, and the
     reason for this decision: a total payment-provider outage cannot slow or
     break message delivery, because messaging reads `plan_id` and knows nothing
     about billing. A CQRS-style projection here buys real fault isolation, not
@@ -284,7 +288,7 @@ Each row is here because it removes a specific failure, not because it has a nam
 | Null Object | `NoopPaymentProvider` (D3) | Half-configured billing that creates unverifiable orders |
 | Anti-corruption layer | `verifyAndParse` → domain `PaymentEvent` (D1) | Provider payload shapes becoming our schema |
 | State machine | `subscription-state.ts` (D10) | Impossible states; "how did it get from expired to active?" |
-| Idempotent receiver | `payment_events` claim (D11) | Double activation, double charge application on redelivery |
+| Idempotent receiver | `payment_events` claim, inside the apply transaction (D11, D15) | Double activation; or a committed claim whose apply rolled back, silently burning the provider's redelivery |
 | Optimistic concurrency | `last_event_at` guard (D12) | A stale failure event downgrading a recovered tenant |
 | Ledger / append-only log | `payment_transactions` (D8) | Losing the evidence trail exactly when a dispute needs it |
 | Unit of Work | single `apply_subscription_state` RPC (D15) | A subscription row that says `active` while `plan_id` says `free` |
@@ -463,7 +467,7 @@ paid for.
 
 ## Action items
 
-> Sequenced, with an adversarial review pass (attack tree A1–A20), in
+> Sequenced, with an adversarial review pass (attack tree A1–A27), in
 > [`.agents/plans/2026-08-22-payments-subscriptions.md`](../../.agents/plans/2026-08-22-payments-subscriptions.md).
 
 1. [ ] `src/lib/ports/payment-provider.ts` — port + domain types, zero vendor
@@ -473,9 +477,10 @@ paid for.
 3. [ ] Migration: `subscriptions`, `payment_events`, `payment_transactions`,
    `accounts.billing_mode`, `accounts.grace_until`, `plans.provider_refs`; RLS
    read-only for members, no write policies (data model, F9)
-4. [ ] `apply_subscription_state(...)` RPC — subscription + `plan_id` + audit in
-   one transaction, with the `last_event_at` monotonic guard and the `manual`
-   short-circuit (D12, D15, D16)
+4. [ ] `process_payment_event(...)` RPC — event claim + subscription + `plan_id`
+   + ledger + audit in **one** transaction (the route makes no second write),
+   with subscription reconstruction from `checkout_intents`, the `last_event_at`
+   monotonic guard and the `manual` short-circuit (D11, D12, D15, D16)
 5. [ ] Razorpay adapter: `createCheckout`, `verifyAndParse` (raw body,
    constant-time compare, parse-after-verify, **no timestamp window**), the total
    provider→domain lifecycle mapping that throws on unmapped states,
