@@ -36,7 +36,8 @@ steps:
 gh auth login                       # as nskreddy1
 gh api user --jq .id                # → REVIEWER_ID
 DRY_RUN=1 ./scripts/infra/task9-github-settings.sh
-DRY_RUN=0 BRANCH=main DEPLOY_APP_ID=<app-id> REVIEWER_ID=<id> \
+DRY_RUN=0 BRANCH=production-infrastructure-architecture \
+  DEPLOY_APP_ID=<app-id> REVIEWER_ID=<id> \
   ./scripts/infra/task9-github-settings.sh
 ```
 
@@ -50,8 +51,13 @@ DRY_RUN=0 BRANCH=main DEPLOY_APP_ID=<app-id> REVIEWER_ID=<id> \
 
 ## Notes
 
-- `wacrm` currently has no `main` branch; set `BRANCH` to the real default
-  branch chosen in `auxelon-app` after the split.
+- `wacrm` has no `main` branch. The release branch is
+  `production-infrastructure-architecture`, which is also the GitHub default
+  branch and the branch every workflow now triggers on. Set `BRANCH` to that
+  value (or to the new default if `auxelon-app` renames it after the split —
+  in which case update the `on:` triggers and the promotion eligibility gate
+  in the same commit, or CI stops firing entirely).
+- Secrets and variables to populate: see `runbooks/env-and-secrets.md`.
 - If the promote workflow uses the built-in `GITHUB_TOKEN` rather than a
   GitHub App, prefer creating a dedicated App anyway — a bypass list with a
   human PAT would violate the "no human actors" rule.

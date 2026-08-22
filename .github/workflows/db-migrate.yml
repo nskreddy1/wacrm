@@ -18,9 +18,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Git ref to run migrations from (default: main)'
+        description: 'Git ref to run migrations from (default: production-infrastructure-architecture)'
         required: false
-        default: 'main'
+        default: 'production-infrastructure-architecture'
         type: string
       destructive_confirm:
         description: 'ONLY for destructive migrations — type exactly: apply destructive migration'

@@ -5,11 +5,13 @@
 #
 # Non-negotiables encoded here:
 #   * workflow_run ELIGIBILITY GATE (review §11): only a SUCCESSFUL CI run
-#     whose head branch is `main` can become promotion input. A green run
-#     from any other branch or workflow never promotes.
+#     whose head branch is the release branch
+#     (`production-infrastructure-architecture`, this repo's default) can
+#     become promotion input. A green run from any other branch or
+#     workflow never promotes.
 #   * Checkout pins github.event.workflow_run.head_sha — NEVER current
-#     main HEAD; the race between CI finishing and promotion starting
-#     would otherwise ship untested code (ADR-001 §4.1).
+#     release-branch HEAD; the race between CI finishing and promotion
+#     starting would otherwise ship untested code (ADR-001 §4.1).
 #   * `environment: production` is the HUMAN approval gate — a person
 #     must approve in the GitHub UI before the build job even starts.
 #   * Artifact integrity (review §8): sha256 recorded at build, artifact
@@ -26,7 +28,7 @@ name: Promote to Production
 
 on:
   workflow_run:
-    workflows: ["CI"] # exact upstream workflow name — do not rename one without the other
+    workflows: ['CI'] # exact upstream workflow name — do not rename one without the other
     types: [completed]
 
 # One promotion at a time; NEVER cancel an in-flight production deploy.
@@ -43,7 +45,7 @@ jobs:
     # ELIGIBILITY GATE (review §11)
     if: >
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event.workflow_run.head_branch == 'production-infrastructure-architecture'
     environment: production # manual approval happens here
     runs-on: ubuntu-latest
     env:
@@ -51,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # NEVER current main HEAD — pin the exact SHA CI validated.
+          # NEVER current release-branch HEAD — pin the SHA CI validated.
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 

@@ -14,7 +14,7 @@ name: AI Review
 
 on:
   pull_request:
-    branches: [main]
+    branches: [production-infrastructure-architecture]
 
 concurrency:
   group: ai-review-${{ github.ref }}
