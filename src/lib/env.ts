@@ -92,11 +92,24 @@ function requireFirstOf(names: readonly string[], hint?: string): string {
 // application code. Order is resolution order: canonical name first.
 // ---------------------------------------------------------------------------
 
-const SUPABASE_URL_NAMES = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
+// These two chains are mirrored verbatim in `next.config.ts` (which
+// cannot import from `src/` at build time). Their ORDER is part of the
+// contract: if the two files disagree, a browser render and a server
+// render can resolve to two different Supabase projects. Until this was
+// enforced, `next.config.ts` accepted four spellings this file did not —
+// `check-env-completeness.mjs --contract` now fails on any divergence.
+const SUPABASE_URL_NAMES = [
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'NEXT_PUBLIC_zepo_SUPABASE_URL',
+  'SUPABASE_URL',
+] as const;
 
 const SUPABASE_ANON_KEY_NAMES = [
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+  'NEXT_PUBLIC_zepo_SUPABASE_ANON_KEY',
+  'zepo_SUPABASE_PUBLISHABLE_KEY',
+  'SUPABASE_PUBLISHABLE_KEY',
 ] as const;
 
 // The `zepo_`-prefixed spellings are injected by the Supabase↔Vercel

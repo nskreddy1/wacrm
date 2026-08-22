@@ -22,6 +22,8 @@
  */
 import postgres from 'postgres';
 
+import { databaseUrl } from '@/lib/env';
+
 type HyperdriveBinding = { connectionString: string };
 
 let client: ReturnType<typeof postgres> | null = null;
@@ -43,7 +45,14 @@ function resolveConnection(): { url: string; prepare: boolean } {
     return { url: hd.connectionString, prepare: true };
   }
 
-  const url = process.env.DATABASE_URL;
+  // Which env names hold the dev/CI connection string — and in what
+  // order — is `@/lib/env`'s decision, not this module's. Reading
+  // `process.env.DATABASE_URL` directly here meant a machine configured
+  // under one of the integration-provisioned spellings (see
+  // `DATABASE_URL_NAMES` in `src/lib/env.ts`) got "no database
+  // configured" here while every standalone script on the same box
+  // connected fine.
+  const url = databaseUrl();
   if (!url) {
     throw new Error(
       'No database connection configured: neither a HYPERDRIVE binding nor DATABASE_URL is present.'
