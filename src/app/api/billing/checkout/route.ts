@@ -99,7 +99,9 @@ export async function POST(request: NextRequest) {
     `billing:checkout:${accountId}`,
     RATE_LIMITS.billingCheckout
   );
-  if (!limit.ok) return rateLimitResponse(limit);
+  // `RateLimitResult.success`, NOT `.ok` — there is no `ok` field, so
+  // `!limit.ok` was `!undefined` and every checkout answered 429.
+  if (!limit.success) return rateLimitResponse(limit);
 
   // 7.3 — parse the body defensively. A malformed JSON body is a 400,
   // never an exception that reaches the 500 handler.
@@ -204,6 +206,12 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  // Captured after the guard because TypeScript discards the null
+  // narrowing inside the `resolveForProvider` closure below — it cannot
+  // prove when the closure runs. Re-reading `plan` there would compile
+  // only with a `!`, which is the assertion this const replaces.
+  const activePlan = plan;
 
   // NULL price = "contact us" tier. Not self-serve purchasable, and a
   // NULL must never be coerced to 0 — that would be a free upgrade.
