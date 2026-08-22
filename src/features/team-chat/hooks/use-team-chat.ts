@@ -206,10 +206,8 @@ export function useTeamChat(
   // ----- realtime: new messages + conversation upserts -----
   useEffect(() => {
     if (!enabled || !accountId || !myId) return;
-    const supabase = createClient();
 
-    const channel: RealtimeChannel = supabase
-      .channel(`team-chat:${accountId}`)
+    const channel: RealtimeChannel = getChannel(`team-chat:${accountId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'team_messages' },
