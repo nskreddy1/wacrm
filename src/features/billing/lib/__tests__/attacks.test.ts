@@ -486,7 +486,11 @@ describe('A33 — smuggle a seat quantity to multiply the amount', () => {
       currency: 'INR',
       // The attacker's smuggled field, present on the object the
       // adapter receives. It must not survive into the provider call.
-      ...({ quantity: 100 } as Record<string, never>),
+      // `as unknown as` is required and is the point: the field is not
+      // on `CheckoutIntent`, which is itself part of the defense. The
+      // cast reproduces what a hostile/careless caller would send at
+      // runtime after the type system has been bypassed.
+      ...({ quantity: 100 } as unknown as Record<string, never>),
     });
 
     const body = capture.body as Record<string, unknown>;
