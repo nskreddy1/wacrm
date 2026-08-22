@@ -116,7 +116,6 @@
     "src/features/inbox/components/inbox-workspace.tsx",
     "src/features/inbox/components/message-thread.tsx",
     "src/features/inbox/components/new-conversation-dialog.tsx",
-    "src/features/inbox/hooks/use-realtime.ts",
     "src/features/inbox/lib/ensure-conversation.ts",
     "src/features/integrations/lib/context.ts",
     "src/features/integrations/lib/run.ts",
