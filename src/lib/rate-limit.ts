@@ -314,6 +314,25 @@ export const RATE_LIMITS = {
    *  back-and-forth conversation tops out well under one message per
    *  two seconds sustained. */
   supportReply: { limit: 30, windowMs: 60_000 },
+  /** Checkout creation (`POST /api/billing/checkout`), keyed on
+   *  ACCOUNT_ID rather than user or IP (Task 7.2). The thing worth
+   *  bounding is journeys started against one tenant's billing state,
+   *  and every other key can be multiplied around it: an owner behind a
+   *  changing IP defeats a per-IP key, and ownership can be transferred
+   *  between users. 5/min sits far above a human clicking "Upgrade"
+   *  while bounding a script that would otherwise have Razorpay create
+   *  subscription after subscription.
+   *
+   *  This is explicitly a SECOND line of defence. The partial unique
+   *  index allowing one open intent per account is what actually makes
+   *  duplicate journeys impossible — a limiter that deliberately fails
+   *  OPEN when Redis is down (see the module header) can never be the
+   *  thing standing between a customer and two real charges. */
+  billingCheckout: { limit: 5, windowMs: 60_000 },
+  /** Cancellation requests, per account. Tighter than checkout: cancel
+   *  is idempotent from the user's point of view, so a human needs it
+   *  once, and every call reaches the provider's API. */
+  billingCancel: { limit: 3, windowMs: 60_000 },
 } as const;
 
 /** Test-only helper. Clears the in-memory state so unit tests don't
