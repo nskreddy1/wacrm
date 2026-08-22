@@ -73,12 +73,28 @@ If the invoices plan ships first, Task 5 shrinks to "extend the existing client"
   timestamp":
   | Signal | Role |
   | --- | --- |
-  | provider event id | **identity** (the idempotency claim) |
+  | `(provider, environment, provider event id)` | **identity** (the idempotency claim, and the whole replay defense) |
   | provider resource state/version | **authoritative** where the provider exposes it |
   | provider event timestamp | ordering **hint** only |
   | `subscriptions.last_event_at` | defensive **monotonic guard** |
   Ordering semantics that vary by provider live **inside the adapter**, not in the
   RPC. Stripe (`D2`, second adapter) does not behave identically to Razorpay.
+- **No replay window on a validly signed webhook** (Task 5.1). Razorpay retries
+  failed deliveries for up to 24 hours, so "reject events older than N minutes"
+  drops real payments while blocking nothing an attacker could send anyway. The
+  event-id claim is the replay defense. Freshness rules, where a provider signs a
+  timestamp, belong to that provider's adapter.
+- **Every provider identifier is unique only within `(provider, environment)`.**
+  Provider refs and provider event ids are never globally unique on their own —
+  every uniqueness constraint on one is a three-column constraint, and internal
+  foreign keys point at our own surrogate `UUID`s (`Task 1`).
+- **Provider vocabulary never becomes domain vocabulary.** Provider lifecycle
+  states are mapped to our status enum by an explicit, total table in the adapter
+  (Task 5.3d) that throws on anything unmapped.
+- **No unsupported provider API surface may be invented.** If this plan implies a
+  provider header, parameter, or behaviour, verify it against that provider's
+  current documentation before sending it; declare the gap as a capability flag
+  rather than guessing (Task 5.3a).
 - **Financial event ≠ entitlement event.** A ledger row and an entitlement change
   are separate consequences. Money events (`charge`/`refund`/`chargeback`) write
   the ledger; **only the subscription/payment lifecycle state determines
@@ -126,12 +142,17 @@ src/features/billing/lib/__tests__/attacks.test.ts                (T12) red-team
 Additive only; no existing column is changed (ADR-009 data model).
 
 - [ ] **1.1** `subscriptions`: `id`, `account_id → accounts`, `plan_id → plans`,
-  `provider TEXT`, `provider_ref TEXT`, `status TEXT`, `interval TEXT`,
+  `provider TEXT`, `environment TEXT NOT NULL CHECK (environment IN
+  ('test','live'))`, `provider_ref TEXT`, `status TEXT`, `interval TEXT`,
   `amount_minor INTEGER`, `currency TEXT`, `current_period_end TIMESTAMPTZ`,
   `cancel_at_period_end BOOLEAN DEFAULT false`, `last_event_at TIMESTAMPTZ`,
   timestamps.
-  - `UNIQUE (provider, provider_ref)` — the mapping that resolves tenant from
-    event (`F3`).
+  - `UNIQUE (provider, environment, provider_ref)` — the mapping that resolves
+    tenant from event (`F3`). **`(provider, provider_ref)` alone is wrong:** a
+    provider reference is only unique *within* one provider's one environment, so
+    a two-provider or test/live deployment can collide on it. Every
+    provider-reference uniqueness constraint in this plan is a three-column
+    constraint for that reason.
   - `CREATE UNIQUE INDEX … ON subscriptions (account_id) WHERE status IN
     ('active','past_due')` — **one live subscription per account**, enforced by
     the database, not by application care (kills attack A7).
@@ -150,14 +171,16 @@ Additive only; no existing column is changed (ADR-009 data model).
   account, so a paying customer is unresolvable.
   - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`, `account_id → accounts`,
     `plan_id → plans`, `interval TEXT`, `provider TEXT`,
+    `environment TEXT NOT NULL CHECK (environment IN ('test','live'))`,
     `amount_minor INTEGER NOT NULL`, `currency TEXT NOT NULL` (the
     server-resolved price, frozen at intent time — the audit trail for `F1`),
     `status TEXT CHECK (status IN ('created','provider_attached','completed','abandoned','failed'))`,
     `provider_ref TEXT`, `provider_customer_ref TEXT`, `created_by → auth.users`,
     timestamps.
-  - `UNIQUE (provider, provider_ref)` where `provider_ref IS NOT NULL` — the
-    second half of the tenant-resolution mapping (`F3`). A webhook that cannot
-    match `subscriptions.provider_ref` **must** still be resolvable here.
+  - `UNIQUE (provider, environment, provider_ref)` where `provider_ref IS NOT
+    NULL` — the second half of the tenant-resolution mapping (`F3`). A webhook
+    that cannot match `subscriptions.provider_ref` **must** still be resolvable
+    here.
   - `id` doubles as the provider idempotency key input (Task 5.3), so uniqueness
     is ours and explicit, not derived from a coarse hash.
 - [ ] **1.3** `billing_reconciliation_state` — durable cursor for Task 10.
@@ -165,11 +188,21 @@ Additive only; no existing column is changed (ADR-009 data model).
   `last_status TEXT`, `orphans_seen INTEGER DEFAULT 0`. Workers isolates are
   ephemeral: a cursor held in a module-level variable resets on every cold start,
   so the cron would re-scan from the beginning forever and never reach the tail.
-- [ ] **1.4** `payment_events`: `event_id TEXT PRIMARY KEY` (the provider's id —
-  this *is* the idempotency claim), `provider`, `subscription_id NULL`,
+- [ ] **1.4** `payment_events`: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`,
+  `provider TEXT NOT NULL`, `environment TEXT NOT NULL`, `event_id TEXT NOT NULL`
+  (the provider's id), `provider_event_type TEXT`, `subscription_id NULL`,
   `account_id NULL`, `kind`, `status TEXT CHECK (status IN
   ('applied','ignored','failed'))`, `ignored_reason TEXT`, `event_at`,
   `received_at DEFAULT now()`, `payload_digest TEXT`.
+  - **`UNIQUE (provider, environment, event_id)` is the idempotency claim**, and
+    the surrogate `id UUID` is the row identity every foreign key points at.
+    `event_id TEXT PRIMARY KEY` would be wrong the moment a second provider or a
+    second environment exists: provider event ids are namespaced *by* the
+    provider, and Razorpay test-mode and live-mode ids come from different
+    id spaces with no cross-guarantee. The uniqueness that matters is the triple.
+  - **This unique triple is also the entire replay defense** (see Task 5.1): a
+    redelivered or replayed event loses the claim and is never applied twice, and
+    that holds no matter how old the delivery is.
   - **Digest only — never the raw payload** (`F7`).
   - `environment TEXT NOT NULL CHECK (environment IN ('test','live'))` — an
     **explicit stored column**, not something an adapter infers later. Attack A11
@@ -179,10 +212,17 @@ Additive only; no existing column is changed (ADR-009 data model).
     `kind`, so forensics can tell "we mapped it wrong" from "they sent something
     new".
 - [ ] **1.5** `payment_transactions` (append-only ledger, `D8`):
-  `id`, `account_id`, `subscription_id`, `kind TEXT CHECK (kind IN
+  `id`, `account_id`, `subscription_id`, `provider TEXT NOT NULL`,
+  `environment TEXT NOT NULL`, `kind TEXT CHECK (kind IN
   ('charge','refund','chargeback'))`, `amount_minor INTEGER` (**signed**),
-  `currency`, `provider_ref TEXT UNIQUE`, `event_id → payment_events`,
-  `occurred_at`, `created_at`.
+  `currency`, `provider_ref TEXT`,
+  `payment_event_id UUID REFERENCES payment_events(id)`, `occurred_at`,
+  `created_at`.
+  - `UNIQUE (provider, environment, provider_ref)`, not `provider_ref UNIQUE` —
+    same reasoning as 1.1.
+  - The ledger references `payment_events.id` (the surrogate), **never** the
+    provider's `event_id` string. Internal foreign keys must not be provider
+    identifiers.
   - Trigger `payment_transactions_append_only`: `BEFORE UPDATE OR DELETE …
     RAISE EXCEPTION`. Append-only is worthless if it is only a comment.
   - `CHECK (kind = 'charge' AND amount_minor >= 0 OR kind <> 'charge' AND
@@ -328,30 +368,92 @@ produce exactly one ledger row; a call with an older `event_at` is recorded
 
 **Files:** create `src/features/billing/lib/razorpay/{client,verify,adapter}.ts` + tests
 
-- [ ] **5.1** `verify.ts` — HMAC-SHA256 over the **raw body string** (read with
-  `await request.text()` **before** any parse; a re-serialised object has
-  different bytes and will never match), `crypto.timingSafeEqual` on equal-length
-  buffers, and a **replay window** rejecting events older than N minutes.
+- [ ] **5.1** `verify.ts` — exactly these steps, in this order:
+  1. Read the **raw body string** (`await request.text()` **before** any parse; a
+     re-serialised object has different bytes and will never match).
+  2. HMAC-SHA256 over the raw body with the webhook secret.
+  3. `crypto.timingSafeEqual` on equal-length buffers.
+  4. Parse **only after** the signature verifies.
+  5. Deduplicate on `(provider, environment, event_id)` (Task 1.4, Task 9.3).
+  6. **No timestamp/replay window. Do not reject a validly signed event for being
+     old.**
+
   Missing secret ⇒ **throw**, never "skip" (`F2`).
+
+  **Why the replay window is removed (corrects the earlier draft and `F2`).**
+  Razorpay's webhook signature is an HMAC-SHA256 over the raw request body with
+  the webhook secret; there is no documented signed-timestamp header to anchor a
+  freshness check on, and Razorpay retries failed deliveries with exponential
+  backoff **for up to 24 hours**. An "older than N minutes ⇒ reject" rule
+  therefore does not raise the bar for an attacker (who cannot forge a signature
+  at any age) and *does* discard legitimate retries — i.e. it throws away money.
+  The `UNIQUE (provider, environment, event_id)` claim is the replay defense, and
+  it is a complete one. If a future provider ships a signed timestamp in the
+  signature base string, that provider's **adapter** may enforce freshness;
+  replay semantics are adapter-local, never a shared rule in `verify.ts`.
 - [ ] **5.2** `client.ts` — `fetch`-based, no SDK. Basic auth from env. Explicit
   timeout via `AbortSignal.timeout` (Workers has no patience for a hung
   subrequest, ADR-INFRA-001).
-- [ ] **5.3** `adapter.ts` — implements the port. `createCheckout` sends the
-  provider **our** idempotency key derived from the local intent:
-  `hash(provider, checkout_intent.id)`. **Not** `hash(account_id, plan_id,
-  interval, day)` — that day-bucketed hash collides across two *legitimate*
-  attempts (customer abandons the page, retries an hour later) and the provider
-  would replay the first response instead of creating the new checkout. The key
-  must be as unique as the journey it identifies, and since `checkout_intents.id`
-  is ours, the uniqueness is enforceable in our own database.
-- [ ] **5.3a** `verifyAndParse` sets `environment` from the credential set that
+- [ ] **5.3** `adapter.ts` — implements the port. **`checkout_intents.id` is the
+  Auxelon idempotency identity for a payment journey.** It replaces the earlier
+  `hash(account_id, plan_id, interval, day)` key, which collides across two
+  *legitimate* attempts (customer abandons the page, retries an hour later) and
+  would make the provider replay the first response instead of creating the new
+  checkout. Because the id is ours, the uniqueness is enforceable in our own
+  database.
+- [ ] **5.3a** **Provider idempotency is capability-driven, not assumed.**
+  - If the selected provider **documents** an idempotency mechanism for
+    subscription creation, the adapter transmits `hash(provider, intent.id)`
+    **using that documented mechanism**.
+  - Otherwise the adapter **MUST NOT invent an unsupported header.** Razorpay's
+    Create Subscription API does not document an `Idempotency-Key` header (they
+    document explicit idempotency for other APIs, such as refunds and payouts —
+    that does not extend to `POST /v1/subscriptions`). Do not send one to
+    Razorpay on the strength of this plan; **verify against the provider's own
+    current documentation before adding any idempotency header.**
+  - Express this in the port as a declared capability
+    (`supportsCreateIdempotency: boolean`) so the absence of a header is a stated
+    fact about the provider, not an oversight in the adapter.
+  - **Where the provider offers no idempotency guarantee, our reconciliation is
+    the safety net:** an ambiguous or timed-out create response is resolved by
+    looking the resource up by `provider_ref` and by the intent
+    (`checkout_intents`), never by blindly retrying the create. `database +
+    provider_ref` reconciliation is the source of truth for ambiguity.
+- [ ] **5.3b** `verifyAndParse` sets `environment` from the credential set that
   verified the signature — **never** from a field in the payload. Provider-specific
   ordering signals (`resourceStatus`/`resourceVersion`) are also mapped here; this
   is the only layer allowed to know how Razorpay orders things.
-- [ ] **5.3b** `verifyAndParse` maps provider event names to domain kinds and
+- [ ] **5.3c** `verifyAndParse` maps provider event names to domain kinds and
   **throws on unknown types** rather than defaulting to something harmless.
+- [ ] **5.3d** **Explicit provider → domain lifecycle mapping table, inside the
+  adapter.** Task 3's status enum is *our* vocabulary; Razorpay's subscription
+  lifecycle is a different, larger set (`created`, `authenticated`, `active`,
+  `pending`, `halted`, `cancelled`, `completed`, `expired`, `paused`/`resumed`,
+  plus events like `subscription.charged`). Provider lifecycle ≠ domain
+  lifecycle, and the anti-corruption layer (`D1`) is where the translation
+  belongs. Start from this table and **confirm each starred row against product
+  semantics** before implementing — do not copy a provider state straight into an
+  entitlement decision:
+
+  | Razorpay state/event | Auxelon status | Note |
+  | --- | --- | --- |
+  | `created` | `incomplete` | mandate not yet authenticated |
+  | `authenticated` | `incomplete` \* | mandate approved, first debit may not have settled — decide whether authentication alone grants access |
+  | `active` | `active` | |
+  | `subscription.charged` | *(no status move)* | money event → ledger only |
+  | `pending` | `past_due` | debit failed, provider still retrying |
+  | `halted` | `past_due` \* | provider gave up retrying; decide grace vs. immediate `canceled` |
+  | `cancelled` | `canceled` | |
+  | `completed` | `expired` \* | ran its full term — terminal, not a failure |
+  | `expired` | `expired` | |
+  | `paused` / `resumed` | out of scope for V1 | reject as unknown (5.3c) until deliberately supported |
+
+  Encode this as a total lookup that **throws on an unmapped provider state**, and
+  unit-test every row. A `default:` branch here silently invents entitlement.
 - [ ] **5.4** Tests with fixture payloads: valid signature passes; single-byte
-  mutation fails; correct signature + stale timestamp fails; absent secret fails.
+  mutation fails; absent secret fails; **a validly signed event with an old
+  timestamp still passes verification** (the removed replay window, 5.1) and is
+  stopped instead by the dedupe claim when it is a genuine duplicate.
 
 **Verify:** `npx vitest run src/features/billing/lib/razorpay/`
 
@@ -429,8 +531,10 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
 - [ ] **9.1** Read `await request.text()` first. Cap body size; reject oversized.
 - [ ] **9.2** `verifyAndParse` → on throw, `401`, log `event_id`-less rejection,
   **record nothing** and alert on a burst.
-- [ ] **9.3** Claim: `INSERT INTO payment_events … ON CONFLICT (event_id) DO
-  NOTHING`. Zero rows ⇒ duplicate ⇒ `200 already_processed`, no re-apply.
+- [ ] **9.3** Claim: `INSERT INTO payment_events … ON CONFLICT (provider,
+  environment, event_id) DO NOTHING`. Zero rows ⇒ duplicate ⇒
+  `200 already_processed`, no re-apply. This claim — not a timestamp window
+  (5.1) — is what makes replay harmless, including a 20-hour-old provider retry.
   **Claim insert error ⇒ `5xx`** so the provider retries — fails *closed*, the
   deliberate inverse of `IngressDedupeStore.claim()` (`D11`). Say so in a comment
   at the call site; the next reader will otherwise "fix" it to match ingress.
@@ -466,6 +570,15 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
 - [ ] **10.4** Expire grace: `past_due` with `grace_until < now()` ⇒ move to the
   `is_default` plan. **Delete no data** (`D13`).
 - [ ] **10.5** Skip `billing_mode = 'manual'` accounts entirely (`D16`).
+- [ ] **10.6** **Surface orphans explicitly; never adopt them.** When the provider
+  reports a subscription as active and *neither* a `subscriptions` row *nor* a
+  `checkout_intents` row matches its `(provider, environment, provider_ref)`,
+  record the outcome as `ORPHAN_PROVIDER_SUBSCRIPTION`, increment
+  `billing_reconciliation_state.orphans_seen`, and **alert**. Do **not**
+  auto-create a tenant mapping from an unknown provider resource — that is a
+  tenant assignment invented from external data, exactly what `F3` forbids. An
+  orphan is a human-resolved incident (a real customer we cannot identify), and
+  it must be loud rather than quietly healed into the wrong account.
 
 ## Task 11 — Settings → Plan & usage UI
 
@@ -499,7 +612,7 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A3** | Hit the return URL / call the success callback directly | Redirect grants entitlement | Redirect grants nothing; only webhook or cron applies (`D9`) | `forged_redirect_grants_nothing` |
 | **A4** | Send a real event captured from their *own* paid account, with `metadata.account_id` swapped to their free workspace | Tenant taken from the payload | Tenant resolved from `subscriptions.provider_ref`; mismatch ⇒ alert, apply nothing (`F3`) | `payload_account_id_is_never_authority` |
 | **A5** | `DELETE /api/billing/subscription` with another account's subscription id | Handler trusts the id | Id ignored; resolved from session `accountId` (`F9`) | `cannot_cancel_another_account` |
-| **A6** | Replay the same `subscription.charged` 50× in parallel | Read-then-write race double-applies | `event_id` PK claim + `SELECT … FOR UPDATE` (`D11`) | `duplicate_event_applies_once` |
+| **A6** | Replay the same `subscription.charged` 50× in parallel | Read-then-write race double-applies | `UNIQUE (provider, environment, event_id)` claim + `SELECT … FOR UPDATE` (`D11`) | `duplicate_event_applies_once` |
 | **A7** | Two concurrent checkouts, two active subscriptions, one paid | Application-level uniqueness only | Partial unique index on `(account_id) WHERE status IN ('active','past_due')` | `one_live_subscription_per_account` |
 | **A8** | Replay an old `activated` event after cancelling | Last-write-wins | Monotonic `last_event_at` guard (`D12`) | `stale_event_is_ignored` |
 | **A9** | Force `expired → active` with a crafted sequence | Permissive switch/default branch | Total transition table; illegal ⇒ recorded, not applied (`D10`) | `illegal_transition_rejected` |
@@ -509,7 +622,7 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A13** | Buy a plan that is `is_active = false` or price `NULL` (hidden/legacy tier) | Only the UI hides it | Server rejects inactive/unpriced plans (`D5`) | `inactive_plan_rejected` |
 | **A14** | Downgrade an enterprise tenant with one forged/stale event | Payments own `plan_id` unconditionally | `billing_mode='manual'` short-circuit (`D16`) | `manual_account_never_auto_downgraded` |
 | **A15** | Downgrade a tenant holding `unlimited_all` override | Plan overwrites overrides | Overrides always win; payments never write them (`F5`) | `override_survives_downgrade` |
-| **A16** | Timing-attack the signature comparison | `===` on secrets | `timingSafeEqual` on equal-length buffers (`F2`) | `signature_compare_is_constant_time` |
+| **A16** | Timing-attack the signature comparison | `===` on secrets | `timingSafeEqual` on equal-length buffers (`F2`) | `verify_uses_constant_time_comparison` |
 | **A17** | Flood checkout to burn provider quota / spam the merchant account | No rate limit on money endpoints | `RATE_LIMITS.BILLING_CHECKOUT` per `account_id` (`F4`) | `checkout_is_rate_limited` |
 | **A18** | Flood the webhook with garbage to exhaust the Workers CPU/request budget | Verification after parse | Verify before parse, body cap, `404` on unknown provider | `oversized_body_rejected` |
 | **A19** | Read another tenant's amounts via the usage/billing API | Missing `account_id` filter | RLS `SELECT`-only + `accountId` scoping (`F9`) | `cross_tenant_ledger_read_blocked` |
@@ -518,6 +631,13 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 - [ ] **12.1** Write A1–A20 as tests. A red-team test that has never failed is
   documentation, not a test: **make each one fail first** by temporarily
   reverting its defense, then restore.
+- [ ] **12.1a** **A16 is an implementation assertion, not a statistical one.** Do
+  not attempt to prove constant-time execution from Vitest timings — a JIT, a
+  noisy CI runner, and GC make that test flaky at best and meaningless at worst.
+  Assert instead that `verify.ts` compares via `crypto.timingSafeEqual` on
+  equal-length buffers (source assertion, like the Task 2.3 boundary test) and
+  that a length-mismatched or mutated signature is rejected. Timing behaviour is
+  a property of the primitive we chose; the test's job is to prove we chose it.
 - [ ] **12.2** Record which attacks are structurally impossible and why — A6
   (no seat quantity ⇒ no quantity tampering, `D6`), and A20's cross-service blast
   radius (messaging never reads billing tables, `D15`).
