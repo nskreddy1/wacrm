@@ -24,6 +24,10 @@ import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
 } from '@/features/whatsapp/lib/template-webhook';
+import {
+  SynchronousMessageIngress,
+  type IngressDedupeStore,
+} from '@/lib/ports/message-ingress';
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -45,6 +49,89 @@ function supabaseAdmin() {
     );
   }
   return _adminClient;
+}
+
+/**
+ * Idempotency claim over `webhook_events` (Task 3 Step 1, NFR-008).
+ * `upsert(..., { ignoreDuplicates: true })` compiles to
+ * INSERT ... ON CONFLICT DO NOTHING; RETURNING is empty on conflict,
+ * so "no row came back" === "someone already processed this event".
+ *
+ * Fails OPEN by contract (see IngressDedupeStore): if the claim
+ * errors, we process anyway — a rare duplicate reply on a Meta
+ * redelivery is recoverable, a dropped customer message is not.
+ */
+const webhookEventDedupe: IngressDedupeStore = {
+  async claim(eventId: string, accountId: string): Promise<boolean> {
+    const { data, error } = await supabaseAdmin()
+      .from('webhook_events')
+      .upsert(
+        { event_id: eventId, account_id: accountId },
+        { onConflict: 'event_id', ignoreDuplicates: true }
+      )
+      .select('event_id');
+    if (error) {
+      console.error(
+        '[webhook] dedupe claim failed (failing open):',
+        error.message
+      );
+      return true;
+    }
+    return (data?.length ?? 0) > 0;
+  },
+};
+
+/** Everything `processMessage` needs, carried opaquely through the
+ *  ingress port. */
+interface InboundWhatsAppPayload {
+  message: WhatsAppMessage;
+  contact: { profile: { name: string }; wa_id: string };
+  /** Sender-of-record for NOT NULL FK audit columns. */
+  configUserId: string;
+  accessToken: string;
+}
+
+/**
+ * The ingress seam (plan addendum §C). Today: synchronous, wrapping
+ * the existing pipeline verbatim — Flows → Automations → AI precedence
+ * lives inside `processMessage` and does not move. Scale ladder stage
+ * 3 swaps this single instance for a QueuedMessageIngress with zero
+ * call-site changes.
+ */
+const messageIngress = new SynchronousMessageIngress<InboundWhatsAppPayload>(
+  webhookEventDedupe,
+  async (event) => {
+    const { message, contact, configUserId, accessToken } = event.payload;
+    await processMessage(
+      message,
+      contact,
+      event.accountId,
+      configUserId,
+      accessToken
+    );
+  }
+);
+
+/**
+ * Opportunistic TTL cleanup of the dedupe ledger — Meta's redelivery
+ * horizon is well under 7 days, so older rows are dead weight. Runs
+ * on ~2% of webhook batches (no cron, no extra infrastructure — the
+ * cost-optimized answer at this scale) and is fire-and-forget so it
+ * never adds latency to the ingest path.
+ */
+const WEBHOOK_EVENT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+function maybeCleanupWebhookEvents(): void {
+  if (Math.random() >= 0.02) return;
+  const cutoff = new Date(Date.now() - WEBHOOK_EVENT_TTL_MS).toISOString();
+  void supabaseAdmin()
+    .from('webhook_events')
+    .delete()
+    .lt('processed_at', cutoff)
+    .then(({ error }: { error: { message?: string } | null }) => {
+      if (error) {
+        console.warn('[webhook] dedupe TTL cleanup failed:', error.message);
+      }
+    });
 }
 
 interface WhatsAppMessage {
@@ -242,6 +329,10 @@ export async function POST(request: Request) {
 async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
   if (!body.entry) return;
 
+  // Fire-and-forget dedupe-ledger TTL sweep on a small fraction of
+  // batches — costs nothing on the ingest path.
+  maybeCleanupWebhookEvents();
+
   for (const entry of body.entry) {
     for (const change of entry.changes) {
       // Template-lifecycle events (status / quality / components
@@ -317,18 +408,44 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
         const message = value.messages[i];
         const contact = value.contacts[i] || value.contacts[0];
 
-        await processMessage(
-          message,
-          contact,
-          // Tenancy — drives every contact / conversation lookup
-          // and the engines' active-row dispatch.
-          config.account_id,
-          // Audit / sender-of-record — used as the user_id on row
-          // inserts that need it for NOT NULL FK compliance. Always
-          // the admin who saved the WhatsApp config.
-          config.user_id,
-          decryptedAccessToken
-        );
+        // Meta always stamps a wamid; a message without one can't be
+        // deduped, so process it directly rather than risk colliding
+        // every id-less event on one ledger row.
+        if (!message.id) {
+          await processMessage(
+            message,
+            contact,
+            config.account_id,
+            config.user_id,
+            decryptedAccessToken
+          );
+          continue;
+        }
+
+        // Idempotency + ingress seam (Task 3 Steps 1–2). The ingress
+        // claims the event id first: a Meta redelivery conflicts on
+        // webhook_events and is skipped, so a slow ack can never turn
+        // into duplicate messages or duplicate AI replies (NFR-008).
+        // Tenancy (config.account_id) drives every downstream lookup;
+        // config.user_id is the audit sender-of-record, exactly as
+        // before — the ingress carries both verbatim.
+        const ack = await messageIngress.accept({
+          eventId: message.id,
+          accountId: config.account_id,
+          channel: 'whatsapp',
+          payload: {
+            message,
+            contact,
+            configUserId: config.user_id,
+            accessToken: decryptedAccessToken,
+          },
+        });
+        if (ack.status === 'duplicate') {
+          console.log(
+            '[webhook] duplicate delivery skipped (already processed):',
+            message.id
+          );
+        }
       }
     }
   }

@@ -42,6 +42,12 @@
 --   is_account_member(p_account_id))` to each WHERE clause instead.
 -- ============================================================
 
+-- The DEFINER → INVOKER downgrade below is the entire point of this
+-- migration (see header). Declare it for the function-security
+-- invariant checker in scripts/push-supabase-schema.mjs:
+-- wacrm:allow-security-downgrade public.match_ai_knowledge_fts
+-- wacrm:allow-security-downgrade public.match_ai_knowledge_semantic
+
 -- Lexical: full-text rank. Body unchanged from migration 030 —
 -- only SECURITY DEFINER → SECURITY INVOKER differs.
 CREATE OR REPLACE FUNCTION public.match_ai_knowledge_fts(

@@ -22,6 +22,7 @@ import { isWithinAutoReplySchedule, startOfTodayUtc } from './schedule';
 import { sendChannelMessage } from '@/features/channels/lib/orchestration/outbound';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { checkMonthlyQuota, consumeMonthlyQuota } from '@/lib/quotas';
+import { aiConcurrencyGuard, AI_GUARD_LIMITS } from '@/lib/concurrency-guard';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -80,6 +81,10 @@ type SkipReason =
   | 'caretaker_budget_spent'
   /** Per-account burst throttle on the shared BYO key. */
   | 'account_rate_limited'
+  /** Bulkhead full — too many generations already IN FLIGHT for this
+   *  account or platform-wide (NFR-005). Distinct from the rate limit
+   *  above: that bounds arrivals per window, this bounds concurrency. */
+  | 'ai_concurrency_exhausted'
   /** Plan's monthly AI-reply budget exhausted. */
   | 'monthly_quota_exhausted'
   /** Nothing to reply to. */
@@ -403,43 +408,60 @@ export async function dispatchInboundToAiReply(
       ]);
 
       let holdingText: string | null = null;
-      try {
-        const caretakerReply = await generateReply({
-          config: activeConfig,
-          messages,
-          promptParts: buildPromptParts({
-            userPrompt: activeConfig.systemPrompt,
-            mode: 'auto_reply',
-            knowledge,
-            crmContext,
-            // Constrains the model to acknowledge and gather detail
-            // without re-promising resolution or inventing specifics.
-            extraInstructions: caretakerPromptOverlay({
-              waitedMinutes: waited,
-              escalationReason: conv.ai_escalation_reason,
+      // Bulkhead (NFR-005, Task 3 Step 3): bound in-flight generations
+      // per account and platform-wide. A full bulkhead is NOT silence
+      // here — holdingText stays null and the static fallback line
+      // below still goes out, preserving the caretaker's contract.
+      const caretakerGuardKey = `ai:${accountId}`;
+      const caretakerSlot = await aiConcurrencyGuard.acquire(
+        caretakerGuardKey,
+        AI_GUARD_LIMITS
+      );
+      if (caretakerSlot) {
+        try {
+          const caretakerReply = await generateReply({
+            config: activeConfig,
+            messages,
+            promptParts: buildPromptParts({
+              userPrompt: activeConfig.systemPrompt,
+              mode: 'auto_reply',
+              knowledge,
+              crmContext,
+              // Constrains the model to acknowledge and gather detail
+              // without re-promising resolution or inventing specifics.
+              extraInstructions: caretakerPromptOverlay({
+                waitedMinutes: waited,
+                escalationReason: conv.ai_escalation_reason,
+              }),
             }),
-          }),
-          cacheKey: conversationId,
-        });
+            cacheKey: conversationId,
+          });
 
-        void logAiUsage(db, {
-          accountId,
-          conversationId,
-          mode: 'auto_reply',
-          agentId: specialist?.id ?? config.agentId,
-          provider: activeConfig.provider,
-          model: activeConfig.model,
-          usage: caretakerReply.usage,
-          keySource: config.keySource,
-        });
+          void logAiUsage(db, {
+            accountId,
+            conversationId,
+            mode: 'auto_reply',
+            agentId: specialist?.id ?? config.agentId,
+            provider: activeConfig.provider,
+            model: activeConfig.model,
+            usage: caretakerReply.usage,
+            keySource: config.keySource,
+          });
 
-        // A second handoff signal here is meaningless — we're already
-        // waiting on a human — so only the prose is used.
-        holdingText = caretakerReply.text || null;
-      } catch (genErr) {
-        console.error(
-          '[ai auto-reply] caretaker generation failed, using fallback:',
-          genErr
+          // A second handoff signal here is meaningless — we're already
+          // waiting on a human — so only the prose is used.
+          holdingText = caretakerReply.text || null;
+        } catch (genErr) {
+          console.error(
+            '[ai auto-reply] caretaker generation failed, using fallback:',
+            genErr
+          );
+        } finally {
+          await aiConcurrencyGuard.release(caretakerGuardKey);
+        }
+      } else {
+        console.log(
+          `[ai auto-reply] bulkhead full — caretaker using static fallback conversation=${conversationId} account=${accountId}`
         );
       }
 
@@ -483,6 +505,42 @@ export async function dispatchInboundToAiReply(
     // stable blocks become the system prefix and the retrieved
     // knowledge rides as the final user turn, so providers reuse the
     // cached prefix across replies.
+    // Bulkhead (NFR-005, Task 3 Step 3): bound IN-FLIGHT generations
+    // per account and platform-wide so one tenant's inbound blast
+    // can't monopolize shared provider capacity. Orthogonal to the
+    // per-window rate limit above. Full bulkhead → policy skip: the
+    // inbound stays in the inbox for a human, exactly like the other
+    // capacity gates — never an error, never a crash (NFR-004).
+    const guardKey = `ai:${accountId}`;
+    if (!(await aiConcurrencyGuard.acquire(guardKey, AI_GUARD_LIMITS))) {
+      decide('ai_concurrency_exhausted', {
+        perAccount: AI_GUARD_LIMITS.perAccount,
+        global: AI_GUARD_LIMITS.global,
+      });
+      return;
+    }
+    let generated: Awaited<ReturnType<typeof generateReply>>;
+    try {
+      generated = await generateReply({
+        config: activeConfig,
+        messages,
+        promptParts: buildPromptParts({
+          // The routed persona — the specialist's when matched, else
+          // the default agent's.
+          userPrompt: activeConfig.systemPrompt,
+          mode: 'auto_reply',
+          knowledge,
+          crmContext,
+          integrationContext,
+        }),
+        cacheKey: conversationId,
+      });
+    } finally {
+      // Release the moment the provider call settles — the slot guards
+      // the generation itself, not the DB writes / channel send below.
+      // On throw, the outer catch still logs 'generation_failed'.
+      await aiConcurrencyGuard.release(guardKey);
+    }
     const {
       text,
       handoff,
@@ -491,20 +549,7 @@ export async function dispatchInboundToAiReply(
       escalationReason,
       language,
       affect,
-    } = await generateReply({
-      config: activeConfig,
-      messages,
-      promptParts: buildPromptParts({
-        // The routed persona — the specialist's when matched, else
-        // the default agent's.
-        userPrompt: activeConfig.systemPrompt,
-        mode: 'auto_reply',
-        knowledge,
-        crmContext,
-        integrationContext,
-      }),
-      cacheKey: conversationId,
-    });
+    } = generated;
 
     // Append to the affective history (ADR-002 §3). APPEND, never
     // update: the single overwritten ai_sentiment column is what made
