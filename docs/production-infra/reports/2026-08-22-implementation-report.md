@@ -52,10 +52,11 @@ Rule applied throughout: **every vendor sits behind an adapter** (`src/lib/db`,
 `src/lib/realtime`, `src/lib/ports/*`), so any of these can be replaced without
 touching feature code. Nothing below is a lock-in decision.
 
-| Tool | Role | Why chosen | Free tier / first paid step |
+| Tool | Role | Why chosen | Free tier (the only tier this plan uses) |
 | --- | --- | --- | --- |
-| Cloudflare Workers (+ OpenNext) | Compute | Stateless isolates auto-scale with zero warmup (NFR-009); no idle-server cost; global edge | 100k req/day free → Workers Paid $5/mo (10M req/mo) |
-| Cloudflare Hyperdrive | DB connection pooling | Workers create many short-lived connections; Hyperdrive pools against Supabase's direct string (NFR-010) — production path from day one, not "later" | 100k queries/day free |
+| Cloudflare Workers (+ OpenNext) | Compute | Stateless isolates auto-scale with zero warmup (NFR-009); no idle-server cost; global edge | **Free plan: 100k req/day**, resets 00:00 UTC. Workers Paid is NOT required by this architecture — it exists only as an escape hatch if the free request/CPU limits are ever measurably exceeded |
+| Cloudflare Hyperdrive | DB connection pooling | Workers create many short-lived connections; Hyperdrive pools against Supabase's direct string (NFR-010) — production path from day one, not "later" | **Free — included on the Workers Free plan: 100k queries/day**, resets 00:00 UTC (verified against current Cloudflare pricing docs; no $5 plan needed) |
+| Cloudflare Workers AI (optional) | Platform-side free AI fallback | Same Cloudflare account, no extra vendor; can serve as a $0 shared AI fallback alongside the existing BYO-key model (per-account OpenAI/Anthropic/Gemini keys) | **Free allocation: 10k neurons/day** on Free and Paid plans alike; some large models are Paid-plan-gated — stick to free-plan models |
 | Supabase (Postgres + Auth + RLS) | Data + auth source of truth | Already in place; 88+ tables RLS-scoped; `current_app_user_id()` shim makes auth portable (ADR-002) | Existing plan; compute upgrade only at ~10k+ users |
 | postgres-js | SQL driver | Minimal, no ORM ambitions; parameterized-only via the `sql` tagged template; prepared-statement mode resolved per connection source | Free (OSS) |
 | Upstash Redis | Cache + bulkhead + rate limits | Per-request pricing fits spiky serverless load — no idle cost; already configured | Free tier; pay-per-request after |
@@ -65,21 +66,29 @@ touching feature code. Nothing below is a lock-in decision.
 | GitHub Actions + GitHub Models | CI/CD + AI review | Included with the repo; no external CI vendor; AI review uses `models: read` (no API key spend) | Free for the expected volume |
 | Cloudflare Web Analytics | Browser analytics | Free, cookieless; independent of our `/api/vitals` telemetry | Free |
 
-**Cost statement (per plan, review §16):** **$0 platform baseline assuming
-free-tier quotas are sufficient; third-party usage beyond free allocations may
-incur charges.** First paid step is Workers Paid at $5/mo.
+**Cost statement (free-tier-only policy):** **The platform runs at $0/month.
+Every service in the table above is used strictly within its free tier — no
+paid plan is required anywhere, including Hyperdrive** (which is included on
+the Cloudflare Workers Free plan at 100k queries/day; the earlier "$5 first
+paid step" note referred to the optional Workers Paid escape hatch, not to
+Hyperdrive, and is now explicitly out of scope). Production domain:
+**https://auxelon.in/** (Cloudflare-managed DNS on the same free account).
 
-### Cost at the user counts you asked about
+### Free-tier budget at the target scale
 
 - **Hundreds of users + hundreds of customers using AI:** fits entirely in
   free tiers. AI spend is bring-your-own-key per account (customers' own
-  OpenAI/Anthropic keys), metered, with per-conversation reply caps and the
-  bulkhead (`ConcurrencyGuard`) so one tenant cannot burn shared capacity —
-  the platform itself stays at $0.
-- **~10,000 users:** typically Workers Paid ($5/mo) plus possibly a Supabase
-  compute bump. Everything else (Hyperdrive, Loki, Sentry, Langfuse, Upstash)
-  stays free-tier or single-digit dollars. No code changes — this is the
-  scale ladder's design (plan §F).
+  OpenAI/Anthropic/Gemini keys), metered, with per-conversation reply caps and
+  the bulkhead (`ConcurrencyGuard`) so one tenant cannot burn shared capacity.
+  Optionally, Cloudflare **Workers AI's 10k free neurons/day** can serve as a
+  platform-side $0 fallback for accounts without their own key — the platform
+  itself stays at $0 either way.
+- **Daily free budgets to watch** (all reset 00:00 UTC): Workers 100k
+  req/day; Hyperdrive 100k queries/day; Workers AI 10k neurons/day; Upstash
+  Redis free-tier command quota; Supabase free-project limits; Grafana Cloud
+  50 GB logs; Sentry 5k errors/mo; Langfuse 50k units/mo. The rule when a
+  limit is approached: reduce usage (caching, sampling, caps) first — a paid
+  plan is a deliberate founder decision, never an automatic step.
 
 ---
 
