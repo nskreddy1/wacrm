@@ -5,6 +5,7 @@ import { Inter, Instrument_Serif } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/hooks/use-theme';
 import { ThemedToaster } from '@/components/themed-toaster';
+import { AnalyticsProvider } from '@/components/providers/analytics-provider';
 import { DEFAULT_MODE, DEFAULT_THEME } from '@/lib/themes';
 
 const inter = Inter({
@@ -78,6 +79,7 @@ export default async function RootLayout({
           <ThemeProvider>
             {children}
             <ThemedToaster />
+            <AnalyticsProvider />
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>
