@@ -915,6 +915,77 @@ claim rolled back with it).
     looking the resource up by `provider_ref` and by the intent
     (`checkout_intents`), never by blindly retrying the create. `database +
     provider_ref` reconciliation is the source of truth for ambiguity.
+- [ ] **5.3b-p** **The outbound Create Subscription body is a closed, exact
+  contract — validated against the provider's documented schema, not assembled by
+  guess.** `POST /v1/subscriptions` documents **9** request parameters, and the
+  API is **strict in both directions**: a missing required field *and* an
+  unrecognised extra field are both `400`. The documented error
+  `{any extra field} is/are not required and should not be sent` means we cannot
+  smuggle anything into the body — every local identifier has to travel in `notes`
+  (5.3a-i). The exact body the adapter sends:
+
+  ```ts
+  // razorpay/adapter.ts — createSubscription. Closed set. Nothing else.
+  {
+    plan_id,                 // REQUIRED. From plans.provider_refs (4.3), 19 chars
+    total_count,             // REQUIRED (see 5.3b-t). Never together with end_at
+    quantity: 1,             // pinned (5.3b-q)
+    customer_notify: false,  // explicit product decision (5.3b-n)
+    notes: { auxelon_checkout_intent: intent.id },  // locator (5.3a-i), max 15 pairs
+  }
+  ```
+
+  Documented `400`s the adapter must not be able to trigger, each of which would
+  otherwise surface as a failed checkout for a real customer:
+
+  | Provider error | Rule the adapter enforces |
+  | --- | --- |
+  | `The plan id field is required.` | `plan_id` resolved from our `plans` table before the call; absent ⇒ fail locally, never call |
+  | `The plan id must be 19 characters.` | validate the `plan_<14 alnum>` shape when a `provider_refs` value is read (a typo'd seed row must fail loudly, not at the customer) |
+  | `The total count field is required when end at is not present.` | always send `total_count` (5.3b-t) |
+  | `Please provide either an end date or a total count, but not both.` | **never** send `end_at` alongside it — mutually exclusive, not merely redundant |
+  | `The total count must be at least 1.` / `must be an integer.` | `total_count` is a server-computed positive integer |
+  | `The quantity must be at least 1.` | pinned to `1` (5.3b-q) |
+  | `start_at cannot be lesser than the current time.` | **do not send `start_at` at all** for immediate-start V1 checkout; omitting it starts the subscription after authorisation. A computed "now" is a clock-skew `400` waiting to happen |
+  | `{any extra field} … should not be sent` | the body is built from the closed literal above — no spreading of caller input, no passthrough object |
+
+  **Verify:** an adapter unit test asserts the serialised request body's key set is
+  **exactly** `{plan_id, total_count, quantity, customer_notify, notes}` — a set
+  equality, not a subset check, so a future field addition has to be deliberate.
+- [ ] **5.3b-t** **`total_count` is required by the provider, and its exhaustion is
+  a silent-access-loss cliff that V1 must decide about explicitly.** Razorpay
+  requires the subscription to be bounded — by `total_count` or `end_at`, never
+  both — so an "indefinite" SaaS subscription does not exist at the provider. What
+  happens at the boundary is the part that matters:
+
+  ```text
+  total_count cycles elapse
+    → provider moves subscription to `completed`
+    → subscription.completed webhook
+    → our mapping: completed → expired  (5.3d)
+    → entitlement revoked
+  … for a customer who never cancelled and would have kept paying.
+  ```
+
+  So `total_count` is not a throwaway constant; it sets the date the paying
+  customer silently loses access. Decide, record the decision, and test it:
+  - Compute it from the plan interval against a **documented horizon** (the API
+    states a 100-year maximum, so a monthly plan admits up to `1200`). A long
+    horizon — e.g. monthly ⇒ `120` (10 years) — turns the cliff into a
+    non-event for V1 while staying well inside provider limits.
+  - **`subscription.completed` must be treated as an operational alert, not a
+    routine terminal state.** It means either a genuine full-term completion or
+    that we under-set `total_count` on a live payer. Surface it (Task 13
+    observability), do not let it revoke access quietly.
+  - A renewal/re-subscribe path is explicitly **out of V1 scope** — which is only
+    acceptable *because* the horizon is long. Write that dependency down so the
+    two decisions cannot drift apart.
+- [ ] **5.3b-n** **`customer_notify` is a product decision, and the default is not
+  ours.** It defaults to `true`, which means **Razorpay** emails the customer about
+  subscription and charge events. For a product that owns its own transactional
+  email, that produces duplicate and off-brand mail. Send it **explicitly** —
+  `false` if we own the messaging, `true` only as a deliberate choice — and never
+  leave it to the provider default by omission.
 - [ ] **5.3b-q** **`quantity` is server-controlled and pinned to `1`.** Razorpay's
   Create Subscription API takes a `quantity` parameter (it multiplies the plan
   amount, for per-seat billing). This product has **no per-seat billing** (`D6`,
@@ -996,6 +1067,32 @@ claim rolled back with it).
   - Guessing at unguessable ids is not a bypass: the note only has effect on a
     request that already passed HMAC verification, and it can only ever attach a
     provider ref to an intent that is still open and unbound.
+- [ ] **5.3b-r** **The authorisation handoff comes from the create response, and
+  it is read back — never constructed.** The plan specifies what we create but not
+  how the customer reaches the mandate page. The Create Subscription response
+  documents `short_url` ("URL that can be used to make the authorisation
+  payment"), alongside `id`, `status: "created"`, and — importantly — a `notes`
+  object echoed back.
+
+  ```text
+  createSubscription returns
+    providerRef  ← response.id          (persist to checkout_intents.provider_ref)
+    authorizeUrl ← response.short_url   (returned to the browser)
+  ```
+
+  Rules:
+  - **Never hand-build a provider URL** from an id or a template. If `short_url`
+    is absent from a `2xx`, that is an ambiguous create ⇒ reconcile by
+    `provider_ref` (5.3a), do not improvise a redirect.
+  - **Persist `provider_ref` before returning the URL to the browser.** The
+    ordering is what makes 5.3a-i's crash window small rather than the primary
+    recovery path.
+  - **Echo-verify the locator.** The response returns `notes`; assert our
+    `auxelon_checkout_intent` survived the round trip. If it did not, the
+    correlation guarantee of 5.3a-i is void for that subscription and it must be
+    flagged immediately, while we still hold the intent in hand.
+  - The returned URL grants **nothing**. `A3` already holds: entitlement comes
+    only from a webhook or the cron, never from the customer arriving back.
 - [ ] **5.3b** `verifyAndParse` sets `environment` from the credential set that
   verified the signature — **never** from a field in the payload. Provider-specific
   ordering signals (`resourceStatus`/`resourceVersion`) are also mapped here; this
