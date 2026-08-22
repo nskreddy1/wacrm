@@ -23,6 +23,7 @@ import { Infinity as InfinityIcon } from 'lucide-react';
 import { AnimatedBar } from '@/components/ui/animated-bar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SettingsPanelHead } from './settings-panel-head';
 
 interface UsageRow {
   key: string;
