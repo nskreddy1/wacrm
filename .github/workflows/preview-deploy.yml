@@ -1,0 +1,77 @@
+# Preview deploy per PR (plan Task 7 Step 3, ADR-001 §4.2).
+#
+# Builds with OpenNext and uploads a Cloudflare Workers VERSION (not a
+# deployment) — versions get a preview URL without touching production
+# traffic. The URL is posted as a PR comment; the Task 1 authenticated
+# smoke test runs against it before any production promotion.
+#
+# Requires (Task 11 founder setup): CLOUDFLARE_API_TOKEN and
+# CLOUDFLARE_ACCOUNT_ID repository secrets. Until those exist the job
+# fails at the upload step — that is expected and visible, not silent.
+name: Preview Deploy
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    name: preview
+    runs-on: ubuntu-latest
+    # Same dummy build-time values as ci.yml — `next build` reads the
+    # public Supabase config at build time. Real values are injected at
+    # RUNTIME on Cloudflare via worker secrets/vars, never baked into
+    # preview artifacts from CI.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://ci.example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy-anon-key
+      ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      META_APP_SECRET: 'ci-dummy-meta-secret'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: OpenNext build
+        run: pnpm exec opennextjs-cloudflare build
+
+      - name: Upload preview version
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          # `versions upload` creates a non-production version and prints
+          # its preview URL. Tee output so we can extract the URL.
+          pnpm exec wrangler versions upload | tee /tmp/upload.log
+          URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev[^ ]*' /tmp/upload.log | head -1 || true)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL
+        if: steps.upload.outputs.url != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.upload.outputs.url }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+            "**Preview deployed:** $URL
+
+          Run the ADR-001 §3 authenticated smoke test against this URL before promoting: login → dashboard → inbox realtime → contact save → webhook echo." || true

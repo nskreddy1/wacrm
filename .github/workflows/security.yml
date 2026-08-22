@@ -1,0 +1,61 @@
+# Security scanning (plan Task 7 Step 1, ADR-001 §4.4).
+#
+# Deliberately NOT using actions/dependency-review-action — it requires
+# GitHub Advanced Security on private repos ($$$). gitleaks + pnpm audit +
+# osv-scanner cover secrets and known-vulnerable dependencies on the free
+# tier. Self-contained for now; Task 8 extracts the body into
+# auxelon-infra as a reusable workflow pinned by tag/SHA.
+name: Security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # gitleaks scans commit history on PRs — needs more than depth 1.
+          fetch-depth: 0
+
+      # Secret scanning. Fails the job on any detected secret; the
+      # finding text itself is redacted in logs by gitleaks.
+      - name: Gitleaks (secret scan)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Known-vulnerability gate at HIGH — moderate findings surface in
+      # logs but do not block (solo-founder triage budget, ADR-001 §4.4).
+      - name: pnpm audit (high+)
+        run: pnpm audit --audit-level high
+
+      # OSV covers ecosystems and advisories pnpm audit misses, straight
+      # from the lockfile — no install needed for this step.
+      - name: OSV scanner (lockfile)
+        uses: google/osv-scanner-action/osv-scanner-action@v2
+        with:
+          scan-args: |-
+            --lockfile=pnpm-lock.yaml
