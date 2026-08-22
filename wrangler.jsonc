@@ -5,7 +5,29 @@
   // (100k req/day, Hyperdrive 100k queries/day free). First paid step
   // is Workers Paid ($5/mo, 10M req/mo) when free CPU limits, request
   // quota, or log retention bite — see plan Task 11 cost statement.
+  // ── MANUAL CLOUDFLARE SETUP (Task 11) — status: NOT DONE ──────────
+  // Done by hand in the dashboard; no script provisions these.
+  //   [ ] 1. Workers service named EXACTLY "auxelon-app" (the "name"
+  //          field below). A mismatch makes `wrangler deploy` silently
+  //          create a SECOND Worker instead of updating the live one.
+  //   [ ] 2. Hyperdrive config → paste its id into "hyperdrive" below.
+  //   [ ] 3. Worker secrets (wrangler secret put <NAME>):
+  //          SUPABASE_SERVICE_ROLE_KEY, ENCRYPTION_KEY, CRON_SECRET,
+  //          KV_REST_API_TOKEN  (+ META_APP_SECRET if WhatsApp is live)
+  //   [ ] 4. Worker plain vars: NEXT_PUBLIC_SUPABASE_URL,
+  //          NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_SITE_URL,
+  //          KV_REST_API_URL
+  //   [ ] 5. API token (Workers Scripts:Edit, Account Settings:Read,
+  //          Workers Routes:Edit, Hyperdrive:Read) → store as the
+  //          CLOUDFLARE_API_TOKEN GitHub secret at REPO level.
+  //   [ ] 6. Custom domain/route matching NEXT_PUBLIC_SITE_URL.
+  // ENCRYPTION_KEY and CRON_SECRET must be byte-identical here and in
+  // the GitHub `production` environment, or CI validates one key while
+  // the Worker runs another and live tenant data fails to decrypt.
+  // Step-by-step: docs/production-infra/runbooks/env-and-secrets.md
+  // ─────────────────────────────────────────────────────────────────
   "$schema": "node_modules/wrangler/config-schema.json",
+  // Must match the Workers service name created in step 1 above.
   "name": "auxelon-app",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-08-01",
@@ -21,7 +43,31 @@
   // ONE Hyperdrive binding (review §3). All SQL goes through it in
   // production; application caching is Redis's job. A second no-cache
   // config is added only with a measured requirement.
-  // The id is created by the founder in Task 11 (Hyperdrive config over
-  // the DIRECT Supabase connection string — never the Supavisor pooler).
+  //
+  // ┌─ MANUAL STEP — not yet done. `wrangler deploy` FAILS until the
+  // │  placeholder below is replaced with a real Hyperdrive id.
+  // │
+  // │  1. Supabase → Project Settings → Database → Connection string.
+  // │     Copy the DIRECT string: db.<ref>.supabase.co:5432
+  // │     NEVER the Supavisor pooler (:6543 / *.pooler.supabase.com).
+  // │     Hyperdrive IS the pooler; stacking the two exhausts server-side
+  // │     connections under load and is the #1 way this breaks in prod.
+  // │
+  // │  2. Cloudflare dashboard → Storage & Databases → Hyperdrive →
+  // │     Create configuration. Paste the direct string. Name it
+  // │     `auxelon-app-db`. Caching ON (default).
+  // │     CLI equivalent:
+  // │       wrangler hyperdrive create auxelon-app-db \
+  // │         --connection-string="postgres://..."
+  // │
+  // │  3. Copy the returned config id (uuid) and replace the
+  // │     "<set-in-task-11>" placeholder below. Commit it — a Hyperdrive
+  // │     id is a resource identifier, NOT a secret. The DB password it
+  // │     wraps is held by Cloudflare and is never exposed to the Worker.
+  // │
+  // │  4. Verify before deploying:
+  // │       wrangler hyperdrive list
+  // │     The id here must appear in that output for THIS account.
+  // └─ Full context + every other env var: docs/production-infra/runbooks/env-and-secrets.md
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<set-in-task-11>" }]
 }
