@@ -1,19 +1,20 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
-// Lazy, shared service-role client for the Flows engine.
-// Mirrors src/lib/automations/admin-client.ts — same shape so anyone
-// reading either file picks up the convention immediately.
-let _adminClient: SupabaseClient | null = null;
-
-export function supabaseAdmin(): SupabaseClient {
-  if (!_adminClient) {
-    _adminClient = createClient(
-      (process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)!,
-      (process.env.SUPABASE_SERVICE_ROLE_KEY ??
-        process.env.zepo_SUPABASE_SERVICE_ROLE_KEY ??
-        process.env.zepo_SUPABASE_SECRET_KEY ??
-        process.env.SUPABASE_SECRET_KEY)!
-    );
-  }
-  return _adminClient;
-}
+/**
+ * Service-role client for the Flows engine.
+ *
+ * This file used to construct its own client with its own module-level
+ * singleton and its own copy of the env-var fallback chain. Three other
+ * features did the same, and the four copies had already drifted: only
+ * the `channels` copy disabled session persistence, so a request that
+ * touched both the Flows engine and the AI auto-reply path opened two
+ * pools and left two refresh timers running for a static credential that
+ * needs neither.
+ *
+ * It is now a re-export. The instance, its configuration, and the
+ * environment names behind it live in `@/lib/supabase/admin`, so there is
+ * one pool per process and one place to change.
+ *
+ * SECURITY: unchanged — this bypasses RLS. Flow runs are triggered by
+ * verified webhooks and by authorized cron requests, and every query must
+ * still filter by `account_id`.
+ */
+export { supabaseAdmin } from '@/lib/supabase/admin';
