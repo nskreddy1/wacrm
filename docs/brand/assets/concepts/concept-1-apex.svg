@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Auxelon concept 1 - Apex">
+  <!--
+    Concept 1 - "Apex" (refined A/X monogram)
+    A solid geometric A with a triangular counter; a single Signal
+    diagonal cuts through the mark, crossing the left leg to form
+    the X. Flat terminals, no round caps, no floating dot.
+    Palette: Ink #0A0A0B / Bone #F5F4F2 / Signal #3E6FF4
+  -->
+  <rect width="512" height="512" fill="#0A0A0B"/>
+  <path fill="#F5F4F2" fill-rule="evenodd" d="M256 76 L452 436 L364 436 L327 364 L185 364 L148 436 L60 436 Z M256 186 L305 316 L207 316 Z"/>
+  <path d="M150 460 L338 52" stroke="#3E6FF4" stroke-width="34" stroke-linecap="butt"/>
+</svg>

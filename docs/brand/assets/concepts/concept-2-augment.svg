@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Auxelon concept 2 - Augment">
+  <!--
+    Concept 2 - "Augment" (abstract, non-letter)
+    A base plane with a second, offset plane rising from it -
+    "one becomes two / the added dimension". The Signal cobalt
+    is the added layer only; the base stays Bone.
+    The two planes share exactly one vertex: the point of augmentation.
+    Palette: Ink #0A0A0B / Bone #F5F4F2 / Signal #3E6FF4
+  -->
+  <rect width="512" height="512" fill="#0A0A0B"/>
+  <!-- base plane (what the business already is) -->
+  <path fill="#F5F4F2" d="M96 344 L272 272 L384 344 L208 416 Z"/>
+  <!-- augmented plane (what Auxelon adds), offset up-right, sharing the vertex at 272,272 -->
+  <path fill="#3E6FF4" d="M160 200 L336 128 L448 200 L272 272 Z"/>
+</svg>

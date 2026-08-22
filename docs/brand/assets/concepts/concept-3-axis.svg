@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Auxelon concept 3 - Axis">
+  <!--
+    Concept 3 - "Axis" (continuous-stroke AX ligature)
+    One unbroken stroke draws the A (both legs) and then returns
+    across the mark, crossing the left leg to complete the X -
+    actually delivering the "single continuous stroke" idea from
+    the brand doc. The return stroke carries the Signal accent.
+    Flat (butt) terminals, mitered joins - no clip-art round caps.
+    Palette: Ink #0A0A0B / Bone #F5F4F2 / Signal #3E6FF4
+  -->
+  <rect width="512" height="512" fill="#0A0A0B"/>
+  <g fill="none" stroke-width="40" stroke-linecap="butt" stroke-linejoin="miter">
+    <!-- the A: up the left leg, down the right leg (one stroke) -->
+    <path stroke="#F5F4F2" d="M116 412 L256 100 L396 412"/>
+    <!-- the return: continues from the right foot, crossing the left leg = the X -->
+    <path stroke="#3E6FF4" d="M396 412 L116 184"/>
+  </g>
+</svg>
