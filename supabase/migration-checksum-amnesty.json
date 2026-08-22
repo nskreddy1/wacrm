@@ -1,0 +1,12 @@
+{
+  "$comment": "Checksum amnesty for comment-only edits to already-applied migrations. Each entry maps a migration filename to sha256 checksums the file PREVIOUSLY had when it was applied to some database. When db:push finds a stored checksum that matches a listed prior checksum, it updates the stored checksum to the current file's checksum and skips re-applying, instead of failing with 'changed after it was applied'. This is NOT a license to edit migration SQL semantics: an amnesty entry is only valid for comment/whitespace-only edits, and every entry must be code-reviewed with a reason explaining why the edit happened. Editing applied migration SQL is still forbidden — add a new migration instead.",
+  "entries": [
+    {
+      "filename": "032_fix_ai_knowledge_membership.sql",
+      "priorChecksums": [
+        "7e243d3c7664cb95761879df2e329057dda694a6ee936fcd9dcd782224be002b"
+      ],
+      "reason": "Comment-only annotation added 2026-08-22: '-- wacrm:allow-security-downgrade' markers for match_ai_knowledge_fts/match_ai_knowledge_semantic, required by the function-security invariant checker added later in push-supabase-schema.mjs. The DEFINER->INVOKER downgrade is the deliberate security fix this migration exists for. No SQL semantics changed. Verified: git show 1b965b16:supabase/migrations/032_... | sha256sum == prior checksum; diff is comments only."
+    }
+  ]
+}

@@ -119,9 +119,73 @@ function findSecurityViolations(before, after, allowances) {
   return violations;
 }
 
+/**
+ * Checksum amnesty (supabase/migration-checksum-amnesty.json).
+ *
+ * Migrations are immutable after application — editing one normally makes
+ * `db:push` fail with "changed after it was applied" on every database that
+ * already ran the original. The one legitimate exception is a comment-only
+ * edit forced by tooling (e.g. the `wacrm:allow-security-downgrade`
+ * annotations the invariant checker reads from the migration file itself,
+ * added to `032_fix_ai_knowledge_membership.sql` after that migration had
+ * shipped). The amnesty file lists, per migration, the sha256 checksums the
+ * file previously had; when a database's stored checksum matches a listed
+ * prior checksum, the tracker updates the stored checksum instead of
+ * failing. Entries are code-reviewed data — adding one for a semantic SQL
+ * edit is still forbidden.
+ */
+async function loadChecksumAmnesty() {
+  const amnestyPath = path.join(
+    projectRoot,
+    'supabase',
+    'migration-checksum-amnesty.json'
+  );
+  let raw;
+  try {
+    raw = await readFile(amnestyPath, 'utf8');
+  } catch {
+    return new Map();
+  }
+  const parsed = JSON.parse(raw);
+  const map = new Map();
+  for (const entry of parsed.entries ?? []) {
+    map.set(entry.filename, new Set(entry.priorChecksums ?? []));
+  }
+  return map;
+}
+
+/**
+ * Baseline support (`--baseline=<filename>[,<filename>...]`, repeatable).
+ *
+ * For databases whose schema was built BEFORE the checksum tracker existed,
+ * the tracker can miss migrations that are already reflected in the live
+ * schema. Replaying most of them is harmless (the repo's migrations are
+ * idempotent), but a migration superseded by a LATER live state cannot
+ * replay — e.g. `CREATE OR REPLACE FUNCTION` cannot change the return type
+ * of a function a later migration already upgraded. Baselining records such
+ * a migration as applied (current checksum) WITHOUT executing it. Only
+ * baseline a migration after verifying the live schema already contains its
+ * effects (or a later superseding version of them).
+ */
+const baselineFilenames = new Set(
+  process.argv
+    .slice(2)
+    .filter((arg) => arg.startsWith('--baseline='))
+    .flatMap((arg) => arg.slice('--baseline='.length).split(','))
+    .map((name) => name.trim())
+    .filter(Boolean)
+);
+
 const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => /^\d+.*\.sql$/.test(file))
   .sort((left, right) => left.localeCompare(right, 'en', { numeric: true }));
+
+for (const name of baselineFilenames) {
+  if (!migrationFiles.includes(name)) {
+    console.error(`--baseline names an unknown migration: ${name}`);
+    process.exit(1);
+  }
+}
 
 if (migrationFiles.length === 0) {
   console.error(`No SQL migrations found in ${migrationsDirectory}`);
@@ -157,6 +221,7 @@ try {
   const applied = new Map(
     rows.map(({ filename, checksum }) => [filename, checksum])
   );
+  const amnesty = await loadChecksumAmnesty();
 
   let appliedCount = 0;
 
@@ -174,9 +239,33 @@ try {
     }
 
     if (previousChecksum) {
+      const priorChecksums = amnesty.get(filename);
+      if (priorChecksums?.has(previousChecksum)) {
+        await client.query(
+          `UPDATE wacrm_internal.schema_migrations
+           SET checksum = $2
+           WHERE filename = $1`,
+          [filename, checksum]
+        );
+        console.log(
+          `amend ${filename} (checksum amnesty: comment-only edit accepted)`
+        );
+        continue;
+      }
       throw new Error(
-        `${filename} changed after it was applied. Add a new migration instead of editing migration history.`
+        `${filename} changed after it was applied. Add a new migration instead of editing migration history. ` +
+          `(For a reviewed comment-only edit, add its prior checksum to supabase/migration-checksum-amnesty.json.)`
       );
+    }
+
+    if (baselineFilenames.has(filename)) {
+      await client.query(
+        `INSERT INTO wacrm_internal.schema_migrations (filename, checksum)
+         VALUES ($1, $2)`,
+        [filename, checksum]
+      );
+      console.log(`base  ${filename} (recorded without executing)`);
+      continue;
     }
 
     console.log(`apply ${filename}`);
