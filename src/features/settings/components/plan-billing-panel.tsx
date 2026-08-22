@@ -49,6 +49,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { SettingsPanelHead } from '@/features/settings/components/settings-panel-head';
 import { formatCurrencyPrecise } from '@/lib/currency';
 
 type Interval = 'monthly' | 'yearly';
@@ -195,6 +196,22 @@ function isSafeRedirect(raw: unknown): raw is string {
 }
 
 export function PlanBillingPanel() {
+  // The head sits OUTSIDE the body so it renders identically in every
+  // state — including the "not permitted" and error branches below. A
+  // panel whose title disappears when its fetch fails reads like a
+  // broken page rather than a failed request.
+  return (
+    <section>
+      <SettingsPanelHead
+        title="Subscription & billing"
+        description="Your current plan, what has been charged, and how to change or cancel it."
+      />
+      <BillingBody />
+    </section>
+  );
+}
+
+function BillingBody() {
   const { accountRole } = useAuth();
 
   // Mirrors the server's `requireRole('admin')` on GET. Financial

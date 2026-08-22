@@ -122,6 +122,22 @@ function UsageMeter({ row, index }: { row: UsageRow; index: number }) {
 }
 
 export function UsagePanel() {
+  // Head kept outside the body so the title survives the loading and
+  // error branches below, matching PlanBillingPanel — the two are
+  // stacked in one section and must not disagree about whether a
+  // heading exists.
+  return (
+    <section>
+      <SettingsPanelHead
+        title="Usage & limits"
+        description="What this workspace is allowed, and how much of it is spent."
+      />
+      <UsageBody />
+    </section>
+  );
+}
+
+function UsageBody() {
   const { data, error, isLoading } = useSWR<UsageSummary>(
     '/api/v1/workspace/usage',
     fetcher,

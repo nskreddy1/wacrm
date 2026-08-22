@@ -44,12 +44,12 @@ import {
   reconcileOnce,
   type ReconcileCandidate,
 } from '@/features/billing/lib/reconcile';
+import { adminDb } from '@/lib/db/admin';
 import { cronAuthEnv, paymentsEnvironment, paymentsProvider } from '@/lib/env';
 import type {
   PaymentEnvironment,
   SubscriptionStatus,
 } from '@/lib/ports/payment-provider';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /**
  * How long an intent may stay open before the sweep closes it (7.8).
@@ -117,7 +117,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: 'payments_dormant' });
   }
 
-  const admin = supabaseAdmin();
+  const admin = adminDb();
 
   // The cron never creates a checkout, so it has no legitimate use for a
   // plan-ref resolver. Supplying one that throws keeps that structural
@@ -331,7 +331,7 @@ function toCandidate(row: CandidateRow): ReconcileCandidate {
  * job (entitlement repair) already succeeded.
  */
 async function sweepAbandonedIntents(
-  admin: ReturnType<typeof supabaseAdmin>,
+  admin: ReturnType<typeof adminDb>,
   provider: string,
   environment: string
 ): Promise<number> {
