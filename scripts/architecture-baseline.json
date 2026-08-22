@@ -1,0 +1,7 @@
+{
+  "$comment": "ARCH-001..010 baseline of pre-existing violations (plan Task 10 Step 2: warn mode first). Keys are \"<RULE-ID> <file>\". This list may only shrink — new violations must be fixed, never baselined.",
+  "violations": [
+    "ARCH-003 src/app/api/health/dependencies/route.ts",
+    "ARCH-008 src/app/api/whatsapp/templates/sync/route.ts"
+  ]
+}
