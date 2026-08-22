@@ -8,6 +8,7 @@ are numbered `ADR-INFRA-NNN`.
 | Doc | Status | What it covers |
 | --- | --- | --- |
 | [ADR-INFRA-001](./ADR-INFRA-001-production-deployment-infrastructure.md) | **Proposed — awaiting founder sign-off** | The full production deployment infrastructure: Cloudflare Workers via OpenNext, 2-branch gated CI/CD, observability stack, performance plan (app slowness), database/pooling strategy, scale decision points |
+| [ADR-INFRA-002](./ADR-INFRA-002-database-portability.md) | **Proposed — awaiting founder sign-off** | Database portability: Postgres-portable (not engine-agnostic) loosely coupled data layer — coupling inventory, repository pattern, auth/realtime/storage adapters, `auth.uid()` shim, phased implementation plan, migration rehearsal before ~100K users |
 
 ## Conventions
 
