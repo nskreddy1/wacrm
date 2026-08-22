@@ -65,6 +65,26 @@ If the invoices plan ships first, Task 5 shrinks to "extend the existing client"
   (`src/lib/rate-limit.ts`), `logAuditEvent` (`src/lib/audit-events.ts`),
   `formatCurrencyPrecise` (`src/lib/currency.ts`), `getAccountUsageSummary`
   (`src/lib/quotas/index.ts`), `requireSuperAdmin()` for any admin surface.
+- **Every payment journey has a local identity before the provider sees it.**
+  A `checkout_intents` row is written **first**; the provider is called second.
+  Never depend on the checkout HTTP request surviving long enough to persist the
+  `provider_ref → account_id` mapping (Task 1.2, Task 7).
+- **Event ordering has a strict hierarchy** — do not collapse it into "trust the
+  timestamp":
+  | Signal | Role |
+  | --- | --- |
+  | provider event id | **identity** (the idempotency claim) |
+  | provider resource state/version | **authoritative** where the provider exposes it |
+  | provider event timestamp | ordering **hint** only |
+  | `subscriptions.last_event_at` | defensive **monotonic guard** |
+  Ordering semantics that vary by provider live **inside the adapter**, not in the
+  RPC. Stripe (`D2`, second adapter) does not behave identically to Razorpay.
+- **Financial event ≠ entitlement event.** A ledger row and an entitlement change
+  are separate consequences. Money events (`charge`/`refund`/`chargeback`) write
+  the ledger; **only the subscription/payment lifecycle state determines
+  entitlement**. Do not hard-code "a chargeback never affects access" — a dispute
+  may drive a provider lifecycle event of its own, and if it does, that event is
+  what revokes access.
 - **Quotas stay untouched.** `src/lib/quotas/index.ts` must not gain a single
   import from billing. Enforcement keeps reading `accounts.plan_id` and never
   learns that payments exist (`D15`).
@@ -81,7 +101,9 @@ supabase/migrations/2026MMDDHHMMSS_apply_subscription_state.sql    (T4)
 src/lib/ports/payment-provider.ts                                 (T2)  zero vendor imports
 src/lib/ports/payment-provider.test.ts                            (T2)  boundary test
 src/features/billing/lib/subscription-state.ts + .test.ts          (T3)  pure, no I/O
+src/features/billing/lib/checkout-intent.ts + .test.ts             (T7)  local intent, written first
 src/features/billing/lib/apply-state.ts + .test.ts                 (T4)  RPC wrapper
+src/features/billing/lib/reconciliation.ts + .test.ts              (T10) durable cursor
 src/features/billing/lib/razorpay/client.ts                        (T5)
 src/features/billing/lib/razorpay/verify.ts + .test.ts             (T5)  raw body HMAC
 src/features/billing/lib/razorpay/adapter.ts + .test.ts            (T5)
@@ -114,13 +136,49 @@ Additive only; no existing column is changed (ADR-009 data model).
     ('active','past_due')` — **one live subscription per account**, enforced by
     the database, not by application care (kills attack A7).
   - `CHECK (amount_minor >= 0)`, `CHECK (status IN (…))` matching the `D10` enum.
-- [ ] **1.2** `payment_events`: `event_id TEXT PRIMARY KEY` (the provider's id —
+  - `checkout_intent_id UUID UNIQUE REFERENCES checkout_intents(id)` — every
+    subscription traces back to a local intent (see 1.2).
+  - **Comment the partial unique index as a business rule, not a billing law:**
+    *"One live self-serve subscription per account is a V1 invariant (ADR-008/D1,
+    no seats). Provider migration or scheduled plan changes would need this
+    relaxed."* Keep it for V1 — but do not let a future reader think it is
+    universally true.
+- [ ] **1.2** `checkout_intents` — **the local identity of a payment journey,
+  created before the provider is called.** This closes the plan's most serious
+  failure mode: provider creates a real subscription → our process crashes → the
+  `INSERT` never runs → the webhook arrives and `provider_ref` resolves to no
+  account, so a paying customer is unresolvable.
+  - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`, `account_id → accounts`,
+    `plan_id → plans`, `interval TEXT`, `provider TEXT`,
+    `amount_minor INTEGER NOT NULL`, `currency TEXT NOT NULL` (the
+    server-resolved price, frozen at intent time — the audit trail for `F1`),
+    `status TEXT CHECK (status IN ('created','provider_attached','completed','abandoned','failed'))`,
+    `provider_ref TEXT`, `provider_customer_ref TEXT`, `created_by → auth.users`,
+    timestamps.
+  - `UNIQUE (provider, provider_ref)` where `provider_ref IS NOT NULL` — the
+    second half of the tenant-resolution mapping (`F3`). A webhook that cannot
+    match `subscriptions.provider_ref` **must** still be resolvable here.
+  - `id` doubles as the provider idempotency key input (Task 5.3), so uniqueness
+    is ours and explicit, not derived from a coarse hash.
+- [ ] **1.3** `billing_reconciliation_state` — durable cursor for Task 10.
+  `provider TEXT PRIMARY KEY`, `cursor TEXT`, `last_run_at`,
+  `last_status TEXT`, `orphans_seen INTEGER DEFAULT 0`. Workers isolates are
+  ephemeral: a cursor held in a module-level variable resets on every cold start,
+  so the cron would re-scan from the beginning forever and never reach the tail.
+- [ ] **1.4** `payment_events`: `event_id TEXT PRIMARY KEY` (the provider's id —
   this *is* the idempotency claim), `provider`, `subscription_id NULL`,
   `account_id NULL`, `kind`, `status TEXT CHECK (status IN
   ('applied','ignored','failed'))`, `ignored_reason TEXT`, `event_at`,
   `received_at DEFAULT now()`, `payload_digest TEXT`.
   - **Digest only — never the raw payload** (`F7`).
-- [ ] **1.3** `payment_transactions` (append-only ledger, `D8`):
+  - `environment TEXT NOT NULL CHECK (environment IN ('test','live'))` — an
+    **explicit stored column**, not something an adapter infers later. Attack A11
+    (point our webhook at the provider's test mode and pay ₹1) is only defensible
+    if the environment is a first-class field the RPC can reject on.
+  - `provider_event_type TEXT` — the raw provider type alongside the normalised
+    `kind`, so forensics can tell "we mapped it wrong" from "they sent something
+    new".
+- [ ] **1.5** `payment_transactions` (append-only ledger, `D8`):
   `id`, `account_id`, `subscription_id`, `kind TEXT CHECK (kind IN
   ('charge','refund','chargeback'))`, `amount_minor INTEGER` (**signed**),
   `currency`, `provider_ref TEXT UNIQUE`, `event_id → payment_events`,
@@ -129,17 +187,19 @@ Additive only; no existing column is changed (ADR-009 data model).
     RAISE EXCEPTION`. Append-only is worthless if it is only a comment.
   - `CHECK (kind = 'charge' AND amount_minor >= 0 OR kind <> 'charge' AND
     amount_minor <= 0)` — sign discipline at the schema level.
-- [ ] **1.4** `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS billing_mode TEXT
+- [ ] **1.6** `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS billing_mode TEXT
   NOT NULL DEFAULT 'self_serve' CHECK (billing_mode IN ('self_serve','manual'))`
   (`D16`) and `grace_until TIMESTAMPTZ` (`D13`).
-- [ ] **1.5** `ALTER TABLE plans ADD COLUMN IF NOT EXISTS provider_refs JSONB
+- [ ] **1.7** `ALTER TABLE plans ADD COLUMN IF NOT EXISTS provider_refs JSONB
   NOT NULL DEFAULT '{}'::jsonb` — our tier id → provider plan id, per provider.
-- [ ] **1.6** RLS on all three new tables: `ENABLE ROW LEVEL SECURITY`;
+- [ ] **1.8** RLS on **all five** new tables: `ENABLE ROW LEVEL SECURITY`;
   **`SELECT` only**, `TO authenticated`, predicate `is_account_member(account_id)`.
   **No `INSERT`/`UPDATE`/`DELETE` policies at all** — every write is
   service-role through the Task 4 RPC, matching the `plans` model.
-  `payment_events` gets **no member-readable policy** (internal forensics).
-- [ ] **1.7** Apply with `pnpm db:push`, then `pnpm db:doc`, then `pnpm docs:sync`.
+  `payment_events` and `billing_reconciliation_state` get **no member-readable
+  policy** (internal forensics / operational state, and the latter has no
+  `account_id` to scope by).
+- [ ] **1.9** Apply with `pnpm db:push`, then `pnpm db:doc`, then `pnpm docs:sync`.
 
 **Verify:** as an authenticated member of account B, `select * from
 subscriptions` returns zero rows for account A; any `insert` fails; `update` on
@@ -150,10 +210,21 @@ subscriptions` returns zero rows for account A; any `insert` fails; `update` on
 **Files:** create `src/lib/ports/payment-provider.ts`, `…test.ts`
 
 - [ ] **2.1** Domain types with **no provider vocabulary**: `CheckoutIntent`
-  (`accountId`, `planId`, `interval`, `idempotencyKey`), `CheckoutHandle`,
-  `ProviderSubscription`, `PaymentEvent` (normalised `kind`, `eventId`,
-  `providerRef`, `occurredAt`, `amountMinor`, `currency`), `RawWebhook`
-  (`rawBody: string`, `headers`).
+  (`intentId`, `accountId`, `planId`, `interval`, `amountMinor`, `currency`),
+  `CheckoutHandle`, `ProviderSubscription`, `RawWebhook` (`rawBody: string`,
+  `headers`), and `PaymentEvent` — normalised as:
+  | Field | Why |
+  | --- | --- |
+  | `kind` | our vocabulary, never the provider's |
+  | `eventId` | identity / idempotency claim |
+  | `providerRef`, `customerRef?`, `subscriptionRef?`, `invoiceRef?` | tenant resolution needs more than one hook when a subscription row is missing |
+  | `occurredAt` | ordering **hint** (see global constraints) |
+  | `resourceStatus?`, `resourceVersion?` | the provider's own authoritative state where exposed — preferred over the timestamp |
+  | `amountMinor`, `currency` | always together (`D7`) |
+  | `environment: 'test' \| 'live'` | first-class, not inferred (A11) |
+  | `providerEventType` | raw type, for forensics |
+  The `idempotencyKey` sent *to* the provider is derived from `intentId`
+  (Task 5.3), so it is not a separate free-form field on the intent.
 - [ ] **2.2** `PaymentProvider` interface exactly as ADR-009/D1.
   `verifyAndParse` **throws** on bad signature — no `{ ok: false }` that a caller
   can forget to check.
@@ -179,6 +250,19 @@ subscriptions` returns zero rows for account A; any `insert` fails; `update` on
   how an `expired` subscription becomes `active` for free.
 - [ ] **3.4** Explicit cases: `expired + activated = illegal` (A9),
   `canceled + charged = illegal`.
+- [ ] **3.5** **Split the event vocabulary in two** and make the split visible in
+  the type, so nobody has to remember it:
+  - *Money events* — `charged`, `refunded`, `charged_back`. These write the
+    ledger. `transition()` returns the **current status unchanged** for a refund:
+    a refund is not a cancellation, and support issuing a goodwill refund must not
+    silently delete a customer's access.
+  - *Lifecycle events* — `activated`, `payment_failed`, `cancel_scheduled`,
+    `canceled`, `expired`. **Only these move status**, and therefore only these
+    change entitlement.
+  - A dispute/chargeback therefore does two independent things: it always writes a
+    negative ledger row, and it revokes access **only if** the provider also emits
+    a lifecycle event (e.g. subscription halted). Assert both halves separately in
+    the tests — do not encode "chargeback never affects access" as a rule.
 
 **Verify:** `npx vitest run src/features/billing/lib/subscription-state.test.ts`
 
@@ -194,18 +278,42 @@ One transaction, or nothing. This function is the only writer of billing state.
   **`SECURITY DEFINER` must be written explicitly** — `CREATE OR REPLACE` does
   not inherit it and Postgres silently downgrades to INVOKER (`AGENTS.md`;
   `scripts/push-supabase-schema.mjs` enforces this).
+- [ ] **4.1a** Harden it as the privileged function it is. `SET search_path` is
+  necessary but **not sufficient** — a definer function is the one place where a
+  resolution surprise executes with elevated rights:
+  - **Schema-qualify every object it touches**: `public.subscriptions`,
+    `public.accounts`, `public.plans`, `public.payment_events`,
+    `public.payment_transactions`, `public.checkout_intents`,
+    `public.audit_events`. No bare table names anywhere in the body.
+  - **Control `EXECUTE` explicitly**, because Postgres grants it to `PUBLIC` by
+    default: `REVOKE EXECUTE ON FUNCTION public.apply_subscription_state(...)
+    FROM PUBLIC;` then `GRANT EXECUTE … TO service_role;` and **nothing else**.
+    An `authenticated` role able to call this function can grant itself any plan
+    — this single `REVOKE` is load-bearing.
+  - Record both in the RLS/security checklist so a later `CREATE OR REPLACE`
+    (which resets neither) is caught.
 - [ ] **4.2** Order of operations inside the transaction:
   1. `SELECT … FOR UPDATE` the subscription row (serialises concurrent
      deliveries of the same subscription — kills the A6 race).
-  2. **Monotonic guard:** if `event_at <= last_event_at`, write
-     `payment_events.status='ignored'`, `ignored_reason='stale_event'`, return
-     without touching state (`D12`).
-  3. **Manual short-circuit:** if `accounts.billing_mode = 'manual'`, record
+  2. **Environment gate:** if the event's `environment` does not match the
+     deployment's configured mode, record `ignored_reason='wrong_environment'`
+     and return. A test-mode event must never move a live tenant's plan (A11).
+  3. **Monotonic guard (defensive, not authoritative):** if
+     `event_at <= last_event_at`, record `ignored_reason='stale_event'` and return
+     without touching state (`D12`). This is a **backstop**, not the ordering
+     mechanism — where the adapter supplied `resourceStatus`/`resourceVersion`,
+     prefer it, and let the adapter own any provider-specific ordering quirk. Do
+     not add provider `if`-branches to this function.
+  4. **Manual short-circuit:** if `accounts.billing_mode = 'manual'`, record
      `ignored_reason='manual_billing'` and return — do not apply (`D16`).
-  4. Compute the transition; `'illegal'` ⇒ `ignored_reason='illegal_transition'`.
-  5. Write `subscriptions` (status, period end, `last_event_at`), insert the
-     ledger row if the event carries money, set `accounts.plan_id`, clear or set
-     `grace_until`, insert the audit event.
+  5. Compute the transition; `'illegal'` ⇒ `ignored_reason='illegal_transition'`.
+  6. Write the ledger row if the event carries money (this happens **whether or
+     not** status moves — money and entitlement are separate consequences, see
+     global constraints).
+  7. If it is a *lifecycle* event: write `subscriptions` (status, period end,
+     `last_event_at`), set `accounts.plan_id`, clear or set `grace_until`.
+  8. Insert the audit event, and mark the `checkout_intents` row `completed` on
+     first activation.
 - [ ] **4.3** `plan_id` is resolved **from our `plans` table** by matching
   `provider_refs`, never from a plan id in the payload (`F3`).
 - [ ] **4.4** Never touch `account_limit_overrides` (`F5`).
@@ -229,8 +337,18 @@ produce exactly one ledger row; a call with an older `event_at` is recorded
   timeout via `AbortSignal.timeout` (Workers has no patience for a hung
   subrequest, ADR-INFRA-001).
 - [ ] **5.3** `adapter.ts` — implements the port. `createCheckout` sends the
-  provider **our** idempotency key `hash(account_id, plan_id, interval, day)`.
-  `verifyAndParse` maps provider event names to domain `PaymentEvent` kinds and
+  provider **our** idempotency key derived from the local intent:
+  `hash(provider, checkout_intent.id)`. **Not** `hash(account_id, plan_id,
+  interval, day)` — that day-bucketed hash collides across two *legitimate*
+  attempts (customer abandons the page, retries an hour later) and the provider
+  would replay the first response instead of creating the new checkout. The key
+  must be as unique as the journey it identifies, and since `checkout_intents.id`
+  is ours, the uniqueness is enforceable in our own database.
+- [ ] **5.3a** `verifyAndParse` sets `environment` from the credential set that
+  verified the signature — **never** from a field in the payload. Provider-specific
+  ordering signals (`resourceStatus`/`resourceVersion`) are also mapped here; this
+  is the only layer allowed to know how Razorpay orders things.
+- [ ] **5.3b** `verifyAndParse` maps provider event names to domain kinds and
   **throws on unknown types** rather than defaulting to something harmless.
 - [ ] **5.4** Tests with fixture payloads: valid signature passes; single-byte
   mutation fails; correct signature + stale timestamp fails; absent secret fails.
@@ -269,10 +387,29 @@ produce exactly one ledger row; a call with an older `event_at` is recorded
   interval's price is `NULL` ("contact us"), or if `provider_refs` lacks the
   active provider.
 - [ ] **7.5** Provider unavailable ⇒ `503 payments_unavailable`.
-- [ ] **7.6** Insert `subscriptions` as `incomplete` **after** the provider call
-  succeeds; on provider failure commit nothing.
+- [ ] **7.6** **Intent-first ordering** (`src/features/billing/lib/checkout-intent.ts`).
+  This replaces the earlier "call the provider, then insert" sequence, which had a
+  crash window that could orphan a real paid subscription:
+  1. Insert `checkout_intents` with the **server-resolved** `amount_minor` and
+     `currency`, `status='created'`. We now own the journey.
+  2. Call the provider with `idempotencyKey = hash(provider, intent.id)`.
+  3. On success, `UPDATE` the intent with `provider_ref` /
+     `provider_customer_ref`, `status='provider_attached'`. Only now insert
+     `subscriptions` as `incomplete`, linked by `checkout_intent_id`.
+  4. On provider failure, mark the intent `failed` — a dead intent row is
+     harmless; an unresolvable paying customer is not.
+  - The failure this defends: provider creates the subscription → our process
+    dies before step 3 → the webhook arrives with a `provider_ref` that matches
+    no `subscriptions` row. With intent-first, the webhook falls back to
+    `checkout_intents (provider, provider_ref)` and still resolves the tenant.
+    Without it, a real customer has paid and we cannot tell who they are.
+  - The step-3 write is idempotent (`UNIQUE (provider, provider_ref)`), so the
+    provider retrying or the user double-submitting cannot fork the journey.
 - [ ] **7.7** Response contains the provider handle and **no amount echoed from
   input** — only the server-resolved amount.
+- [ ] **7.8** Abandoned intents (`created`/`provider_attached`, older than 24 h,
+  never completed) are swept to `abandoned` by the Task 10 cron. They are
+  evidence, not garbage — keep the rows.
 
 ## Task 8 — `GET/DELETE /api/billing/subscription` (`F10`)
 
@@ -297,14 +434,22 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
   **Claim insert error ⇒ `5xx`** so the provider retries — fails *closed*, the
   deliberate inverse of `IngressDedupeStore.claim()` (`D11`). Say so in a comment
   at the call site; the next reader will otherwise "fix" it to match ingress.
-- [ ] **9.4** Resolve tenant from `subscriptions.provider_ref` **only**. If the
-  payload carries `metadata.account_id` and it disagrees, apply nothing and alert
-  (`F3`, attack A4).
+- [ ] **9.4** Resolve tenant **from our own mapping only**, in this order:
+  `subscriptions.provider_ref` → `checkout_intents.provider_ref` (the crash-window
+  fallback from 7.6). If neither matches, record the event as `failed` with
+  `ignored_reason='unresolved_tenant'` and **alert** — never guess. If the payload
+  carries `metadata.account_id` and it disagrees with the mapping, apply nothing
+  and alert: a payload field is evidence of intent, never authority (`F3`,
+  attack A4).
 - [ ] **9.5** Call `applySubscriptionState`; return `200` on applied/ignored,
   `5xx` only on genuine failure.
 - [ ] **9.6** Unknown provider in `[provider]` ⇒ `404`. Provider not configured
   ⇒ `404` (not `503` — an unconfigured webhook endpoint should not confirm it
-  exists).
+  exists). **But `404` externally must not mean invisible internally:** emit a
+  metric/alert when *real provider traffic* reaches an unconfigured endpoint.
+  Otherwise someone wires live Razorpay at an environment where
+  `PAYMENTS_PROVIDER` is unset and we silently discard paid customers' events
+  with a clean-looking `404` and no signal that money is being dropped.
 - [ ] **9.7** Log `event_id`, `account_id`, `status`, `ignored_reason`. **Never**
   the payload (`F7`).
 
