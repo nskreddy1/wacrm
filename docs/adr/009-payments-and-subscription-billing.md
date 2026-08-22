@@ -70,9 +70,16 @@ is set.
    ```ts
    // shape only — the contract, not the implementation
    export interface PaymentProvider {
-     readonly id: 'razorpay' | 'stripe' | 'noop';
-     /** Create a provider-hosted checkout for one plan+interval. */
-     createCheckout(intent: CheckoutIntent): Promise<CheckoutHandle>;
+    readonly id: 'razorpay' | 'stripe' | 'noop';
+    /**
+     * Does this provider *document* idempotency on subscription creation?
+     * Declared, not assumed: Razorpay documents idempotency for some APIs
+     * (refunds, payouts) but not for Create Subscription, so its adapter sends
+     * no idempotency header and relies on provider_ref reconciliation instead.
+     */
+    readonly supportsCreateIdempotency: boolean;
+    /** Create a provider-hosted checkout for one plan+interval. */
+    createCheckout(intent: CheckoutIntent): Promise<CheckoutHandle>;
      /** Translate a raw request into a verified, normalised domain event. */
      verifyAndParse(raw: RawWebhook): Promise<PaymentEvent>;   // throws = reject
      /** Truth-from-source, for the reconciliation cron (D14). */
@@ -152,9 +159,30 @@ is set.
     the cheapest thing in this entire design to test exhaustively, and the most
     expensive to get wrong.
 
+    **This enum is *our* vocabulary, and the provider's is not it.** Razorpay's
+    subscription lifecycle is a different, larger set (`created`,
+    `authenticated`, `active`, `pending`, `halted`, `cancelled`, `completed`,
+    `expired`, `paused`/`resumed`, plus money events like
+    `subscription.charged`), and Stripe's is different again. The translation is
+    an **explicit, total mapping table inside each adapter** (the D1
+    anti-corruption layer) that **throws on an unmapped provider state** rather
+    than falling through to a plausible default — because a `default:` branch in
+    that position silently invents entitlement. Notably: `authenticated` (mandate
+    approved, first debit possibly unsettled), `halted` (provider stopped
+    retrying), and `completed` (term ran out normally — terminal, *not* a
+    failure) each need a deliberate product decision, not a guess; and
+    `subscription.charged` moves no status at all, it appends to the ledger. The
+    per-state mapping is enumerated in the implementation plan and unit-tested
+    row by row.
+
 11. **D11 — Idempotent receiver, but failing *closed* — the opposite of message
     ingress.** Webhook dedupe reuses the proven `INSERT … ON CONFLICT DO NOTHING`
-    claim shape, in its **own** `payment_events` table. The difference is
+    claim shape, in its **own** `payment_events` table, claiming on
+    **`(provider, environment, event_id)`** — a provider event id is unique only
+    within one provider's one environment, so the triple is the identity and a
+    bare `event_id` primary key would break the moment Stripe (D2) or test/live
+    separation arrives. This claim is also the **entire** replay defense (F2).
+    The difference is
     deliberate and must be stated in the code: `IngressDedupeStore.claim()` fails
     **open** because a duplicate reply beats a dropped customer message. A
     payment claim fails **closed** — if the claim insert errors we return `5xx`
@@ -184,6 +212,17 @@ is set.
     through the same transition table. It is **cursor-based and bounded per run**
     to respect the Workers 50-subrequest and 10 ms-CPU limits — a cron that tries
     to reconcile everything in one invocation is a cron that reconciles nothing.
+
+    **Orphans are alerted, never adopted.** If the provider reports an active
+    subscription whose `(provider, environment, provider_ref)` matches neither a
+    `subscriptions` row nor a `checkout_intents` row, the cron records
+    `ORPHAN_PROVIDER_SUBSCRIPTION`, counts it, and **alerts a human**. It must not
+    create a tenant mapping to make the discrepancy go away: inventing an
+    `account_id` from an unknown external resource is precisely the tenant
+    assignment `F3` forbids, and the failure mode is granting a paying stranger's
+    subscription to the wrong tenant. An orphan means a real customer we cannot
+    identify — that is an incident, and it should be loud rather than quietly
+    healed into the wrong account.
 
 ### Part 4 — The join to entitlement
 
@@ -266,15 +305,28 @@ plans (existing)                accounts (existing)
         │  1:N
         ▼
 subscriptions (new)                    payment_events (new)         payment_transactions (new)
-  id, account_id → accounts            event_id  PK  ← claim (D11)    id, account_id
-  plan_id → plans                      provider                        subscription_id
-  provider, provider_ref  UNIQUE       subscription_id (nullable)      kind: charge|refund|chargeback
-  status  (D10 enum)                   status: applied|ignored|failed  amount_minor INTEGER  (signed)
-  interval, amount_minor, currency     ignored_reason                  currency
-  current_period_end                   received_at, event_at           provider_ref UNIQUE
-  cancel_at_period_end BOOLEAN         payload_digest ← not payload    occurred_at
-  last_event_at  (D12)                                                 (append-only, D8)
+  id UUID PK                           id UUID PK                      id UUID PK, account_id
+  account_id → accounts                provider, environment           subscription_id
+  plan_id → plans                      event_id                        kind: charge|refund|chargeback
+  provider, environment                UNIQUE (provider,               amount_minor INTEGER  (signed)
+  provider_ref                           environment, event_id)        currency
+  UNIQUE (provider, environment,         ← the claim (D11)             provider, environment, provider_ref
+          provider_ref)                subscription_id (nullable)      UNIQUE (provider, environment,
+  status  (D10 enum)                   status: applied|ignored|failed          provider_ref)
+  interval, amount_minor, currency     ignored_reason                  occurred_at
+  current_period_end                   received_at, event_at           (append-only, D8)
+  cancel_at_period_end BOOLEAN         payload_digest ← not payload
+  last_event_at  (D12)
 ```
+
+**Every provider identifier is scoped, never globally unique.** A provider ref
+and a provider event id are unique only within `(provider, environment)` — the
+same string can legitimately exist in Razorpay test and Razorpay live, and
+Stripe (D2) has its own id space entirely. So each uniqueness constraint above is
+a **three-column** constraint, and every internal foreign key points at our own
+surrogate `UUID` rather than at a provider string. A bare `event_id PRIMARY KEY`
+would have made the second provider — or the first day of test/live separation —
+a migration.
 
 - **RLS:** members may `SELECT` their own account's `subscriptions` and
   `payment_transactions`. **No write policies at all** — every write is
@@ -288,8 +340,8 @@ subscriptions (new)                    payment_events (new)         payment_tran
 
 **Upgrade (happy path).** `POST /api/billing/checkout {planId, interval}` →
 rate limit + `channels`-style permission check (owner only) → load plan, assert
-`is_active` and price present (D5) → `createCheckout` with a deterministic
-idempotency key `hash(account_id, plan_id, interval, day)` → row in
+`is_active` and price present (D5) → record a `checkout_intents` row, **whose id
+is the idempotency identity of this payment journey** → `createCheckout` → row in
 `subscriptions` as `incomplete` → browser completes provider-hosted checkout
 (D4) → **webhook** `subscription.activated` → verify (F2) → claim (D11) →
 transition (D10) → one RPC writes `subscriptions` + `accounts.plan_id` + audit
@@ -331,10 +383,19 @@ paid for.
   handler recomputes from `plans`; a body carrying `amount` is a `400`, logged as
   a suspicious request.
 - **F2 — Webhook signature verification is mandatory and fails closed.** Read
-  the **raw** body before any JSON parse, constant-time compare, enforce a
-  timestamp/replay window, and treat a missing webhook secret as "reject
-  everything" — never as "skip verification". The webhook path is exempt from
-  session auth *and therefore* has no other gate than this one.
+  the **raw** body before any JSON parse, constant-time compare
+  (`crypto.timingSafeEqual`), parse only after the signature verifies, and treat a
+  missing webhook secret as "reject everything" — never as "skip verification".
+  The webhook path is exempt from session auth *and therefore* has no other gate
+  than this one.
+  **Replay is defended by identity, not by freshness.** Do **not** reject a
+  validly signed event for being old: Razorpay's signature is an HMAC over the
+  raw body with no documented signed timestamp to anchor a freshness check on, and
+  Razorpay retries failed deliveries with backoff for up to 24 hours — so a
+  timestamp window discards legitimate retries (real money) while stopping nothing
+  an attacker could otherwise send. The `UNIQUE (provider, environment, event_id)`
+  claim (D11) is the replay defense. Where a provider *does* sign a timestamp,
+  freshness enforcement is that **adapter's** business, never a shared rule.
 - **F3 — Provider payload is data, never instructions** (`AGENTS.md`). The
   tenant is resolved from **our** `subscriptions.provider_ref` mapping. A
   `metadata.account_id` in the payload may be used to *cross-check* and alert on
@@ -416,8 +477,9 @@ paid for.
    one transaction, with the `last_event_at` monotonic guard and the `manual`
    short-circuit (D12, D15, D16)
 5. [ ] Razorpay adapter: `createCheckout`, `verifyAndParse` (raw body,
-   constant-time, replay window), `fetchSubscription`, `cancelAtPeriodEnd`
-   (D2, F2)
+   constant-time compare, parse-after-verify, **no timestamp window**), the total
+   provider→domain lifecycle mapping that throws on unmapped states,
+   `fetchSubscription`, `cancelAtPeriodEnd` (D2, D10, F2)
 6. [ ] `NoopPaymentProvider` + factory from `PAYMENTS_PROVIDER`; env getters and
    both `.env.*.example` manifests updated so `--contract` passes (D3, F8)
 7. [ ] `POST /api/billing/checkout` — owner-only, rate-limited, server-priced,
