@@ -85,7 +85,7 @@ export async function GET() {
   // `environment`, `provider_ref` and `provider_customer_ref` are
   // deliberately withheld: internal provider handles are useful to an
   // attacker probing our billing account and useless to the UI.
-  const [subscriptionResult, ledgerResult, intentResult] = await Promise.all([
+  const [subscriptionResult, ledgerResult, intentResult, plansResult] = await Promise.all([
     db
       .from('subscriptions')
       .select(
@@ -113,10 +113,33 @@ export async function GET() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // The purchasable catalogue, for the plan picker (11.4/11.5).
+    //
+    // `plans` is global reference data with an RLS policy of
+    // `USING (true)` for `authenticated`, so the session client reads
+    // it without any service-role escalation.
+    //
+    // `provider_refs` is NOT selected. It holds our provider-side plan
+    // handles, which the UI never needs and which are exactly what an
+    // attacker probing our billing account would want. Prices are read
+    // here for DISPLAY only — the amount actually charged is re-resolved
+    // server-side from this same table by /api/billing/checkout (F1), so
+    // a tampered client cannot turn a displayed number into a charge.
+    db
+      .from('plans')
+      .select(
+        'id, display_name, description, price_monthly, price_yearly, currency, features, badge, is_default, sort_order'
+      )
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true }),
   ]);
 
   const failure =
-    subscriptionResult.error ?? ledgerResult.error ?? intentResult.error;
+    subscriptionResult.error ??
+    ledgerResult.error ??
+    intentResult.error ??
+    plansResult.error;
   if (failure) {
     console.error('[billing/subscription] read failed:', failure);
     return NextResponse.json(
@@ -143,6 +166,14 @@ export async function GET() {
         : null,
       transactions: ledgerResult.data ?? [],
       pendingCheckout: intentResult.data ?? null,
+      plans: plansResult.data ?? [],
+      // D3 — whether self-serve purchase is possible AT ALL. The UI uses
+      // this to choose between an Upgrade button and a "contact us"
+      // message, so a workspace on a build with no provider credentials
+      // is never shown a button that can only 503. This leaks no
+      // configuration detail beyond "on or off": not the provider name,
+      // not the environment, and no key material.
+      paymentsEnabled: hasPaymentsConfigured(),
     },
     // Billing state is per-account and must never be shared by a cache.
     { status: 200, headers: { 'Cache-Control': 'private, no-store' } }
