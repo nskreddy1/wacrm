@@ -38,6 +38,17 @@ const PUBLIC_PREFIXES = [
   // scheduler to /login, so the flow engine's time-based work — resuming
   // `wait` steps, starting scheduled flows, sweeping stale runs — never runs.
   '/api/flows/cron',
+  // Billing reconciliation (ADR-009 Task 10). Same story as the flow
+  // scheduler: no session by definition, authenticated by the identical
+  // constant-time cron compare inside the handler. Without this
+  // exemption the proxy 307-redirects it to /login and the ONLY repair
+  // path for a webhook that never arrived silently never runs — a paying
+  // customer stuck without access, with nothing in the logs to say so.
+  //
+  // Exempted as an exact path, not as an `/api/cron/` prefix, so a
+  // future route dropped into that folder does not inherit public
+  // reachability by accident.
+  '/api/cron/billing-reconcile',
 ];
 
 function isPublicPath(pathname: string) {
