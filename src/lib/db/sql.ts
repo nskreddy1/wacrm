@@ -17,5 +17,5 @@ export async function sql<T = unknown>(
   strings: TemplateStringsArray,
   ...params: unknown[]
 ): Promise<T[]> {
-  return (await db()(strings, ...(params as never[]))) as T[];
+  return (await db()(strings, ...(params as never[]))) as unknown as T[];
 }
