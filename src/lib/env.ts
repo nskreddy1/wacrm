@@ -34,9 +34,12 @@
  * DELIBERATELY NOT HERE
  * - `HYPERDRIVE` (production SQL) is a Cloudflare *binding*, not an env
  *   var; it is resolved in `src/lib/db/client.ts`.
- * - `SUPABASE_DB_URL` and `CLOUDFLARE_API_TOKEN` are CI/deploy-only
- *   names. They must never appear in application code (ARCH-010) and
- *   are resolved in `scripts/lib/db-url.mjs` for standalone scripts.
+ * - The Supabase direct-connection URL and the Cloudflare API token are
+ *   CI/deploy-only names, so they are not spelled out here: ARCH-010
+ *   forbids those literals anywhere under `src/`, and this file is not
+ *   exempt from its own rules. They are resolved for standalone scripts
+ *   in `scripts/lib/db-url.mjs`; see that file (or the ARCH-010 rule in
+ *   `scripts/check-architecture.mjs`) for the exact variable names.
  * - `NEXT_PUBLIC_*` values consumed in the browser stay inline in the
  *   component that needs them: Next.js inlines those at build time by
  *   matching the literal `process.env.NEXT_PUBLIC_FOO` text, so routing

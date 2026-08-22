@@ -3,6 +3,7 @@ import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import pg from 'pg';
+import { resolveDbUrlOrExit } from './lib/db-url.mjs';
 
 const { Client } = pg;
 
@@ -48,34 +49,9 @@ const outputPath = path.join(
 );
 const migrationsDirectory = path.join(projectRoot, 'supabase', 'migrations');
 
-// Same precedence as push-supabase-schema.mjs so both scripts read one
-// connection string. Non-pooling is preferred but not required: this is a
-// read-only session, so a pooled connection returns identical catalog rows.
-const rawConnectionString =
-  process.env.SUPABASE_DB_URL ??
-  process.env.POSTGRES_URL_NON_POOLING ??
-  process.env.POSTGRES_URL ??
-  process.env.DATABASE_URL;
-
-if (!rawConnectionString) {
-  console.error(
-    'Missing SUPABASE_DB_URL, POSTGRES_URL_NON_POOLING, POSTGRES_URL, or DATABASE_URL.'
-  );
-  process.exit(1);
-}
-
-/**
- * Supabase's pooler presents a certificate that Node cannot chain to a
- * public root, so the default `sslmode=require` aborts the handshake. The
- * connection still has to be encrypted, so drop any inherited sslmode and
- * ask for `no-verify`: TLS stays on, only hostname/CA verification is
- * skipped. Acceptable because this reads catalog metadata over a trusted
- * network path and writes no data.
- */
-function withPermissiveSsl(connectionString) {
-  const stripped = connectionString.replace(/[?&]sslmode=[^&]*/g, '');
-  return `${stripped}${stripped.includes('?') ? '&' : '?'}sslmode=no-verify`;
-}
+// No requireDirect: this is a read-only catalog session, so a pooled
+// connection returns identical rows.
+const connection = resolveDbUrlOrExit();
 
 /** Render a value for the `Default` column: backticked, or an em dash. */
 function renderDefault(value) {
@@ -267,9 +243,7 @@ function formatTrigger(definition) {
 }
 
 async function main() {
-  const client = new Client({
-    connectionString: withPermissiveSsl(rawConnectionString),
-  });
+  const client = new Client(connection);
   await client.connect();
 
   const results = {};

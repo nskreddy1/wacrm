@@ -1,5 +1,5 @@
 import { NextResponse, after } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { channelAdmin } from '@/lib/supabase/admin';
 import {
   decrypt,
   encrypt,
@@ -35,21 +35,12 @@ import {
 // plan's ceiling). Tune as needed.
 export const maxDuration = 60;
 
-// Lazy-initialized to avoid build-time crash when env vars are missing
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _adminClient: any = null;
-function supabaseAdmin() {
-  if (!_adminClient) {
-    _adminClient = createClient(
-      (process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)!,
-      (process.env.SUPABASE_SERVICE_ROLE_KEY ??
-        process.env.zepo_SUPABASE_SERVICE_ROLE_KEY ??
-        process.env.zepo_SUPABASE_SECRET_KEY ??
-        process.env.SUPABASE_SECRET_KEY)!
-    );
-  }
-  return _adminClient;
-}
+// The inbound-webhook alias of the one shared service-role client. The
+// authorization boundary for every call below is the `x-hub-signature-256`
+// check in POST — there is no `auth.uid()` here because the caller is Meta.
+// Named locally so the ~30 call sites below read unchanged; the env-alias
+// resolution and the lazy singleton both live in @/lib/supabase/admin.
+const supabaseAdmin = channelAdmin;
 
 /**
  * Idempotency claim over `webhook_events` (Task 3 Step 1, NFR-008).
@@ -565,7 +556,14 @@ async function handleStatusUpdate(status: {
     .maybeSingle();
 
   if (msgRow) {
-    const conv = msgRow.conversations as { account_id: string } | null;
+    // PostgREST types a many-to-one embed as an array even though it
+    // yields at most one row here, so narrow both shapes (same pattern
+    // as the flows cron's `flows` embed).
+    const convField = msgRow.conversations as
+      | { account_id: string }
+      | { account_id: string }[]
+      | null;
+    const conv = Array.isArray(convField) ? convField[0] : convField;
     const accountId = conv?.account_id;
     if (accountId) {
       await dispatchWebhookEvent(

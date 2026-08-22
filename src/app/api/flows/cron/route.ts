@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { authorizeCronRequest } from '@/features/flows/lib/cron-auth';
+import { cronAuthEnv } from '@/lib/env';
 import { resolveFallbackPolicy } from '@/features/flows/lib/fallback';
 import {
   resumeWaitingRuns,
@@ -37,10 +38,7 @@ export async function GET(request: Request) {
       authorization: request.headers.get('authorization'),
       xCronSecret: request.headers.get('x-cron-secret'),
     },
-    {
-      automationCronSecret: process.env.AUTOMATION_CRON_SECRET,
-      vercelCronSecret: process.env.CRON_SECRET,
-    }
+    cronAuthEnv()
   );
   if (auth.status !== 200) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });

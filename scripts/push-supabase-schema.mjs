@@ -3,21 +3,16 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import pg from 'pg';
+import { resolveDbUrlOrExit } from './lib/db-url.mjs';
 
 const { Client } = pg;
 const projectRoot = process.cwd();
 const migrationsDirectory = path.join(projectRoot, 'supabase', 'migrations');
-const connectionString =
-  process.env.SUPABASE_DB_URL ??
-  process.env.POSTGRES_URL ??
-  process.env.DATABASE_URL;
-
-if (!connectionString) {
-  console.error(
-    'Missing SUPABASE_DB_URL, POSTGRES_URL, or DATABASE_URL. Set one to the Supabase Postgres connection string.'
-  );
-  process.exit(1);
-}
+// requireDirect: this script runs DDL inside transactions and holds an
+// advisory lock as the migration mutex. Neither survives transaction
+// pooling, and both fail silently rather than erroring, so refuse to start
+// on a pooled connection. See scripts/lib/db-url.mjs.
+const connection = resolveDbUrlOrExit({ requireDirect: true });
 
 /**
  * Function-security invariants.
@@ -192,17 +187,7 @@ if (migrationFiles.length === 0) {
   process.exit(1);
 }
 
-const isLocalDatabase = /localhost|127\.0\.0\.1/.test(connectionString);
-const normalizedConnectionString = new URL(connectionString);
-
-// Supabase pooler certificates can include a managed self-signed chain.
-// Remove URL-level sslmode so this explicit pg TLS configuration takes effect.
-if (!isLocalDatabase) normalizedConnectionString.searchParams.delete('sslmode');
-
-const client = new Client({
-  connectionString: normalizedConnectionString.toString(),
-  ssl: isLocalDatabase ? undefined : { rejectUnauthorized: false },
-});
+const client = new Client(connection);
 
 try {
   await client.connect();
