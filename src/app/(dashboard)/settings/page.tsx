@@ -16,6 +16,7 @@ import { FieldsAndTagsPanel } from '@/features/settings/components/fields-and-ta
 import { MembersTab } from '@/features/settings/components/members-tab';
 import { ActivityPanel } from '@/features/settings/components/activity-panel';
 import { UsagePanel } from '@/features/settings/components/usage-panel';
+import { PlanBillingPanel } from '@/features/settings/components/plan-billing-panel';
 // Restore with the deferred `integrations` panel entry below.
 // import { IntegrationsPanel } from '@/features/settings/components/integrations-panel';
 import { SupportTab } from '@/features/settings/components/support-tab';
@@ -95,7 +96,17 @@ export default function SettingsPage() {
     ),
     security: <SecurityPanel />,
     members: <MembersTab />,
-    usage: <UsagePanel />,
+    // Subscription first, then consumption: "what am I paying for" is the
+    // question that brings someone to this section, and the usage meters
+    // are the justification for changing it. Both panels are client-side
+    // and role-gated internally (billing is owner/admin only, server-
+    // enforced on the API) — this stacking grants no visibility that the
+    // routes themselves would not.
+    usage: (
+      <StackedPanels>
+        {[<PlanBillingPanel key="billing" />, <UsagePanel key="usage" />]}
+      </StackedPanels>
+    ),
     // "Deals & currency" was a lone default-currency select; it reads as a
     // property of the data model, so it is now the "Currency" tab inside
     // this panel rather than a second stacked panel with its own heading.
