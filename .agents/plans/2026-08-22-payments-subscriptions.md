@@ -77,6 +77,18 @@ If the invoices plan ships first, Task 5 shrinks to "extend the existing client"
   A `checkout_intents` row is written **first**; the provider is called second.
   Never depend on the checkout HTTP request surviving long enough to persist the
   `provider_ref → account_id` mapping (Task 1.2, Task 7).
+- **Two distinct trust boundaries — do not conflate them.** There are exactly two
+  classes of billing table, and they have different writers:
+  | Class | Tables | Writer | Trust |
+  | --- | --- | --- | --- |
+  | **Application-owned intent state** | `checkout_intents` (incl. its `status`), and any `cancel_request_*` columns | The authenticated owner's request path, directly | What the *user asked for* |
+  | **Provider-derived billing state** | `payment_events`, `subscriptions`, `payment_transactions`, `accounts.plan_id` | `process_payment_event()` **only** | What the *provider confirmed* |
+  So "the RPC is the only writer of billing state" means **provider-derived**
+  state. An authenticated owner may freely record intent ("checkout started",
+  "cancellation requested"); an authenticated owner may **never** move
+  entitlement. Entitlement changes only on a signed webhook or a reconciliation
+  read of the provider API. A request-path write that touches a
+  provider-derived table is a review-blocking defect.
 - **Event ordering has a strict hierarchy** — do not collapse it into "trust the
   timestamp":
   | Signal | Role |
@@ -179,7 +191,16 @@ Additive only; no existing column is changed (ADR-009 data model).
   ('test','live'))`, `provider_ref TEXT`, `status TEXT`, `interval TEXT`,
   `amount_minor INTEGER`, `currency TEXT`, `current_period_end TIMESTAMPTZ`,
   `cancel_at_period_end BOOLEAN DEFAULT false`, `last_event_at TIMESTAMPTZ`,
-  timestamps.
+  `cancel_request_status TEXT CHECK (cancel_request_status IN
+  ('requested','provider_accepted','failed'))`,
+  `cancel_requested_at TIMESTAMPTZ`, timestamps.
+  - **The two cancellation column groups are on opposite sides of the trust
+    boundary and must never be confused.** `cancel_request_status` /
+    `cancel_requested_at` are application-owned: the owner's `DELETE` request
+    writes them directly (Task 8.2). `cancel_at_period_end` and `status` are
+    provider-derived: only `process_payment_event()` writes them, once the
+    provider confirms. A handler that sets `cancel_at_period_end` from a user
+    request is the defect this split exists to prevent.
   - `UNIQUE (provider, environment, provider_ref)` — the mapping that resolves
     tenant from event (`F3`). **`(provider, provider_ref)` alone is wrong:** a
     provider reference is only unique *within* one provider's one environment, so
@@ -216,6 +237,15 @@ Additive only; no existing column is changed (ADR-009 data model).
     here.
   - `id` doubles as the provider idempotency key input (Task 5.3), so uniqueness
     is ours and explicit, not derived from a coarse hash.
+  - **`CREATE UNIQUE INDEX … ON checkout_intents (account_id) WHERE status IN
+    ('created','provider_attached')` — at most one *open* intent per account.**
+    This is the real fix for A7. The partial unique index on `subscriptions`
+    (1.1) only rejects the *second active row*, which is too late: by then the
+    customer may already have two live Razorpay subscriptions and two charges.
+    Duplicate provider-side subscriptions must be prevented **before** the
+    provider is called, and the only place to do that is the intent row. Task 7
+    reuses an existing open intent instead of creating a second one; the index is
+    what makes that check race-proof rather than advisory.
 - [ ] **1.3** `billing_reconciliation_state` — durable cursor for Task 10.
   `provider TEXT NOT NULL`, `environment TEXT NOT NULL CHECK (environment IN
   ('test','live'))`, `cursor TEXT`, `last_run_at`, `last_status TEXT`,
@@ -269,13 +299,21 @@ Additive only; no existing column is changed (ADR-009 data model).
   `environment TEXT NOT NULL`, `kind TEXT CHECK (kind IN
   ('charge','refund','chargeback'))`, `amount_minor INTEGER` (**signed**),
   `currency`, `provider_ref TEXT`,
-  `payment_event_id UUID REFERENCES payment_events(id)`, `occurred_at`,
+  `payment_event_id UUID NOT NULL REFERENCES payment_events(id)`, `occurred_at`,
   `created_at`.
   - `UNIQUE (provider, environment, provider_ref)`, not `provider_ref UNIQUE` —
     same reasoning as 1.1.
   - The ledger references `payment_events.id` (the surrogate), **never** the
     provider's `event_id` string. Internal foreign keys must not be provider
     identifiers.
+  - **`payment_event_id` is `NOT NULL`, deliberately.** Every row in this ledger
+    is created by `process_payment_event()` in the same transaction as the
+    `payment_events` claim that caused it, so the causing event always exists. A
+    nullable FK would be an escape hatch for an orphan money row with no
+    provable provider origin — exactly the thing an auditable ledger exists to
+    make impossible. If some future flow needs a manual adjustment, it gets its
+    own synthetic `payment_events` row (with `provider = 'manual'`) rather than a
+    `NULL`.
   - Trigger `payment_transactions_append_only`: `BEFORE UPDATE OR DELETE …
     RAISE EXCEPTION`. Append-only is worthless if it is only a comment.
   - `CHECK (kind = 'charge' AND amount_minor >= 0 OR kind <> 'charge' AND
@@ -580,8 +618,14 @@ claim rolled back with it).
     1. Generate the new secret and set it as `…_WEBHOOK_SECRET_PREVIOUS = old`,
        `…_WEBHOOK_SECRET = new` **before** changing it at the provider.
     2. Update the secret in the provider dashboard.
-    3. Watch the "verified by previous secret" counter drain to zero.
-    4. Wait out the full provider retry/replay window (24 h for Razorpay).
+    3. Monitor previous-secret validations until no recent retries still rely on
+       the old secret. Log a structured line on every previous-secret hit and
+       read those logs — do **not** make the runbook depend on a provider-side
+       metric that may not exist.
+    4. Wait out the full provider retry/replay window (24 h for Razorpay) from
+       the last previous-secret hit. Razorpay's own FAQ states that retries in
+       flight when the secret changed must still validate against the old
+       secret, which is the entire reason this step exists.
     5. Remove `…_WEBHOOK_SECRET_PREVIOUS`.
   - If the provider's configuration model permits only one active secret per
     endpoint, document that limitation explicitly and rotate by adding a second
@@ -740,8 +784,19 @@ claim rolled back with it).
 - [ ] **7.6** **Intent-first ordering** (`src/features/billing/lib/checkout-intent.ts`).
   This replaces the earlier "call the provider, then insert" sequence, which had a
   crash window that could orphan a real paid subscription:
+  0. **Reuse before create (A7).** Attempt the insert of the new intent and let
+     the partial unique index on `(account_id) WHERE status IN
+     ('created','provider_attached')` (Task 1.2) arbitrate. On unique violation,
+     re-read the existing open intent: if it already has a `provider_ref`, return
+     **that** provider handle so the user resumes the same journey; if it is
+     `created` with no `provider_ref`, respond `409 checkout_in_progress`. Never
+     "check then insert" in two statements — that is the exact race this index
+     exists to close, and losing it means the customer gets two real Razorpay
+     subscriptions and two charges, which no local constraint can undo.
   1. Insert `checkout_intents` with the **server-resolved** `amount_minor` and
-     `currency`, `status='created'`. We now own the journey.
+     `currency`, `status='created'`. We now own the journey. This is an
+     application-owned intent write, which the trust-boundary table explicitly
+     permits — it moves no entitlement.
   2. Call the provider with `idempotencyKey = hash(provider, intent.id)`.
   3. On success, `UPDATE` the intent with `provider_ref` /
      `provider_customer_ref`, `status='provider_attached'`. Only now insert
@@ -765,9 +820,31 @@ claim rolled back with it).
 
 - [ ] **8.1** `GET`: current subscription + ledger history for
   `context.accountId` only (`F9`). Poll target for the return page (`D9`).
-- [ ] **8.2** `DELETE`: owner-only; sets `cancel_at_period_end` via the provider,
-  then applies through the same RPC. Reversible until period end; **no immediate
-  data loss**.
+- [ ] **8.2** `DELETE`: owner-only. **The request path must not call
+  `process_payment_event()` and must not touch entitlement.** A user pressing
+  "Cancel" is a *request*, not provider-verified state, and the RPC is allowed to
+  move `accounts.plan_id`. Earlier drafts of this step had the handler apply
+  through the RPC, which directly contradicts the Definition of Done. The correct
+  sequence:
+  1. Authenticate; require `owner`; resolve the subscription from
+     `context.accountId` (never a client-supplied id).
+  2. Ask the provider to cancel at period end.
+  3. Record **intent only** on the local row — add
+     `cancel_request_status TEXT CHECK (cancel_request_status IN
+     ('requested','provider_accepted','failed'))` and
+     `cancel_requested_at TIMESTAMPTZ` to `subscriptions` in Task 1.1. These are
+     application-owned intent columns, deliberately **not** `status`, not
+     `cancel_at_period_end`, and not `plan_id`.
+  4. Return `200` with the pending state. The UI renders "Cancellation
+     requested — active until <period end>", which is the honest description of
+     what we actually know.
+  - `cancel_at_period_end`, `status`, and any `plan_id` change land **later**,
+    when the provider's cancellation webhook arrives (or Task 10 reconciliation
+    reads the cancelled state from the provider API) and that signed/verified
+    event flows through `process_payment_event()` like every other entitlement
+    change. If the provider silently fails to honour the request, reconciliation
+    catches the divergence instead of us having already lied locally.
+  - Reversible until period end; **no immediate data loss**.
 - [ ] **8.3** Cancelling someone else's subscription by passing an id is
   impossible: the handler ignores any client-supplied subscription id and
   resolves from the session's `accountId` (attack A5).
@@ -945,7 +1022,7 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A4** | Send a real event captured from their *own* paid account, with `metadata.account_id` swapped to their free workspace | Tenant taken from the payload | Tenant resolved from `subscriptions.provider_ref`; mismatch ⇒ alert, apply nothing (`F3`) | `payload_account_id_is_never_authority` |
 | **A5** | `DELETE /api/billing/subscription` with another account's subscription id | Handler trusts the id | Id ignored; resolved from session `accountId` (`F9`) | `cannot_cancel_another_account` |
 | **A6** | Replay the same `subscription.charged` 50× in parallel | Read-then-write race double-applies | `UNIQUE (provider, environment, event_id)` claim + `SELECT … FOR UPDATE` (`D11`) | `duplicate_event_applies_once` |
-| **A7** | Two concurrent checkouts, two active subscriptions, one paid | Application-level uniqueness only | Partial unique index on `(account_id) WHERE status IN ('active','past_due')` | `one_live_subscription_per_account` |
+| **A7** | Two concurrent checkouts ⇒ **two real provider subscriptions**, two charges | "Check for an existing subscription, then create" in two statements; and a `subscriptions`-only constraint that fires *after* the provider already charged twice | **Primary:** partial unique index on `checkout_intents (account_id) WHERE status IN ('created','provider_attached')` — the loser reuses/409s **before** the provider is called (Task 1.2, Task 7.6 step 0). **Backstop:** partial unique index on `subscriptions (account_id) WHERE status IN ('active','past_due')` | `concurrent_checkouts_create_one_provider_subscription`, `one_live_subscription_per_account` |
 | **A8** | Replay an old `activated` event after cancelling | Last-write-wins | Monotonic `last_event_at` guard (`D12`) | `stale_event_is_ignored` |
 | **A9** | Force `expired → active` with a crafted sequence | Permissive switch/default branch | Total transition table; illegal ⇒ recorded, not applied (`D10`) | `illegal_transition_rejected` |
 | **A10** | Valid signature, tampered body (amount raised) | HMAC computed over re-serialised JSON | HMAC over the **raw** body before parse (`F2`) | `mutated_body_fails_signature` |
@@ -977,9 +1054,23 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
   equal-length buffers (source assertion, like the Task 2.3 boundary test) and
   that a length-mismatched or mutated signature is rejected. Timing behaviour is
   a property of the primitive we chose; the test's job is to prove we chose it.
-- [ ] **12.2** Record which attacks are structurally impossible and why — A6
-  (no seat quantity ⇒ no quantity tampering, `D6`), and A20's cross-service blast
-  radius (messaging never reads billing tables, `D15`).
+- [ ] **12.2** Record which attacks are **structurally** contained and why, using
+  the right reason for each — the earlier draft mislabelled A6:
+  - **A6** (parallel replay of the same event) is contained by the
+    `UNIQUE (provider, environment, event_id)` claim plus `SELECT … FOR UPDATE`,
+    **not** by the absence of seat quantities. It is a concurrency/idempotency
+    defense and it is tested, not asserted away.
+  - **Quantity tampering** is the one that is structurally impossible: V1 has no
+    seat quantity to tamper with (`D6`, ADR-008/D1). If seats are ever
+    introduced, this line stops being true and needs its own attack row.
+  - **A20 / A27** are contained by the single database transaction: claim and
+    apply commit together or not at all, so no interleaving can produce a
+    half-applied event (Task 4).
+  - **A20's cross-service blast radius** is contained by `D15`: messaging never
+    reads billing tables, so a billing outage cannot become a WhatsApp outage.
+  - **A23** is contained because entitlement is only ever a projection onto the
+    pre-existing `accounts.plan_id` mechanism; billing adds no second source of
+    truth for access.
 
 ## Task 13 — Fail-open sweep + static analysis
 
@@ -1032,10 +1123,19 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
    read back from the provider's API. Both go through the same RPC. **No
    client-influenced input — redirect, request body, header, or provider payload
    field — can change entitlement by any route.**
-1a. **No signed event is ever lost.** A retryable failure leaves no claim behind
-   (Task 9.3a), so every event either applies, is deliberately `ignored`, is
-   `failed_terminal`, or is still redeliverable. An unresolved tenant is
-   redeliverable and alerted, never a silent `200`.
+1a. **No signed event is ever silently acknowledged as processed when it was not
+   applied.** A retryable failure leaves no claim behind (Task 9.3a), so every
+   event either applies, is deliberately `ignored`, is `failed_terminal`, or
+   stays redeliverable. An unresolved tenant is redeliverable and alerted, never
+   a silent `200`.
+   - This is deliberately **not** phrased as "no signed event is ever lost",
+     which would be a guarantee we cannot make. Razorpay retries for only ~24 h
+     and can disable a persistently failing webhook, so an event *can* stop being
+     redeliverable through no action of ours. What we do guarantee is that such an
+     event never disappears quietly: it surfaces as an explicit orphan incident
+     for reconciliation (Task 10) or manual recovery once the provider's retry
+     window closes. Detection and recovery are the guarantee; delivery is the
+     provider's.
 1b. **A crash between "provider created it" and "we recorded it" is recoverable.**
    The webhook resolves through `checkout_intents` and the RPC reconstructs the
    missing `subscriptions` row (Task 4.1b) — while still refusing to invent a

@@ -339,6 +339,26 @@ a migration.
   redelivery, no PII or instrument data at rest (F7).
 - `provider_refs JSONB` on `plans` maps our tier id to the provider's plan id
   per provider, so adding Stripe adds a key, not a column.
+- `payment_transactions.payment_event_id UUID **NOT NULL** REFERENCES
+  payment_events(id)`. Every ledger row is written by the RPC in the same
+  transaction as the event claim that caused it, so the causing event always
+  exists. A nullable FK would permit an orphan money row with no provable
+  provider origin, which defeats the point of an auditable ledger. A future
+  manual adjustment gets a synthetic `payment_events` row, not a `NULL`.
+- **Two trust boundaries, two writers.** `checkout_intents` (including its
+  `status`) and `subscriptions.cancel_request_status` /
+  `cancel_requested_at` are **application-owned intent** state, written directly
+  by the authenticated owner's request path. `payment_events`, `subscriptions`
+  (status, `cancel_at_period_end`, periods), `payment_transactions`, and
+  `accounts.plan_id` are **provider-derived billing** state, written only by the
+  RPC. "The RPC is the only writer" means the second group. Recording what a user
+  *asked for* is always allowed; moving entitlement never is.
+- **At most one open checkout intent per account:** a partial unique index on
+  `checkout_intents (account_id) WHERE status IN ('created','provider_attached')`.
+  The `subscriptions` partial unique index rejects a duplicate *active row*,
+  which is too late — by then the provider may have created two subscriptions and
+  charged twice. Duplicate provider-side subscriptions must be prevented before
+  the provider is called, so the intent row is where concurrency is arbitrated.
 
 ## Request flows
 
