@@ -88,12 +88,50 @@ const files = collectFiles(SRC);
 const IMPORT_RE =
   /(?:import|export)[^'"]*?from\s*['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-/** @returns {{ file: string, spec: string }[]} */
+/**
+ * True when an import statement contributes NOTHING to the runtime graph.
+ *
+ * `import type { X } from 'pkg'` and `import { type X } from 'pkg'` are
+ * erased by TypeScript before emit: no `require`, no bundle edge, no
+ * chance of calling into the module. Rule 5 exists to stop the supabase
+ * SDK being *used* outside the adapter layer (its own header calls itself
+ * an Anti-Corruption Layer), so a vanished import cannot violate it —
+ * flagging one is a false positive of the regex, not a finding.
+ *
+ * Deliberately conservative: a statement counts as type-only when it is
+ * declared `import type ...`, or when EVERY named specifier carries its
+ * own `type` prefix. A single value specifier (`import { type A, b }`)
+ * makes the whole statement runtime, which is the correct answer.
+ *
+ * This is scoped to Rule 5 only. The layering rules (1-3) intentionally
+ * still count type imports, because depending on `@/app`'s *types* from a
+ * feature is a real design inversion even with no runtime edge.
+ */
+function isTypeOnlyImport(statement) {
+  if (/^(?:import|export)\s+type\s/.test(statement)) return true;
+  const named = statement.match(/\{([^}]*)\}/);
+  if (!named) return false;
+  const specifiers = named[1]
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return (
+    specifiers.length > 0 && specifiers.every((s) => /^type\s+\S/.test(s))
+  );
+}
+
+/** @returns {{ file: string, spec: string, typeOnly: boolean }[]} */
 function importsOf(file) {
   const content = readFileSync(file, 'utf8');
   const specs = [];
   for (const m of content.matchAll(IMPORT_RE)) {
-    specs.push({ file, spec: m[1] ?? m[2] });
+    specs.push({
+      file,
+      spec: m[1] ?? m[2],
+      // `m[0]` is the whole statement, so the `type` keyword is still
+      // visible here; by the time we have only the specifier it is gone.
+      typeOnly: isTypeOnlyImport(m[0]),
+    });
   }
   return specs;
 }
@@ -162,9 +200,15 @@ for (const file of files) {
   const feature = featureOf(file);
   const sharedLayer = sharedLayerOf(file);
 
-  for (const { spec } of importsOf(file)) {
-    // Rule 5: supabase SDK imports outside the adapter layer.
-    if (SUPABASE_IMPORT_RE.test(spec) && !isSupabaseAllowlisted(relPath(file))) {
+  for (const { spec, typeOnly } of importsOf(file)) {
+    // Rule 5: supabase SDK imports outside the adapter layer. Type-only
+    // imports are erased before emit and so cannot reach the SDK at
+    // runtime — see isTypeOnlyImport().
+    if (
+      SUPABASE_IMPORT_RE.test(spec) &&
+      !typeOnly &&
+      !isSupabaseAllowlisted(relPath(file))
+    ) {
       foundSupabaseImporters.add(relPath(file));
     }
     // Rule 1a: nothing outside src/app imports from @/app.

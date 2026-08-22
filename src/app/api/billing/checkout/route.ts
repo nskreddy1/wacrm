@@ -36,13 +36,13 @@ import {
   hasPaymentsConfigured,
 } from '@/features/billing/lib/provider-factory';
 import { logAuditEvent } from '@/lib/audit-events';
+import { adminDb } from '@/lib/db/admin';
 import type { BillingInterval } from '@/lib/ports/payment-provider';
 import {
   checkRateLimit,
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /**
  * Exactly `{ planId, interval }`. `.strict()` is the F1 tripwire — see
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
       if (tampering.length > 0) {
         // Fire-and-forget; a failed audit write must not block the
         // rejection we have already decided on.
-        void logAuditEvent(supabaseAdmin(), {
+        void logAuditEvent(adminDb(), {
           accountId,
           actorId: userId,
           action: 'billing.checkout.rejected',
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const db = supabaseAdmin();
+  const db = adminDb();
 
   // 7.4 — load the plan SERVER-SIDE. This row, not the request, is the
   // source of truth for what the customer will be charged.

@@ -52,8 +52,8 @@ import {
   PaymentsUnavailableError,
   WebhookVerificationError,
 } from '@/lib/ports/payment-provider';
+import { adminDb } from '@/lib/db/admin';
 import { paymentsEnvironment, paymentsProvider } from '@/lib/env';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /**
  * Body cap (9.1). Razorpay subscription events are a few KB; 128 KB is
@@ -222,7 +222,7 @@ export async function POST(
   // thing that makes claim-and-apply atomic.
   let result: PaymentEventResult;
   try {
-    result = await processPaymentEvent(supabaseAdmin(), {
+    result = await processPaymentEvent(adminDb(), {
       provider: provider.id,
       // TRUSTED: this deployment's own mode, from env — not from the
       // event. Postgres cannot read PAYMENTS_ENVIRONMENT, so the gate
