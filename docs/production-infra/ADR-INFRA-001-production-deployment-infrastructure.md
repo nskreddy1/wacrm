@@ -46,7 +46,7 @@ This ADR consolidates the original production plan **and** the external review c
 | AI/LLM tracing | Langfuse Hobby (50k **units**/mo — see caveat in §6) behind an env-gated adapter |
 | Web analytics | Cloudflare Web Analytics (free, unlimited; Core Web Vitals Chromium-only) replacing the Vercel packages |
 | Uptime | Grafana Cloud synthetic monitoring free tier (Uptime Kuma self-host documented as fallback) hitting a new `/api/health` |
-| DB connectivity | Cloudflare Hyperdrive (now on the free plan) for raw-SQL paths + Supavisor transaction pooler (port 6543, `prepare: false`) — details in §7 |
+| DB connectivity | Cloudflare Hyperdrive (single binding, direct connection string) as the production path for raw-SQL; Supavisor transaction pooler (port 6543, `prepare: false`) for local dev only — details in §7 |
 | Caching | Upstash Redis general cache layer with strict correctness boundary (§8) |
 | Queues | Interface-ready now; build on Cloudflare Queues (free since Feb 2026) only when synchronous webhook handling is measured as a bottleneck |
 
@@ -193,11 +193,12 @@ The slowness must be **measured before it is fixed** — but the architecture-le
 Workers run globally by default, but Supabase Postgres lives in **one region**. A page that makes 5 sequential queries from a Worker isolate far from the DB pays 5 × cross-continent round trips — routinely hundreds of ms. Fixes, in order:
 
 1. **Smart Placement / placement hint in `wrangler.jsonc`** — run the Worker in the datacenter closest to the Supabase project. Since the DB region is known and static, use an explicit placement hint (e.g. `"placement": { "region": "aws:<supabase-region>" }`). For multi-query requests this alone can cut latency from hundreds of ms to single digits. Free, config-only.
-2. **Cloudflare Hyperdrive** — now available on the **Workers free plan** (100k queries/day, pooling + query caching included). Eliminates per-request TCP/TLS connection setup and caches read queries at the edge. Validated integration notes:
+2. **Cloudflare Hyperdrive — the production DB connection path from day one** (revised per third external review: not "later"). Available on the **Workers free plan** (100k queries/day, pooling included). Eliminates per-request TCP/TLS connection setup. Validated integration notes:
    - Hyperdrive must be given the **direct** connection string, not the Supavisor-pooled one (Hyperdrive does its own pooling).
    - Use a raw driver (postgres-js / node-postgres) — which matches this repo's raw-SQL data layer. The `supabase-js` client (used for Auth/Storage/Realtime) stays as-is; Hyperdrive applies to the SQL data layer only.
-   - Create a **second, cache-disabled Hyperdrive config** for correctness-sensitive reads (auth checks, read-after-write) — cached reads are for hot config-style data only.
-3. **If Supavisor is used instead of / alongside Hyperdrive:** transaction-mode pooler (port 6543) is correct for serverless, and the client **must disable prepared statements** (`prepare: false` for postgres-js) — transaction mode doesn't support them; this is a classic source of intermittent under-load connection errors that only appear in production.
+   - **One Hyperdrive binding only.** Application caching is Redis's job (§8). A second, cache-tuned Hyperdrive config may be added later only against a measured caching requirement — never speculatively.
+   - Postgres.js against Hyperdrive supports prepared statements per current Cloudflare docs — do not blanket-apply `prepare: false` on this path.
+3. **Supavisor is the local-dev / non-Workers path only** (`DATABASE_URL`): transaction-mode pooler (port 6543) is correct there, and on that path the client **must disable prepared statements** (`prepare: false` for postgres-js) — transaction mode doesn't support them. The `prepare` setting is therefore a **per-connection-source decision resolved inside `src/lib/db/client.ts`**, never a blanket requirement.
 
 ### 7.3 Known architectural suspect #2: no cache layer
 
@@ -290,7 +291,7 @@ document, so nothing silently drops during implementation.
 | 7 | "Free/low-cost tier first, adapter-swappable" language (not "all free tiers") | §1 Constraints, README conventions |
 | — | 2-branch + gated promotion confirmed; never revert to 3 branches | §4 (options considered) |
 | — | Cloudflare Queues free since Feb 2026; interface-ready, build only when measured | §10 |
-| — | Transaction pooler port 6543 + `prepare: false` (prepared statements off) | §7.2 |
+| — | `prepare` is a per-connection-source decision: Hyperdrive path keeps prepared statements; Supavisor 6543 path disables them (`prepare: false`) | §7.2 |
 | — | In-memory cache only for optimization data; never correctness data; isolates are not a shared cache | §8 |
 | — | pgvector not a lock-in risk; MAU not the Supabase cost driver | §9 |
 | — | Snyk rejected (scan caps, redundancy, no containers/IaC); revisit triggers documented | §4.4 |

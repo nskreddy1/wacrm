@@ -58,9 +58,11 @@ Key insight: **pgvector and the SQL itself are not the problem. The `supabase-js
 
 ```text
 src/lib/db/               # NEW — the only place that knows how to reach Postgres
-  client.ts               #   postgres-js (or pg) connection via DATABASE_URL
-                          #   (works with Supavisor today, Hyperdrive/Neon/RDS later — ADR-INFRA-001 §7)
-  sql.ts                  #   tagged-template helper, parameterized only, query timing hooks (ADR-INFRA-001 §7.1)
+  client.ts               #   postgres-js connection, resolved per environment:
+                          #   Hyperdrive binding in Cloudflare production (day one),
+                          #   DATABASE_URL (Supavisor/direct) in local dev — ADR-INFRA-001 §7.2
+  sql.ts                  #   tagged-template helper, parameterized only, NO side effects
+                          #   (timing/observability wraps it via decorator — plan Task 6)
   transaction.ts          #   transaction helper
 src/lib/data/             # EXISTING pattern, expanded — one repository module per domain
   contacts/ conversations/ messages/ pipelines/ flows/ ...
@@ -99,7 +101,7 @@ Migration pressure is not uniform: hot paths and new code matter; cold admin scr
 
 ### Phase 0 — Foundations (do with ADR-INFRA-001 implementation; same PR series)
 
-1. Add `src/lib/db/` (client + sql + transaction) using the Supavisor transaction-pooler settings already decided (port 6543, `prepare: false`) and Hyperdrive-ready.
+1. Add `src/lib/db/` (client + sql + transaction) with per-environment connection resolution: Hyperdrive binding in Cloudflare production (prepared statements supported), `DATABASE_URL` in local dev (`prepare: false` only when it targets the Supavisor transaction pooler on port 6543) — ADR-INFRA-001 §7.2.
 2. Add `src/lib/auth-provider/` facade with the current Supabase implementation; new code must use it.
 3. Extend `scripts/check-boundaries.mjs`: fail on `@supabase/*` imports outside the adapter allowlist. Start in **warn mode** with a baseline file (like a lint baseline) so the 112 existing files don't block CI; new violations fail.
 4. Add the `current_app_user_id()` SQL function (returning `auth.uid()` for now) via a normal timestamped migration; refactor `is_account_member` to call it. Zero behavior change; `pnpm db:push`, `pnpm db:doc`, `pnpm docs:sync`.
