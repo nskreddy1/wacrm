@@ -336,6 +336,78 @@ export function inviteDeliveryMode(): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// Payments (ADR-009). ALL OPTIONAL — absent config yields the
+// NoopPaymentProvider, which throws on every method (F8).
+//
+// `environment` is CONFIGURED, never inferred. Every payments table
+// stores it and the RPC rejects on a mismatch, so the deployment must
+// be able to state which mode it is in without consulting a payload.
+// An unrecognised or absent value while a provider IS set resolves to
+// the Noop — defaulting to `test` would make live webhooks unverifiable,
+// and defaulting to `live` would let a sandbox grant real entitlement.
+// Both are fail-open; there is no safe guess.
+//
+// Two credential sets are nameable at once so the test-mode go-live
+// rehearsal needs no code edit. Only the set matching
+// `PAYMENTS_ENVIRONMENT` is ever loaded, which is what makes "the
+// environment stamped on an event is the credential set that verified
+// its signature" true by construction rather than by convention.
+// ---------------------------------------------------------------------------
+
+/** Provider id, e.g. `razorpay`. Absent ⇒ payments disabled entirely. */
+export function paymentsProvider(): string | undefined {
+  return firstOf(['PAYMENTS_PROVIDER']);
+}
+
+/** Raw `PAYMENTS_ENVIRONMENT`; validated by the provider factory. */
+export function paymentsEnvironment(): string | undefined {
+  return firstOf(['PAYMENTS_ENVIRONMENT']);
+}
+
+/**
+ * Razorpay credentials for one environment, resolved as a UNIT.
+ *
+ * Returning a bundle rather than four getters is the same reasoning as
+ * `redisCredentials()`, and it matters more here: a deployment holding
+ * an API key but no webhook secret could create real subscriptions and
+ * charge real customers while being structurally unable to verify the
+ * webhook that grants them access (attack A2). Requiring all three
+ * together makes that half-live state unrepresentable.
+ *
+ * `merchantAccountRef` and `webhookSecretPrevious` are deliberately
+ * NOT required: the first is defense in depth over an already-verified
+ * signature, and the second exists only during a rotation window.
+ */
+export function razorpayCredentials(environment: 'test' | 'live'):
+  | {
+      keyId: string;
+      keySecret: string;
+      webhookSecret: string;
+      webhookSecretPrevious?: string;
+      merchantAccountRef?: string;
+    }
+  | undefined {
+  const prefix = environment === 'live' ? 'RAZORPAY_LIVE' : 'RAZORPAY_TEST';
+
+  const keyId = firstOf([`${prefix}_KEY_ID`]);
+  const keySecret = firstOf([`${prefix}_KEY_SECRET`]);
+  const webhookSecret = firstOf([`${prefix}_WEBHOOK_SECRET`]);
+  if (!keyId || !keySecret || !webhookSecret) return undefined;
+
+  return {
+    keyId,
+    keySecret,
+    webhookSecret,
+    // Accepted during a secret rotation only. Razorpay retries failed
+    // deliveries for up to 24 hours and those in flight when the secret
+    // changed still validate against the OLD secret, so a single-secret
+    // rotation silently 401s a day of real events.
+    webhookSecretPrevious: firstOf([`${prefix}_WEBHOOK_SECRET_PREVIOUS`]),
+    merchantAccountRef: firstOf([`${prefix}_ACCOUNT_ID`]),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Release identity + observability (all optional; adapters no-op when unset)
 // ---------------------------------------------------------------------------
 
