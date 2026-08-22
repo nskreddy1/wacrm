@@ -1,0 +1,27 @@
+{
+  // Cloudflare Workers configuration (ADR-INFRA-001 §3, plan Task 4).
+  //
+  // Cost posture: everything here runs on the Workers FREE tier
+  // (100k req/day, Hyperdrive 100k queries/day free). First paid step
+  // is Workers Paid ($5/mo, 10M req/mo) when free CPU limits, request
+  // quota, or log retention bite — see plan Task 11 cost statement.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "auxelon-app",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  // Run near the Supabase region — cuts multi-query latency from
+  // hundreds of ms to single digits (ADR-001 §7.2).
+  "placement": { "mode": "smart" },
+  "observability": { "logs": { "enabled": true } },
+  // Replaces the vercel.json cron for /api/flows/cron (copied verbatim
+  // from vercel.json — daily at 00:00 UTC; do not invent schedules).
+  "triggers": { "crons": ["0 0 * * *"] },
+  // ONE Hyperdrive binding (review §3). All SQL goes through it in
+  // production; application caching is Redis's job. A second no-cache
+  // config is added only with a measured requirement.
+  // The id is created by the founder in Task 11 (Hyperdrive config over
+  // the DIRECT Supabase connection string — never the Supavisor pooler).
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<set-in-task-11>" }]
+}
