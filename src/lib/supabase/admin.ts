@@ -1,5 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+import {
+  hasSupabaseAdminConfig,
+  supabaseAdminCredentials,
+} from '@/lib/env';
+
 /**
  * The single service-role Supabase client for the whole process.
  *
@@ -25,42 +30,22 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 let adminClient: SupabaseClient | null = null;
 
 /**
- * Resolve one of the accepted aliases for a Supabase setting.
+ * Which environment names hold the URL and the service-role key — and in
+ * what order they are tried — is decided in `@/lib/env`, not here. That
+ * module is the only place allowed to know about legacy spellings, so a
+ * rename lands in one file instead of the seven that used to read these
+ * names independently (see the header of `src/lib/env.ts`).
  *
- * The aliases exist because deployments have named these differently over
- * time (`zepo_`-prefixed keys come from the hosted preview environment).
- * Resolution order is the same as it always was; the difference is that a
- * miss now throws here, naming every variable that would have satisfied
- * the lookup. The old code asserted with `!` and handed `undefined` to
- * `createClient`, which failed much later with a generic
+ * A miss throws `MissingEnvError` naming every variable that would have
+ * satisfied the lookup. The original code asserted with `!` and handed
+ * `undefined` to `createClient`, which failed much later with a generic
  * `fetch failed`/`Invalid API key` from deep inside supabase-js and gave
  * no hint that the real problem was an unset environment variable.
  */
-function requireEnv(names: readonly string[]): string {
-  for (const name of names) {
-    const value = process.env[name];
-    if (value) return value;
-  }
-  throw new Error(
-    `Supabase service-role client is not configured. Set one of: ${names.join(', ')}.`
-  );
-}
-
-const URL_VARS = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
-
-const SERVICE_KEY_VARS = [
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'zepo_SUPABASE_SERVICE_ROLE_KEY',
-  'zepo_SUPABASE_SECRET_KEY',
-  'SUPABASE_SECRET_KEY',
-] as const;
 
 /** True when a service-role key is present, without constructing a client. */
 export function hasServiceRoleConfig(): boolean {
-  return (
-    URL_VARS.some((name) => process.env[name]) &&
-    SERVICE_KEY_VARS.some((name) => process.env[name])
-  );
+  return hasSupabaseAdminConfig();
 }
 
 /**
@@ -72,7 +57,8 @@ export function hasServiceRoleConfig(): boolean {
  */
 export function supabaseAdmin(): SupabaseClient {
   if (!adminClient) {
-    adminClient = createClient(requireEnv(URL_VARS), requireEnv(SERVICE_KEY_VARS), {
+    const { url, key } = supabaseAdminCredentials();
+    adminClient = createClient(url, key, {
       // A service-role key is a static credential: there is no session to
       // persist and nothing to refresh.
       auth: { persistSession: false, autoRefreshToken: false },

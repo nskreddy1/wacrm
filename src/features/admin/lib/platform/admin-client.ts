@@ -1,25 +1,16 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
-// Lazy, shared service-role client for platform-operator paths
-// (super-admin console, support-ticket triage, compensating
-// cleanups). Mirrors src/lib/ai/admin-client.ts and friends.
-//
-// SECURITY: every caller MUST sit behind `requireSuperAdmin()` or be
-// a server-internal compensation step (e.g. rolling back a ticket
-// shell after a failed message insert). Never expose query results
-// from this client without explicitly scoping/filtering them first —
-// it bypasses RLS entirely.
-let _adminClient: SupabaseClient | null = null;
-
-export function platformAdmin(): SupabaseClient {
-  if (!_adminClient) {
-    _adminClient = createClient(
-      (process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)!,
-      (process.env.SUPABASE_SERVICE_ROLE_KEY ??
-        process.env.zepo_SUPABASE_SERVICE_ROLE_KEY ??
-        process.env.zepo_SUPABASE_SECRET_KEY ??
-        process.env.SUPABASE_SECRET_KEY)!
-    );
-  }
-  return _adminClient;
-}
+/**
+ * Service-role client for platform-operator paths — the super-admin
+ * console, support-ticket triage, and compensating cleanups (e.g. rolling
+ * back a ticket shell after a failed message insert).
+ *
+ * The instance now lives in `@/lib/supabase/admin`; this file previously
+ * held a fourth private copy of the same client and env-var chain.
+ * `platformAdmin` is kept as the local name so call sites and the
+ * security convention around them read unchanged.
+ *
+ * SECURITY: unchanged, and strictest here. Every caller MUST sit behind
+ * `requireSuperAdmin()` or be a server-internal compensation step. This
+ * client bypasses RLS entirely, so query results must be explicitly
+ * scoped before they are returned to anyone.
+ */
+export { supabaseAdmin as platformAdmin } from '@/lib/supabase/admin';
