@@ -7,10 +7,18 @@
 > starting the red-team tasks (12–14) load `in-repo-fp-check` for verdicts and
 > `in-repo-insecure-defaults` for the fail-open sweep.
 
-**Goal:** implement ADR-009 — self-serve subscription payments where a *verified
-webhook*, never a browser redirect, is the only thing that can change
-`accounts.plan_id`; money state is append-only; and a total payment outage
-cannot touch message delivery.
+**Goal:** implement ADR-009 — self-serve subscription payments where the **only
+two paths that may change `accounts.plan_id` are (a) a signature-verified
+provider webhook and (b) an authenticated reconciliation operation acting on
+state it read back from the provider's own API**; money state is append-only; and
+a total payment outage cannot touch message delivery.
+
+**A browser redirect, a client request body, or any other client-influenced
+input can never change entitlement — at any point, by any route.** State the rule
+this way everywhere: "verified webhook only" is *wrong* as written, because the
+`D14` reconciliation cron deliberately also applies provider-verified state. Both
+paths share one property — the state originates from the provider and is verified
+— and that property, not the transport, is the actual invariant.
 
 **Source of truth:** [`docs/adr/009-payments-and-subscription-billing.md`](../../docs/adr/009-payments-and-subscription-billing.md).
 Decision ids (`D1`–`D17`) and security rules (`F1`–`F10`) below refer to it. If
@@ -184,16 +192,34 @@ Additive only; no existing column is changed (ADR-009 data model).
   - `id` doubles as the provider idempotency key input (Task 5.3), so uniqueness
     is ours and explicit, not derived from a coarse hash.
 - [ ] **1.3** `billing_reconciliation_state` — durable cursor for Task 10.
-  `provider TEXT PRIMARY KEY`, `cursor TEXT`, `last_run_at`,
-  `last_status TEXT`, `orphans_seen INTEGER DEFAULT 0`. Workers isolates are
-  ephemeral: a cursor held in a module-level variable resets on every cold start,
-  so the cron would re-scan from the beginning forever and never reach the tail.
+  `provider TEXT NOT NULL`, `environment TEXT NOT NULL CHECK (environment IN
+  ('test','live'))`, `cursor TEXT`, `last_run_at`, `last_status TEXT`,
+  `orphans_seen INTEGER DEFAULT 0`, **`PRIMARY KEY (provider, environment)`**.
+  Workers isolates are ephemeral: a cursor held in a module-level variable resets
+  on every cold start, so the cron would re-scan from the beginning forever and
+  never reach the tail.
+  - **`provider TEXT PRIMARY KEY` would be wrong for the same reason as 1.1:**
+    Razorpay/test and Razorpay/live would share one cursor and one
+    `orphans_seen` counter, so a test-mode reconcile run would drag the live
+    cursor to a position in a different id space. The cursor is per
+    `(provider, environment)`, exactly like every other provider-scoped row in
+    this schema.
 - [ ] **1.4** `payment_events`: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`,
   `provider TEXT NOT NULL`, `environment TEXT NOT NULL`, `event_id TEXT NOT NULL`
   (the provider's id), `provider_event_type TEXT`, `subscription_id NULL`,
-  `account_id NULL`, `kind`, `status TEXT CHECK (status IN
-  ('applied','ignored','failed'))`, `ignored_reason TEXT`, `event_at`,
+  `account_id NULL`, `kind`, `status TEXT NOT NULL CHECK (status IN
+  ('applied','ignored','failed_terminal'))`, `ignored_reason TEXT`, `event_at`,
   `received_at DEFAULT now()`, `payload_digest TEXT`.
+  - **There is deliberately no persisted `failed_retryable` state, because a
+    retryable failure must not leave a row at all.** The claim and the apply share
+    one transaction (Task 9.3a): if the apply fails transiently, the transaction
+    rolls back, the claim disappears with it, and the provider's retry gets a
+    fresh claim. A persisted "failed" row plus a `200` response is the trap — the
+    provider stops retrying while `ON CONFLICT DO NOTHING` makes every future
+    redelivery look `already_processed`, so the event is unrecoverable forever.
+  - `failed_terminal` is reserved for outcomes where retrying provably cannot
+    help (e.g. a malformed-but-signed event we will never be able to interpret).
+    It is **not** for "we could not resolve the tenant yet" — see Task 9.4.
   - **`UNIQUE (provider, environment, event_id)` is the idempotency claim**, and
     the surrogate `id UUID` is the row identity every foreign key points at.
     `event_id TEXT PRIMARY KEY` would be wrong the moment a second provider or a
@@ -332,9 +358,48 @@ One transaction, or nothing. This function is the only writer of billing state.
     — this single `REVOKE` is load-bearing.
   - Record both in the RLS/security checklist so a later `CREATE OR REPLACE`
     (which resets neither) is caught.
+- [ ] **4.1b** **The function must be able to *reconstruct* a missing subscription
+  from its `checkout_intents` row.** Without this, the intent-first design of Task
+  1.2/7.6 is only half implemented: it resolves the tenant and then dies at the
+  next line. The crash scenario it exists for is precisely the one where no
+  `subscriptions` row exists —
+
+  ```text
+  checkout_intent exists
+  provider subscription exists
+  our process died before inserting `subscriptions`
+  webhook arrives
+    → tenant resolves via checkout_intent          ✅
+    → apply_subscription_state()
+    → SELECT subscription … FOR UPDATE
+    → NO ROW                                        ❌ stuck
+  ```
+
+  So the RPC accepts **either** an existing subscription **or** a missing
+  subscription plus a matching intent, via an internal
+  `ensure_subscription_for_event(...)` step that runs **inside the same
+  transaction** (never as a separate call the caller could skip or fail between):
+  1. Look up `public.subscriptions` by `(provider, environment, provider_ref)`.
+  2. If absent, `SELECT … FOR UPDATE` the `public.checkout_intents` row for the
+     same triple. Still absent ⇒ this is a genuinely unresolvable event; do not
+     invent a tenant (`F3`) — return unresolved and let Task 9.4 handle it.
+  3. Build the `subscriptions` row from the **intent** (`account_id`, `plan_id`,
+     `interval`, `amount_minor`, `currency` — our server-resolved values, never
+     the payload's) plus the provider event's lifecycle/period fields, inserted as
+     `incomplete` with `checkout_intent_id` set.
+  4. The insert is `ON CONFLICT (provider, environment, provider_ref) DO NOTHING`
+     followed by a re-select, so two concurrent first-deliveries cannot fork the
+     row.
+  5. Then continue at 4.2 step 1 with a row that is guaranteed to exist and
+     locked.
+
+  Reconstruction is a **repair path, not an adoption path**: it only ever fires
+  when *our own* intent row already names the account. An event with no intent and
+  no subscription is Task 10.6's orphan incident, never a new mapping.
 - [ ] **4.2** Order of operations inside the transaction:
-  1. `SELECT … FOR UPDATE` the subscription row (serialises concurrent
-     deliveries of the same subscription — kills the A6 race).
+  1. `SELECT … FOR UPDATE` the subscription row — reconstructing it from the
+     intent first if it is missing (4.1b). Locking serialises concurrent
+     deliveries of the same subscription (kills the A6 race).
   2. **Environment gate:** if the event's `environment` does not match the
      deployment's configured mode, record `ignored_reason='wrong_environment'`
      and return. A test-mode event must never move a live tenant's plan (A11).
@@ -419,6 +484,28 @@ produce exactly one ledger row; a call with an older `event_at` is recorded
     looking the resource up by `provider_ref` and by the intent
     (`checkout_intents`), never by blindly retrying the create. `database +
     provider_ref` reconciliation is the source of truth for ambiguity.
+- [ ] **5.3a-i** **Correlation breadcrumb (optional, diagnostic only).** Where a
+  provider supports merchant-defined metadata — Razorpay's Create Subscription
+  API documents a `notes` object — the adapter may include the local intent id:
+
+  ```json
+  { "notes": { "auxelon_checkout_intent": "<intent UUID>" } }
+  ```
+
+  This makes an ambiguous create response or a reconciliation mismatch far easier
+  to diagnose. **It carries no authority.** It is provider-echoed, merchant-
+  writable data, indistinguishable from a payload field, so it is never read as
+  tenant identity, never used to resolve an account, and never substitutes for a
+  mapping. The authoritative chain stays exactly:
+
+  ```text
+  (provider, environment, provider_ref)
+        → our checkout_intent / subscription row
+        → account_id
+  ```
+
+  Treat it as reconciliation evidence a human or an alert can act on — the same
+  status the plan already gives `metadata.account_id` (9.4, `F3`).
 - [ ] **5.3b** `verifyAndParse` sets `environment` from the credential set that
   verified the signature — **never** from a field in the payload. Provider-specific
   ordering signals (`resourceStatus`/`resourceVersion`) are also mapped here; this
@@ -462,13 +549,43 @@ produce exactly one ledger row; a call with an older `event_at` is recorded
 **Files:** create `provider-factory.ts`, `noop.ts`, `…test.ts`; edit `src/lib/env.ts`,
 `.env.*.example`
 
-- [ ] **6.1** Optional getters: `paymentsProvider()`, `razorpayKeyId()`,
-  `razorpayKeySecret()`, `razorpayWebhookSecret()` — same optional-getter shape
-  as the existing `cronAuthEnv()`.
+- [ ] **6.1** Optional getters: `paymentsProvider()`, `paymentsEnvironment()`,
+  and the per-environment credential getters below — same optional-getter shape as
+  the existing `cronAuthEnv()`.
+- [ ] **6.1a** **`environment` is configured, never inferred.** Every table in
+  Task 1 stores `environment`, and the RPC rejects on it (A11), so the deployment
+  must be able to state which mode it is in without consulting a payload:
+
+  ```text
+  PAYMENTS_PROVIDER=razorpay
+  PAYMENTS_ENVIRONMENT=live          # 'test' | 'live', required when a provider is set
+
+  RAZORPAY_TEST_KEY_ID / _KEY_SECRET / _WEBHOOK_SECRET
+  RAZORPAY_LIVE_KEY_ID / _KEY_SECRET / _WEBHOOK_SECRET
+  ```
+
+  Resolution is one-directional and total:
+
+  ```text
+  PAYMENTS_ENVIRONMENT=live
+        → live credential set
+        → signature verified with the live webhook secret
+        → event.environment = 'live'
+  ```
+
+  - An **unrecognised or absent** `PAYMENTS_ENVIRONMENT` while
+    `PAYMENTS_PROVIDER` is set ⇒ `NoopPaymentProvider`, not a default of `test`
+    and not a default of `live`. Guessing either way is a fail-open.
+  - The environment stamped on an event is **the credential set that verified its
+    signature** (5.3b) — which, because only one set is loaded, is the configured
+    one. Never a payload field, never a header.
+  - Keeping both credential sets nameable in one manifest is what makes the
+    test-mode rehearsal in Task 14.3 possible without editing code.
 - [ ] **6.2** `getPaymentProvider()` returns the Razorpay adapter **only** when
-  provider id *and* all three credentials are present; otherwise
-  `NoopPaymentProvider` (`createCheckout` throws `PaymentsUnavailableError`,
-  `verifyAndParse` throws, `fetchSubscription` throws).
+  the provider id, a valid `PAYMENTS_ENVIRONMENT`, *and* all three credentials
+  **for that environment** are present; otherwise `NoopPaymentProvider`
+  (`createCheckout` throws `PaymentsUnavailableError`, `verifyAndParse` throws,
+  `fetchSubscription` throws).
 - [ ] **6.3** Add the new names to **both** `.env.*.example` manifests so
   `node scripts/check-env-completeness.mjs --contract` stays green.
 - [ ] **6.4** Test the partial-config case explicitly: key present, webhook
@@ -538,13 +655,47 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
   **Claim insert error ⇒ `5xx`** so the provider retries — fails *closed*, the
   deliberate inverse of `IngressDedupeStore.claim()` (`D11`). Say so in a comment
   at the call site; the next reader will otherwise "fix" it to match ingress.
+- [ ] **9.3a** **The claim and the apply are one transaction, so a retryable
+  failure never consumes the claim.** This is the rule that keeps the provider's
+  24-hour retry window usable:
+
+  ```text
+  BEGIN
+    claim event            -- INSERT … ON CONFLICT DO NOTHING
+    apply event            -- apply_subscription_state()
+  COMMIT                   -- 200
+  ```
+
+  On a transient failure: `ROLLBACK` ⇒ the claim row vanishes ⇒ return `5xx` ⇒ the
+  provider redelivers and the next attempt claims cleanly. **Never `COMMIT` a
+  claim whose apply did not succeed and then answer `200`** — that combination is
+  permanent data loss dressed as success:
+
+  ```text
+  claim committed + 200 returned
+      → provider never retries
+      → redelivery (if any) hits ON CONFLICT DO NOTHING
+      → treated as already_processed
+      → the event can never be applied
+  ```
+
+  Only a provably terminal outcome may be committed with a `200`: `ignored`
+  (environment mismatch, stale, manual billing, illegal transition — all decided
+  deliberately by the RPC) or `failed_terminal` (uninterpretable signed event).
+  Everything else is a `5xx` with nothing left behind.
 - [ ] **9.4** Resolve tenant **from our own mapping only**, in this order:
   `subscriptions.provider_ref` → `checkout_intents.provider_ref` (the crash-window
-  fallback from 7.6). If neither matches, record the event as `failed` with
-  `ignored_reason='unresolved_tenant'` and **alert** — never guess. If the payload
-  carries `metadata.account_id` and it disagrees with the mapping, apply nothing
-  and alert: a payload field is evidence of intent, never authority (`F3`,
-  attack A4).
+  fallback from 7.6, reconstructed by 4.1b). If the payload carries
+  `metadata.account_id` and it disagrees with the mapping, apply nothing and
+  alert: a payload field is evidence of intent, never authority (`F3`, attack A4).
+- [ ] **9.4a** **An unresolved tenant is a retryable failure, not a terminal
+  one.** If neither mapping matches, `ROLLBACK` (releasing the claim), **alert**,
+  and return `5xx`. Do **not** persist `failed` + `200`: the mapping may become
+  available moments later (a concurrent checkout still committing, a replica
+  catching up), and a `200` permanently forfeits the provider's redelivery — the
+  only mechanism that would have recovered a real paying customer. Never guess a
+  tenant to make the `200` possible. If redelivery is still unresolved when the
+  provider's retry budget expires, Task 10.6's orphan incident is the human path.
 - [ ] **9.5** Call `applySubscriptionState`; return `200` on applied/ignored,
   `5xx` only on genuine failure.
 - [ ] **9.6** Unknown provider in `[provider]` ⇒ `404`. Provider not configured
@@ -565,8 +716,35 @@ The only endpoint that can change entitlement. Treat every byte as hostile.
   per-run cap** (≤ 20 provider calls) — Workers allows 50 subrequests and 10 ms
   CPU per invocation. An unbounded reconcile loop reconciles nothing.
 - [ ] **10.3** For each: `fetchSubscription`, then apply drift through the same
-  RPC with a synthetic `event_id` (`reconcile:<ref>:<date>`) so reconciliation is
-  itself idempotent.
+  RPC with a synthetic `event_id` so reconciliation is itself idempotent. **The
+  synthetic id must key on the observed provider state, not on the calendar day:**
+
+  ```text
+  reconcile:<provider>:<environment>:<provider_ref>:<provider_state_version>
+  ```
+
+  falling back, where the provider exposes no version, to a digest of the
+  materially relevant observed fields:
+
+  ```text
+  reconcile:<provider>:<environment>:<provider_ref>:<state_digest>
+  ```
+
+  `reconcile:<ref>:<date>` is wrong because two real transitions can happen to one
+  subscription on one day —
+
+  ```text
+  10:00  provider reports active     → applied
+  15:00  provider reports past_due   → same synthetic id
+                                      → ON CONFLICT DO NOTHING
+                                      → silently "already processed"
+  ```
+
+  — so the second, entitlement-relevant observation is discarded. Keying on
+  `provider_state_version`/`state_digest` makes **each materially different
+  observed state** its own idempotent event, which is exactly the provider-resource
+  -state hierarchy declared in the global constraints. Re-observing an *unchanged*
+  state still collapses to one row, which is the deduplication we actually wanted.
 - [ ] **10.4** Expire grace: `past_due` with `grace_until < now()` ⇒ move to the
   `is_default` plan. **Delete no data** (`D13`).
 - [ ] **10.5** Skip `billing_mode = 'manual'` accounts entirely (`D16`).
@@ -627,6 +805,11 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 | **A18** | Flood the webhook with garbage to exhaust the Workers CPU/request budget | Verification after parse | Verify before parse, body cap, `404` on unknown provider | `oversized_body_rejected` |
 | **A19** | Read another tenant's amounts via the usage/billing API | Missing `account_id` filter | RLS `SELECT`-only + `accountId` scoping (`F9`) | `cross_tenant_ledger_read_blocked` |
 | **A20** | Trigger a `5xx` mid-apply to leave `subscriptions.active` + `plan_id = free` (or the reverse) | Multi-statement write without a transaction | One RPC, one transaction, rollback on error (`D15`) | `partial_apply_rolls_back` |
+| **A21** | Make the first apply fail transiently, then let the provider retry — a paying customer never gets access | Claim committed + `200` burns the retry, and every redelivery reads as `already_processed` | Claim and apply share one transaction; rollback releases the claim; `5xx` on anything not provably terminal (Task 9.3a) | `retryable_failure_releases_claim` |
+| **A22** | Kill the checkout request after the provider created the subscription, then pay | Webhook's `provider_ref` matches no `subscriptions` row, so the RPC has nothing to lock | Intent-first write + `ensure_subscription_for_event` reconstructs from `checkout_intents` in the same transaction (Task 4.1b) | `subscription_reconstructed_from_intent` |
+| **A23** | Present an active provider subscription we have no intent for, hoping reconstruction adopts it | Repair path used as an adoption path | Reconstruction requires *our* intent row; otherwise orphan alert, no mapping created (Task 10.6, `F3`) | `orphan_is_never_adopted` |
+| **A24** | Run test-mode reconciliation to drag the live cursor / mix live and test cursors | One cursor row per provider | `billing_reconciliation_state` PK is `(provider, environment)` (Task 1.3) | `reconcile_cursor_is_per_environment` |
+| **A25** | Deploy with `PAYMENTS_PROVIDER` set and `PAYMENTS_ENVIRONMENT` absent/garbage, hoping it defaults to `live` (or to `test` against live credentials) | Environment inferred or defaulted | Invalid/absent environment ⇒ Noop, never a default (Task 6.1a) | `invalid_environment_yields_noop` |
 
 - [ ] **12.1** Write A1–A20 as tests. A red-team test that has never failed is
   documentation, not a test: **make each one fail first** by temporarily
@@ -688,8 +871,19 @@ paid account elsewhere. They do **not** have our webhook secret or DB access.
 
 ## Definition of done
 
-1. No path other than a verified webhook or the authenticated cron can change
-   `accounts.plan_id`.
+1. **Exactly two paths can change `accounts.plan_id`:** a signature-verified
+   provider webhook, and the authenticated reconciliation cron applying state it
+   read back from the provider's API. Both go through the same RPC. **No
+   client-influenced input — redirect, request body, header, or provider payload
+   field — can change entitlement by any route.**
+1a. **No signed event is ever lost.** A retryable failure leaves no claim behind
+   (Task 9.3a), so every event either applies, is deliberately `ignored`, is
+   `failed_terminal`, or is still redeliverable. An unresolved tenant is
+   redeliverable and alerted, never a silent `200`.
+1b. **A crash between "provider created it" and "we recorded it" is recoverable.**
+   The webhook resolves through `checkout_intents` and the RPC reconstructs the
+   missing `subscriptions` row (Task 4.1b) — while still refusing to invent a
+   mapping for a provider resource we have no intent for (Task 10.6).
 2. A1–A20 all pass, and each has been observed failing without its defense.
 3. `src/lib/quotas/index.ts` has zero billing imports; deleting the billing
    feature would not break message delivery.
